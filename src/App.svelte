@@ -6,6 +6,37 @@
   import { markdown } from '@codemirror/lang-markdown'
   import { basicSetup } from 'codemirror'
 
+  // CodeMirrorダークテーマ
+  const editorDarkTheme = EditorView.theme(
+    {
+      '&': {
+        backgroundColor: '#1a1a1a',
+        color: '#e5e7eb',
+      },
+      '.cm-content': {
+        caretColor: '#0d9488',
+      },
+      '.cm-cursor, .cm-dropCursor': {
+        borderLeftColor: '#0d9488',
+      },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+        backgroundColor: '#1f4d48',
+      },
+      '.cm-activeLine': {
+        backgroundColor: '#2d2d2d',
+      },
+      '.cm-gutters': {
+        backgroundColor: '#1a1a1a',
+        color: '#9ca3af',
+        border: 'none',
+      },
+      '.cm-activeLineGutter': {
+        backgroundColor: '#2d2d2d',
+      },
+    },
+    { dark: true }
+  )
+
   type Settings = {
     token: string
     username: string
@@ -27,6 +58,7 @@
     folderId: string
     content: string
     updatedAt: number
+    order: number
   }
 
   type View = 'home' | 'settings' | 'edit' | 'folder'
@@ -66,6 +98,7 @@
   let originalFolderName = ''
   let editingBreadcrumb: string | null = null
   let draggedFolder: Folder | null = null
+  let draggedNote: Note | null = null
   let showModal = false
   let modalMessage = ''
   let modalType: 'confirm' | 'alert' = 'confirm'
@@ -132,7 +165,20 @@
 
     const storedNotes = localStorage.getItem(NOTES_KEY)
     if (storedNotes) {
-      notes = JSON.parse(storedNotes)
+      const parsedNotes = JSON.parse(storedNotes)
+      // 既存ノートにorderがない場合は追加
+      let needsUpdate = false
+      const updatedNotes = parsedNotes.map((note: Note, index: number) => {
+        if (note.order === undefined) {
+          needsUpdate = true
+          return { ...note, order: index }
+        }
+        return note
+      })
+      notes = updatedNotes
+      if (needsUpdate) {
+        persistNotes()
+      }
     }
 
     initializeEditor()
@@ -149,6 +195,18 @@
   // テーマ変更を即座に反映
   $: applyTheme(settings.theme)
 
+  function toggleTheme(isDark: boolean) {
+    settings.theme = isDark ? 'dark' : 'light'
+    persistSettings()
+  }
+
+  // GitHub設定が完了しているかチェック
+  $: isGitHubConfigured =
+    settings.token.trim() !== '' &&
+    settings.username.trim() !== '' &&
+    settings.email.trim() !== '' &&
+    settings.repoName.trim() !== ''
+
   // フォルダ変更の監視（デバッグ用）
   $: console.log('Reactive: folders changed, count:', folders.length, folders)
 
@@ -161,6 +219,11 @@
     ? folders.filter((f) => f.parentId === currentFolder.id).sort((a, b) => a.order - b.order)
     : []
   $: console.log('Reactive: subfolders computed:', subfolders)
+
+  // リアクティブに計算されるカレントフォルダのノート
+  $: currentFolderNotes = currentFolder
+    ? notes.filter((n) => n.folderId === currentFolder.id).sort((a, b) => a.order - b.order)
+    : []
 
   function persistSettings() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
@@ -310,14 +373,17 @@
   function createNewNote() {
     if (!currentFolder) return
     const title = getNextNoteName()
+    const folderNotes = notes.filter((n) => n.folderId === currentFolder.id)
+    const maxOrder = folderNotes.length > 0 ? Math.max(...folderNotes.map((n) => n.order)) : -1
     const newNote: Note = {
       id: crypto.randomUUID(),
       title,
       folderId: currentFolder.id,
       content: `# ${title}\n`,
       updatedAt: Date.now(),
+      order: maxOrder + 1,
     }
-    notes = [newNote, ...notes]
+    notes = [...notes, newNote]
     currentNote = newNote
     currentView = 'edit'
     persistNotes()
@@ -497,19 +563,23 @@
 
   function resetEditorContent(content: string) {
     if (editorView) {
+      const extensions = [
+        basicSetup,
+        markdown(),
+        history(),
+        keymap.of([...defaultKeymap, ...historyKeymap]),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            updateNoteContent(update.state.doc.toString())
+          }
+        }),
+      ]
+      if (settings.theme === 'dark') {
+        extensions.push(editorDarkTheme)
+      }
       const newState = EditorState.create({
         doc: content,
-        extensions: [
-          basicSetup,
-          markdown(),
-          history(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              updateNoteContent(update.state.doc.toString())
-            }
-          }),
-        ],
+        extensions,
       })
       editorView.setState(newState)
     }
@@ -518,31 +588,38 @@
   function initializeEditor() {
     if (!editorContainer) return
 
+    const extensions = [
+      basicSetup,
+      markdown(),
+      history(),
+      keymap.of([...defaultKeymap, ...historyKeymap]),
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          updateNoteContent(update.state.doc.toString())
+        }
+      }),
+    ]
+    if (settings.theme === 'dark') {
+      extensions.push(editorDarkTheme)
+    }
+
     editorView = new EditorView({
       state: EditorState.create({
         doc: currentNote?.content ?? '',
-        extensions: [
-          basicSetup,
-          markdown(),
-          history(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              updateNoteContent(update.state.doc.toString())
-            }
-          }),
-        ],
+        extensions,
       }),
       parent: editorContainer,
     })
   }
 
-  $: if (editorContainer) {
+  $: if (editorContainer || settings.theme) {
     if (editorView) {
       editorView.destroy()
       editorView = null
     }
-    initializeEditor()
+    if (editorContainer) {
+      initializeEditor()
+    }
   }
 
   $: if (editorView && currentNote) {
@@ -667,7 +744,7 @@
   }
 
   function getNotesInFolder(folderId: string) {
-    return notes.filter((n) => n.folderId === folderId)
+    return notes.filter((n) => n.folderId === folderId).sort((a, b) => a.order - b.order)
   }
 
   function getFolderDisplayName(folder: Folder): string {
@@ -721,12 +798,47 @@
     persistFolders()
     draggedFolder = null
   }
+
+  function handleNoteDragStart(note: Note) {
+    draggedNote = note
+  }
+
+  function handleNoteDrop(targetNote: Note) {
+    if (!draggedNote || draggedNote.id === targetNote.id) return
+    if (draggedNote.folderId !== targetNote.folderId) return
+
+    const folderNotes = notes.filter((n) => n.folderId === targetNote.folderId)
+    const sortedNotes = folderNotes.sort((a, b) => a.order - b.order)
+
+    const draggedIndex = sortedNotes.findIndex((n) => n.id === draggedNote.id)
+    const targetIndex = sortedNotes.findIndex((n) => n.id === targetNote.id)
+
+    if (draggedIndex === -1 || targetIndex === -1) return
+
+    // 並び替え
+    sortedNotes.splice(draggedIndex, 1)
+    sortedNotes.splice(targetIndex, 0, draggedNote)
+
+    // order を再設定
+    sortedNotes.forEach((note, index) => {
+      note.order = index
+    })
+
+    notes = [...notes]
+    persistNotes()
+    draggedNote = null
+  }
 </script>
 
 <header>
   <h1 style="cursor: pointer;" on:click={() => (currentView = 'home')}>SimplestNote.md</h1>
   {#if currentView !== 'settings'}
-    <button class="icon-button" on:click={() => (currentView = 'settings')} title="設定">
+    <button
+      class="icon-button"
+      on:click={() => (currentView = 'settings')}
+      title="設定"
+      style="position: relative;"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="20"
@@ -743,6 +855,11 @@
         />
         <circle cx="12" cy="12" r="3" />
       </svg>
+      {#if !isGitHubConfigured}
+        <span
+          style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; background: var(--error-color); border-radius: 50%;"
+        ></span>
+      {/if}
     </button>
   {/if}
 </header>
@@ -868,7 +985,7 @@
             <input
               type="checkbox"
               checked={settings.theme === 'dark'}
-              on:change={(e) => (settings.theme = e.currentTarget.checked ? 'dark' : 'light')}
+              on:change={(e) => toggleTheme(e.currentTarget.checked)}
             />
             <span class="toggle-slider"></span>
           </label>
@@ -968,15 +1085,23 @@
             </div>
           </div>
         {/each}
-        {#each getNotesInFolder(currentFolder.id) as note}
-          <div class="note-card" on:click={() => selectNote(note)} style="cursor: pointer;">
+        {#each currentFolderNotes as note}
+          <div
+            class="note-card"
+            draggable="true"
+            on:dragstart={() => handleNoteDragStart(note)}
+            on:dragover={handleDragOver}
+            on:drop|preventDefault={() => handleNoteDrop(note)}
+            on:click={() => selectNote(note)}
+            style="cursor: pointer;"
+          >
             <strong>{note.title}</strong>
             <div style="margin-top: 8px;">
               <small>{new Date(note.updatedAt).toLocaleDateString()}</small>
             </div>
           </div>
         {/each}
-        {#if getNotesInFolder(currentFolder.id).length === 0 && subfolders.length === 0}
+        {#if currentFolderNotes.length === 0 && subfolders.length === 0}
           <p>ノートとサブフォルダがまだありません。</p>
         {/if}
       </div>
