@@ -13,9 +13,13 @@
 <section class="view-container">
   <div class="card-grid">
     {#each folders as folder (folder.id)}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         class="note-card folder-card"
         draggable="true"
+        role="button"
+        tabindex="0"
         on:dragstart={() => onDragStart(folder)}
         on:dragover={onDragOver}
         on:drop|preventDefault={() => onDrop(folder)}

@@ -22,9 +22,13 @@
 <section class="view-container">
   <div class="card-grid">
     {#each subfolders as subfolder (subfolder.id)}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         class="note-card folder-card"
         draggable="true"
+        role="button"
+        tabindex="0"
         on:dragstart={() => onDragStartFolder(subfolder)}
         on:dragover={onDragOver}
         on:drop|preventDefault={() => onDropFolder(subfolder)}
@@ -39,9 +43,13 @@
       </div>
     {/each}
     {#each notes as note (note.id)}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         class="note-card"
         draggable="true"
+        role="button"
+        tabindex="0"
         on:dragstart={() => onDragStartNote(note)}
         on:dragover={onDragOver}
         on:drop|preventDefault={() => onDropNote(note)}

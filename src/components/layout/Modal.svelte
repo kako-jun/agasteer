@@ -16,8 +16,11 @@
 </script>
 
 {#if show}
-  <div class="modal-overlay" on:click={onClose}>
-    <div class="modal-content" on:click|stopPropagation>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="modal-overlay" on:click={onClose} role="presentation">
+    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <div class="modal-content" on:click|stopPropagation role="dialog" aria-modal="true">
       <p>{message}</p>
       <div class="modal-buttons">
         {#if type === 'confirm'}

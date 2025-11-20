@@ -20,22 +20,42 @@
       <h3>GitHub連携</h3>
       <div class="form-row">
         <div class="form-field">
-          <label>リポジトリ名（owner/repo）</label>
-          <input type="text" bind:value={settings.repoName} placeholder="owner/repo" />
+          <label for="repo-name">リポジトリ名（owner/repo）</label>
+          <input
+            id="repo-name"
+            type="text"
+            bind:value={settings.repoName}
+            placeholder="owner/repo"
+          />
         </div>
         <div class="form-field">
-          <label>GitHubトークン</label>
-          <input type="password" bind:value={settings.token} placeholder="ghp_..." />
+          <label for="github-token">GitHubトークン</label>
+          <input
+            id="github-token"
+            type="password"
+            bind:value={settings.token}
+            placeholder="ghp_..."
+          />
         </div>
       </div>
       <div class="form-row">
         <div class="form-field">
-          <label>コミットユーザー名</label>
-          <input type="text" bind:value={settings.username} placeholder="your-name" />
+          <label for="commit-username">コミットユーザー名</label>
+          <input
+            id="commit-username"
+            type="text"
+            bind:value={settings.username}
+            placeholder="your-name"
+          />
         </div>
         <div class="form-field">
-          <label>コミットメールアドレス</label>
-          <input type="email" bind:value={settings.email} placeholder="you@example.com" />
+          <label for="commit-email">コミットメールアドレス</label>
+          <input
+            id="commit-email"
+            type="email"
+            bind:value={settings.email}
+            placeholder="you@example.com"
+          />
         </div>
       </div>
       <div class="form-actions">
@@ -90,12 +110,12 @@
       {#if settings.theme === 'custom'}
         <div class="custom-theme-controls">
           <div class="color-picker">
-            <label>背景色</label>
-            <input type="color" bind:value={settings.customBgPrimary} />
+            <label for="custom-bg-color">背景色</label>
+            <input id="custom-bg-color" type="color" bind:value={settings.customBgPrimary} />
           </div>
           <div class="color-picker">
-            <label>アクセント色</label>
-            <input type="color" bind:value={settings.customAccentColor} />
+            <label for="custom-accent-color">アクセント色</label>
+            <input id="custom-accent-color" type="color" bind:value={settings.customAccentColor} />
           </div>
         </div>
       {/if}
