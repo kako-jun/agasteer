@@ -7,7 +7,12 @@
 
 <header>
   <button class="title-button" on:click={onTitleClick}>{title}</button>
-  <button class="settings-button" on:click={onSettingsClick}>
+  <button
+    class="settings-button"
+    on:click={onSettingsClick}
+    title="設定を開く"
+    aria-label="設定を開く"
+  >
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="20"
