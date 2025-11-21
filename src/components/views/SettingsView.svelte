@@ -4,7 +4,6 @@
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
   export let onThemeChange: (theme: ThemeType) => void
-  export let pullMessage: string = ''
   export let pullRunning: boolean = false
   export let onPull: (isInitial?: boolean) => void
 
@@ -31,7 +30,7 @@
     handleInputChange('toolName', value)
   }
 
-  $: testSuccess = pullMessage.startsWith('✅')
+  // Pullテスト結果の表示はトーストに統一
 </script>
 
 <section class="settings-container">
@@ -85,15 +84,6 @@
         </div>
       </div>
       <div class="test-actions">
-        {#if pullMessage}
-          <span
-            class:test-success={testSuccess}
-            class:test-error={!testSuccess}
-            class="test-message"
-          >
-            {pullMessage}
-          </span>
-        {/if}
         <button
           type="button"
           class="test-button"
@@ -376,22 +366,6 @@
     justify-content: flex-end;
     gap: 1rem;
     margin-top: 0.5rem;
-  }
-
-  .test-message {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    flex: 1;
-  }
-
-  .test-message.test-success {
-    color: var(--accent-color);
-    font-weight: 600;
-  }
-
-  .test-message.test-error {
-    color: var(--error-color);
-    font-weight: 600;
   }
 
   .test-button {

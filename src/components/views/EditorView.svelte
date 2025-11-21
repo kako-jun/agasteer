@@ -4,8 +4,6 @@
 
   export let note: Note
   export let theme: ThemeType
-  export let syncMessage: string = ''
-  export let syncError: string = ''
   export let onContentChange: (content: string) => void
   export let onSave: () => void
   export let onDownload: () => void
@@ -45,14 +43,7 @@
     </svg>
   </button>
 
-  <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-    {#if syncMessage}
-      <span class="message success">{syncMessage}</span>
-    {/if}
-    {#if syncError}
-      <span class="message error">{syncError}</span>
-    {/if}
-  </div>
+  <div style="flex: 1; display: flex; align-items: center; gap: 8px;"></div>
 
   <button
     type="button"
@@ -165,21 +156,5 @@
   button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-
-  .message {
-    font-size: 0.85rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 4px;
-  }
-
-  .message.success {
-    color: #059669;
-    background: #d1fae5;
-  }
-
-  .message.error {
-    color: #dc2626;
-    background: #fee2e2;
   }
 </style>

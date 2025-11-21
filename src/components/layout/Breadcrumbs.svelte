@@ -29,6 +29,14 @@
       onCancelEdit()
     }
   }
+
+  function handleBlur(crumb: Breadcrumb) {
+    if (inputValue.trim()) {
+      onSaveEdit(crumb.id, inputValue.trim(), crumb.type)
+    } else {
+      onCancelEdit()
+    }
+  }
 </script>
 
 <div class="breadcrumbs">
@@ -43,11 +51,15 @@
           bind:this={inputElement}
           bind:value={inputValue}
           on:keydown={(e) => handleKeydown(e, crumb)}
-          on:blur={onCancelEdit}
+          on:blur={() => handleBlur(crumb)}
           class="breadcrumb-input"
         />
       {:else}
-        <button class="breadcrumb-button" on:click={crumb.action}>
+        <button
+          class="breadcrumb-button"
+          class:current={index === breadcrumbs.length - 1}
+          on:click={crumb.action}
+        >
           {#if index === 0}
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -124,6 +136,10 @@
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     transition: background 0.2s;
+  }
+  .breadcrumb-button.current {
+    color: var(--text-primary);
+    cursor: default;
   }
 
   .breadcrumb-button:hover {

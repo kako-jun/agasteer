@@ -33,13 +33,12 @@
   let editingBreadcrumb: string | null = null
   let draggedFolder: Folder | null = null
   let draggedNote: Note | null = null
-  let syncMessage = ''
-  let syncError = ''
-  let pullMessage = ''
   let pullRunning = false
   let isOperationsLocked = true
   let pullToast = ''
   let pushToast = ''
+  let pullToastVariant: 'success' | 'error' | '' = ''
+  let pushToastVariant: 'success' | 'error' | '' = ''
 
   // モーダル状態
   let showModal = false
@@ -94,6 +93,11 @@
     }, 2000)
   }
 
+  function notifyPush(success: boolean, message?: string) {
+    showPushToast(message ?? (success ? 'プッシュしました' : 'プッシュに失敗しました'))
+    pushToastVariant = success ? 'success' : 'error'
+  }
+
   // ナビゲーション
   async function goHome() {
     if ($currentView === 'settings') {
@@ -108,9 +112,9 @@
     if ($currentView !== 'settings') {
       try {
         updateSettings({ ...$settings })
-        showPushToast('プッシュしました')
+        notifyPush(true)
       } catch (e) {
-        showPushToast('プッシュに失敗しました')
+        notifyPush(false)
       }
     }
     currentView.set('settings')
@@ -442,30 +446,24 @@
   // GitHub同期
   async function handleSaveToGitHub() {
     if (isOperationsLocked) {
-      syncError = '初回Pullが完了するまで保存できません'
+      notifyPush(false, '初回Pullが完了するまで保存できません')
       return
     }
     if (!$currentNote) return
 
-    syncMessage = ''
-    syncError = ''
-
     const result = await saveToGitHub($currentNote, $folders, $settings)
 
     if (result.success) {
-      syncMessage = result.message
-      setTimeout(() => {
-        syncMessage = ''
-      }, 3000)
+      notifyPush(true)
     } else {
-      syncError = result.message
+      notifyPush(false)
     }
   }
 
   // ダウンロード
   function downloadNote() {
     if (isOperationsLocked) {
-      syncError = '初回Pullが完了するまでダウンロードできません'
+      notifyPush(false, '初回Pullが完了するまでダウンロードできません')
       return
     }
     if (!$currentNote) return
@@ -506,7 +504,6 @@
   }
 
   async function handlePull(isInitial = false) {
-    pullMessage = ''
     pullRunning = true
     isOperationsLocked = true
 
@@ -518,23 +515,25 @@
     currentNote.set(null)
 
     const result = await pullFromGitHub($settings)
-    pullMessage = result.message
     if (result.success) {
       updateFolders(result.folders)
       updateNotes(result.notes)
       isOperationsLocked = false
       pullToast = 'Pullしました'
+      pullToastVariant = 'success'
     } else {
       if (isInitial) {
         showAlert('初回Pullに失敗しました。設定を確認して再度Pullしてください。')
       }
       pullToast = 'Pullに失敗しました'
+      pullToastVariant = 'error'
     }
 
     pullRunning = false
     if (pullToast) {
       setTimeout(() => {
         pullToast = ''
+        pullToastVariant = ''
       }, 2000)
     }
   }
@@ -597,8 +596,6 @@
       <EditorView
         note={$currentNote}
         theme={$settings.theme}
-        {syncMessage}
-        {syncError}
         disabled={isOperationsLocked}
         onContentChange={updateNoteContent}
         onSave={handleSaveToGitHub}
@@ -610,7 +607,6 @@
         settings={$settings}
         onThemeChange={handleThemeChange}
         onSettingsChange={handleSettingsChange}
-        {pullMessage}
         {pullRunning}
         onPull={handlePull}
       />
@@ -627,10 +623,22 @@
   {#if pullToast || pushToast}
     <div class="toast-stack">
       {#if pullToast}
-        <div class="toast">{pullToast}</div>
+        <div
+          class="toast"
+          class:success={pullToastVariant === 'success'}
+          class:error={pullToastVariant === 'error'}
+        >
+          {pullToast}
+        </div>
       {/if}
       {#if pushToast}
-        <div class="toast">{pushToast}</div>
+        <div
+          class="toast"
+          class:success={pushToastVariant === 'success'}
+          class:error={pushToastVariant === 'error'}
+        >
+          {pushToast}
+        </div>
       {/if}
     </div>
   {/if}
@@ -681,5 +689,15 @@
     font-size: 0.9rem;
     min-width: 140px;
     text-align: center;
+  }
+
+  .toast.success {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+
+  .toast.error {
+    border-color: var(--error-color);
+    color: var(--error-color);
   }
 </style>
