@@ -17,7 +17,13 @@
 </section>
 
 <div class="toolbar-fixed">
-  <button type="button" class="secondary" on:click={onDelete}>
+  <button
+    type="button"
+    class="secondary icon-only"
+    on:click={onDelete}
+    title="ノートを削除"
+    aria-label="ノートを削除"
+  >
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="16"
@@ -35,7 +41,6 @@
       <line x1="10" y1="11" x2="10" y2="17" />
       <line x1="14" y1="11" x2="14" y2="17" />
     </svg>
-    ノートを削除
   </button>
 
   <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
@@ -47,7 +52,13 @@
     {/if}
   </div>
 
-  <button type="button" class="secondary" on:click={onDownload}>
+  <button
+    type="button"
+    class="secondary icon-only"
+    on:click={onDownload}
+    title="Download"
+    aria-label="Download"
+  >
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="16"
@@ -64,10 +75,9 @@
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
     </svg>
-    Download
   </button>
 
-  <button type="button" on:click={onSave}>
+  <button type="button" class="icon-only" on:click={onSave} title="Save" aria-label="Save">
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="16"
@@ -84,7 +94,6 @@
       <polyline points="17 21 17 13 7 13 7 21" />
       <polyline points="7 3 7 8 15 8" />
     </svg>
-    Save
   </button>
 </div>
 
@@ -133,7 +142,14 @@
   }
 
   :global(.button-icon) {
-    margin-right: 0.25rem;
+    margin: 0;
+  }
+
+  .icon-only {
+    padding: 0.5rem;
+    width: 40px;
+    height: 40px;
+    justify-content: center;
   }
 
   .message {
