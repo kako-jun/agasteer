@@ -139,17 +139,17 @@
             </button>
             <button
               type="button"
-              class:active={settings.theme === 'dots1'}
-              on:click={() => handleThemeSelect('dots1')}
+              class:active={settings.theme === 'dotsD'}
+              on:click={() => handleThemeSelect('dotsD')}
             >
-              ドッツ1
+              ドッツD
             </button>
             <button
               type="button"
-              class:active={settings.theme === 'dots2'}
-              on:click={() => handleThemeSelect('dots2')}
+              class:active={settings.theme === 'dotsF'}
+              on:click={() => handleThemeSelect('dotsF')}
             >
-              ドッツ2
+              ドッツF
             </button>
           </div>
           <div class="tool-name-field">

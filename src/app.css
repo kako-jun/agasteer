@@ -53,7 +53,7 @@
   --error-color: #b42318;
 }
 
-:root[data-theme='dots1'] {
+:root[data-theme='dotsD'] {
   --bg-primary: #05080f;
   --bg-secondary: #0b1220;
   --bg-tertiary: #111a2c;
@@ -65,7 +65,7 @@
   --error-color: #f472b6;
 }
 
-:root[data-theme='dots2'] {
+:root[data-theme='dotsF'] {
   --bg-primary: #0b1324;
   --bg-secondary: #111b30;
   --bg-tertiary: #1a2740;

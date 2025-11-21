@@ -7,7 +7,7 @@ import type { Settings, Folder, Note, ThemeType } from './types'
 
 // 設定のみLocalStorage利用（キー簡素化）
 const SETTINGS_KEY = 'simplest-md-note'
-const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dots1', 'dots2']
+const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dotsD', 'dotsF']
 const DB_NAME = 'simplest-md-note/db'
 const NOTES_STORE = 'notes'
 const FOLDERS_STORE = 'folders'
@@ -31,7 +31,13 @@ export function loadSettings(): Settings {
     const merged = { ...defaultSettings, ...storedSettings }
     const storedTheme = merged.theme as string
     if (storedTheme === 'dots') {
-      merged.theme = 'dots1'
+      merged.theme = 'dotsD'
+    }
+    if (storedTheme === 'dots1') {
+      merged.theme = 'dotsD'
+    }
+    if (storedTheme === 'dots2') {
+      merged.theme = 'dotsF'
     }
     if (!THEME_OPTIONS.includes(merged.theme as ThemeType)) {
       merged.theme = defaultSettings.theme
