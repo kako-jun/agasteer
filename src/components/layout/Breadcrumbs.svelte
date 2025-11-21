@@ -59,6 +59,8 @@
           class="breadcrumb-button"
           class:current={index === breadcrumbs.length - 1}
           on:click={crumb.action}
+          title={index === 0 ? 'ホームへ移動' : undefined}
+          aria-label={index === 0 ? 'ホームへ移動' : crumb.label}
         >
           {#if index === 0}
             <svg
