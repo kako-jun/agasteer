@@ -116,7 +116,7 @@
       <div class="form-row">
         <div class="form-field">
           <h3>おまけ</h3>
-          <label>テーマ選択</label>
+          <span class="sub-label">テーマ選択</span>
           <div class="theme-buttons">
             <button
               type="button"
@@ -380,5 +380,13 @@
   .test-icon {
     width: 16px;
     height: 16px;
+  }
+
+  .sub-label {
+    display: inline-block;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
   }
 </style>
