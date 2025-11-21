@@ -113,6 +113,7 @@
           {pullRunning ? 'Pull中…' : 'Pullテスト'}
         </button>
       </div>
+      <hr />
       <div class="form-row">
         <div class="form-field">
           <h3>おまけ</h3>
