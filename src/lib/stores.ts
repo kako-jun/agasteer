@@ -45,10 +45,11 @@ export function updateSettings(newSettings: Settings): void {
 
 export function updateFolders(newFolders: Folder[]): void {
   folders.set(newFolders)
-  saveFolders(newFolders)
+  saveFolders(newFolders).catch((err) => console.error('Failed to persist folders:', err))
 }
 
 export function updateNotes(newNotes: Note[]): void {
   notes.set(newNotes)
-  saveNotes(newNotes)
+  // 非同期で永続化（失敗してもUIをブロックしない）
+  saveNotes(newNotes).catch((err) => console.error('Failed to persist notes:', err))
 }

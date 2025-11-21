@@ -3,20 +3,22 @@
  * アプリケーションデータの永続化を担当
  */
 
-import type { Settings, Folder, Note } from './types'
+import type { Settings, Folder, Note, ThemeType } from './types'
 
-const SETTINGS_KEY = 'simplest-md-note/settings'
-const NOTES_KEY = 'simplest-md-note/notes'
-const FOLDERS_KEY = 'simplest-md-note/folders'
+// 設定のみLocalStorage利用（キー簡素化）
+const SETTINGS_KEY = 'simplest-md-note'
+const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dots']
+const DB_NAME = 'simplest-md-note/db'
+const NOTES_STORE = 'notes'
+const FOLDERS_STORE = 'folders'
 
 export const defaultSettings: Settings = {
   token: '',
   username: '',
   email: '',
   repoName: '',
-  theme: 'light',
-  customBgPrimary: '#ffffff',
-  customAccentColor: '#0f766e',
+  theme: 'yomi',
+  toolName: 'SimplestNote.md',
 }
 
 /**
@@ -25,7 +27,12 @@ export const defaultSettings: Settings = {
 export function loadSettings(): Settings {
   const stored = localStorage.getItem(SETTINGS_KEY)
   if (stored) {
-    return { ...defaultSettings, ...JSON.parse(stored) }
+    const storedSettings = JSON.parse(stored) as Partial<Settings>
+    const merged = { ...defaultSettings, ...storedSettings }
+    if (!THEME_OPTIONS.includes(merged.theme as ThemeType)) {
+      merged.theme = defaultSettings.theme
+    }
+    return merged
   }
   return { ...defaultSettings }
 }
@@ -38,67 +45,120 @@ export function saveSettings(settings: Settings): void {
 }
 
 /**
- * フォルダを読み込む（後方互換性処理を含む）
+ * IndexedDBを開く（notes/folders用）
  */
-export function loadFolders(): Folder[] {
-  const stored = localStorage.getItem(FOLDERS_KEY)
-  if (!stored) return []
+async function openAppDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1)
 
-  const parsedFolders = JSON.parse(stored) as Folder[]
-
-  // 既存フォルダにorderがない場合は追加
-  let needsUpdate = false
-  const updatedFolders = parsedFolders.map((folder, index) => {
-    if (folder.order === undefined) {
-      needsUpdate = true
-      return { ...folder, order: index }
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(NOTES_STORE)) {
+        db.createObjectStore(NOTES_STORE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(FOLDERS_STORE)) {
+        db.createObjectStore(FOLDERS_STORE, { keyPath: 'id' })
+      }
     }
-    return folder
+
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
   })
+}
 
-  if (needsUpdate) {
-    saveFolders(updatedFolders)
-  }
+function getAllFromStore<T>(db: IDBDatabase, storeName: string): Promise<T[]> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly')
+    const store = tx.objectStore(storeName)
+    const request = store.getAll()
 
-  return updatedFolders
+    request.onsuccess = () => resolve((request.result as T[]) || [])
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function replaceAllInStore<T extends { id: string }>(
+  db: IDBDatabase,
+  storeName: string,
+  items: T[]
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const store = tx.objectStore(storeName)
+    const clearReq = store.clear()
+
+    clearReq.onerror = () => reject(clearReq.error)
+    clearReq.onsuccess = () => {
+      if (items.length === 0) {
+        resolve()
+        return
+      }
+
+      let remaining = items.length
+      items.forEach((item) => {
+        const putReq = store.put(item)
+        putReq.onerror = () => reject(putReq.error)
+        putReq.onsuccess = () => {
+          remaining -= 1
+          if (remaining === 0) {
+            resolve()
+          }
+        }
+      })
+    }
+  })
 }
 
 /**
- * フォルダを保存
+ * ノートを読み込む（IndexedDB）
  */
-export function saveFolders(folders: Folder[]): void {
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
-}
-
-/**
- * ノートを読み込む（後方互換性処理を含む）
- */
-export function loadNotes(): Note[] {
-  const stored = localStorage.getItem(NOTES_KEY)
-  if (!stored) return []
-
-  const parsedNotes = JSON.parse(stored) as Note[]
-
-  // 既存ノートにorderがない場合は追加
-  let needsUpdate = false
-  const updatedNotes = parsedNotes.map((note, index) => {
-    if (note.order === undefined) {
-      needsUpdate = true
-      return { ...note, order: index }
-    }
-    return note
-  })
-
-  if (needsUpdate) {
-    saveNotes(updatedNotes)
+export async function loadNotes(): Promise<Note[]> {
+  try {
+    const db = await openAppDB()
+    return await getAllFromStore<Note>(db, NOTES_STORE)
+  } catch (error) {
+    console.error('Failed to load notes from IndexedDB:', error)
+    return []
   }
-
-  return updatedNotes
 }
 
 /**
  * ノートを保存
  */
-export function saveNotes(notes: Note[]): void {
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes))
+export async function saveNotes(notes: Note[]): Promise<void> {
+  try {
+    const db = await openAppDB()
+    await replaceAllInStore<Note>(db, NOTES_STORE, notes)
+  } catch (error) {
+    console.error('Failed to save notes to IndexedDB:', error)
+  }
+}
+
+/**
+ * フォルダを読み込む
+ */
+export async function loadFolders(): Promise<Folder[]> {
+  try {
+    const db = await openAppDB()
+    const folders = await getAllFromStore<Folder>(db, FOLDERS_STORE)
+    // orderが欠けていたら付与
+    return folders.map((folder, index) =>
+      folder.order === undefined ? { ...folder, order: index } : folder
+    )
+  } catch (error) {
+    console.error('Failed to load folders from IndexedDB:', error)
+    return []
+  }
+}
+
+/**
+ * フォルダを保存
+ */
+export async function saveFolders(folders: Folder[]): Promise<void> {
+  try {
+    const db = await openAppDB()
+    await replaceAllInStore<Folder>(db, FOLDERS_STORE, folders)
+  } catch (error) {
+    console.error('Failed to save folders to IndexedDB:', error)
+  }
 }

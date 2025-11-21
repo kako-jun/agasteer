@@ -6,63 +6,63 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #0f766e;
+  --bg-primary: #fdfdfc;
+  --bg-secondary: #f5f6f8;
+  --bg-tertiary: #e9edf2;
   --text-primary: #1f2933;
-  --text-secondary: #52616b;
+  --text-secondary: #4b5563;
   --border-color: #e5e7eb;
-  --border-input: #d0d7de;
-  --accent-color: #0f766e;
+  --border-input: #d7dce3;
+  --accent-color: #c7a443;
   --error-color: #b42318;
 }
 
-:root[data-theme='dark'] {
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #2d2d2d;
-  --bg-tertiary: #1f4d48;
-  --text-primary: #e5e7eb;
-  --text-secondary: #9ca3af;
-  --border-color: #374151;
-  --border-input: #4b5563;
-  --accent-color: #1f4d48;
-  --error-color: #f87171;
-}
-
-:root[data-theme='blackboard'] {
-  --bg-primary: #1a3a2e;
-  --bg-secondary: #224436;
-  --bg-tertiary: #4a7c59;
-  --text-primary: #f0f0f0;
-  --text-secondary: #c5d5cb;
-  --border-color: #3d5a4a;
-  --border-input: #4a7c59;
-  --accent-color: #4a7c59;
-  --error-color: #ff6b6b;
-}
-
-:root[data-theme='kawaii'] {
-  --bg-primary: #fff5f5;
-  --bg-secondary: #ffe4e6;
-  --bg-tertiary: #fda4af;
-  --text-primary: #831843;
-  --text-secondary: #9f1239;
-  --border-color: #fecdd3;
-  --border-input: #fda4af;
-  --accent-color: #fda4af;
-  --error-color: #dc2626;
-}
-
-:root[data-theme='custom'] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #0f766e;
-  --text-primary: #1f2933;
-  --text-secondary: #52616b;
-  --border-color: #e5e7eb;
-  --border-input: #d0d7de;
-  --accent-color: #0f766e;
+:root[data-theme='campus'] {
+  --bg-primary: #fdf8ec;
+  --bg-secondary: #fbf3df;
+  --bg-tertiary: #e9ddc3;
+  --text-primary: #1f2937;
+  --text-secondary: #334155;
+  --border-color: #e2d7bd;
+  --border-input: #d8c9a7;
+  --accent-color: #2f56c6;
   --error-color: #b42318;
+}
+
+:root[data-theme='greenboard'] {
+  --bg-primary: #102117;
+  --bg-secondary: #142a1c;
+  --bg-tertiary: #1d3a29;
+  --text-primary: #e6f0e7;
+  --text-secondary: #b7cbb9;
+  --border-color: #1f3b2b;
+  --border-input: #2a4d39;
+  --accent-color: #96d46a;
+  --error-color: #ff9f9f;
+}
+
+:root[data-theme='whiteboard'] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f7fb;
+  --bg-tertiary: #dfe7f5;
+  --text-primary: #1f2933;
+  --text-secondary: #4b5563;
+  --border-color: #dbe4f2;
+  --border-input: #cdd8e9;
+  --accent-color: #3b82f6;
+  --error-color: #b42318;
+}
+
+:root[data-theme='dots'] {
+  --bg-primary: #05080f;
+  --bg-secondary: #0b1220;
+  --bg-tertiary: #111a2c;
+  --text-primary: #e2ecff;
+  --text-secondary: #9fb4d3;
+  --border-color: #1f2b3d;
+  --border-input: #273649;
+  --accent-color: #49c7ff;
+  --error-color: #f472b6;
 }
 
 body {

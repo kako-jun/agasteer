@@ -18,7 +18,7 @@
     updateNotes,
   } from './lib/stores'
   import { loadSettings, loadFolders, loadNotes } from './lib/storage'
-  import { saveToGitHub } from './lib/github'
+  import { saveToGitHub, testGitHubConnection } from './lib/github'
   import { applyTheme } from './lib/theme'
   import Header from './components/layout/Header.svelte'
   import Breadcrumbs from './components/layout/Breadcrumbs.svelte'
@@ -33,9 +33,10 @@
   let editingBreadcrumb: string | null = null
   let draggedFolder: Folder | null = null
   let draggedNote: Note | null = null
-  let statusMessage = ''
   let syncMessage = ''
   let syncError = ''
+  let githubTestMessage = ''
+  let githubTestRunning = false
 
   // モーダル状態
   let showModal = false
@@ -46,18 +47,19 @@
   // リアクティブ宣言
   $: breadcrumbs = getBreadcrumbs($currentView, $currentFolder, $currentNote, $folders)
   $: isGitHubConfigured = $githubConfigured
+  $: document.title = $settings.toolName
 
   // 初期化
   onMount(() => {
     const loadedSettings = loadSettings()
     settings.set(loadedSettings)
     applyTheme(loadedSettings.theme, loadedSettings)
-
-    const loadedFolders = loadFolders()
-    folders.set(loadedFolders)
-
-    const loadedNotes = loadNotes()
-    notes.set(loadedNotes)
+    document.title = loadedSettings.toolName
+    ;(async () => {
+      const [loadedFolders, loadedNotes] = await Promise.all([loadFolders(), loadNotes()])
+      folders.set(loadedFolders)
+      notes.set(loadedNotes)
+    })()
   })
 
   // モーダル関数
@@ -420,24 +422,36 @@
   }
 
   // 設定
-  function handleSaveSettings() {
-    updateSettings($settings)
-    applyTheme($settings.theme, $settings)
-    statusMessage = '✅ 設定を保存しました'
-    setTimeout(() => {
-      statusMessage = ''
-    }, 2000)
+  function handleThemeChange(theme: typeof $settings.theme) {
+    const next = { ...$settings, theme }
+    updateSettings(next)
+    applyTheme(theme, next)
   }
 
-  function handleThemeChange(theme: typeof $settings.theme) {
-    updateSettings($settings)
-    applyTheme(theme, $settings)
+  function handleSettingsChange(payload: Partial<typeof $settings>) {
+    const next = { ...$settings, ...payload }
+    updateSettings(next)
+    if (payload.theme) {
+      applyTheme(payload.theme, next)
+    }
+    if (payload.toolName) {
+      document.title = payload.toolName
+    }
+  }
+
+  async function handleGithubTest() {
+    githubTestMessage = ''
+    githubTestRunning = true
+    const result = await testGitHubConnection($settings)
+    githubTestMessage = result.message
+    githubTestRunning = false
   }
 </script>
 
 <div class="app-container">
   <Header
     githubConfigured={isGitHubConfigured}
+    title={$settings.toolName}
     onTitleClick={goHome}
     onSettingsClick={goSettings}
   />
@@ -492,9 +506,11 @@
     {:else if $currentView === 'settings'}
       <SettingsView
         settings={$settings}
-        {statusMessage}
-        onSave={handleSaveSettings}
         onThemeChange={handleThemeChange}
+        onSettingsChange={handleSettingsChange}
+        {githubTestMessage}
+        {githubTestRunning}
+        onTestConnection={handleGithubTest}
       />
     {/if}
   </main>

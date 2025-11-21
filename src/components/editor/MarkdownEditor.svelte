@@ -15,32 +15,34 @@
   let editorView: EditorView | null = null
   let currentExtensions: any[] = []
 
-  // CodeMirrorダークテーマ
+  const darkThemes: ThemeType[] = ['greenboard', 'dots']
+
+  // CodeMirrorダークテーマ（テーマのCSS変数に追従）
   const editorDarkTheme = EditorView.theme(
     {
       '&': {
-        backgroundColor: '#1a1a1a',
-        color: '#e5e7eb',
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
       },
       '.cm-content': {
-        caretColor: '#1f4d48',
+        caretColor: 'var(--accent-color)',
       },
       '.cm-cursor, .cm-dropCursor': {
-        borderLeftColor: '#1f4d48',
+        borderLeftColor: 'var(--accent-color)',
       },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: '#1f4d48',
+        backgroundColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
       },
       '.cm-activeLine': {
-        backgroundColor: '#2d2d2d',
+        backgroundColor: 'var(--bg-secondary)',
       },
       '.cm-gutters': {
-        backgroundColor: '#1a1a1a',
-        color: '#9ca3af',
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-secondary)',
         border: 'none',
       },
       '.cm-activeLineGutter': {
-        backgroundColor: '#2d2d2d',
+        backgroundColor: 'var(--bg-secondary)',
       },
     },
     { dark: true }
@@ -61,8 +63,8 @@
       }),
     ]
 
-    // テーマがdarkの場合はダークテーマを追加
-    if (theme === 'dark') {
+    // ダーク系テーマの場合はエディタの配色も揃える
+    if (darkThemes.includes(theme)) {
       extensions.push(editorDarkTheme)
     }
 

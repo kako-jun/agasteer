@@ -5,7 +5,7 @@
 
 export type UUID = string
 
-export type ThemeType = 'light' | 'dark' | 'blackboard' | 'kawaii' | 'custom'
+export type ThemeType = 'yomi' | 'campus' | 'greenboard' | 'whiteboard' | 'dots'
 
 export type View = 'home' | 'settings' | 'edit' | 'folder'
 
@@ -15,8 +15,7 @@ export interface Settings {
   email: string
   repoName: string
   theme: ThemeType
-  customBgPrimary: string
-  customAccentColor: string
+  toolName: string
 }
 
 export interface Folder {

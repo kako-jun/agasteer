@@ -10,6 +10,10 @@ export interface SaveResult {
   message: string
 }
 
+export interface TestResult {
+  success: boolean
+  message: string
+}
 /**
  * UTF-8テキストをBase64エンコード
  */
@@ -128,5 +132,49 @@ export async function saveToGitHub(
       success: false,
       message: '❌ ネットワークエラー',
     }
+  }
+}
+
+/**
+ * GitHub接続テスト（認証＋リポジトリ参照）
+ */
+export async function testGitHubConnection(settings: Settings): Promise<TestResult> {
+  if (!settings.token) {
+    return { success: false, message: '❌ トークンが未設定です' }
+  }
+  if (!settings.repoName || !settings.repoName.includes('/')) {
+    return { success: false, message: '❌ リポジトリ名が不正です（owner/repo）' }
+  }
+
+  const headers = {
+    Authorization: `Bearer ${settings.token}`,
+  }
+
+  try {
+    // 認証確認
+    const userRes = await fetch('https://api.github.com/user', { headers })
+    if (userRes.status === 401) {
+      return { success: false, message: '❌ トークンが無効です' }
+    }
+    if (!userRes.ok) {
+      return { success: false, message: `❌ ユーザー情報取得に失敗 (${userRes.status})` }
+    }
+
+    // リポジトリ参照確認
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
+    if (repoRes.status === 404) {
+      return { success: false, message: '❌ リポジトリが見つかりません' }
+    }
+    if (repoRes.status === 401 || repoRes.status === 403) {
+      return { success: false, message: '❌ リポジトリへの権限がありません' }
+    }
+    if (!repoRes.ok) {
+      return { success: false, message: `❌ リポジトリ確認に失敗 (${repoRes.status})` }
+    }
+
+    return { success: true, message: '✅ 接続OK（認証・リポジトリ参照に成功）' }
+  } catch (error) {
+    console.error('GitHub test error:', error)
+    return { success: false, message: '❌ ネットワークエラー' }
   }
 }

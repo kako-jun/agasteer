@@ -1,11 +1,12 @@
 <script lang="ts">
   export let githubConfigured: boolean
+  export let title: string = 'SimplestNote.md'
   export let onTitleClick: () => void
   export let onSettingsClick: () => void
 </script>
 
 <header>
-  <button class="title-button" on:click={onTitleClick}>SimplestNote.md</button>
+  <button class="title-button" on:click={onTitleClick}>{title}</button>
   <button class="settings-button" on:click={onSettingsClick}>
     <svg
       xmlns="http://www.w3.org/2000/svg"

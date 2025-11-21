@@ -2,14 +2,36 @@
   import type { Settings, ThemeType } from '../../lib/types'
 
   export let settings: Settings
-  export let statusMessage: string = ''
-  export let onSave: () => void
+  export let onSettingsChange: (payload: Partial<Settings>) => void
   export let onThemeChange: (theme: ThemeType) => void
+  export let githubTestMessage: string = ''
+  export let githubTestRunning: boolean = false
+  export let onTestConnection: () => void
 
   function handleThemeSelect(theme: ThemeType) {
     settings.theme = theme
     onThemeChange(theme)
+    onSettingsChange({ theme })
   }
+
+  type TextSettingKey = Exclude<keyof Settings, 'theme'>
+
+  function handleInputChange(key: TextSettingKey, value: string) {
+    settings[key] = value as Settings[TextSettingKey]
+    onSettingsChange({ [key]: value } as Partial<Settings>)
+  }
+
+  function handleTextInput(key: TextSettingKey, event: Event) {
+    const value = (event.target as HTMLInputElement).value
+    handleInputChange(key, value)
+  }
+
+  function handleToolNameInput(event: Event) {
+    const value = (event.target as HTMLInputElement).value
+    handleInputChange('toolName', value)
+  }
+
+  $: testSuccess = githubTestMessage.startsWith('✅')
 </script>
 
 <section class="settings-container">
@@ -25,6 +47,7 @@
             id="repo-name"
             type="text"
             bind:value={settings.repoName}
+            on:input={(e) => handleTextInput('repoName', e)}
             placeholder="owner/repo"
           />
         </div>
@@ -34,6 +57,7 @@
             id="github-token"
             type="password"
             bind:value={settings.token}
+            on:input={(e) => handleTextInput('token', e)}
             placeholder="ghp_..."
           />
         </div>
@@ -45,6 +69,7 @@
             id="commit-username"
             type="text"
             bind:value={settings.username}
+            on:input={(e) => handleTextInput('username', e)}
             placeholder="your-name"
           />
         </div>
@@ -54,15 +79,48 @@
             id="commit-email"
             type="email"
             bind:value={settings.email}
+            on:input={(e) => handleTextInput('email', e)}
             placeholder="you@example.com"
           />
         </div>
       </div>
-      <div class="form-actions">
-        {#if statusMessage}
-          <span class="status-message">{statusMessage}</span>
+      <div class="test-actions">
+        {#if githubTestMessage}
+          <span
+            class:test-success={testSuccess}
+            class:test-error={!testSuccess}
+            class="test-message"
+          >
+            {githubTestMessage}
+          </span>
         {/if}
-        <button type="button" on:click={onSave}>設定を保存</button>
+        <button
+          type="button"
+          class="test-button"
+          on:click={onTestConnection}
+          disabled={githubTestRunning}
+        >
+          <svg class="test-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M8 3v6h2V3h4v3h2V3a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v3h2zm8 6h-8a2 2 0 0 0-2 2v2a5 5 0 0 0 4 4.9V22a1 1 0 1 0 2 0v-4.1A5 5 0 0 0 18 13v-2a2 2 0 0 0-2-2zm0 4a3 3 0 0 1-6 0v-2h6z"
+              fill="currentColor"
+            />
+          </svg>
+          {githubTestRunning ? '通信テスト中…' : '通信テスト'}
+        </button>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <h3>おまけ</h3>
+          <label for="tool-name">ツール名</label>
+          <input
+            id="tool-name"
+            type="text"
+            bind:value={settings.toolName}
+            placeholder="SimplestNote.md"
+            on:input={handleToolNameInput}
+          />
+        </div>
       </div>
     </div>
 
@@ -73,52 +131,40 @@
       <div class="theme-buttons">
         <button
           type="button"
-          class:active={settings.theme === 'light'}
-          on:click={() => handleThemeSelect('light')}
+          class:active={settings.theme === 'yomi'}
+          on:click={() => handleThemeSelect('yomi')}
         >
-          ライト
+          黄泉
         </button>
         <button
           type="button"
-          class:active={settings.theme === 'dark'}
-          on:click={() => handleThemeSelect('dark')}
+          class:active={settings.theme === 'campus'}
+          on:click={() => handleThemeSelect('campus')}
         >
-          ダーク
+          キャンパス
         </button>
         <button
           type="button"
-          class:active={settings.theme === 'blackboard'}
-          on:click={() => handleThemeSelect('blackboard')}
+          class:active={settings.theme === 'greenboard'}
+          on:click={() => handleThemeSelect('greenboard')}
         >
-          黒板
+          緑板
         </button>
         <button
           type="button"
-          class:active={settings.theme === 'kawaii'}
-          on:click={() => handleThemeSelect('kawaii')}
+          class:active={settings.theme === 'whiteboard'}
+          on:click={() => handleThemeSelect('whiteboard')}
         >
-          Kawaii
+          ホワイボー
         </button>
         <button
           type="button"
-          class:active={settings.theme === 'custom'}
-          on:click={() => handleThemeSelect('custom')}
+          class:active={settings.theme === 'dots'}
+          on:click={() => handleThemeSelect('dots')}
         >
-          カスタム
+          ドッツ
         </button>
       </div>
-      {#if settings.theme === 'custom'}
-        <div class="custom-theme-controls">
-          <div class="color-picker">
-            <label for="custom-bg-color">背景色</label>
-            <input id="custom-bg-color" type="color" bind:value={settings.customBgPrimary} />
-          </div>
-          <div class="color-picker">
-            <label for="custom-accent-color">アクセント色</label>
-            <input id="custom-accent-color" type="color" bind:value={settings.customAccentColor} />
-          </div>
-        </div>
-      {/if}
     </div>
 
     <hr />
@@ -219,19 +265,6 @@
     border-color: var(--accent-color);
   }
 
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1rem;
-  }
-
-  .status-message {
-    color: var(--accent-color);
-    font-size: 0.9rem;
-  }
-
   .theme-buttons {
     display: flex;
     gap: 0.5rem;
@@ -257,33 +290,6 @@
 
   .theme-buttons button:hover:not(.active) {
     border-color: var(--accent-color);
-  }
-
-  .custom-theme-controls {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    margin-top: 1rem;
-  }
-
-  .color-picker {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .color-picker label {
-    font-size: 0.85rem;
-    margin-bottom: 0;
-  }
-
-  input[type='color'] {
-    width: 80px;
-    height: 40px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    cursor: pointer;
   }
 
   hr {
@@ -338,5 +344,42 @@
 
   button[type='button']:not(.theme-buttons button):hover {
     opacity: 0.9;
+  }
+
+  .test-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  .test-message {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    flex: 1;
+  }
+
+  .test-message.test-success {
+    color: var(--accent-color);
+    font-weight: 600;
+  }
+
+  .test-message.test-error {
+    color: var(--error-color);
+    font-weight: 600;
+  }
+
+  .test-button {
+    margin-left: auto;
+    min-width: 120px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .test-icon {
+    width: 16px;
+    height: 16px;
   }
 </style>
