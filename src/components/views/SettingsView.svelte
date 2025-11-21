@@ -6,7 +6,7 @@
   export let onThemeChange: (theme: ThemeType) => void
   export let pullMessage: string = ''
   export let pullRunning: boolean = false
-  export let onPull: () => void
+  export let onPull: (isInitial?: boolean) => void
 
   function handleThemeSelect(theme: ThemeType) {
     settings.theme = theme
@@ -94,7 +94,12 @@
             {pullMessage}
           </span>
         {/if}
-        <button type="button" class="test-button" on:click={onPull} disabled={pullRunning}>
+        <button
+          type="button"
+          class="test-button"
+          on:click={() => onPull(false)}
+          disabled={pullRunning}
+        >
           <svg class="test-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path
               d="M12 3v12m0 0-4-4m4 4 4-4M5 17h14"
