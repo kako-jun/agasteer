@@ -170,6 +170,9 @@
       if (updatedFolder && $currentFolder?.id === id) {
         currentFolder.set(updatedFolder)
       }
+      if (!$folders.some((f) => f.id === $currentFolder?.id)) {
+        currentFolder.set(null)
+      }
     } else if (type === 'note') {
       const allNotes = $notes
       const updatedNotes = allNotes.map((n) => (n.id === id ? { ...n, title: newName.trim() } : n))
@@ -177,6 +180,9 @@
       const updatedNote = updatedNotes.find((n) => n.id === id)
       if (updatedNote && $currentNote?.id === id) {
         currentNote.set(updatedNote)
+      }
+      if (!$notes.some((n) => n.id === $currentNote?.id)) {
+        currentNote.set(null)
       }
     }
 
@@ -482,9 +488,6 @@
       isOperationsLocked = false
       updateFolders(result.folders)
       updateNotes(result.notes)
-      currentFolder.set(null)
-      currentNote.set(null)
-      currentView.set('home')
     } else if (isInitial) {
       showAlert('初回Pullに失敗しました。設定を確認して再度Pullしてください。')
     }
