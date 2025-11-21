@@ -265,30 +265,34 @@
   }
 
   .theme-buttons {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    justify-content: center;
+    display: inline-flex;
+    gap: 0;
+    flex-wrap: nowrap;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
   }
 
   .theme-buttons button {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    border: none;
     background: var(--bg-secondary);
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background 0.2s,
+      color 0.2s;
+    min-width: 70px;
   }
 
   .theme-buttons button.active {
     background: var(--accent-color);
     color: white;
-    border-color: var(--accent-color);
+    box-shadow: inset 0 0 0 1px var(--accent-color);
   }
 
   .theme-buttons button:hover:not(.active) {
-    border-color: var(--accent-color);
+    background: var(--bg-primary);
   }
 
   hr {
