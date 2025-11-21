@@ -160,10 +160,18 @@
 
     if (type === 'folder') {
       updateFolderName(id, newName.trim())
+      const updatedFolder = $folders.find((f) => f.id === id)
+      if (updatedFolder && $currentFolder?.id === id) {
+        currentFolder.set(updatedFolder)
+      }
     } else if (type === 'note') {
       const allNotes = $notes
       const updatedNotes = allNotes.map((n) => (n.id === id ? { ...n, title: newName.trim() } : n))
       updateNotes(updatedNotes)
+      const updatedNote = updatedNotes.find((n) => n.id === id)
+      if (updatedNote && $currentNote?.id === id) {
+        currentNote.set(updatedNote)
+      }
     }
 
     editingBreadcrumb = null
