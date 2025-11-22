@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "author": "kako-jun",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
