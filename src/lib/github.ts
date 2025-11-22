@@ -40,6 +40,13 @@ function getFolderPath(note: Note, allNotes: Note[]): string {
   return note.name
 }
 
+/**
+ * ノートのフルパスを取得（notes/配下のディレクトリパス）
+ */
+function getNotePath(note: Note, allNotes: Note[]): string {
+  return `notes/${getFolderPath(note, allNotes)}`
+}
+
 function buildPath(leaf: Leaf, notes: Note[]): string {
   const note = notes.find((f) => f.id === leaf.noteId)
   if (!note) return `notes/${leaf.title}.md`
@@ -235,6 +242,19 @@ export async function pushAllWithTreeAPI(
       content: '',
     })
 
+    // 全ノートに対して.gitkeepを配置（リーフがなくてもディレクトリを保持）
+    for (const note of notes) {
+      const notePath = getNotePath(note, notes)
+      treeItems.push({
+        path: `${notePath}/.gitkeep`,
+        mode: '100644',
+        type: 'blob',
+        content: '',
+      })
+      // .gitkeepもローカルファイルとして記録（削除されないように）
+      localFilePaths.add(`${notePath}/.gitkeep`)
+    }
+
     // 全リーフをTreeに追加
     for (const leaf of leaves) {
       const path = buildPath(leaf, notes)
@@ -419,7 +439,10 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
 
     const notePaths = entries.filter(
       (e) =>
-        e.type === 'blob' && e.path.startsWith('notes/') && e.path.toLowerCase().endsWith('.md')
+        e.type === 'blob' &&
+        e.path.startsWith('notes/') &&
+        e.path.toLowerCase().endsWith('.md') &&
+        !e.path.endsWith('.gitkeep') // .gitkeepは除外
     )
 
     for (const entry of notePaths) {
