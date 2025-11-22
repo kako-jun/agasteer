@@ -1607,33 +1607,83 @@ describe('LocalStorage operations', () => {
 npm install -D vitest @vitest/ui @testing-library/svelte
 ```
 
-### 6. ルーティングの導入
+### 6. モジュール分離の完了（実装済み 2025-01-23）
 
-現在は`currentView`変数で画面切り替えを行っていますが、URLベースのルーティングを導入することで：
+App.svelteをモダンな構成に分割し、保守性を大幅に向上させました。
 
-- ブラウザの戻る/進むボタン対応
-- ディープリンク対応
-- ブックマーク可能
+#### 新規追加ファイル
 
-```bash
-npm install svelte-spa-router
+```
+src/lib/
+├── sync.ts    # Push/Pull処理の分離
+│   ├── executePush()  - 全リーフをGitHubにPush
+│   └── executePull()  - GitHubから全データをPull
+│
+├── ui.ts      # UI状態管理の分離
+│   ├── pushToastState/pullToastState - トースト状態ストア
+│   ├── modalState                    - モーダル状態ストア
+│   ├── showPushToast/showPullToast   - トースト表示ヘルパー
+│   └── showConfirm/showAlert/closeModal - モーダル操作ヘルパー
+│
+src/components/layout/
+└── Toast.svelte  # トースト表示コンポーネント
 ```
 
-```typescript
-// src/App.svelte
-import Router from 'svelte-spa-router'
-import HomeView from './components/views/HomeView.svelte'
-import FolderView from './components/views/FolderView.svelte'
-import EditorView from './components/views/EditorView.svelte'
-import SettingsView from './components/views/SettingsView.svelte'
+**成果:**
 
-const routes = {
-  '/': HomeView,
-  '/folder/:id': FolderView,
-  '/note/:id': EditorView,
-  '/settings': SettingsView,
-}
-```
+- Push/Pull処理をsync.tsに委譲し、ビジネスロジックを分離
+- モーダル・トースト状態をui.tsのストアで管理し、グローバル状態を整理
+- トースト表示をToastコンポーネント化し、再利用性を向上
+- App.svelteのローカル状態変数を約50行削減
+- z-index管理を改善（トーストはモーダルより前面に表示）
+
+#### UI改善（実装済み 2025-01-23）
+
+- **設定画面**: モーダル化（フルページ遷移からポップアップに変更）
+- **URLルーティング**: クエリパラメータベースのディープリンク対応（`?note=uuid&leaf=uuid`）
+- **ブラウザ対応**: 戻る/進むボタンでの状態復元
+- **ヘルプリンク**: 設定画面に使い方（テキスト・動画）へのリンクを追加
+- **テーマボタン**: スマホ対応のため3個ずつ2段表示に変更
+- **トースト通知**: Push/Pull開始時に「Pushします」「Pullします」を表示
+
+### 7. データ永続化仕様の明確化（実装済み 2025-01-23）
+
+GitHubを唯一の真実の情報源（Single Source of Truth）とする設計を明確化し、実装しました。
+
+#### データ永続化の役割分担
+
+| ストレージ       | 役割                       | 同期      |
+| ---------------- | -------------------------- | --------- |
+| **LocalStorage** | 設定情報のみ保存           | なし      |
+| **IndexedDB**    | ノート・リーフのキャッシュ | なし      |
+| **GitHub**       | 全リーフの永続化（SSoT）   | Push/Pull |
+
+#### Pull処理フロー
+
+1. 「Pullします」トースト表示
+2. IndexedDB全削除
+3. GitHubから全データ取得
+4. IndexedDB全作成
+5. 「Pullしました」トースト表示
+
+**重要**: 前回終了時のIndexedDBデータは使用しない。アプリ起動時は必ず初回Pullを実行。
+
+#### Push処理フロー
+
+1. 「Pushします」トースト表示
+2. 全リーフをGitHubにPush
+3. 「Pushしました」トースト表示
+
+**Pushタイミング**:
+
+- 保存ボタン押下時
+- 設定ボタン押下時（設定画面を開く前）
+
+**Pullタイミング**:
+
+- アプリ起動時（初回Pull）
+- 設定画面の「Pullテスト」ボタン押下時
+- 設定画面を閉じるとき
 
 ---
 
@@ -1770,6 +1820,78 @@ CLAUDE.mdの仕様では「全ノート・全リーフをPush」と記載され�
 3. **ネットワークエラー時の挙動**
    - Push失敗時、編集内容はIndexedDBに残るが、次のPullで消える
    - オフライン対応なし
+
+---
+
+## 次の実装計画
+
+### URLルーティングの改善（計画中 2025-01-23）
+
+#### 現状の課題
+
+現在はクエリパラメータベースのURL（`?note=uuid&leaf=uuid`）を使用していますが、以下の問題があります：
+
+1. **UUIDの不安定性**
+   - Pull時に新しいUUIDが割り当てられるため、ブックマークやディープリンクが無効になる
+   - GitHubにメタデータを保存していないため、IDが永続化されない
+
+2. **URL の可読性**
+   - UUIDはユーザーにとって意味のない文字列
+   - URLから内容を推測できない
+
+#### 新しい設計方針
+
+**パスベースのURL設計に移行**し、ノート名・リーフ名をURLに使用する：
+
+```
+# 現在（クエリパラメータベース）
+https://example.com/simplest-note-md?note=550e8400-e29b-41d4-a716-446655440000&leaf=7c9e6679-7425-40de-944b-e07fc1f90ae7
+
+# 新設計（パスベース）
+https://example.com/simplest-note-md/仕事/会議/議事録
+```
+
+#### 実装方針
+
+1. **ファイル名の一意性制約**
+   - 同じ階層に同じ名前のノート・リーフを作成できないようにする
+   - 作成時にバリデーションを追加
+
+2. **URLエンコーディング**
+   - 日本語や特殊文字を含むノート名・リーフ名をURLエンコード
+   - `encodeURIComponent()` / `decodeURIComponent()` を使用
+
+3. **パス解析**
+   - URLパスからノート名・リーフ名を抽出
+   - 階層構造を再構築してビューを表示
+
+4. **ハッシュの使用禁止**
+   - SPAルーティングでよく使われる `#` は使用しない
+   - GitHubのHistory APIを活用
+
+#### URL例
+
+```
+/                           # ホーム（ルートノート一覧）
+/仕事                       # 「仕事」ノート（サブノート・リーフ一覧）
+/仕事/会議                  # 「会議」サブノート（リーフ一覧）
+/仕事/会議/議事録           # 「議事録」リーフを編集
+```
+
+#### メリット
+
+- ✅ **URLの永続性**: Pull後もノート名・リーフ名が変わらなければURLは有効
+- ✅ **可読性**: URLから内容が推測できる
+- ✅ **ブックマーク対応**: 意味のあるURLをブックマーク可能
+- ✅ **GitHubとの整合性**: GitHubのディレクトリ構造とURLが一致
+
+#### 実装タスク
+
+- [ ] ノート・リーフ作成時の名前重複チェック
+- [ ] URLパース処理の実装
+- [ ] パスからノート・リーフを解決するロジック
+- [ ] ブラウザ履歴の管理
+- [ ] エラーハンドリング（存在しないパスへのアクセス）
 
 ---
 
@@ -1986,7 +2108,12 @@ SimplestNote.mdは、シンプルさを追求した軽量Markdownノートアプ
 
 ---
 
-**Document Version**: 2.0
-**Last Updated**: 2025-01-20
+**Document Version**: 3.0
+**Last Updated**: 2025-01-23
 **Author**: Claude (Anthropic)
-**Major Changes**: リファクタリング実装を反映（コンポーネント分割、Svelteストア導入）
+**Major Changes**:
+
+- モジュール分離の完了（sync.ts、ui.ts、Toast.svelte追加）
+- データ永続化仕様の明確化（GitHub SSoT設計）
+- UI改善（設定モーダル化、URLルーティング、トースト通知）
+- 次の実装計画の追加（パスベースURLルーティング）
