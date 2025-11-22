@@ -176,6 +176,8 @@
   }
 
   async function goSettings() {
+    // 仕様: 設定ボタンを押したときに全リーフをGitHubにPush
+    await handleSaveToGitHub()
     showSettings = true
   }
 
