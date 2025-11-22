@@ -17,12 +17,42 @@
 
   const darkThemes: ThemeType[] = ['greenboard', 'dotsD', 'dotsF']
 
+  // CodeMirrorライトテーマ（テーマのCSS変数に追従）
+  const editorLightTheme = EditorView.theme({
+    '&': {
+      backgroundColor: 'var(--bg-primary)',
+      color: 'var(--text-primary)',
+      border: 'none',
+    },
+    '.cm-content': {
+      caretColor: 'var(--accent-color)',
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: 'var(--accent-color)',
+    },
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+      backgroundColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
+    },
+    '.cm-activeLine': {
+      backgroundColor: 'var(--bg-secondary)',
+    },
+    '.cm-gutters': {
+      backgroundColor: 'var(--bg-primary)',
+      color: 'var(--text-secondary)',
+      border: 'none',
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: 'var(--bg-secondary)',
+    },
+  })
+
   // CodeMirrorダークテーマ（テーマのCSS変数に追従）
   const editorDarkTheme = EditorView.theme(
     {
       '&': {
         backgroundColor: 'var(--bg-primary)',
         color: 'var(--text-primary)',
+        border: 'none',
       },
       '.cm-content': {
         caretColor: 'var(--accent-color)',
@@ -66,6 +96,8 @@
     // ダーク系テーマの場合はエディタの配色も揃える
     if (darkThemes.includes(theme)) {
       extensions.push(editorDarkTheme)
+    } else {
+      extensions.push(editorLightTheme)
     }
 
     currentExtensions = extensions
@@ -123,11 +155,13 @@
 <style>
   .editor-container {
     height: 100%;
-    overflow: auto;
+    overflow: hidden;
   }
 
   :global(.cm-editor) {
     height: 100%;
+    border: none !important;
+    outline: none !important;
   }
 
   :global(.cm-scroller) {

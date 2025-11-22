@@ -775,6 +775,7 @@
   />
 
   <div class="content-wrapper">
+    <div class="pane-divider"></div>
     <div class="left-column">
       <div class="breadcrumbs-pane">
         <Breadcrumbs
@@ -984,6 +985,24 @@
     flex: 1;
     height: calc(100vh - 80px);
     overflow: hidden;
+    position: relative;
+  }
+
+  .pane-divider {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    bottom: 0;
+    width: 1px;
+    background: rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  :global([data-theme='greenboard']) .pane-divider,
+  :global([data-theme='dotsD']) .pane-divider,
+  :global([data-theme='dotsF']) .pane-divider {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .left-column,
@@ -993,10 +1012,6 @@
     min-width: 0;
     height: 100%;
     overflow: hidden;
-  }
-
-  .left-column {
-    border-right: 2px solid var(--border-color);
   }
 
   .breadcrumbs-pane {
@@ -1012,11 +1027,11 @@
     .content-wrapper {
       grid-template-columns: 1fr;
     }
-    .right-column {
+    .pane-divider {
       display: none;
     }
-    .left-column {
-      border-right: none;
+    .right-column {
+      display: none;
     }
   }
 
