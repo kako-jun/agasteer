@@ -526,6 +526,10 @@
       return
     }
 
+    // Push開始を通知
+    pushToast = 'Pushします'
+    pushToastVariant = ''
+
     let successCount = 0
     let failCount = 0
 
@@ -593,6 +597,10 @@
   async function handlePull(isInitial = false) {
     pullRunning = true
     isOperationsLocked = true
+
+    // Pull開始を通知
+    pullToast = 'Pullします'
+    pullToastVariant = ''
 
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     // IndexedDBは単なるキャッシュであり、Pull成功時に全削除→全作成される
