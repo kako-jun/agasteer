@@ -42,6 +42,7 @@
 
   // ローカル状態
   let breadcrumbs: Breadcrumb[] = []
+  let breadcrumbsRight: Breadcrumb[] = []
   let editingBreadcrumb: string | null = null
   let draggedNote: Note | null = null
   let draggedLeaf: Leaf | null = null
@@ -49,8 +50,15 @@
   let isOperationsLocked = true
   let showSettings = false
 
+  // 2ペイン用の状態（将来の拡張用、現在は1ペインのみ使用）
+  let isDualPane = false // 画面幅で切り替え
+  let rightNote: Note | null = null
+  let rightLeaf: Leaf | null = null
+  let rightView: View = 'home'
+
   // リアクティブ宣言
   $: breadcrumbs = getBreadcrumbs($currentView, $currentNote, $currentLeaf, $notes)
+  $: breadcrumbsRight = getBreadcrumbsRight(rightView, rightNote, rightLeaf, $notes)
   $: isGitHubConfigured = $githubConfigured
   $: document.title = $settings.toolName
 
@@ -66,8 +74,9 @@
     const leftPath = buildPath($currentNote, $currentLeaf, $notes)
     params.set('left', leftPath)
 
-    // 右ペイン（将来の2ペイン対応用、現在は左と同じ）
-    params.set('right', leftPath)
+    // 右ペイン（2ペイン表示時は独立した状態、1ペイン時は左と同じ）
+    const rightPath = isDualPane ? buildPath(rightNote, rightLeaf, $notes) : leftPath
+    params.set('right', rightPath)
 
     const newUrl = `?${params.toString()}`
     window.history.pushState({}, '', newUrl)
@@ -76,7 +85,7 @@
   function restoreStateFromUrl() {
     const params = new URLSearchParams(window.location.search)
     let leftPath = params.get('left')
-    const rightPath = params.get('right')
+    let rightPath = params.get('right')
 
     // 互換性: 旧形式（?note=uuid&leaf=uuid）もサポート
     if (!leftPath && !rightPath) {
@@ -110,25 +119,49 @@
 
     isRestoringFromUrl = true
 
-    // 現在は1ペインのみなので、leftを使用
+    // 左ペインの復元
     if (!leftPath) {
       leftPath = '/'
     }
 
-    const resolution = resolvePath(leftPath, $notes, $leaves)
+    const leftResolution = resolvePath(leftPath, $notes, $leaves)
 
-    if (resolution.type === 'home') {
+    if (leftResolution.type === 'home') {
       currentNote.set(null)
       currentLeaf.set(null)
       currentView.set('home')
-    } else if (resolution.type === 'note') {
-      currentNote.set(resolution.note)
+    } else if (leftResolution.type === 'note') {
+      currentNote.set(leftResolution.note)
       currentLeaf.set(null)
       currentView.set('note')
-    } else if (resolution.type === 'leaf') {
-      currentNote.set(resolution.note)
-      currentLeaf.set(resolution.leaf)
+    } else if (leftResolution.type === 'leaf') {
+      currentNote.set(leftResolution.note)
+      currentLeaf.set(leftResolution.leaf)
       currentView.set('edit')
+    }
+
+    // 右ペインの復元（2ペイン表示時のみ）
+    if (rightPath && isDualPane) {
+      const rightResolution = resolvePath(rightPath, $notes, $leaves)
+
+      if (rightResolution.type === 'home') {
+        rightNote = null
+        rightLeaf = null
+        rightView = 'home'
+      } else if (rightResolution.type === 'note') {
+        rightNote = rightResolution.note
+        rightLeaf = null
+        rightView = 'note'
+      } else if (rightResolution.type === 'leaf') {
+        rightNote = rightResolution.note
+        rightLeaf = rightResolution.leaf
+        rightView = 'edit'
+      }
+    } else {
+      // 1ペイン表示時は右ペインを左と同じにする
+      rightNote = $currentNote
+      rightLeaf = $currentLeaf
+      rightView = $currentView
     }
 
     isRestoringFromUrl = false
@@ -139,12 +172,26 @@
     updateUrlFromState()
   }
 
+  // 右ペインの状態変更をURLに反映
+  $: if (rightNote || rightLeaf || (!rightNote && !rightLeaf)) {
+    updateUrlFromState()
+  }
+
   // 初期化
   onMount(() => {
     const loadedSettings = loadSettings()
     settings.set(loadedSettings)
     applyTheme(loadedSettings.theme, loadedSettings)
     document.title = loadedSettings.toolName
+
+    // 画面幅を監視して isDualPane を更新
+    const mediaQuery = window.matchMedia('(min-width: 1025px)')
+    isDualPane = mediaQuery.matches
+
+    const handleMediaChange = (e: MediaQueryListEvent) => {
+      isDualPane = e.matches
+    }
+    mediaQuery.addEventListener('change', handleMediaChange)
     ;(async () => {
       // 初回Pull（GitHubから最新データを取得）
       // 重要: IndexedDBからは読み込まない
@@ -163,6 +210,7 @@
 
     return () => {
       window.removeEventListener('popstate', handlePopState)
+      mediaQuery.removeEventListener('change', handleMediaChange)
     }
   })
 
@@ -171,6 +219,34 @@
     currentView.set('home')
     currentNote.set(null)
     currentLeaf.set(null)
+  }
+
+  // 右ペイン用ナビゲーション
+  function selectNoteRight(note: Note) {
+    rightNote = note
+    rightLeaf = null
+    rightView = 'note'
+    updateUrlFromState()
+  }
+
+  function selectLeafRight(leaf: Leaf) {
+    const note = $notes.find((n) => n.id === leaf.noteId)
+    if (note) {
+      rightNote = note
+      rightLeaf = leaf
+      rightView = 'edit'
+      updateUrlFromState()
+    }
+  }
+
+  function createNoteRight(parentId?: string) {
+    createNote(parentId)
+    updateUrlFromState()
+  }
+
+  function createLeafRight() {
+    createLeaf()
+    updateUrlFromState()
   }
 
   async function goSettings() {
@@ -195,7 +271,7 @@
     e.stopPropagation()
   }
 
-  // パンくずリスト
+  // パンくずリスト（左ペイン用）
   function getBreadcrumbs(
     view: View,
     note: Note | null,
@@ -241,6 +317,57 @@
     return crumbs
   }
 
+  // パンくずリスト（右ペイン用）
+  function getBreadcrumbsRight(
+    view: View,
+    note: Note | null,
+    leaf: Leaf | null,
+    allNotes: Note[]
+  ): Breadcrumb[] {
+    const crumbs: Breadcrumb[] = []
+
+    crumbs.push({
+      label: 'SimplestNote.md',
+      action: () => {
+        rightNote = null
+        rightLeaf = null
+        rightView = 'home'
+        updateUrlFromState()
+      },
+      id: 'home-right',
+      type: 'home',
+    })
+
+    if (note) {
+      const parentNote = allNotes.find((f) => f.id === note.parentId)
+      if (parentNote) {
+        crumbs.push({
+          label: parentNote.name,
+          action: () => selectNoteRight(parentNote),
+          id: parentNote.id + '-right',
+          type: 'note',
+        })
+      }
+      crumbs.push({
+        label: note.name,
+        action: () => selectNoteRight(note),
+        id: note.id + '-right',
+        type: 'note',
+      })
+    }
+
+    if (leaf) {
+      crumbs.push({
+        label: leaf.title,
+        action: () => {},
+        id: leaf.id + '-right',
+        type: 'leaf',
+      })
+    }
+
+    return crumbs
+  }
+
   function startEditingBreadcrumb(crumb: Breadcrumb) {
     if (crumb.type === 'home' || crumb.type === 'settings') return
     editingBreadcrumb = crumb.id
@@ -248,32 +375,53 @@
 
   function refreshBreadcrumbs() {
     breadcrumbs = getBreadcrumbs($currentView, $currentNote, $currentLeaf, $notes)
+    breadcrumbsRight = getBreadcrumbsRight(rightView, rightNote, rightLeaf, $notes)
   }
 
   function saveEditBreadcrumb(id: string, newName: string, type: Breadcrumb['type']) {
     if (!newName.trim()) return
 
+    // 右ペインのパンくずリストかどうかを判定
+    const isRight = id.endsWith('-right')
+    const actualId = isRight ? id.replace('-right', '') : id
+
     if (type === 'note') {
-      updateNoteName(id, newName.trim())
-      const updatedNote = $notes.find((f) => f.id === id)
-      if (updatedNote && $currentNote?.id === id) {
-        currentNote.set(updatedNote)
+      updateNoteName(actualId, newName.trim())
+      const updatedNote = $notes.find((f) => f.id === actualId)
+      if (updatedNote) {
+        if ($currentNote?.id === actualId) {
+          currentNote.set(updatedNote)
+        }
+        if (isRight && rightNote?.id === actualId) {
+          rightNote = updatedNote
+        }
       }
       if (!$notes.some((f) => f.id === $currentNote?.id)) {
         currentNote.set(null)
       }
+      if (isRight && !$notes.some((f) => f.id === rightNote?.id)) {
+        rightNote = null
+      }
     } else if (type === 'leaf') {
       const allLeaves = $leaves
       const updatedLeaves = allLeaves.map((n) =>
-        n.id === id ? { ...n, title: newName.trim() } : n
+        n.id === actualId ? { ...n, title: newName.trim() } : n
       )
       updateLeaves(updatedLeaves)
-      const updatedLeaf = updatedLeaves.find((n) => n.id === id)
-      if (updatedLeaf && $currentLeaf?.id === id) {
-        currentLeaf.set(updatedLeaf)
+      const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
+      if (updatedLeaf) {
+        if ($currentLeaf?.id === actualId) {
+          currentLeaf.set(updatedLeaf)
+        }
+        if (isRight && rightLeaf?.id === actualId) {
+          rightLeaf = updatedLeaf
+        }
       }
       if (!$leaves.some((n) => n.id === $currentLeaf?.id)) {
         currentLeaf.set(null)
+      }
+      if (isRight && !$leaves.some((n) => n.id === rightLeaf?.id)) {
+        rightLeaf = null
       }
     }
 
@@ -626,58 +774,125 @@
     }}
   />
 
-  <Breadcrumbs
-    {breadcrumbs}
-    editingId={editingBreadcrumb}
-    onStartEdit={startEditingBreadcrumb}
-    onSaveEdit={saveEditBreadcrumb}
-    onCancelEdit={cancelEditBreadcrumb}
-  />
+  <div class="content-wrapper">
+    <div class="left-column">
+      <div class="breadcrumbs-pane">
+        <Breadcrumbs
+          {breadcrumbs}
+          editingId={editingBreadcrumb}
+          onStartEdit={startEditingBreadcrumb}
+          onSaveEdit={saveEditBreadcrumb}
+          onCancelEdit={cancelEditBreadcrumb}
+        />
+      </div>
 
-  <main>
-    {#if $currentView === 'home'}
-      <HomeView
-        notes={$rootNotes}
-        disabled={isOperationsLocked}
-        onSelectNote={selectNote}
-        onCreateNote={() => createNote()}
-        onDragStart={handleDragStartNote}
-        onDragOver={handleDragOver}
-        onDrop={handleDropNote}
-        onSave={handleSaveToGitHub}
-        {getNoteItems}
-      />
-    {:else if $currentView === 'note' && $currentNote}
-      <NoteView
-        currentNote={$currentNote}
-        subNotes={$subNotes}
-        leaves={$currentNoteLeaves}
-        disabled={isOperationsLocked}
-        onSelectNote={selectNote}
-        onSelectLeaf={selectLeaf}
-        onCreateNote={() => createNote($currentNote.id)}
-        onCreateLeaf={createLeaf}
-        onDeleteNote={deleteNote}
-        onDragStartNote={handleDragStartNote}
-        onDragStartLeaf={handleDragStartLeaf}
-        onDragOver={handleDragOver}
-        onDropNote={handleDropNote}
-        onDropLeaf={handleDropLeaf}
-        onSave={handleSaveToGitHub}
-        {getNoteItems}
-      />
-    {:else if $currentView === 'edit' && $currentLeaf}
-      <EditorView
-        leaf={$currentLeaf}
-        theme={$settings.theme}
-        disabled={isOperationsLocked}
-        onContentChange={updateLeafContent}
-        onSave={handleSaveToGitHub}
-        onDownload={downloadLeaf}
-        onDelete={deleteLeaf}
-      />
-    {/if}
-  </main>
+      <main class="main-pane">
+        {#if $currentView === 'home'}
+          <HomeView
+            notes={$rootNotes}
+            disabled={isOperationsLocked}
+            onSelectNote={selectNote}
+            onCreateNote={() => createNote()}
+            onDragStart={handleDragStartNote}
+            onDragOver={handleDragOver}
+            onDrop={handleDropNote}
+            onSave={handleSaveToGitHub}
+            {getNoteItems}
+          />
+        {:else if $currentView === 'note' && $currentNote}
+          <NoteView
+            currentNote={$currentNote}
+            subNotes={$subNotes}
+            leaves={$currentNoteLeaves}
+            disabled={isOperationsLocked}
+            onSelectNote={selectNote}
+            onSelectLeaf={selectLeaf}
+            onCreateNote={() => createNote($currentNote.id)}
+            onCreateLeaf={createLeaf}
+            onDeleteNote={deleteNote}
+            onDragStartNote={handleDragStartNote}
+            onDragStartLeaf={handleDragStartLeaf}
+            onDragOver={handleDragOver}
+            onDropNote={handleDropNote}
+            onDropLeaf={handleDropLeaf}
+            onSave={handleSaveToGitHub}
+            {getNoteItems}
+          />
+        {:else if $currentView === 'edit' && $currentLeaf}
+          <EditorView
+            leaf={$currentLeaf}
+            theme={$settings.theme}
+            disabled={isOperationsLocked}
+            onContentChange={updateLeafContent}
+            onSave={handleSaveToGitHub}
+            onDownload={downloadLeaf}
+            onDelete={deleteLeaf}
+          />
+        {/if}
+      </main>
+    </div>
+
+    <div class="right-column">
+      <div class="breadcrumbs-pane">
+        <Breadcrumbs
+          breadcrumbs={breadcrumbsRight}
+          editingId={editingBreadcrumb}
+          onStartEdit={startEditingBreadcrumb}
+          onSaveEdit={saveEditBreadcrumb}
+          onCancelEdit={cancelEditBreadcrumb}
+        />
+      </div>
+
+      <main class="main-pane">
+        {#if rightView === 'home'}
+          <HomeView
+            notes={$rootNotes}
+            disabled={isOperationsLocked}
+            onSelectNote={selectNoteRight}
+            onCreateNote={() => createNoteRight()}
+            onDragStart={handleDragStartNote}
+            onDragOver={handleDragOver}
+            onDrop={handleDropNote}
+            onSave={handleSaveToGitHub}
+            {getNoteItems}
+          />
+        {:else if rightView === 'note' && rightNote}
+          <NoteView
+            currentNote={rightNote}
+            subNotes={$notes
+              .filter((n) => n.parentId === rightNote.id)
+              .sort((a, b) => a.order - b.order)}
+            leaves={$leaves
+              .filter((l) => l.noteId === rightNote.id)
+              .sort((a, b) => a.order - b.order)}
+            disabled={isOperationsLocked}
+            onSelectNote={selectNoteRight}
+            onSelectLeaf={selectLeafRight}
+            onCreateNote={() => createNoteRight(rightNote.id)}
+            onCreateLeaf={createLeafRight}
+            onDeleteNote={deleteNote}
+            onDragStartNote={handleDragStartNote}
+            onDragStartLeaf={handleDragStartLeaf}
+            onDragOver={handleDragOver}
+            onDropNote={handleDropNote}
+            onDropLeaf={handleDropLeaf}
+            onSave={handleSaveToGitHub}
+            {getNoteItems}
+          />
+        {:else if rightView === 'edit' && rightLeaf}
+          <EditorView
+            leaf={rightLeaf}
+            theme={$settings.theme}
+            disabled={isOperationsLocked}
+            onContentChange={updateLeafContent}
+            onSave={handleSaveToGitHub}
+            onDownload={downloadLeaf}
+            onDelete={deleteLeaf}
+          />
+        {/if}
+      </main>
+    </div>
+  </div>
 
   <Modal
     show={$modalState.show}
@@ -758,10 +973,51 @@
   .app-container {
     width: 100%;
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 
-  main {
-    position: relative;
+  .content-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    height: calc(100vh - 80px);
+    overflow: hidden;
+  }
+
+  .left-column,
+  .right-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .left-column {
+    border-right: 2px solid var(--border-color);
+  }
+
+  .breadcrumbs-pane {
+    flex-shrink: 0;
+  }
+
+  .main-pane {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  @media (max-width: 1024px) {
+    .content-wrapper {
+      grid-template-columns: 1fr;
+    }
+    .right-column {
+      display: none;
+    }
+    .left-column {
+      border-right: none;
+    }
   }
 
   .settings-modal-overlay {

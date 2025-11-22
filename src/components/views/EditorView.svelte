@@ -87,7 +87,7 @@
 <style>
   .editor-section {
     padding: 0;
-    height: calc(100vh - 80px - 60px);
+    height: calc(100% - 40px);
     overflow: hidden;
   }
 </style>

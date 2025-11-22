@@ -172,7 +172,7 @@
 <style>
   .view-container {
     padding: 1rem;
-    height: calc(100vh - 80px - 60px);
+    height: calc(100% - 40px);
     overflow-y: auto;
   }
 

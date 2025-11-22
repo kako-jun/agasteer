@@ -112,7 +112,8 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0 1rem;
+    padding: 0;
+    padding-left: 1rem;
     height: 40px;
     background: rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);

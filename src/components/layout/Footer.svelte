@@ -6,20 +6,16 @@
 
 <style>
   .footer-fixed {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
     background: rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid rgba(0, 0, 0, 0.15);
     padding: 0 1rem;
     height: 40px;
-    z-index: 10;
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    flex-shrink: 0;
   }
 
   :global([data-theme='greenboard']) .footer-fixed,
