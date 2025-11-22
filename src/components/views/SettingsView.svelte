@@ -35,7 +35,7 @@
 
 <section class="settings-container">
   <div class="settings-content">
-    <h2>設定</h2>
+    <h2 id="settings-title">設定</h2>
 
     <div class="help-links">
       <a

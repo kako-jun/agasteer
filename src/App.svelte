@@ -184,6 +184,17 @@
     await handleCloseSettings()
   }
 
+  function handleOverlayKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      closeSettings()
+    }
+  }
+
+  function handleContentClick(e: MouseEvent) {
+    e.stopPropagation()
+  }
+
   // パンくずリスト
   function getBreadcrumbs(
     view: View,
@@ -687,8 +698,24 @@
   />
 
   {#if showSettings}
-    <div class="settings-modal-overlay" on:click={closeSettings}>
-      <div class="settings-modal-content" on:click|stopPropagation>
+    <div
+      class="settings-modal-overlay"
+      role="button"
+      tabindex="0"
+      on:click={closeSettings}
+      on:keydown={handleOverlayKeydown}
+      aria-label="設定を閉じる"
+    >
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+      <div
+        class="settings-modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        on:click={handleContentClick}
+      >
         <button class="settings-close-button" on:click={closeSettings} aria-label="閉じる">
           <svg
             xmlns="http://www.w3.org/2000/svg"
