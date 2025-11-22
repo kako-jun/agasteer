@@ -351,7 +351,7 @@
   .theme-buttons {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0;
     margin: 0 auto;
     max-width: fit-content;
   }
@@ -360,8 +360,21 @@
     display: flex;
     gap: 0;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
     overflow: hidden;
+  }
+
+  .theme-button-row:not(:first-child) {
+    border-top: none;
+  }
+
+  .theme-button-row:first-child {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+  }
+
+  .theme-button-row:last-child {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
   }
 
   .theme-buttons button {
@@ -378,12 +391,20 @@
     flex: 1;
   }
 
-  .theme-button-row button:first-child {
-    border-radius: 6px 0 0 6px;
+  .theme-button-row:first-child button:first-child {
+    border-radius: 6px 0 0 0;
   }
 
-  .theme-button-row button:last-child {
-    border-radius: 0 6px 6px 0;
+  .theme-button-row:first-child button:last-child {
+    border-radius: 0 6px 0 0;
+  }
+
+  .theme-button-row:last-child button:first-child {
+    border-radius: 0 0 0 6px;
+  }
+
+  .theme-button-row:last-child button:last-child {
+    border-radius: 0 0 6px 0;
   }
 
   .tool-name-field {

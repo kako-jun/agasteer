@@ -528,10 +528,8 @@
     }
   }
   async function handleCloseSettings() {
-    // 設定画面から別画面へ移動したときにPullを1回実行
-    if ($currentView === 'settings') {
-      await handlePull(false)
-    }
+    // 設定画面を閉じるときにPullを1回実行
+    await handlePull(false)
   }
 
   async function handlePull(isInitial = false) {
