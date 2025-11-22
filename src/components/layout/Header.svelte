@@ -41,23 +41,17 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(0, 0, 0, 0.15);
     gap: 0.5rem;
   }
 
-  :global([data-theme='campus']) header,
-  :global([data-theme='whiteboard']) header {
-    background: rgba(255, 255, 255, 0.6);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
-  }
-
   :global([data-theme='greenboard']) header,
   :global([data-theme='dotsD']) header,
   :global([data-theme='dotsF']) header {
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.15);
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   }
 

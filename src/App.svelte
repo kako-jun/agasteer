@@ -451,14 +451,32 @@
       notifyPush(false, '初回Pullが完了するまで保存できません')
       return
     }
-    if (!$currentLeaf) return
 
-    const result = await saveToGitHub($currentLeaf, $notes, $settings)
+    // 全リーフを保存
+    const allLeaves = $leaves
+    if (allLeaves.length === 0) {
+      notifyPush(false, '保存するリーフがありません')
+      return
+    }
 
-    if (result.success) {
-      notifyPush(true)
+    let successCount = 0
+    let failCount = 0
+
+    for (const leaf of allLeaves) {
+      const result = await saveToGitHub(leaf, $notes, $settings)
+      if (result.success) {
+        successCount++
+      } else {
+        failCount++
+      }
+    }
+
+    if (failCount === 0) {
+      notifyPush(true, `✅ ${successCount}件のリーフを保存しました`)
+    } else if (successCount > 0) {
+      notifyPush(false, `⚠️ ${successCount}件成功、${failCount}件失敗`)
     } else {
-      notifyPush(false)
+      notifyPush(false, `❌ すべての保存に失敗しました`)
     }
   }
 
@@ -574,6 +592,7 @@
         onDragStart={handleDragStartNote}
         onDragOver={handleDragOver}
         onDrop={handleDropNote}
+        onSave={handleSaveToGitHub}
         {getNoteItems}
       />
     {:else if $currentView === 'note' && $currentNote}
@@ -592,6 +611,7 @@
         onDragOver={handleDragOver}
         onDropNote={handleDropNote}
         onDropLeaf={handleDropLeaf}
+        onSave={handleSaveToGitHub}
         {getNoteItems}
       />
     {:else if $currentView === 'edit' && $currentLeaf}

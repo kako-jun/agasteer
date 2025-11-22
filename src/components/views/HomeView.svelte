@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Footer from '../layout/Footer.svelte'
   import type { Note } from '../../lib/types'
 
   export let notes: Note[]
@@ -7,6 +8,7 @@
   export let onDragStart: (note: Note) => void
   export let onDragOver: (e: DragEvent) => void
   export let onDrop: (note: Note) => void
+  export let onSave: () => void
   export let getNoteItems: (noteId: string) => string[]
   export let disabled: boolean = false
 </script>
@@ -37,34 +39,47 @@
   </div>
 </section>
 
-<div class="toolbar-fixed">
-  <div style="flex: 1;"></div>
+<Footer>
+  <svelte:fragment slot="left">
+    <button type="button" on:click={onCreateNote} title="新規ノート" aria-label="新規ノート">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="button-icon"
+      >
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <line x1="12" y1="11" x2="12" y2="17" />
+        <line x1="9" y1="14" x2="15" y2="14" />
+      </svg>
+    </button>
+  </svelte:fragment>
 
-  <button
-    type="button"
-    class="icon-only"
-    on:click={onCreateNote}
-    title="新規ノート"
-    aria-label="新規ノート"
-  >
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class="button-icon"
-    >
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-      <line x1="12" y1="11" x2="12" y2="17" />
-      <line x1="9" y1="14" x2="15" y2="14" />
-    </svg>
-  </button>
-</div>
+  <svelte:fragment slot="right">
+    <button type="button" class="primary" on:click={onSave} title="保存" aria-label="保存">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="button-icon"
+      >
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+        <polyline points="17 21 17 13 7 13 7 21" />
+        <polyline points="7 3 7 8 15 8" />
+      </svg>
+    </button>
+  </svelte:fragment>
+</Footer>
 
 <style>
   .view-container {
@@ -107,68 +122,5 @@
 
   .note-item {
     display: block;
-  }
-
-  .toolbar-fixed {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(0, 0, 0, 0.15);
-    padding: 0.75rem 1rem;
-    z-index: 10;
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  :global([data-theme='campus']) .toolbar-fixed,
-  :global([data-theme='whiteboard']) .toolbar-fixed {
-    background: rgba(255, 255, 255, 0.7);
-    border-top: 1px solid rgba(0, 0, 0, 0.15);
-  }
-
-  :global([data-theme='greenboard']) .toolbar-fixed,
-  :global([data-theme='dotsD']) .toolbar-fixed,
-  :global([data-theme='dotsF']) .toolbar-fixed {
-    background: rgba(0, 0, 0, 0.4);
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
-  }
-
-  button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.25rem;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.2s;
-  }
-
-  button:hover {
-    opacity: 0.7;
-  }
-
-  :global(.button-icon) {
-    margin: 0;
-  }
-
-  .icon-only {
-    padding: 0.25rem;
-    color: var(--accent-color);
-  }
-
-  .icon-only:hover {
-    opacity: 0.7;
-  }
-
-  button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
   }
 </style>

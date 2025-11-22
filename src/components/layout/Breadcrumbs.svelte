@@ -114,7 +114,7 @@
     gap: 0.5rem;
     padding: 0 1rem;
     height: 40px;
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(0, 0, 0, 0.15);
@@ -122,16 +122,10 @@
     flex-wrap: wrap;
   }
 
-  :global([data-theme='campus']) .breadcrumbs,
-  :global([data-theme='whiteboard']) .breadcrumbs {
-    background: rgba(255, 255, 255, 0.5);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
-  }
-
   :global([data-theme='greenboard']) .breadcrumbs,
   :global([data-theme='dotsD']) .breadcrumbs,
   :global([data-theme='dotsF']) .breadcrumbs {
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(255, 255, 255, 0.15);
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   }
 
