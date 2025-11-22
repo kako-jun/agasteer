@@ -157,48 +157,52 @@
           <h3>おまけ</h3>
           <span class="sub-label">テーマ選択</span>
           <div class="theme-buttons">
-            <button
-              type="button"
-              class:active={settings.theme === 'yomi'}
-              on:click={() => handleThemeSelect('yomi')}
-            >
-              黄泉
-            </button>
-            <button
-              type="button"
-              class:active={settings.theme === 'campus'}
-              on:click={() => handleThemeSelect('campus')}
-            >
-              キャンパス
-            </button>
-            <button
-              type="button"
-              class:active={settings.theme === 'greenboard'}
-              on:click={() => handleThemeSelect('greenboard')}
-            >
-              緑板
-            </button>
-            <button
-              type="button"
-              class:active={settings.theme === 'whiteboard'}
-              on:click={() => handleThemeSelect('whiteboard')}
-            >
-              ホワイボー
-            </button>
-            <button
-              type="button"
-              class:active={settings.theme === 'dotsD'}
-              on:click={() => handleThemeSelect('dotsD')}
-            >
-              ドッツD
-            </button>
-            <button
-              type="button"
-              class:active={settings.theme === 'dotsF'}
-              on:click={() => handleThemeSelect('dotsF')}
-            >
-              ドッツF
-            </button>
+            <div class="theme-button-row">
+              <button
+                type="button"
+                class:active={settings.theme === 'yomi'}
+                on:click={() => handleThemeSelect('yomi')}
+              >
+                黄泉
+              </button>
+              <button
+                type="button"
+                class:active={settings.theme === 'campus'}
+                on:click={() => handleThemeSelect('campus')}
+              >
+                キャンパス
+              </button>
+              <button
+                type="button"
+                class:active={settings.theme === 'greenboard'}
+                on:click={() => handleThemeSelect('greenboard')}
+              >
+                緑板
+              </button>
+            </div>
+            <div class="theme-button-row">
+              <button
+                type="button"
+                class:active={settings.theme === 'whiteboard'}
+                on:click={() => handleThemeSelect('whiteboard')}
+              >
+                ホワイボー
+              </button>
+              <button
+                type="button"
+                class:active={settings.theme === 'dotsD'}
+                on:click={() => handleThemeSelect('dotsD')}
+              >
+                ドッツD
+              </button>
+              <button
+                type="button"
+                class:active={settings.theme === 'dotsF'}
+                on:click={() => handleThemeSelect('dotsF')}
+              >
+                ドッツF
+              </button>
+            </div>
           </div>
           <div class="tool-name-field">
             <label for="tool-name">ツール名</label>
@@ -268,6 +272,7 @@
     gap: 1rem;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
+    justify-content: center;
   }
 
   .help-link {
@@ -344,14 +349,19 @@
   }
 
   .theme-buttons {
-    display: inline-flex;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0 auto;
+    max-width: fit-content;
+  }
+
+  .theme-button-row {
+    display: flex;
     gap: 0;
-    flex-wrap: nowrap;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     overflow: hidden;
-    margin: 0 auto;
-    justify-content: center;
   }
 
   .theme-buttons button {
@@ -365,13 +375,14 @@
       color 0.2s;
     min-width: 70px;
     border-radius: 0;
+    flex: 1;
   }
 
-  .theme-buttons button:first-child {
+  .theme-button-row button:first-child {
     border-radius: 6px 0 0 6px;
   }
 
-  .theme-buttons button:last-child {
+  .theme-button-row button:last-child {
     border-radius: 0 6px 6px 0;
   }
 
