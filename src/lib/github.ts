@@ -74,7 +74,7 @@ export async function fetchCurrentSha(path: string, settings: Settings): Promise
 }
 
 /**
- * GitHubにノートを保存
+ * GitHubにノートを保存（旧実装、後方互換性のため残す）
  */
 export async function saveToGitHub(
   leaf: Leaf,
@@ -132,6 +132,161 @@ export async function saveToGitHub(
       }
     }
   } catch (error) {
+    return {
+      success: false,
+      message: '❌ ネットワークエラー',
+    }
+  }
+}
+
+/**
+ * Git Tree APIを使って全リーフを1コミットでPush
+ * リネーム・削除されたファイルも正しく処理される
+ */
+export async function pushAllWithTreeAPI(
+  leaves: Leaf[],
+  notes: Note[],
+  settings: Settings
+): Promise<SaveResult> {
+  // 設定の検証
+  if (!settings.token || !settings.repoName) {
+    return {
+      success: false,
+      message: 'GitHub設定が不完全です。',
+    }
+  }
+
+  const headers = {
+    Authorization: `Bearer ${settings.token}`,
+    'Content-Type': 'application/json',
+  }
+
+  try {
+    // 1. デフォルトブランチを取得
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
+    if (!repoRes.ok) {
+      return { success: false, message: `❌ リポジトリ取得失敗 (${repoRes.status})` }
+    }
+    const repoData = await repoRes.json()
+    const branch = repoData.default_branch || 'main'
+
+    // 2. 現在のブランチのHEADを取得
+    const refRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/ref/heads/${branch}`,
+      { headers }
+    )
+    if (!refRes.ok) {
+      return { success: false, message: `❌ ブランチ取得失敗 (${refRes.status})` }
+    }
+    const refData = await refRes.json()
+    const currentCommitSha = refData.object.sha
+
+    // 3. 現在のコミットを取得してTreeのSHAを取得
+    const commitRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/commits/${currentCommitSha}`,
+      { headers }
+    )
+    if (!commitRes.ok) {
+      return { success: false, message: `❌ コミット取得失敗 (${commitRes.status})` }
+    }
+    const commitData = await commitRes.json()
+    const baseTreeSha = commitData.tree.sha
+
+    // 4. 新しいTreeを構築（notes/配下を全て定義）
+    const treeItems: Array<{
+      path: string
+      mode: string
+      type: string
+      content?: string
+      sha?: string | null
+    }> = []
+
+    // notes/.gitkeep を追加（notesディレクトリが空でも削除されないように）
+    treeItems.push({
+      path: 'notes/.gitkeep',
+      mode: '100644',
+      type: 'blob',
+      content: '',
+    })
+
+    // 全リーフをTreeに追加
+    for (const leaf of leaves) {
+      const path = buildPath(leaf, notes)
+      treeItems.push({
+        path,
+        mode: '100644',
+        type: 'blob',
+        content: leaf.content, // Git APIはUTF-8をそのまま受け付ける
+      })
+    }
+
+    // 5. 新しいTreeを作成
+    const treeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree: treeItems,
+      }),
+    })
+    if (!treeRes.ok) {
+      const error = await treeRes.json()
+      return { success: false, message: `❌ Tree作成失敗: ${error.message}` }
+    }
+    const treeData = await treeRes.json()
+    const newTreeSha = treeData.sha
+
+    // 6. 新しいコミットを作成
+    const newCommitRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/commits`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message: 'auto-sync',
+          tree: newTreeSha,
+          parents: [currentCommitSha],
+          committer: {
+            name: settings.username || 'SimplestNote User',
+            email: settings.email || 'user@example.com',
+          },
+          author: {
+            name: settings.username || 'SimplestNote User',
+            email: settings.email || 'user@example.com',
+          },
+        }),
+      }
+    )
+    if (!newCommitRes.ok) {
+      const error = await newCommitRes.json()
+      return { success: false, message: `❌ コミット作成失敗: ${error.message}` }
+    }
+    const newCommitData = await newCommitRes.json()
+    const newCommitSha = newCommitData.sha
+
+    // 7. ブランチのリファレンスを更新
+    const updateRefRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/refs/heads/${branch}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          sha: newCommitSha,
+          force: false, // 強制更新しない（競合を検出）
+        }),
+      }
+    )
+    if (!updateRefRes.ok) {
+      const error = await updateRefRes.json()
+      return { success: false, message: `❌ ブランチ更新失敗: ${error.message}` }
+    }
+
+    return {
+      success: true,
+      message: `✅ ${leaves.length}件のリーフを保存しました`,
+    }
+  } catch (error) {
+    console.error('GitHub Tree API error:', error)
     return {
       success: false,
       message: '❌ ネットワークエラー',

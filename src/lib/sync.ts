@@ -1,5 +1,5 @@
 import type { Note, Leaf, Settings } from './types'
-import { saveToGitHub, pullFromGitHub } from './github'
+import { pushAllWithTreeAPI, pullFromGitHub } from './github'
 
 /**
  * Push操作の結果
@@ -22,7 +22,12 @@ export interface PullResult {
 }
 
 /**
- * 全リーフをGitHubにPush
+ * 全リーフをGitHubにPush（Git Tree APIを使用）
+ *
+ * Git Tree APIにより、1コミットで全変更を反映：
+ * - リネーム・削除されたファイルも正しく処理
+ * - APIリクエスト数を最小化（約6回）
+ * - IndexedDBには一切触らない（メモリ上のみで処理）
  *
  * @param leaves - Push対象のリーフ配列
  * @param notes - ノート配列（パス構築に必要）
@@ -54,38 +59,13 @@ export async function executePush(
     }
   }
 
-  let successCount = 0
-  let failCount = 0
+  // Git Tree APIで一括Push
+  const result = await pushAllWithTreeAPI(leaves, notes, settings)
 
-  // 全リーフをPush
-  for (const leaf of leaves) {
-    const result = await saveToGitHub(leaf, notes, settings)
-    if (result.success) {
-      successCount++
-    } else {
-      failCount++
-    }
-  }
-
-  // 結果を返す
-  if (failCount === 0) {
-    return {
-      success: true,
-      message: `✅ ${successCount}件のリーフを保存しました`,
-      variant: 'success',
-    }
-  } else if (successCount > 0) {
-    return {
-      success: false,
-      message: `⚠️ ${successCount}件成功、${failCount}件失敗`,
-      variant: 'error',
-    }
-  } else {
-    return {
-      success: false,
-      message: `❌ すべての保存に失敗しました`,
-      variant: 'error',
-    }
+  return {
+    success: result.success,
+    message: result.message,
+    variant: result.success ? 'success' : 'error',
   }
 }
 
