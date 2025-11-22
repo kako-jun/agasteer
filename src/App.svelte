@@ -18,11 +18,22 @@
     updateLeaves,
   } from './lib/stores'
   import { clearAllData, loadSettings } from './lib/storage'
-  import { pullFromGitHub, saveToGitHub } from './lib/github'
   import { applyTheme } from './lib/theme'
+  import { executePush, executePull } from './lib/sync'
+  import {
+    pushToastState,
+    pullToastState,
+    modalState,
+    showPushToast,
+    showPullToast,
+    showConfirm,
+    showAlert,
+    closeModal,
+  } from './lib/ui'
   import Header from './components/layout/Header.svelte'
   import Breadcrumbs from './components/layout/Breadcrumbs.svelte'
   import Modal from './components/layout/Modal.svelte'
+  import Toast from './components/layout/Toast.svelte'
   import HomeView from './components/views/HomeView.svelte'
   import NoteView from './components/views/NoteView.svelte'
   import EditorView from './components/views/EditorView.svelte'
@@ -35,16 +46,6 @@
   let draggedLeaf: Leaf | null = null
   let pullRunning = false
   let isOperationsLocked = true
-  let pullToast = ''
-  let pushToast = ''
-  let pullToastVariant: 'success' | 'error' | '' = ''
-  let pushToastVariant: 'success' | 'error' | '' = ''
-
-  // モーダル状態
-  let showModal = false
-  let modalMessage = ''
-  let modalType: 'confirm' | 'alert' = 'confirm'
-  let modalCallback: (() => void) | null = null
   let showSettings = false
 
   // リアクティブ宣言
@@ -134,39 +135,6 @@
       window.removeEventListener('popstate', handlePopState)
     }
   })
-
-  // モーダル関数
-  function showConfirm(message: string, onConfirm: () => void) {
-    modalMessage = message
-    modalType = 'confirm'
-    modalCallback = onConfirm
-    showModal = true
-  }
-
-  function showAlert(message: string) {
-    modalMessage = message
-    modalType = 'alert'
-    modalCallback = null
-    showModal = true
-  }
-
-  function closeModal() {
-    showModal = false
-    modalMessage = ''
-    modalCallback = null
-  }
-
-  function showPushToast(message: string) {
-    pushToast = message
-    setTimeout(() => {
-      pushToast = ''
-    }, 2000)
-  }
-
-  function notifyPush(success: boolean, message?: string) {
-    showPushToast(message ?? (success ? 'Pushしました' : 'Pushに失敗しました'))
-    pushToastVariant = success ? 'success' : 'error'
-  }
 
   // ナビゲーション
   async function goHome() {
@@ -514,47 +482,19 @@
 
   // GitHub同期
   async function handleSaveToGitHub() {
-    if (isOperationsLocked) {
-      notifyPush(false, '初回Pullが完了するまで保存できません')
-      return
-    }
-
-    // 全リーフを保存
-    const allLeaves = $leaves
-    if (allLeaves.length === 0) {
-      notifyPush(false, '保存するリーフがありません')
-      return
-    }
-
     // Push開始を通知
-    pushToast = 'Pushします'
-    pushToastVariant = ''
+    showPushToast('Pushします')
 
-    let successCount = 0
-    let failCount = 0
+    const result = await executePush($leaves, $notes, $settings, isOperationsLocked)
 
-    for (const leaf of allLeaves) {
-      const result = await saveToGitHub(leaf, $notes, $settings)
-      if (result.success) {
-        successCount++
-      } else {
-        failCount++
-      }
-    }
-
-    if (failCount === 0) {
-      notifyPush(true, `✅ ${successCount}件のリーフを保存しました`)
-    } else if (successCount > 0) {
-      notifyPush(false, `⚠️ ${successCount}件成功、${failCount}件失敗`)
-    } else {
-      notifyPush(false, `❌ すべての保存に失敗しました`)
-    }
+    // 結果を通知
+    showPushToast(result.message, result.variant)
   }
 
   // ダウンロード
   function downloadLeaf() {
     if (isOperationsLocked) {
-      notifyPush(false, '初回Pullが完了するまでダウンロードできません')
+      showPushToast('初回Pullが完了するまでダウンロードできません', 'error')
       return
     }
     if (!$currentLeaf) return
@@ -599,8 +539,7 @@
     isOperationsLocked = true
 
     // Pull開始を通知
-    pullToast = 'Pullします'
-    pullToastVariant = ''
+    showPullToast('Pullします')
 
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     // IndexedDBは単なるキャッシュであり、Pull成功時に全削除→全作成される
@@ -611,29 +550,22 @@
     currentNote.set(null)
     currentLeaf.set(null)
 
-    const result = await pullFromGitHub($settings)
+    const result = await executePull($settings, isInitial)
+
     if (result.success) {
       // GitHubから取得したデータでIndexedDBを再作成
       updateNotes(result.notes)
       updateLeaves(result.leaves)
       isOperationsLocked = false
-      pullToast = 'Pullしました'
-      pullToastVariant = 'success'
     } else {
       if (isInitial) {
         showAlert('初回Pullに失敗しました。設定を確認して再度Pullしてください。')
       }
-      pullToast = 'Pullに失敗しました'
-      pullToastVariant = 'error'
     }
 
+    // 結果を通知
+    showPullToast(result.message, result.variant)
     pullRunning = false
-    if (pullToast) {
-      setTimeout(() => {
-        pullToast = ''
-        pullToastVariant = ''
-      }, 2000)
-    }
   }
 </script>
 
@@ -703,10 +635,10 @@
   </main>
 
   <Modal
-    show={showModal}
-    message={modalMessage}
-    type={modalType}
-    onConfirm={modalCallback}
+    show={$modalState.show}
+    message={$modalState.message}
+    type={$modalState.type}
+    onConfirm={$modalState.callback}
     onClose={closeModal}
   />
 
@@ -756,28 +688,12 @@
     </div>
   {/if}
 
-  {#if pullToast || pushToast}
-    <div class="toast-stack">
-      {#if pullToast}
-        <div
-          class="toast"
-          class:success={pullToastVariant === 'success'}
-          class:error={pullToastVariant === 'error'}
-        >
-          {pullToast}
-        </div>
-      {/if}
-      {#if pushToast}
-        <div
-          class="toast"
-          class:success={pushToastVariant === 'success'}
-          class:error={pushToastVariant === 'error'}
-        >
-          {pushToast}
-        </div>
-      {/if}
-    </div>
-  {/if}
+  <Toast
+    pullMessage={$pullToastState.message}
+    pullVariant={$pullToastState.variant}
+    pushMessage={$pushToastState.message}
+    pushVariant={$pushToastState.variant}
+  />
 </div>
 
 <style>
@@ -801,40 +717,6 @@
 
   main {
     position: relative;
-  }
-
-  .toast-stack {
-    position: fixed;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    z-index: 100;
-    align-items: center;
-  }
-
-  .toast {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.5rem 0.75rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    font-size: 0.9rem;
-    min-width: 140px;
-    text-align: center;
-  }
-
-  .toast.success {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
-  }
-
-  .toast.error {
-    border-color: var(--error-color);
-    color: var(--error-color);
   }
 
   .settings-modal-overlay {
