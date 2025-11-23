@@ -15,6 +15,7 @@ export const currentView = writable<View>('home')
 export const currentNote = writable<Note | null>(null)
 export const currentLeaf = writable<Leaf | null>(null)
 export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
+export const isDirty = writable<boolean>(false)
 
 // 派生ストア
 export const rootNotes = derived(notes, ($notes) =>
@@ -47,10 +48,14 @@ export function updateSettings(newSettings: Settings): void {
 export function updateNotes(newNotes: Note[]): void {
   notes.set(newNotes)
   saveNotes(newNotes).catch((err) => console.error('Failed to persist notes:', err))
+  // ノートの変更があったらダーティフラグを立てる
+  isDirty.set(true)
 }
 
 export function updateLeaves(newLeaves: Leaf[]): void {
   leaves.set(newLeaves)
   // 非同期で永続化（失敗してもUIをブロックしない）
   saveLeaves(newLeaves).catch((err) => console.error('Failed to persist leaves:', err))
+  // リーフの変更があったらダーティフラグを立てる
+  isDirty.set(true)
 }

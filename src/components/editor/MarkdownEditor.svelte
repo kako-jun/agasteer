@@ -6,6 +6,7 @@
   import { markdown } from '@codemirror/lang-markdown'
   import { basicSetup } from 'codemirror'
   import type { ThemeType } from '../../lib/types'
+  import { isDirty } from '../../lib/stores'
 
   export let content: string
   export let theme: ThemeType
@@ -88,7 +89,10 @@
       history(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          onChange(update.state.doc.toString())
+          const newContent = update.state.doc.toString()
+          onChange(newContent)
+          // エディタで変更があったらダーティフラグを立てる（Push成功まで解除されない）
+          isDirty.set(true)
         }
       }),
     ]
@@ -125,6 +129,7 @@
     })
 
     editorView.setState(newState)
+    // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
   // テーマ変更時にエディタを再初期化

@@ -103,6 +103,15 @@
 - [x] **Push並行実行防止**（isPushingフラグ）
 - [x] **強制更新**（force: true、個人用アプリなので常に成功を優先）
 
+#### データ保護
+
+- [x] **未保存変更の確認機能**
+  - isDirtyストアでGitHubにPushされていない変更を追跡
+  - Pull実行時に確認ダイアログを表示
+  - ページ離脱時（タブを閉じる、リロード）にブラウザ標準ダイアログを表示
+  - 保存ボタンに赤い丸印（notification badge）を表示
+  - アプリ内ナビゲーションは制限されない（自動保存のため）
+
 ### 🚧 実装中の機能
 
 なし（現在、すべての計画済み機能が実装完了）
@@ -177,6 +186,19 @@ npm run preview
 ---
 
 ## 📝 変更履歴
+
+### Version 4.4 (2025-01-23)
+
+- **未保存変更の確認機能**
+  - isDirtyストアを追加（GitHubにPushされていない変更を追跡）
+  - エディタ編集時、ノート/リーフの作成・削除・変更時にisDirty.set(true)
+  - Push成功時とPull成功時にisDirty.set(false)
+  - Pull実行時に未保存の変更がある場合、確認ダイアログを表示（Modal.svelte）
+  - ページ離脱時（タブを閉じる、リロード）にブラウザ標準の確認ダイアログを表示（beforeunload）
+  - 保存ボタンに赤い丸印（notification badge）を表示
+  - アプリ内ナビゲーション（ホーム、ノート、リーフ間の移動）は制限されない
+  - ブラウザの戻る/進むボタンも制限されない
+  - 自動保存（IndexedDB）により、アプリ内でのデータ損失は発生しない
 
 ### Version 4.3 (2025-01-23)
 
@@ -253,6 +275,6 @@ npm run preview
 
 ---
 
-**Document Version**: 4.2
+**Document Version**: 4.4
 **Last Updated**: 2025-01-23
 **Author**: Claude (Anthropic)

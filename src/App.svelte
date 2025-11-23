@@ -14,6 +14,7 @@
     currentNoteLeaves,
     githubConfigured,
     metadata,
+    isDirty,
     updateSettings,
     updateNotes,
     updateLeaves,
@@ -218,9 +219,20 @@
     }
     window.addEventListener('popstate', handlePopState)
 
+    // ページ離脱時の確認（未保存の変更がある場合）
+    // ブラウザ標準のダイアログを使用
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (get(isDirty)) {
+        e.preventDefault()
+        e.returnValue = '' // Chrome requires returnValue to be set
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
     return () => {
       window.removeEventListener('popstate', handlePopState)
       window.removeEventListener('resize', updateDualPane)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
     }
   })
 
@@ -799,6 +811,11 @@
 
       // 結果を通知
       showPushToast(result.message, result.variant)
+
+      // Push成功時にダーティフラグをクリア
+      if (result.variant === 'success') {
+        isDirty.set(false)
+      }
     } finally {
       isPushing = false
     }
@@ -849,6 +866,18 @@
   }
 
   async function handlePull(isInitial = false) {
+    // 初回Pull以外で未保存の変更がある場合は確認
+    if (!isInitial && get(isDirty)) {
+      showConfirm('未保存の変更があります。Pullを実行しますか？', () =>
+        executePullInternal(isInitial)
+      )
+      return
+    }
+
+    await executePullInternal(isInitial)
+  }
+
+  async function executePullInternal(isInitial: boolean) {
     pullRunning = true
     isOperationsLocked = true
     isPulling = true // Pull処理中はURL更新をスキップ
@@ -879,6 +908,9 @@
       updateLeaves(result.leaves)
       metadata.set(result.metadata)
       isOperationsLocked = false
+
+      // Pull成功時はGitHubと同期したのでダーティフラグをクリア
+      isDirty.set(false)
 
       // 初回Pull時はURLから状態を復元（既にisRestoringFromUrl=trueを設定済み）
       if (isInitial) {
@@ -1006,7 +1038,7 @@
           <svelte:fragment slot="right">
             <button
               type="button"
-              class="primary"
+              class="primary save-button"
               on:click={handleSaveToGitHub}
               title="保存"
               aria-label="保存"
@@ -1025,6 +1057,9 @@
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
+              {#if $isDirty}
+                <span class="notification-badge"></span>
+              {/if}
             </button>
           </svelte:fragment>
         </Footer>
@@ -1117,7 +1152,7 @@
           <svelte:fragment slot="right">
             <button
               type="button"
-              class="primary"
+              class="primary save-button"
               on:click={handleSaveToGitHub}
               title="保存"
               aria-label="保存"
@@ -1136,6 +1171,9 @@
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
+              {#if $isDirty}
+                <span class="notification-badge"></span>
+              {/if}
             </button>
           </svelte:fragment>
         </Footer>
@@ -1198,7 +1236,7 @@
           <svelte:fragment slot="right">
             <button
               type="button"
-              class="primary"
+              class="primary save-button"
               on:click={handleSaveToGitHub}
               title="Save"
               aria-label="Save"
@@ -1217,6 +1255,9 @@
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
+              {#if $isDirty}
+                <span class="notification-badge"></span>
+              {/if}
             </button>
           </svelte:fragment>
         </Footer>
@@ -1325,7 +1366,7 @@
           <svelte:fragment slot="right">
             <button
               type="button"
-              class="primary"
+              class="primary save-button"
               on:click={handleSaveToGitHub}
               title="保存"
               aria-label="保存"
@@ -1344,6 +1385,9 @@
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
+              {#if $isDirty}
+                <span class="notification-badge"></span>
+              {/if}
             </button>
           </svelte:fragment>
         </Footer>
@@ -1436,7 +1480,7 @@
           <svelte:fragment slot="right">
             <button
               type="button"
-              class="primary"
+              class="primary save-button"
               on:click={handleSaveToGitHub}
               title="保存"
               aria-label="保存"
@@ -1455,6 +1499,9 @@
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
+              {#if $isDirty}
+                <span class="notification-badge"></span>
+              {/if}
             </button>
           </svelte:fragment>
         </Footer>
@@ -1517,7 +1564,7 @@
           <svelte:fragment slot="right">
             <button
               type="button"
-              class="primary"
+              class="primary save-button"
               on:click={handleSaveToGitHub}
               title="Save"
               aria-label="Save"
@@ -1536,6 +1583,9 @@
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
+              {#if $isDirty}
+                <span class="notification-badge"></span>
+              {/if}
             </button>
           </svelte:fragment>
         </Footer>
@@ -1724,5 +1774,19 @@
   .settings-close-button:hover {
     background: var(--bg-secondary);
     color: var(--text-primary);
+  }
+
+  :global(.save-button) {
+    position: relative;
+  }
+
+  :global(.notification-badge) {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
   }
 </style>

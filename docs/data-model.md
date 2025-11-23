@@ -87,6 +87,77 @@ Folder (id: uuid-1, parentId: null)         // ルートフォルダ
 
 ## 状態管理とデータフロー
 
+### Svelteストア
+
+SimplestNote.mdは、Svelteの`writable`と`derived`ストアを使用して状態を管理します。
+
+#### 基本ストア
+
+```typescript
+export const settings = writable<Settings>(defaultSettings)
+export const notes = writable<Note[]>([])
+export const leaves = writable<Leaf[]>([])
+export const currentView = writable<View>('home')
+export const currentNote = writable<Note | null>(null)
+export const currentLeaf = writable<Leaf | null>(null)
+export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
+export const isDirty = writable<boolean>(false) // GitHubにPushされていない変更があるか
+```
+
+#### 派生ストア
+
+```typescript
+// ルートノート（parentIdがないもの）
+export const rootNotes = derived(notes, ($notes) =>
+  $notes.filter((f) => !f.parentId).sort((a, b) => a.order - b.order)
+)
+
+// サブノート（現在のノートの子ノート）
+export const subNotes = derived([notes, currentNote], ([$notes, $currentNote]) =>
+  $currentNote
+    ? $notes.filter((f) => f.parentId === $currentNote.id).sort((a, b) => a.order - b.order)
+    : []
+)
+
+// 現在のノート内のリーフ
+export const currentNoteLeaves = derived([leaves, currentNote], ([$leaves, $currentNote]) =>
+  $currentNote
+    ? $leaves.filter((n) => n.noteId === $currentNote.id).sort((a, b) => a.order - b.order)
+    : []
+)
+
+// GitHub設定が完了しているか
+export const githubConfigured = derived(
+  settings,
+  ($settings) => !!($settings.token && $settings.repoName)
+)
+```
+
+#### ダーティフラグ（isDirty）の管理
+
+`isDirty`ストアは、GitHubにPushされていない変更があるかどうかを追跡します。
+
+**ダーティフラグが立つタイミング:**
+
+- エディタでリーフの内容を編集したとき
+- ノートを作成・削除・名前変更・並び替えたとき（`updateNotes()`内で自動的に`isDirty.set(true)`）
+- リーフを作成・削除・名前変更・並び替えたとき（`updateLeaves()`内で自動的に`isDirty.set(true)`）
+
+**ダーティフラグがクリアされるタイミング:**
+
+- Push成功時（GitHubとの同期完了）
+- Pull成功時（GitHubから最新データを取得）
+
+**ダーティ状態での動作:**
+
+- 保存ボタンに赤い丸印（notification badge）が表示される
+- Pull実行時に確認ダイアログが表示される
+- ページ離脱時（タブを閉じる、リロード）にブラウザ標準の確認ダイアログが表示される
+
+**アプリ内ナビゲーションは制限されない:**
+
+このアプリは編集時に自動的にIndexedDBに保存されるため、アプリ内のナビゲーション（ホーム、ノート、リーフ間の移動）ではデータが失われません。ダーティフラグは「GitHubにPushしていない」という意味であり、GitHubとの同期を失う操作（Pullとページ離脱）のみ確認が必要です。
+
 ### データ永続化の仕様
 
 SimplestNote.mdは、データを2つの異なるストレージに保存します。
