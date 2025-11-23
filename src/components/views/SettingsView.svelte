@@ -1,14 +1,10 @@
 <script lang="ts">
   import { _, locale } from '../../lib/i18n'
   import type { Settings, ThemeType, Locale } from '../../lib/types'
-  import { uploadAndApplyFont, removeAndDeleteCustomFont } from '../../lib/font'
-  import {
-    uploadAndApplyBackgroundLeft,
-    uploadAndApplyBackgroundRight,
-    removeAndDeleteCustomBackgroundLeft,
-    removeAndDeleteCustomBackgroundRight,
-  } from '../../lib/background'
-  import { showAlert } from '../../lib/ui'
+  import GitHubSettings from '../settings/GitHubSettings.svelte'
+  import ThemeSelector from '../settings/ThemeSelector.svelte'
+  import FontCustomizer from '../settings/FontCustomizer.svelte'
+  import BackgroundCustomizer from '../settings/BackgroundCustomizer.svelte'
 
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
@@ -16,45 +12,10 @@
   export let pullRunning: boolean = false
   export let onPull: (isInitial?: boolean) => void
 
-  let fileInput: HTMLInputElement
-  let fontUploading = false
-  let backgroundLeftFileInput: HTMLInputElement
-  let backgroundRightFileInput: HTMLInputElement
-  let backgroundLeftUploading = false
-  let backgroundRightUploading = false
-
-  const BACKGROUND_OPACITY = 0.1
-
-  function handleThemeSelect(theme: ThemeType) {
-    settings.theme = theme
-    onThemeChange(theme)
-    onSettingsChange({ theme })
-  }
-
-  type TextSettingKey = Exclude<
-    keyof Settings,
-    | 'theme'
-    | 'locale'
-    | 'hasCustomFont'
-    | 'hasCustomBackgroundLeft'
-    | 'hasCustomBackgroundRight'
-    | 'backgroundOpacityLeft'
-    | 'backgroundOpacityRight'
-  >
-
-  function handleInputChange(key: TextSettingKey, value: string) {
-    settings[key] = value as Settings[TextSettingKey]
-    onSettingsChange({ [key]: value } as Partial<Settings>)
-  }
-
-  function handleTextInput(key: TextSettingKey, event: Event) {
-    const value = (event.target as HTMLInputElement).value
-    handleInputChange(key, value)
-  }
-
   function handleToolNameInput(event: Event) {
     const value = (event.target as HTMLInputElement).value
-    handleInputChange('toolName', value)
+    settings.toolName = value
+    onSettingsChange({ toolName: value })
   }
 
   function handleLocaleChange(event: Event) {
@@ -63,153 +24,6 @@
     settings.locale = value
     onSettingsChange({ locale: value })
   }
-
-  function handleFontButtonClick() {
-    fileInput?.click()
-  }
-
-  async function handleFontFileChange(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-
-    if (!file) return
-
-    // フォントファイルの拡張子チェック
-    const validExtensions = ['.ttf', '.otf', '.woff', '.woff2']
-    const fileName = file.name.toLowerCase()
-    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      showAlert($_('settings.extras.font.invalidFormat'))
-      return
-    }
-
-    try {
-      fontUploading = true
-      await uploadAndApplyFont(file)
-      settings.hasCustomFont = true
-      onSettingsChange({ hasCustomFont: true })
-    } catch (error) {
-      console.error('Failed to upload font:', error)
-      showAlert($_('settings.extras.font.uploadFailed'))
-    } finally {
-      fontUploading = false
-      input.value = ''
-    }
-  }
-
-  async function handleResetFont() {
-    try {
-      await removeAndDeleteCustomFont()
-      settings.hasCustomFont = false
-      onSettingsChange({ hasCustomFont: false })
-    } catch (error) {
-      console.error('Failed to reset font:', error)
-      showAlert($_('settings.extras.font.resetFailed'))
-    }
-  }
-
-  function handleBackgroundLeftButtonClick() {
-    backgroundLeftFileInput?.click()
-  }
-
-  function handleBackgroundRightButtonClick() {
-    backgroundRightFileInput?.click()
-  }
-
-  async function handleBackgroundLeftFileChange(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-
-    if (!file) return
-
-    // 画像ファイルの拡張子チェック
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-    const fileName = file.name.toLowerCase()
-    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      showAlert($_('settings.extras.background.invalidFormat'))
-      return
-    }
-
-    try {
-      backgroundLeftUploading = true
-      await uploadAndApplyBackgroundLeft(file, BACKGROUND_OPACITY)
-      settings.hasCustomBackgroundLeft = true
-      settings.backgroundOpacityLeft = BACKGROUND_OPACITY
-      onSettingsChange({
-        hasCustomBackgroundLeft: true,
-        backgroundOpacityLeft: BACKGROUND_OPACITY,
-      })
-    } catch (error) {
-      console.error('Failed to upload left background:', error)
-      showAlert($_('settings.extras.background.uploadFailedLeft'))
-    } finally {
-      backgroundLeftUploading = false
-      input.value = ''
-    }
-  }
-
-  async function handleBackgroundRightFileChange(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-
-    if (!file) return
-
-    // 画像ファイルの拡張子チェック
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-    const fileName = file.name.toLowerCase()
-    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      showAlert($_('settings.extras.background.invalidFormat'))
-      return
-    }
-
-    try {
-      backgroundRightUploading = true
-      await uploadAndApplyBackgroundRight(file, BACKGROUND_OPACITY)
-      settings.hasCustomBackgroundRight = true
-      settings.backgroundOpacityRight = BACKGROUND_OPACITY
-      onSettingsChange({
-        hasCustomBackgroundRight: true,
-        backgroundOpacityRight: BACKGROUND_OPACITY,
-      })
-    } catch (error) {
-      console.error('Failed to upload right background:', error)
-      showAlert($_('settings.extras.background.uploadFailedRight'))
-    } finally {
-      backgroundRightUploading = false
-      input.value = ''
-    }
-  }
-
-  async function handleResetBackgroundLeft() {
-    try {
-      await removeAndDeleteCustomBackgroundLeft()
-      settings.hasCustomBackgroundLeft = false
-      settings.backgroundOpacityLeft = BACKGROUND_OPACITY
-      onSettingsChange({
-        hasCustomBackgroundLeft: false,
-        backgroundOpacityLeft: BACKGROUND_OPACITY,
-      })
-    } catch (error) {
-      console.error('Failed to reset left background:', error)
-      showAlert($_('settings.extras.background.resetFailedLeft'))
-    }
-  }
-
-  async function handleResetBackgroundRight() {
-    try {
-      await removeAndDeleteCustomBackgroundRight()
-      settings.hasCustomBackgroundRight = false
-      settings.backgroundOpacityRight = BACKGROUND_OPACITY
-      onSettingsChange({
-        hasCustomBackgroundRight: false,
-        backgroundOpacityRight: BACKGROUND_OPACITY,
-      })
-    } catch (error) {
-      console.error('Failed to reset right background:', error)
-      showAlert($_('settings.extras.background.resetFailedRight'))
-    }
-  }
-
-  // Pullテスト結果の表示はトーストに統一
 </script>
 
 <section class="settings-container">
@@ -272,71 +86,7 @@
     <hr />
 
     <div class="form-section">
-      <h3>{$_('settings.github.title')}</h3>
-      <div class="form-row">
-        <div class="form-field">
-          <label for="repo-name">{$_('settings.github.repoName')}</label>
-          <input
-            id="repo-name"
-            type="text"
-            bind:value={settings.repoName}
-            on:input={(e) => handleTextInput('repoName', e)}
-            placeholder={$_('settings.github.repoPlaceholder')}
-          />
-        </div>
-        <div class="form-field">
-          <label for="github-token">{$_('settings.github.token')}</label>
-          <input
-            id="github-token"
-            type="password"
-            bind:value={settings.token}
-            on:input={(e) => handleTextInput('token', e)}
-            placeholder={$_('settings.github.tokenPlaceholder')}
-          />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-field">
-          <label for="commit-username">{$_('settings.github.username')}</label>
-          <input
-            id="commit-username"
-            type="text"
-            bind:value={settings.username}
-            on:input={(e) => handleTextInput('username', e)}
-            placeholder={$_('settings.github.usernamePlaceholder')}
-          />
-        </div>
-        <div class="form-field">
-          <label for="commit-email">{$_('settings.github.email')}</label>
-          <input
-            id="commit-email"
-            type="email"
-            bind:value={settings.email}
-            on:input={(e) => handleTextInput('email', e)}
-            placeholder={$_('settings.github.emailPlaceholder')}
-          />
-        </div>
-      </div>
-      <div class="test-actions">
-        <button
-          type="button"
-          class="test-button"
-          on:click={() => onPull(false)}
-          disabled={pullRunning}
-        >
-          <svg class="test-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-              d="M12 3v12m0 0-4-4m4 4 4-4M5 17h14"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          {pullRunning ? $_('settings.github.pulling') : $_('settings.github.pullTest')}
-        </button>
-      </div>
+      <GitHubSettings {settings} {onSettingsChange} {pullRunning} {onPull} />
       <hr />
       <div class="form-row">
         <div class="form-field">
@@ -348,57 +98,8 @@
             <option value="ja">日本語</option>
           </select>
 
-          <span class="sub-label" style="margin-top: 1rem;"
-            >{$_('settings.extras.theme.title')}</span
-          >
-          <div class="theme-buttons">
-            <div class="theme-button-row">
-              <button
-                type="button"
-                class:active={settings.theme === 'yomi'}
-                on:click={() => handleThemeSelect('yomi')}
-              >
-                {$_('settings.extras.theme.yomi')}
-              </button>
-              <button
-                type="button"
-                class:active={settings.theme === 'campus'}
-                on:click={() => handleThemeSelect('campus')}
-              >
-                {$_('settings.extras.theme.campus')}
-              </button>
-              <button
-                type="button"
-                class:active={settings.theme === 'greenboard'}
-                on:click={() => handleThemeSelect('greenboard')}
-              >
-                {$_('settings.extras.theme.greenboard')}
-              </button>
-            </div>
-            <div class="theme-button-row">
-              <button
-                type="button"
-                class:active={settings.theme === 'whiteboard'}
-                on:click={() => handleThemeSelect('whiteboard')}
-              >
-                {$_('settings.extras.theme.whiteboard')}
-              </button>
-              <button
-                type="button"
-                class:active={settings.theme === 'dotsD'}
-                on:click={() => handleThemeSelect('dotsD')}
-              >
-                {$_('settings.extras.theme.dotsD')}
-              </button>
-              <button
-                type="button"
-                class:active={settings.theme === 'dotsF'}
-                on:click={() => handleThemeSelect('dotsF')}
-              >
-                {$_('settings.extras.theme.dotsF')}
-              </button>
-            </div>
-          </div>
+          <ThemeSelector {settings} {onThemeChange} {onSettingsChange} />
+
           <div class="tool-name-field">
             <label for="tool-name">{$_('settings.extras.toolName.label')}</label>
             <input
@@ -409,151 +110,10 @@
               on:input={handleToolNameInput}
             />
           </div>
-          <div class="font-field">
-            <span class="sub-label">{$_('settings.extras.font.title')}</span>
-            <div class="font-controls">
-              <input
-                type="file"
-                accept=".ttf,.otf,.woff,.woff2"
-                bind:this={fileInput}
-                on:change={handleFontFileChange}
-                style="display: none;"
-              />
-              <button
-                type="button"
-                class="test-button"
-                on:click={handleFontButtonClick}
-                disabled={fontUploading}
-              >
-                <svg
-                  class="test-icon"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                  <path d="M8 7h8" />
-                  <path d="M8 11h8" />
-                </svg>
-                {fontUploading
-                  ? $_('settings.extras.font.uploading')
-                  : $_('settings.extras.font.select')}
-              </button>
-              {#if settings.hasCustomFont}
-                <button type="button" class="test-button" on:click={handleResetFont}>
-                  {$_('settings.extras.font.reset')}
-                </button>
-              {/if}
-            </div>
-          </div>
-          <div class="background-field-wrapper">
-            <span class="sub-label">{$_('settings.extras.background.title')}</span>
-            <div class="background-dual-pane">
-              <div class="background-pane">
-                <span class="pane-label">{$_('settings.extras.background.leftPane')}</span>
-                {#if settings.hasCustomBackgroundLeft}
-                  <div class="background-preview background-preview-left">
-                    <span class="preview-label">{$_('settings.extras.background.preview')}</span>
-                  </div>
-                {/if}
-                <div class="background-controls">
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,.gif"
-                    bind:this={backgroundLeftFileInput}
-                    on:change={handleBackgroundLeftFileChange}
-                    style="display: none;"
-                  />
-                  <button
-                    type="button"
-                    class="test-button"
-                    on:click={handleBackgroundLeftButtonClick}
-                    disabled={backgroundLeftUploading}
-                  >
-                    <svg
-                      class="test-icon"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                    {backgroundLeftUploading
-                      ? $_('settings.extras.background.uploading')
-                      : $_('settings.extras.background.select')}
-                  </button>
-                  {#if settings.hasCustomBackgroundLeft}
-                    <button type="button" class="test-button" on:click={handleResetBackgroundLeft}>
-                      {$_('settings.extras.background.reset')}
-                    </button>
-                  {/if}
-                </div>
-              </div>
-              <div class="background-pane">
-                <span class="pane-label">{$_('settings.extras.background.rightPane')}</span>
-                {#if settings.hasCustomBackgroundRight}
-                  <div class="background-preview background-preview-right">
-                    <span class="preview-label">{$_('settings.extras.background.preview')}</span>
-                  </div>
-                {/if}
-                <div class="background-controls">
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,.gif"
-                    bind:this={backgroundRightFileInput}
-                    on:change={handleBackgroundRightFileChange}
-                    style="display: none;"
-                  />
-                  <button
-                    type="button"
-                    class="test-button"
-                    on:click={handleBackgroundRightButtonClick}
-                    disabled={backgroundRightUploading}
-                  >
-                    <svg
-                      class="test-icon"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                    {backgroundRightUploading
-                      ? $_('settings.extras.background.uploading')
-                      : $_('settings.extras.background.select')}
-                  </button>
-                  {#if settings.hasCustomBackgroundRight}
-                    <button type="button" class="test-button" on:click={handleResetBackgroundRight}>
-                      {$_('settings.extras.background.reset')}
-                    </button>
-                  {/if}
-                </div>
-              </div>
-            </div>
-          </div>
+
+          <FontCustomizer {settings} {onSettingsChange} />
+
+          <BackgroundCustomizer {settings} {onSettingsChange} />
         </div>
       </div>
     </div>
@@ -600,6 +160,12 @@
 
   h2 {
     margin-bottom: 1.5rem;
+    color: var(--text-primary);
+  }
+
+  h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
     color: var(--text-primary);
   }
 
@@ -667,12 +233,6 @@
     flex-shrink: 0;
   }
 
-  h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-  }
-
   .form-section {
     margin-bottom: 2rem;
   }
@@ -697,9 +257,8 @@
     font-weight: 500;
   }
 
-  input[type='text'],
-  input[type='password'],
-  input[type='email'] {
+  select,
+  input[type='text'] {
     padding: 0.5rem;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -708,76 +267,10 @@
     font-size: 0.9rem;
   }
 
-  input[type='text']:focus,
-  input[type='password']:focus,
-  input[type='email']:focus {
+  select:focus,
+  input[type='text']:focus {
     outline: none;
     border-color: var(--accent-color);
-  }
-
-  .theme-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    margin: 0 auto;
-    max-width: fit-content;
-  }
-
-  .theme-button-row {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--border-color);
-    overflow: hidden;
-  }
-
-  .theme-button-row:not(:first-child) {
-    border-top: none;
-  }
-
-  .theme-button-row:first-child {
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
-  }
-
-  .theme-button-row:last-child {
-    border-bottom-left-radius: 6px;
-    border-bottom-right-radius: 6px;
-  }
-
-  .theme-buttons button {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-right: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    cursor: pointer;
-    transition:
-      background 0.2s,
-      color 0.2s;
-    min-width: 90px;
-    border-radius: 0;
-    flex: 1;
-    white-space: nowrap;
-  }
-
-  .theme-button-row button:last-child {
-    border-right: none;
-  }
-
-  .theme-button-row:first-child button:first-child {
-    border-radius: 6px 0 0 0;
-  }
-
-  .theme-button-row:first-child button:last-child {
-    border-radius: 0 6px 0 0;
-  }
-
-  .theme-button-row:last-child button:first-child {
-    border-radius: 0 0 0 6px;
-  }
-
-  .theme-button-row:last-child button:last-child {
-    border-radius: 0 0 6px 0;
   }
 
   .tool-name-field {
@@ -788,16 +281,6 @@
 
   .tool-name-field label {
     margin-bottom: 0.5rem;
-  }
-
-  .theme-buttons button.active {
-    background: var(--accent-color);
-    color: white;
-    box-shadow: inset 0 0 0 1px var(--accent-color);
-  }
-
-  .theme-buttons button:hover:not(.active) {
-    background: var(--bg-primary);
   }
 
   hr {
@@ -842,143 +325,5 @@
 
   .author a:hover {
     color: var(--accent-color);
-  }
-
-  button[type='button']:not(.theme-buttons button):not(.test-button) {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    background: var(--accent-color);
-    color: white;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: opacity 0.2s;
-  }
-
-  button[type='button']:not(.theme-buttons button):not(.test-button):hover {
-    opacity: 0.9;
-  }
-
-  .test-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 0.5rem;
-  }
-
-  .test-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .test-button:hover:not(:disabled) {
-    background: var(--accent-color);
-    color: white;
-    border-color: var(--accent-color);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .test-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .test-icon {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-  }
-
-  .sub-label {
-    display: inline-block;
-    margin-bottom: 0.5rem;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  .font-field {
-    margin-top: 1rem;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .font-field .sub-label {
-    margin-bottom: 0.5rem;
-  }
-
-  .font-controls {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .background-field-wrapper {
-    margin-top: 1rem;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .background-field-wrapper .sub-label {
-    margin-bottom: 0.5rem;
-  }
-
-  .background-dual-pane {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-
-  .background-pane {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .pane-label {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .background-controls {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .background-preview {
-    position: relative;
-    width: 100%;
-    height: 120px;
-    background: var(--bg-primary);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .preview-label {
-    position: relative;
-    z-index: 1;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    font-weight: 500;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
 </style>
