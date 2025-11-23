@@ -24,7 +24,7 @@
   export let getNoteItems: (noteId: string) => string[]
   export let disabled: boolean = false
 
-  // リアクティブ宣言: currentNoteが変わるたびに再計算
+  // リアクティブ宣言: ノートが変わるたびに再計算
   $: canHaveSubNote = !currentNote.parentId
 
   function formatDateTime(timestamp: number): string {

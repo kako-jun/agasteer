@@ -91,18 +91,41 @@ Folder (id: uuid-1, parentId: null)         // ルートフォルダ
 
 SimplestNote.mdは、Svelteの`writable`と`derived`ストアを使用して状態を管理します。
 
-#### 基本ストア
+#### 基本ストア（グローバル）
 
 ```typescript
 export const settings = writable<Settings>(defaultSettings)
 export const notes = writable<Note[]>([])
 export const leaves = writable<Leaf[]>([])
-export const currentView = writable<View>('home')
-export const currentNote = writable<Note | null>(null)
-export const currentLeaf = writable<Leaf | null>(null)
 export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
 export const isDirty = writable<boolean>(false) // GitHubにPushされていない変更があるか
 ```
+
+**重要な設計変更（Version 5.0）:**
+
+- 表示状態（`currentView`, `currentNote`, `currentLeaf`）はローカル変数に変更
+- 2ペイン対応のため、各ペインが独立した状態を持つ設計に変更
+- グローバルストアは全体で共有するデータ（notes, leaves, settings等）のみ
+
+#### ローカル変数（各ペイン独立）
+
+```typescript
+// 左ペインの状態
+let leftNote: Note | null = null
+let leftLeaf: Leaf | null = null
+let leftView: View = 'home'
+
+// 右ペインの状態
+let rightNote: Note | null = null
+let rightLeaf: Leaf | null = null
+let rightView: View = 'home'
+```
+
+**設計思想:**
+
+- 左右のペインは完全に対等
+- 各ペインが独立したナビゲーション状態を持つ
+- URLルーティングで左右別々に状態を管理
 
 #### 派生ストア
 
@@ -112,26 +135,19 @@ export const rootNotes = derived(notes, ($notes) =>
   $notes.filter((f) => !f.parentId).sort((a, b) => a.order - b.order)
 )
 
-// サブノート（現在のノートの子ノート）
-export const subNotes = derived([notes, currentNote], ([$notes, $currentNote]) =>
-  $currentNote
-    ? $notes.filter((f) => f.parentId === $currentNote.id).sort((a, b) => a.order - b.order)
-    : []
-)
-
-// 現在のノート内のリーフ
-export const currentNoteLeaves = derived([leaves, currentNote], ([$leaves, $currentNote]) =>
-  $currentNote
-    ? $leaves.filter((n) => n.noteId === $currentNote.id).sort((a, b) => a.order - b.order)
-    : []
-)
-
 // GitHub設定が完了しているか
 export const githubConfigured = derived(
   settings,
   ($settings) => !!($settings.token && $settings.repoName)
 )
 ```
+
+**削除された派生ストア:**
+
+- `subNotes` - インラインfilterに変更（各ペインで独立して計算）
+- `currentNoteLeaves` - インラインfilterに変更（各ペインで独立して計算）
+
+**理由:** 2ペイン表示では左右で異なるノートを表示できるため、グローバルな「currentNote」という概念が不適切
 
 #### ダーティフラグ（isDirty）の管理
 
@@ -317,16 +333,29 @@ onMount(() => {
 **ノートの作成:**
 
 ```typescript
-function createNote(parentId?: string) {
+function createNote(parentId: string | undefined, pane: Pane) {
   if (isOperationsLocked) return
   const allNotes = $notes
+
+  // 階層制限チェック: サブノートの下にはサブノートを作成できない
+  if (parentId) {
+    const parentNote = allNotes.find((n) => n.id === parentId)
+    if (parentNote && parentNote.parentId) {
+      showAlert('サブノートの下にはサブノートを作成できません。')
+      return
+    }
+  }
+
   const targetNotes = parentId
     ? allNotes.filter((f) => f.parentId === parentId)
     : allNotes.filter((f) => !f.parentId)
 
   const newNote: Note = {
     id: crypto.randomUUID(),
-    name: `ノート${targetNotes.length + 1}`,
+    name: generateUniqueName(
+      'ノート',
+      targetNotes.map((n) => n.name)
+    ),
     parentId: parentId || undefined,
     order: targetNotes.length,
   }
@@ -338,44 +367,59 @@ function createNote(parentId?: string) {
 **リーフの作成:**
 
 ```typescript
-function createLeaf() {
+function createLeaf(pane: Pane) {
   if (isOperationsLocked) return
-  if (!$currentNote) return
+  const targetNote = pane === 'left' ? leftNote : rightNote
+  if (!targetNote) return
 
   const allLeaves = $leaves
-  const noteLeaves = allLeaves.filter((n) => n.noteId === $currentNote!.id)
+  const noteLeaves = allLeaves.filter((n) => n.noteId === targetNote.id)
 
   const newLeaf: Leaf = {
     id: crypto.randomUUID(),
-    title: `リーフ${noteLeaves.length + 1}`,
-    noteId: $currentNote.id,
-    content: '',
+    title: generateUniqueName(
+      'リーフ',
+      noteLeaves.map((l) => l.title)
+    ),
+    noteId: targetNote.id,
+    content: `# ${uniqueTitle}\n\n`,
     updatedAt: Date.now(),
     order: noteLeaves.length,
   }
 
   updateLeaves([...allLeaves, newLeaf]) // IndexedDBに保存
-  selectLeaf(newLeaf)
+  selectLeaf(newLeaf, pane)
 }
 ```
 
+**重要:** すべてのナビゲーション関数は`pane: 'left' | 'right'`引数を取り、左右のペインを明示的に指定します。
+
 #### Read（読み取り）
 
-リアクティブ宣言（Derived Stores）によって自動的に計算。
+**グローバル派生ストア:**
 
 ```typescript
 // ルートノート（parentIdがないもの）
 export const rootNotes = derived(notes, ($notes) =>
   $notes.filter((f) => !f.parentId).sort((a, b) => a.order - b.order)
 )
-
-// 現在のノート内のリーフ
-export const currentNoteLeaves = derived([leaves, currentNote], ([$leaves, $currentNote]) =>
-  $currentNote
-    ? $leaves.filter((n) => n.noteId === $currentNote.id).sort((a, b) => a.order - b.order)
-    : []
-)
 ```
+
+**ペイン固有の計算（インライン）:**
+
+```typescript
+// 左ペインのサブノート
+subNotes={$notes
+  .filter((n) => n.parentId === leftNote.id)
+  .sort((a, b) => a.order - b.order)}
+
+// 左ペインのリーフ
+leaves={$leaves
+  .filter((l) => l.noteId === leftNote.id)
+  .sort((a, b) => a.order - b.order)}
+```
+
+**設計変更の理由:** 2ペイン表示では、左右で異なるノートを表示できるため、各ペインで独立してfilter/sortを実行する必要がある。
 
 #### Update（更新）
 
@@ -392,32 +436,51 @@ function updateNoteName(noteId: string, newName: string) {
 **リーフコンテンツの更新:**
 
 ```typescript
-function updateLeafContent(content: string) {
+function updateLeafContent(content: string, leafId: string) {
   if (isOperationsLocked) return
-  if (!$currentLeaf) return
 
   const allLeaves = $leaves
+  const targetLeaf = allLeaves.find((l) => l.id === leafId)
+  if (!targetLeaf) return
+
+  // コンテンツの1行目が # 見出しの場合、リーフのタイトルも自動更新
+  const h1Title = extractH1Title(content)
+  const newTitle = h1Title || targetLeaf.title
+
+  // グローバルストアを更新（左右ペイン両方に反映される）
   const updatedLeaves = allLeaves.map((n) =>
-    n.id === $currentLeaf!.id ? { ...n, content, updatedAt: Date.now() } : n
+    n.id === leafId ? { ...n, content, title: newTitle, updatedAt: Date.now() } : n
   )
   updateLeaves(updatedLeaves) // IndexedDBに保存
-  currentLeaf.update((n) => (n ? { ...n, content, updatedAt: Date.now() } : n))
+
+  // 左ペインのリーフを編集している場合は leftLeaf も更新
+  if (leftLeaf?.id === leafId) {
+    leftLeaf = { ...leftLeaf, content, title: newTitle, updatedAt: Date.now() }
+  }
+
+  // 右ペインのリーフを編集している場合は rightLeaf も更新
+  if (rightLeaf?.id === leafId) {
+    rightLeaf = { ...rightLeaf, content, title: newTitle, updatedAt: Date.now() }
+  }
 }
 ```
+
+**重要:** leafIdベースの更新により、左右どちらのペインでも同じリーフを編集可能。同じリーフを左右で開いている場合は即座に同期される。
 
 #### Delete（削除）
 
 **ノートの削除:**
 
 ```typescript
-function deleteNote() {
+function deleteNote(pane: Pane) {
   if (isOperationsLocked) return
-  if (!$currentNote) return
+  const targetNote = pane === 'left' ? leftNote : rightNote
+  if (!targetNote) return
 
   const allNotes = $notes
   const allLeaves = $leaves
-  const hasSubNotes = allNotes.some((f) => f.parentId === $currentNote!.id)
-  const hasLeaves = allLeaves.some((n) => n.noteId === $currentNote!.id)
+  const hasSubNotes = allNotes.some((f) => f.parentId === targetNote.id)
+  const hasLeaves = allLeaves.some((n) => n.noteId === targetNote.id)
 
   if (hasSubNotes || hasLeaves) {
     showAlert('サブノートやリーフが含まれているため削除できません。')
@@ -425,16 +488,16 @@ function deleteNote() {
   }
 
   showConfirm('このノートを削除しますか？', () => {
-    const noteId = $currentNote!.id
-    const parentId = $currentNote!.parentId
+    const noteId = targetNote.id
+    const parentId = targetNote.parentId
     updateNotes(allNotes.filter((f) => f.id !== noteId)) // IndexedDBに保存
 
     // 親ノートまたはホームに戻る
     const parentNote = allNotes.find((f) => f.id === parentId)
     if (parentNote) {
-      selectNote(parentNote)
+      selectNote(parentNote, pane)
     } else {
-      goHome()
+      goHome(pane)
     }
   })
 }
@@ -443,23 +506,27 @@ function deleteNote() {
 **リーフの削除:**
 
 ```typescript
-function deleteLeaf() {
+function deleteLeaf(leafId: string, pane: Pane) {
   if (isOperationsLocked) return
-  if (!$currentLeaf) return
+
+  const allLeaves = $leaves
+  const targetLeaf = allLeaves.find((l) => l.id === leafId)
+  if (!targetLeaf) return
 
   showConfirm('このリーフを削除しますか？', () => {
-    const allLeaves = $leaves
-    updateLeaves(allLeaves.filter((n) => n.id !== $currentLeaf!.id)) // IndexedDBに保存
+    updateLeaves(allLeaves.filter((n) => n.id !== leafId)) // IndexedDBに保存
 
-    const note = $notes.find((f) => f.id === $currentLeaf!.noteId)
+    const note = $notes.find((f) => f.id === targetLeaf.noteId)
     if (note) {
-      selectNote(note)
+      selectNote(note, pane)
     } else {
-      goHome()
+      goHome(pane)
     }
   })
 }
 ```
+
+**重要:** すべての削除操作でもpane引数を指定し、削除後のナビゲーションが適切なペインで行われるようにする。
 
 ### 並び替えのデータフロー
 

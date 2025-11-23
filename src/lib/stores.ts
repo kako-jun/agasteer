@@ -4,34 +4,19 @@
  */
 
 import { writable, derived } from 'svelte/store'
-import type { Settings, Note, Leaf, View, Metadata } from './types'
+import type { Settings, Note, Leaf, Metadata } from './types'
 import { defaultSettings, saveSettings, saveNotes, saveLeaves } from './storage'
 
 // 基本ストア
 export const settings = writable<Settings>(defaultSettings)
 export const notes = writable<Note[]>([])
 export const leaves = writable<Leaf[]>([])
-export const currentView = writable<View>('home')
-export const currentNote = writable<Note | null>(null)
-export const currentLeaf = writable<Leaf | null>(null)
 export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
 export const isDirty = writable<boolean>(false)
 
 // 派生ストア
 export const rootNotes = derived(notes, ($notes) =>
   $notes.filter((f) => !f.parentId).sort((a, b) => a.order - b.order)
-)
-
-export const subNotes = derived([notes, currentNote], ([$notes, $currentNote]) =>
-  $currentNote
-    ? $notes.filter((f) => f.parentId === $currentNote.id).sort((a, b) => a.order - b.order)
-    : []
-)
-
-export const currentNoteLeaves = derived([leaves, currentNote], ([$leaves, $currentNote]) =>
-  $currentNote
-    ? $leaves.filter((n) => n.noteId === $currentNote.id).sort((a, b) => a.order - b.order)
-    : []
 )
 
 export const githubConfigured = derived(

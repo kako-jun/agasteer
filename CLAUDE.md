@@ -95,6 +95,7 @@
 - [x] データ永続化仕様の明確化（GitHub SSoT設計）
 - [x] LocalStorage（設定のみ）とIndexedDB（ノート・リーフ）の分離
 - [x] **ノート階層制限**（ルートノート→サブノートの2階層まで）
+- [x] **左右対称設計**（ビューストアをローカル変数化、全ナビゲーション関数統一）
 
 #### UI/UX改善
 
@@ -207,6 +208,34 @@ npm run preview
 ---
 
 ## 📝 変更履歴
+
+### Version 5.0 (2025-11-24)
+
+- **左右対称設計への大規模リファクタリング**
+  - **問題**: 左ペイン（グローバルストア）と右ペイン（ローカル変数）の非対称設計により、Pull後に左ペインのみ状態が失われるバグが発生
+  - **設計方針**: 左右ペインを完全に対等にする - コードに差があればバグという原則
+  - **グローバルストアの削除**（左ペインをローカル変数化）
+    - `currentView`, `currentNote`, `currentLeaf` ストアを削除
+    - `subNotes`, `currentNoteLeaves` 派生ストアを削除
+    - 左右とも`leftNote/rightNote`などのローカル変数で管理
+  - **関数の統一化**（8個以上の重複関数を削減）
+    - `type Pane = 'left' | 'right'` 型を追加
+    - `goHome(pane)`, `selectNote(note, pane)`, `selectLeaf(leaf, pane)` など全ナビゲーション関数に`pane`パラメータを追加
+    - `getBreadcrumbsRight()`を削除、`getBreadcrumbs()`に統一
+    - `createNote`, `createLeaf`, `deleteNote`, `deleteLeaf`, `togglePreview` など全CRUD操作を統一
+  - **Pull処理の修正**
+    - Pull後は常にURLから状態を復元（初回Pullだけでなく全Pull）
+    - 左右両方の状態を等しくリセット
+  - **コメントの中立化**
+    - "currentNoteが変わるたびに"→"ノートが変わるたびに"など、左ペイン中心の表現を削除
+  - **影響範囲**
+    - `src/App.svelte`: 約100行のコード削減、8個以上の関数統一
+    - `src/lib/stores.ts`: 5個のストア削除
+    - `src/components/views/NoteView.svelte`: コメント修正
+  - **ドキュメント更新**
+    - `docs/data-model.md`: 状態管理の章を全面改訂（ストア→ローカル変数）
+    - `docs/refactoring.md`: Section 9を追加（本リファクタリングの詳細記録）
+  - **成果**: 完全な左右対称性の実現、コード重複の大幅削減、保守性の向上
 
 ### Version 4.7 (2025-11-23)
 
@@ -343,6 +372,6 @@ npm run preview
 
 ---
 
-**Document Version**: 4.6
-**Last Updated**: 2025-01-23
+**Document Version**: 5.0
+**Last Updated**: 2025-11-24
 **Author**: Claude (Anthropic)

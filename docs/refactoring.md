@@ -419,3 +419,216 @@ function generateUniqueName(baseName: string, existingNames: string[]): string {
 - **パフォーマンス向上**: APIリクエスト数を大幅削減（ファイル数 × 2 → 7回）
 - **並行実行防止**: ダブルクリック等での不具合を解消
 - **UTF-8対応**: 日本語を含むファイルで正しくSHA計算
+
+---
+
+## 9. 左右対称設計への大規模リファクタリング（実装済み 2025-11-24）
+
+デュアルペイン表示の実装により左ペイン中心の設計に非対称性が生まれていたため、完全に左右対等な設計に変更しました。
+
+### 問題点
+
+**非対称な状態管理:**
+
+- 左ペイン: `currentView`, `currentNote`, `currentLeaf`（グローバルストア）
+- 右ペイン: `rightView`, `rightNote`, `rightLeaf`（ローカル変数）
+
+**非対称な関数名:**
+
+- 左ペイン: `goHome()`, `selectNote()`, `createNote()`, `deleteNote()`等（サフィックスなし）
+- 右ペイン: `selectNoteRight()`, `createNoteRight()`等（Rightサフィックス）
+
+**問題の影響:**
+
+- Pull処理で左ペインだけがリセットされて復元されないバグ
+- 右ペインはローカル変数のため、Pull時にリセットされず状態が残る
+- 設定画面を開いて閉じた後、リーフ表示時に左ペインだけ描画されなくなる
+
+### 実施した変更
+
+#### 1. 状態管理の統一
+
+**グローバルストアから削除:**
+
+```typescript
+// 削除されたストア
+export const currentView = writable<View>('home')
+export const currentNote = writable<Note | null>(null)
+export const currentLeaf = writable<Leaf | null>(null)
+export const subNotes = derived([notes, currentNote], ...)
+export const currentNoteLeaves = derived([leaves, currentNote], ...)
+```
+
+**ローカル変数に統一:**
+
+```typescript
+// 左ペインの状態（App.svelte内のローカル変数）
+let leftNote: Note | null = null
+let leftLeaf: Leaf | null = null
+let leftView: View = 'home'
+
+// 右ペインの状態（App.svelte内のローカル変数）
+let rightNote: Note | null = null
+let rightLeaf: Leaf | null = null
+let rightView: View = 'home'
+```
+
+**設計思想:**
+
+- 左右のペインは完全に対等
+- グローバルストアは全体で共有するデータ（notes, leaves, settings等）のみ
+- 表示状態は各ペインが独立して管理
+
+#### 2. ナビゲーション関数の統合
+
+**すべての関数にpane引数を追加:**
+
+```typescript
+// Pane型の定義
+type Pane = 'left' | 'right'
+
+// 統合されたナビゲーション関数
+function goHome(pane: Pane)
+function selectNote(note: Note, pane: Pane)
+function selectLeaf(leaf: Leaf, pane: Pane)
+function createNote(parentId: string | undefined, pane: Pane)
+function createLeaf(pane: Pane)
+function deleteNote(pane: Pane)
+function deleteLeaf(leafId: string, pane: Pane)
+function togglePreview(pane: Pane)
+```
+
+**削除された関数:**
+
+- `selectNoteRight()` - `selectNote(note, 'right')`に統合
+- `selectLeafRight()` - `selectLeaf(leaf, 'right')`に統合
+- `createNoteRight()` - `createNote(parentId, 'right')`に統合
+- `createLeafRight()` - `createLeaf('right')`に統合
+- `togglePreviewRight()` - `togglePreview('right')`に統合
+
+#### 3. パンくずリスト関数の統合
+
+**2つの関数を1つに統合:**
+
+```typescript
+// 統合前
+function getBreadcrumbs(view, note, leaf, allNotes): Breadcrumb[] // 左ペイン用
+function getBreadcrumbsRight(view, note, leaf, allNotes): Breadcrumb[] // 右ペイン用
+
+// 統合後
+function getBreadcrumbs(view, note, leaf, allNotes, pane: Pane): Breadcrumb[]
+```
+
+**使用例:**
+
+```typescript
+$: breadcrumbs = getBreadcrumbs(leftView, leftNote, leftLeaf, $notes, 'left')
+$: breadcrumbsRight = getBreadcrumbs(rightView, rightNote, rightLeaf, $notes, 'right')
+```
+
+#### 4. Pull処理の修正
+
+**Pull後の状態復元を左右両方に適用:**
+
+```typescript
+async function executePullInternal(isInitial: boolean) {
+  // IndexedDB全削除
+  await clearAllData()
+  notes.set([])
+  leaves.set([])
+
+  // 左右両方の状態をリセット
+  leftNote = null
+  leftLeaf = null
+  rightNote = null
+  rightLeaf = null
+
+  const result = await executePull($settings, isInitial)
+
+  if (result.success) {
+    updateNotes(result.notes)
+    updateLeaves(result.leaves)
+
+    // Pull後は常にURLから状態を復元（初回Pullも含む）
+    if (isInitial) {
+      restoreStateFromUrl(true)
+      isRestoringFromUrl = false
+    } else {
+      restoreStateFromUrl(false) // 追加：初回Pull以外でも復元
+    }
+  }
+}
+```
+
+**修正のポイント:**
+
+- 左右両方の状態を明示的にnullにリセット
+- 初回Pull以外でも`restoreStateFromUrl()`を呼ぶように修正
+- これにより、設定画面を閉じた後のPullでも状態が正しく復元される
+
+#### 5. コンポーネント呼び出しの修正
+
+**左ペイン:**
+
+```typescript
+<HomeView
+  onSelectNote={(note) => selectNote(note, 'left')}
+  onCreateNote={() => createNote(undefined, 'left')}
+/>
+
+<NoteView
+  onSelectLeaf={(leaf) => selectLeaf(leaf, 'left')}
+  onCreateLeaf={() => createLeaf('left')}
+  onDeleteNote={() => deleteNote('left')}
+/>
+
+<EditorFooter
+  onDelete={() => deleteLeaf(leftLeaf.id, 'left')}
+  onTogglePreview={() => togglePreview('left')}
+/>
+```
+
+**右ペイン:**
+
+```typescript
+<HomeView
+  onSelectNote={(note) => selectNote(note, 'right')}
+  onCreateNote={() => createNote(undefined, 'right')}
+/>
+
+<NoteView
+  onSelectLeaf={(leaf) => selectLeaf(leaf, 'right')}
+  onCreateLeaf={() => createLeaf('right')}
+  onDeleteNote={() => deleteNote('right')}
+/>
+
+<EditorFooter
+  onDelete={() => deleteLeaf(rightLeaf.id, 'right')}
+  onTogglePreview={() => togglePreview('right')}
+/>
+```
+
+### 成果
+
+- **完全な左右対称**: すべての関数が`pane`引数で制御される統一設計
+- **バグ修正**: 設定を閉じた後に左ペインだけ描画されないバグを解決
+- **保守性向上**: 左右で重複していたコードを共通化
+- **型安全性**: `Pane`型により、左右の指定が明確化
+- **コード削減**: 右ペイン専用の関数（~8関数）を削除し、約100行削減
+
+### 削除されたストアと派生ストア
+
+- `currentView` - `leftView`, `rightView`ローカル変数に移行
+- `currentNote` - `leftNote`, `rightNote`ローカル変数に移行
+- `currentLeaf` - `leftLeaf`, `rightLeaf`ローカル変数に移行
+- `subNotes` - インラインfilterに変更（各ペインで独立計算）
+- `currentNoteLeaves` - インラインfilterに変更（各ペインで独立計算）
+
+### 設計原則
+
+**左右対等の原則:**
+
+- 左と右のペインに差は一切ない
+- すべての処理が`pane: 'left' | 'right'`引数で制御される
+- グローバルストアは全体で共有するデータのみ
+- 表示状態は各ペインがローカル変数で独立管理

@@ -2,16 +2,13 @@
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
   import type { Note, Leaf, Breadcrumb, View } from './lib/types'
+
+  type Pane = 'left' | 'right'
   import {
     settings,
     notes,
     leaves,
-    currentView,
-    currentNote,
-    currentLeaf,
     rootNotes,
-    subNotes,
-    currentNoteLeaves,
     githubConfigured,
     metadata,
     isDirty,
@@ -64,8 +61,11 @@
   let showSettings = false
   let isPulling = false // Pull処理中はURL更新をスキップ
 
-  // 2ペイン用の状態（将来の拡張用、現在は1ペインのみ使用）
+  // 左右ペイン用の状態（対等なローカル変数）
   let isDualPane = false // 画面幅で切り替え
+  let leftNote: Note | null = null
+  let leftLeaf: Leaf | null = null
+  let leftView: View = 'home'
   let rightNote: Note | null = null
   let rightLeaf: Leaf | null = null
   let rightView: View = 'home'
@@ -79,10 +79,10 @@
   // スクロール同期関数
   function handleLeftScroll(scrollTop: number, scrollHeight: number) {
     // 同じリーフで、左がedit/previewで右がその逆の場合のみ同期
-    if (!isDualPane || !$currentLeaf || !rightLeaf || $currentLeaf.id !== rightLeaf.id) return
+    if (!isDualPane || !leftLeaf || !rightLeaf || leftLeaf.id !== rightLeaf.id) return
     if (
-      ($currentView === 'edit' && rightView === 'preview') ||
-      ($currentView === 'preview' && rightView === 'edit')
+      (leftView === 'edit' && rightView === 'preview') ||
+      (leftView === 'preview' && rightView === 'edit')
     ) {
       const target = rightView === 'edit' ? rightEditorView : rightPreviewView
       if (target && target.scrollTo) {
@@ -93,12 +93,12 @@
 
   function handleRightScroll(scrollTop: number, scrollHeight: number) {
     // 同じリーフで、右がedit/previewで左がその逆の場合のみ同期
-    if (!isDualPane || !$currentLeaf || !rightLeaf || $currentLeaf.id !== rightLeaf.id) return
+    if (!isDualPane || !leftLeaf || !rightLeaf || leftLeaf.id !== rightLeaf.id) return
     if (
-      (rightView === 'edit' && $currentView === 'preview') ||
-      (rightView === 'preview' && $currentView === 'edit')
+      (rightView === 'edit' && leftView === 'preview') ||
+      (rightView === 'preview' && leftView === 'edit')
     ) {
-      const target = $currentView === 'edit' ? leftEditorView : leftPreviewView
+      const target = leftView === 'edit' ? leftEditorView : leftPreviewView
       if (target && target.scrollTo) {
         target.scrollTo(scrollTop)
       }
@@ -106,8 +106,8 @@
   }
 
   // リアクティブ宣言
-  $: breadcrumbs = getBreadcrumbs($currentView, $currentNote, $currentLeaf, $notes)
-  $: breadcrumbsRight = getBreadcrumbsRight(rightView, rightNote, rightLeaf, $notes)
+  $: breadcrumbs = getBreadcrumbs(leftView, leftNote, leftLeaf, $notes, 'left')
+  $: breadcrumbsRight = getBreadcrumbs(rightView, rightNote, rightLeaf, $notes, 'right')
   $: isGitHubConfigured = $githubConfigured
   $: document.title = $settings.toolName
 
@@ -123,7 +123,7 @@
     const params = new URLSearchParams()
 
     // 左ペイン（常に設定）
-    const leftPath = buildPath($currentNote, $currentLeaf, $notes, $currentView)
+    const leftPath = buildPath(leftNote, leftLeaf, $notes, leftView)
     params.set('left', leftPath)
 
     // 右ペイン（2ペイン表示時は独立した状態、1ペイン時は左と同じ）
@@ -149,22 +149,22 @@
         if (leaf) {
           const note = $notes.find((f) => f.id === leaf.noteId)
           if (note) {
-            currentNote.set(note)
-            currentLeaf.set(leaf)
-            currentView.set('edit')
+            leftNote = note
+            leftLeaf = leaf
+            leftView = 'edit'
           }
         }
       } else if (noteId) {
         const note = $notes.find((f) => f.id === noteId)
         if (note) {
-          currentNote.set(note)
-          currentLeaf.set(null)
-          currentView.set('note')
+          leftNote = note
+          leftLeaf = null
+          leftView = 'note'
         }
       } else {
-        currentNote.set(null)
-        currentLeaf.set(null)
-        currentView.set('home')
+        leftNote = null
+        leftLeaf = null
+        leftView = 'home'
       }
       return
     }
@@ -181,17 +181,17 @@
     const leftResolution = resolvePath(leftPath, $notes, $leaves)
 
     if (leftResolution.type === 'home') {
-      currentNote.set(null)
-      currentLeaf.set(null)
-      currentView.set('home')
+      leftNote = null
+      leftLeaf = null
+      leftView = 'home'
     } else if (leftResolution.type === 'note') {
-      currentNote.set(leftResolution.note)
-      currentLeaf.set(null)
-      currentView.set('note')
+      leftNote = leftResolution.note
+      leftLeaf = null
+      leftView = 'note'
     } else if (leftResolution.type === 'leaf') {
-      currentNote.set(leftResolution.note)
-      currentLeaf.set(leftResolution.leaf)
-      currentView.set(leftResolution.isPreview ? 'preview' : 'edit')
+      leftNote = leftResolution.note
+      leftLeaf = leftResolution.leaf
+      leftView = leftResolution.isPreview ? 'preview' : 'edit'
     }
 
     // 右ペインの復元（2ペイン表示時のみ）
@@ -213,9 +213,9 @@
       }
     } else {
       // 1ペイン表示時は右ペインを左と同じにする
-      rightNote = $currentNote
-      rightLeaf = $currentLeaf
-      rightView = $currentView
+      rightNote = leftNote
+      rightLeaf = leftLeaf
+      rightView = leftView
     }
 
     if (!alreadyRestoring) {
@@ -223,13 +223,13 @@
     }
   }
 
-  // ストアの変更をURLに反映
-  $: if ($currentNote || $currentLeaf || (!$currentNote && !$currentLeaf)) {
+  // 左ペインの状態変更をURLに反映
+  $: if (leftNote || leftLeaf || (!leftNote && !leftLeaf) || leftView) {
     updateUrlFromState()
   }
 
   // 右ペインの状態変更をURLに反映
-  $: if (rightNote || rightLeaf || (!rightNote && !rightLeaf)) {
+  $: if (rightNote || rightLeaf || (!rightNote && !rightLeaf) || rightView) {
     updateUrlFromState()
   }
 
@@ -294,58 +294,60 @@
     }
   })
 
-  // ナビゲーション
-  async function goHome() {
-    currentView.set('home')
-    currentNote.set(null)
-    currentLeaf.set(null)
-  }
-
-  // プレビュートグル（左ペイン）
-  function togglePreview() {
-    if ($currentView === 'edit') {
-      currentView.set('preview')
-    } else if ($currentView === 'preview') {
-      currentView.set('edit')
+  // ナビゲーション（左右共通）
+  function goHome(pane: Pane) {
+    if (pane === 'left') {
+      leftView = 'home'
+      leftNote = null
+      leftLeaf = null
+    } else {
+      rightView = 'home'
+      rightNote = null
+      rightLeaf = null
     }
-    updateUrlFromState()
   }
 
-  // プレビュートグル（右ペイン）
-  function togglePreviewRight() {
-    if (rightView === 'edit') {
-      rightView = 'preview'
-    } else if (rightView === 'preview') {
-      rightView = 'edit'
+  function selectNote(note: Note, pane: Pane) {
+    if (pane === 'left') {
+      leftNote = note
+      leftLeaf = null
+      leftView = 'note'
+    } else {
+      rightNote = note
+      rightLeaf = null
+      rightView = 'note'
     }
-    updateUrlFromState()
   }
 
-  // 右ペイン用ナビゲーション
-  function selectNoteRight(note: Note) {
-    rightNote = note
-    rightLeaf = null
-    rightView = 'note'
-    updateUrlFromState()
-  }
-
-  function selectLeafRight(leaf: Leaf) {
+  function selectLeaf(leaf: Leaf, pane: Pane) {
     const note = $notes.find((n) => n.id === leaf.noteId)
     if (note) {
-      rightNote = note
-      rightLeaf = leaf
-      rightView = 'edit'
-      updateUrlFromState()
+      if (pane === 'left') {
+        leftNote = note
+        leftLeaf = leaf
+        leftView = 'edit'
+      } else {
+        rightNote = note
+        rightLeaf = leaf
+        rightView = 'edit'
+      }
     }
   }
 
-  function createNoteRight(parentId?: string) {
-    createNote(parentId)
-    updateUrlFromState()
-  }
-
-  function createLeafRight() {
-    createLeaf()
+  function togglePreview(pane: Pane) {
+    if (pane === 'left') {
+      if (leftView === 'edit') {
+        leftView = 'preview'
+      } else if (leftView === 'preview') {
+        leftView = 'edit'
+      }
+    } else {
+      if (rightView === 'edit') {
+        rightView = 'preview'
+      } else if (rightView === 'preview') {
+        rightView = 'edit'
+      }
+    }
     updateUrlFromState()
   }
 
@@ -371,19 +373,21 @@
     e.stopPropagation()
   }
 
-  // パンくずリスト（左ペイン用）
+  // パンくずリスト（左右共通）
   function getBreadcrumbs(
     view: View,
     note: Note | null,
     leaf: Leaf | null,
-    allNotes: Note[]
+    allNotes: Note[],
+    pane: Pane
   ): Breadcrumb[] {
     const crumbs: Breadcrumb[] = []
+    const suffix = pane === 'right' ? '-right' : ''
 
     crumbs.push({
       label: 'SimplestNote.md',
-      action: goHome,
-      id: 'home',
+      action: () => goHome(pane),
+      id: `home${suffix}`,
       type: 'home',
     })
 
@@ -392,15 +396,15 @@
       if (parentNote) {
         crumbs.push({
           label: parentNote.name,
-          action: () => selectNote(parentNote),
-          id: parentNote.id,
+          action: () => selectNote(parentNote, pane),
+          id: `${parentNote.id}${suffix}`,
           type: 'note',
         })
       }
       crumbs.push({
         label: note.name,
-        action: () => selectNote(note),
-        id: note.id,
+        action: () => selectNote(note, pane),
+        id: `${note.id}${suffix}`,
         type: 'note',
       })
     }
@@ -409,58 +413,7 @@
       crumbs.push({
         label: leaf.title,
         action: () => {},
-        id: leaf.id,
-        type: 'leaf',
-      })
-    }
-
-    return crumbs
-  }
-
-  // パンくずリスト（右ペイン用）
-  function getBreadcrumbsRight(
-    view: View,
-    note: Note | null,
-    leaf: Leaf | null,
-    allNotes: Note[]
-  ): Breadcrumb[] {
-    const crumbs: Breadcrumb[] = []
-
-    crumbs.push({
-      label: 'SimplestNote.md',
-      action: () => {
-        rightNote = null
-        rightLeaf = null
-        rightView = 'home'
-        updateUrlFromState()
-      },
-      id: 'home-right',
-      type: 'home',
-    })
-
-    if (note) {
-      const parentNote = allNotes.find((f) => f.id === note.parentId)
-      if (parentNote) {
-        crumbs.push({
-          label: parentNote.name,
-          action: () => selectNoteRight(parentNote),
-          id: parentNote.id + '-right',
-          type: 'note',
-        })
-      }
-      crumbs.push({
-        label: note.name,
-        action: () => selectNoteRight(note),
-        id: note.id + '-right',
-        type: 'note',
-      })
-    }
-
-    if (leaf) {
-      crumbs.push({
-        label: leaf.title,
-        action: () => {},
-        id: leaf.id + '-right',
+        id: `${leaf.id}${suffix}`,
         type: 'leaf',
       })
     }
@@ -474,8 +427,8 @@
   }
 
   function refreshBreadcrumbs() {
-    breadcrumbs = getBreadcrumbs($currentView, $currentNote, $currentLeaf, $notes)
-    breadcrumbsRight = getBreadcrumbsRight(rightView, rightNote, rightLeaf, $notes)
+    breadcrumbs = getBreadcrumbs(leftView, leftNote, leftLeaf, $notes, 'left')
+    breadcrumbsRight = getBreadcrumbs(rightView, rightNote, rightLeaf, $notes, 'right')
   }
 
   function saveEditBreadcrumb(id: string, newName: string, type: Breadcrumb['type']) {
@@ -489,15 +442,15 @@
       updateNoteName(actualId, newName.trim())
       const updatedNote = $notes.find((f) => f.id === actualId)
       if (updatedNote) {
-        if ($currentNote?.id === actualId) {
-          currentNote.set(updatedNote)
+        if (leftNote?.id === actualId) {
+          leftNote = updatedNote
         }
         if (isRight && rightNote?.id === actualId) {
           rightNote = updatedNote
         }
       }
-      if (!$notes.some((f) => f.id === $currentNote?.id)) {
-        currentNote.set(null)
+      if (!$notes.some((f) => f.id === leftNote?.id)) {
+        leftNote = null
       }
       if (isRight && !$notes.some((f) => f.id === rightNote?.id)) {
         rightNote = null
@@ -520,15 +473,15 @@
       updateLeaves(updatedLeaves)
       const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
       if (updatedLeaf) {
-        if ($currentLeaf?.id === actualId) {
-          currentLeaf.set(updatedLeaf)
+        if (leftLeaf?.id === actualId) {
+          leftLeaf = updatedLeaf
         }
         if (isRight && rightLeaf?.id === actualId) {
           rightLeaf = updatedLeaf
         }
       }
-      if (!$leaves.some((n) => n.id === $currentLeaf?.id)) {
-        currentLeaf.set(null)
+      if (!$leaves.some((n) => n.id === leftLeaf?.id)) {
+        leftLeaf = null
       }
       if (isRight && !$leaves.some((n) => n.id === rightLeaf?.id)) {
         rightLeaf = null
@@ -555,7 +508,7 @@
   }
 
   // ノート管理（束）
-  function createNote(parentId?: string) {
+  function createNote(parentId: string | undefined, pane: Pane) {
     if (isOperationsLocked) return
     const allNotes = $notes
 
@@ -585,23 +538,18 @@
     updateNotes([...allNotes, newNote])
   }
 
-  function selectNote(note: Note) {
-    currentNote.set(note)
-    currentLeaf.set(null)
-    currentView.set('note')
-  }
-
-  function deleteNote() {
+  function deleteNote(pane: Pane) {
     if (isOperationsLocked) {
       showAlert('初回Pullが完了するまで操作できません。設定からPullしてください。')
       return
     }
-    if (!$currentNote) return
+    const targetNote = pane === 'left' ? leftNote : rightNote
+    if (!targetNote) return
 
     const allNotes = $notes
     const allLeaves = $leaves
-    const hasSubNotes = allNotes.some((f) => f.parentId === $currentNote!.id)
-    const hasLeaves = allLeaves.some((n) => n.noteId === $currentNote!.id)
+    const hasSubNotes = allNotes.some((f) => f.parentId === targetNote.id)
+    const hasLeaves = allLeaves.some((n) => n.noteId === targetNote.id)
 
     if (hasSubNotes || hasLeaves) {
       showAlert('サブノートやリーフが含まれているため削除できません。')
@@ -609,15 +557,15 @@
     }
 
     showConfirm('このノートを削除しますか？', () => {
-      const noteId = $currentNote!.id
-      const parentId = $currentNote!.parentId
+      const noteId = targetNote.id
+      const parentId = targetNote.parentId
       updateNotes(allNotes.filter((f) => f.id !== noteId))
 
       const parentNote = allNotes.find((f) => f.id === parentId)
       if (parentNote) {
-        selectNote(parentNote)
+        selectNote(parentNote, pane)
       } else {
-        goHome()
+        goHome(pane)
       }
     })
   }
@@ -684,12 +632,13 @@
   }
 
   // リーフ管理
-  function createLeaf() {
+  function createLeaf(pane: Pane) {
     if (isOperationsLocked) return
-    if (!$currentNote) return
+    const targetNote = pane === 'left' ? leftNote : rightNote
+    if (!targetNote) return
 
     const allLeaves = $leaves
-    const noteLeaves = allLeaves.filter((n) => n.noteId === $currentNote!.id)
+    const noteLeaves = allLeaves.filter((n) => n.noteId === targetNote.id)
 
     const existingTitles = noteLeaves.map((l) => l.title)
     const uniqueTitle = generateUniqueName('リーフ', existingTitles)
@@ -697,22 +646,17 @@
     const newLeaf: Leaf = {
       id: crypto.randomUUID(),
       title: uniqueTitle,
-      noteId: $currentNote.id,
+      noteId: targetNote.id,
       content: `# ${uniqueTitle}\n\n`,
       updatedAt: Date.now(),
       order: noteLeaves.length,
     }
 
     updateLeaves([...allLeaves, newLeaf])
-    selectLeaf(newLeaf)
+    selectLeaf(newLeaf, pane)
   }
 
-  function selectLeaf(leaf: Leaf) {
-    currentLeaf.set(leaf)
-    currentView.set('edit')
-  }
-
-  function deleteLeaf(leafId: string) {
+  function deleteLeaf(leafId: string, pane: Pane) {
     if (isOperationsLocked) {
       showAlert('初回Pullが完了するまで操作できません。設定からPullしてください。')
       return
@@ -727,9 +671,9 @@
 
       const note = $notes.find((f) => f.id === targetLeaf.noteId)
       if (note) {
-        selectNote(note)
+        selectNote(note, pane)
       } else {
-        goHome()
+        goHome(pane)
       }
     })
   }
@@ -769,9 +713,9 @@
     )
     updateLeaves(updatedLeaves)
 
-    // 左ペインのリーフを編集している場合は currentLeaf も更新
-    if ($currentLeaf?.id === leafId) {
-      currentLeaf.update((n) => (n ? { ...n, content, title: newTitle, updatedAt: Date.now() } : n))
+    // 左ペインのリーフを編集している場合は leftLeaf も更新
+    if (leftLeaf?.id === leafId) {
+      leftLeaf = { ...leftLeaf, content, title: newTitle, updatedAt: Date.now() }
     }
 
     // 右ペインのリーフを編集している場合は rightLeaf も更新
@@ -969,8 +913,10 @@
     await clearAllData() // IndexedDB全削除
     notes.set([])
     leaves.set([])
-    currentNote.set(null)
-    currentLeaf.set(null)
+    leftNote = null
+    leftLeaf = null
+    rightNote = null
+    rightLeaf = null
 
     const result = await executePull($settings, isInitial)
 
@@ -990,10 +936,12 @@
       // Pull成功時はGitHubと同期したのでダーティフラグをクリア
       isDirty.set(false)
 
-      // 初回Pull時はURLから状態を復元（既にisRestoringFromUrl=trueを設定済み）
+      // Pull後はURLから状態を復元（初回Pullも含む）
       if (isInitial) {
         restoreStateFromUrl(true)
         isRestoringFromUrl = false
+      } else {
+        restoreStateFromUrl(false)
       }
     } else {
       if (isInitial) {
@@ -1013,7 +961,7 @@
     githubConfigured={isGitHubConfigured}
     title={$settings.toolName}
     onTitleClick={() => {
-      goHome()
+      goHome('left')
     }}
     onSettingsClick={() => {
       goSettings()
@@ -1032,12 +980,12 @@
       />
 
       <main class="main-pane">
-        {#if $currentView === 'home'}
+        {#if leftView === 'home'}
           <HomeView
             notes={$rootNotes}
             disabled={isOperationsLocked}
-            onSelectNote={selectNote}
-            onCreateNote={() => createNote()}
+            onSelectNote={(note) => selectNote(note, 'left')}
+            onCreateNote={() => createNote(undefined, 'left')}
             onDragStart={handleDragStartNote}
             onDragEnd={handleDragEndNote}
             onDragOver={handleDragOverNote}
@@ -1046,17 +994,21 @@
             {dragOverNoteId}
             {getNoteItems}
           />
-        {:else if $currentView === 'note' && $currentNote}
+        {:else if leftView === 'note' && leftNote}
           <NoteView
-            currentNote={$currentNote}
-            subNotes={$subNotes}
-            leaves={$currentNoteLeaves}
+            currentNote={leftNote}
+            subNotes={$notes
+              .filter((n) => n.parentId === leftNote.id)
+              .sort((a, b) => a.order - b.order)}
+            leaves={$leaves
+              .filter((l) => l.noteId === leftNote.id)
+              .sort((a, b) => a.order - b.order)}
             disabled={isOperationsLocked}
-            onSelectNote={selectNote}
-            onSelectLeaf={selectLeaf}
-            onCreateNote={() => createNote($currentNote.id)}
-            onCreateLeaf={createLeaf}
-            onDeleteNote={deleteNote}
+            onSelectNote={(note) => selectNote(note, 'left')}
+            onSelectLeaf={(leaf) => selectLeaf(leaf, 'left')}
+            onCreateNote={() => createNote(leftNote.id, 'left')}
+            onCreateLeaf={() => createLeaf('left')}
+            onDeleteNote={() => deleteNote('left')}
             onDragStartNote={handleDragStartNote}
             onDragStartLeaf={handleDragStartLeaf}
             onDragEndNote={handleDragEndNote}
@@ -1070,57 +1022,53 @@
             {dragOverLeafId}
             {getNoteItems}
           />
-        {:else if $currentView === 'edit' && $currentLeaf}
+        {:else if leftView === 'edit' && leftLeaf}
           <EditorView
             bind:this={leftEditorView}
-            leaf={$currentLeaf}
+            leaf={leftLeaf}
             theme={$settings.theme}
             disabled={isOperationsLocked || isPushing}
             onContentChange={updateLeafContent}
             onSave={handleSaveToGitHub}
             onDownload={downloadLeaf}
-            onDelete={deleteLeaf}
+            onDelete={(leafId) => deleteLeaf(leafId, 'left')}
             onScroll={handleLeftScroll}
           />
-        {:else if $currentView === 'preview' && $currentLeaf}
-          <PreviewView
-            bind:this={leftPreviewView}
-            leaf={$currentLeaf}
-            onScroll={handleLeftScroll}
-          />
+        {:else if leftView === 'preview' && leftLeaf}
+          <PreviewView bind:this={leftPreviewView} leaf={leftLeaf} onScroll={handleLeftScroll} />
         {/if}
       </main>
 
-      {#if $currentView === 'home'}
+      {#if leftView === 'home'}
         <HomeFooter
-          onCreateNote={() => createNote()}
+          onCreateNote={() => createNote(undefined, 'left')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
         />
-      {:else if $currentView === 'note' && $currentNote}
+      {:else if leftView === 'note' && leftNote}
         <NoteFooter
-          onDeleteNote={deleteNote}
-          onCreateSubNote={() => createNote($currentNote.id)}
-          onCreateLeaf={createLeaf}
+          onDeleteNote={() => deleteNote('left')}
+          onCreateSubNote={() => createNote(leftNote.id, 'left')}
+          onCreateLeaf={() => createLeaf('left')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
-          canHaveSubNote={!$currentNote.parentId}
+          canHaveSubNote={!leftNote.parentId}
         />
-      {:else if $currentView === 'edit' && $currentLeaf}
+      {:else if leftView === 'edit' && leftLeaf}
         <EditorFooter
-          onDelete={() => deleteLeaf($currentLeaf.id)}
-          onDownload={() => downloadLeaf($currentLeaf.id)}
-          onTogglePreview={togglePreview}
+          onDelete={() => deleteLeaf(leftLeaf.id, 'left')}
+          onDownload={() => downloadLeaf(leftLeaf.id)}
+          onTogglePreview={() => togglePreview('left')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
         />
-      {:else if $currentView === 'preview' && $currentLeaf}
+      {:else if leftView === 'preview' && leftLeaf}
         <PreviewFooter
-          onDownload={() => downloadLeaf($currentLeaf.id)}
-          onToggleEdit={togglePreview}
+          onDownload={() => downloadLeaf(leftLeaf.id)}
+          onToggleEdit={() => togglePreview('left')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
@@ -1146,8 +1094,8 @@
           <HomeView
             notes={$rootNotes}
             disabled={isOperationsLocked}
-            onSelectNote={selectNoteRight}
-            onCreateNote={() => createNoteRight()}
+            onSelectNote={(note) => selectNote(note, 'right')}
+            onCreateNote={() => createNote(undefined, 'right')}
             onDragStart={handleDragStartNote}
             onDragEnd={handleDragEndNote}
             onDragOver={handleDragOverNote}
@@ -1166,11 +1114,11 @@
               .filter((l) => l.noteId === rightNote.id)
               .sort((a, b) => a.order - b.order)}
             disabled={isOperationsLocked}
-            onSelectNote={selectNoteRight}
-            onSelectLeaf={selectLeafRight}
-            onCreateNote={() => createNoteRight(rightNote.id)}
-            onCreateLeaf={createLeafRight}
-            onDeleteNote={deleteNote}
+            onSelectNote={(note) => selectNote(note, 'right')}
+            onSelectLeaf={(leaf) => selectLeaf(leaf, 'right')}
+            onCreateNote={() => createNote(rightNote.id, 'right')}
+            onCreateLeaf={() => createLeaf('right')}
+            onDeleteNote={() => deleteNote('right')}
             onDragStartNote={handleDragStartNote}
             onDragStartLeaf={handleDragStartLeaf}
             onDragEndNote={handleDragEndNote}
@@ -1193,7 +1141,7 @@
             onContentChange={updateLeafContent}
             onSave={handleSaveToGitHub}
             onDownload={downloadLeaf}
-            onDelete={deleteLeaf}
+            onDelete={(leafId) => deleteLeaf(leafId, 'right')}
             onScroll={handleRightScroll}
           />
         {:else if rightView === 'preview' && rightLeaf}
@@ -1203,16 +1151,16 @@
 
       {#if rightView === 'home'}
         <HomeFooter
-          onCreateNote={() => createNoteRight()}
+          onCreateNote={() => createNote(undefined, 'right')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
         />
       {:else if rightView === 'note' && rightNote}
         <NoteFooter
-          onDeleteNote={deleteNote}
-          onCreateSubNote={() => createNoteRight(rightNote.id)}
-          onCreateLeaf={createLeafRight}
+          onDeleteNote={() => deleteNote('right')}
+          onCreateSubNote={() => createNote(rightNote.id, 'right')}
+          onCreateLeaf={() => createLeaf('right')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
@@ -1220,9 +1168,9 @@
         />
       {:else if rightView === 'edit' && rightLeaf}
         <EditorFooter
-          onDelete={() => deleteLeaf(rightLeaf.id)}
+          onDelete={() => deleteLeaf(rightLeaf.id, 'right')}
           onDownload={() => downloadLeaf(rightLeaf.id)}
-          onTogglePreview={togglePreviewRight}
+          onTogglePreview={() => togglePreview('right')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
@@ -1230,7 +1178,7 @@
       {:else if rightView === 'preview' && rightLeaf}
         <PreviewFooter
           onDownload={() => downloadLeaf(rightLeaf.id)}
-          onToggleEdit={togglePreviewRight}
+          onToggleEdit={() => togglePreview('right')}
           onSave={handleSaveToGitHub}
           disabled={isOperationsLocked}
           isDirty={$isDirty}
