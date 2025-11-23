@@ -31,6 +31,7 @@
 
 - **[UI/UX機能](./docs/ui-features.md)**
   - 2ペイン表示（アスペクト比判定、レスポンシブ対応）
+  - カスタムフォント機能（クライアントサイド保存、リロード不要）
 
 - **[コンテンツ同期機能](./docs/content-sync.md)**
   - リーフのタイトルと#見出しの双方向同期
@@ -50,7 +51,7 @@
 
 - **[データ永続化とストレージ](./docs/storage.md)**
   - LocalStorage（設定情報）
-  - IndexedDB（ノート・リーフデータ）
+  - IndexedDB（ノート・リーフ・カスタムフォントデータ）
   - GitHub（リモートリポジトリ）
   - テーマシステム
 
@@ -109,6 +110,7 @@
 - [x] **2ペイン表示での同期**（同じリーフを左右で開いている場合は即座に同期）
 - [x] **マークダウンプレビュー機能**（marked + DOMPurify、編集/プレビュートグル、URLルーティング対応）
 - [x] **編集/プレビュー間のスクロール同期**（同じリーフを左右で開いた際の双方向スクロール同期、無限ループ防止）
+- [x] **カスタムフォント機能**（.ttf/.otf/.woff/.woff2対応、IndexedDB保存、リロード不要で適用・削除）
 
 #### GitHub同期
 
@@ -204,6 +206,22 @@ npm run preview
 ---
 
 ## 📝 変更履歴
+
+### Version 4.6 (2025-01-23)
+
+- **カスタムフォント機能の実装**
+  - ユーザーが自由にフォントファイル（.ttf, .otf, .woff, .woff2）をアップロード可能
+  - IndexedDB `fonts` オブジェクトストアにフォントデータを保存（1つのみ、上書き方式）
+  - FileReader APIでフォントファイルをArrayBufferとして読み込み
+  - CSS `@font-face`を動的に登録して即座に適用（リロード不要）
+  - 設定画面に「フォント選択」ボタンと「デフォルトに戻す」ボタンを追加
+  - フォント削除時も即座に反映（リロード不要、確認ダイアログなし）
+  - `Settings.hasCustomFont`フラグで適用状態を管理
+  - アプリ起動時に保存されたフォントを自動復元
+  - body, input, textarea, button, CodeMirrorエディタのすべてに適用
+  - サーバー側にフォントを持たず、完全クライアントサイドで動作
+  - 新規ファイル追加: `src/lib/font.ts` (フォント管理モジュール)
+  - ドキュメント更新: `docs/ui-features.md`, `docs/storage.md`
 
 ### Version 4.5 (2025-01-23)
 
@@ -306,6 +324,6 @@ npm run preview
 
 ---
 
-**Document Version**: 4.5
+**Document Version**: 4.6
 **Last Updated**: 2025-01-23
 **Author**: Claude (Anthropic)

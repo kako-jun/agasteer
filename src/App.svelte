@@ -21,6 +21,7 @@
   } from './lib/stores'
   import { clearAllData, loadSettings } from './lib/storage'
   import { applyTheme } from './lib/theme'
+  import { loadAndApplyCustomFont } from './lib/font'
   import { executePush, executePull } from './lib/sync'
   import {
     pushToastState,
@@ -237,6 +238,13 @@
     settings.set(loadedSettings)
     applyTheme(loadedSettings.theme, loadedSettings)
     document.title = loadedSettings.toolName
+
+    // カスタムフォントがあれば適用
+    if (loadedSettings.hasCustomFont) {
+      loadAndApplyCustomFont().catch((error) => {
+        console.error('Failed to load custom font:', error)
+      })
+    }
 
     // アスペクト比を監視して isDualPane を更新（横 > 縦で2ペイン表示）
     const updateDualPane = () => {

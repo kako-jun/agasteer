@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Settings, ThemeType } from '../../lib/types'
+  import { uploadAndApplyFont, removeAndDeleteCustomFont } from '../../lib/font'
 
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
@@ -7,13 +8,16 @@
   export let pullRunning: boolean = false
   export let onPull: (isInitial?: boolean) => void
 
+  let fileInput: HTMLInputElement
+  let fontUploading = false
+
   function handleThemeSelect(theme: ThemeType) {
     settings.theme = theme
     onThemeChange(theme)
     onSettingsChange({ theme })
   }
 
-  type TextSettingKey = Exclude<keyof Settings, 'theme'>
+  type TextSettingKey = Exclude<keyof Settings, 'theme' | 'hasCustomFont'>
 
   function handleInputChange(key: TextSettingKey, value: string) {
     settings[key] = value as Settings[TextSettingKey]
@@ -28,6 +32,49 @@
   function handleToolNameInput(event: Event) {
     const value = (event.target as HTMLInputElement).value
     handleInputChange('toolName', value)
+  }
+
+  function handleFontButtonClick() {
+    fileInput?.click()
+  }
+
+  async function handleFontFileChange(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+
+    if (!file) return
+
+    // フォントファイルの拡張子チェック
+    const validExtensions = ['.ttf', '.otf', '.woff', '.woff2']
+    const fileName = file.name.toLowerCase()
+    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
+      alert('対応しているフォント形式: .ttf, .otf, .woff, .woff2')
+      return
+    }
+
+    try {
+      fontUploading = true
+      await uploadAndApplyFont(file)
+      settings.hasCustomFont = true
+      onSettingsChange({ hasCustomFont: true })
+    } catch (error) {
+      console.error('Failed to upload font:', error)
+      alert('フォントの読み込みに失敗しました')
+    } finally {
+      fontUploading = false
+      input.value = ''
+    }
+  }
+
+  async function handleResetFont() {
+    try {
+      await removeAndDeleteCustomFont()
+      settings.hasCustomFont = false
+      onSettingsChange({ hasCustomFont: false })
+    } catch (error) {
+      console.error('Failed to reset font:', error)
+      alert('フォントのリセットに失敗しました')
+    }
   }
 
   // Pullテスト結果の表示はトーストに統一
@@ -220,6 +267,48 @@
               placeholder="SimplestNote.md"
               on:input={handleToolNameInput}
             />
+          </div>
+          <div class="font-field">
+            <span class="sub-label">カスタムフォント</span>
+            <div class="font-controls">
+              <input
+                type="file"
+                accept=".ttf,.otf,.woff,.woff2"
+                bind:this={fileInput}
+                on:change={handleFontFileChange}
+                style="display: none;"
+              />
+              <button
+                type="button"
+                class="font-button"
+                on:click={handleFontButtonClick}
+                disabled={fontUploading}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  <path d="M8 7h8" />
+                  <path d="M8 11h8" />
+                </svg>
+                {fontUploading ? 'アップロード中...' : 'フォント選択'}
+              </button>
+              {#if settings.hasCustomFont}
+                <button type="button" class="font-reset-button" on:click={handleResetFont}>
+                  デフォルトに戻す
+                </button>
+              {/if}
+            </div>
+            <p class="font-help-text">対応形式: .ttf, .otf, .woff, .woff2</p>
           </div>
         </div>
       </div>
@@ -568,5 +657,73 @@
     color: var(--text-primary);
     font-size: 0.9rem;
     font-weight: 500;
+  }
+
+  .font-field {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .font-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .font-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .font-button:hover:not(:disabled) {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .font-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .font-button svg {
+    flex-shrink: 0;
+  }
+
+  .font-reset-button {
+    padding: 0.6rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .font-reset-button:hover {
+    background: #ff4444;
+    color: white;
+    border-color: #ff4444;
+  }
+
+  .font-help-text {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
   }
 </style>

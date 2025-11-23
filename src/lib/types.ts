@@ -16,6 +16,13 @@ export interface Settings {
   repoName: string
   theme: ThemeType
   toolName: string
+  hasCustomFont?: boolean
+}
+
+export interface CustomFont {
+  name: string
+  data: ArrayBuffer
+  type: string
 }
 
 export interface Metadata {

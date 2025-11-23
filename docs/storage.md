@@ -51,6 +51,7 @@ const SETTINGS_KEY = 'simplest-md-note/settings'
 
 - `notes`: ノートデータ
 - `leaves`: リーフデータ
+- `fonts`: カスタムフォントデータ
 
 ### データ構造
 
@@ -115,6 +116,36 @@ interface Leaf {
 
 - ノート/リーフの作成・削除・編集時に即座に反映
 - ドラッグ&ドロップによる並び替え時
+
+#### `fonts` オブジェクトストア
+
+```typescript
+interface CustomFont {
+  name: string // フォント名（常に'custom'）
+  data: ArrayBuffer // フォントファイルのバイナリデータ
+  type: string // MIMEタイプ（例: 'font/ttf', 'font/woff2'）
+}
+```
+
+**例:**
+
+```json
+{
+  "name": "custom",
+  "data": ArrayBuffer(...),
+  "type": "font/ttf"
+}
+```
+
+**仕様:**
+
+- **同時保存数**: 1つのみ（固定キー `'custom'` で上書き保存）
+- **保存タイミング**: フォント選択時
+- **削除タイミング**: 「デフォルトに戻す」ボタン押下時
+- **設定フラグ**: `Settings.hasCustomFont` (boolean) をLocalStorageに保存
+  - フォント適用時に `true` を設定
+  - フォント削除時に `false` を設定
+  - アプリ起動時、`true`の場合はIndexedDBからフォントを読み込んで適用
 
 ---
 

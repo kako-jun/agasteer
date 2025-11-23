@@ -3,7 +3,7 @@
  * アプリケーションデータの永続化を担当
  */
 
-import type { Settings, Note, Leaf, ThemeType } from './types'
+import type { Settings, Note, Leaf, ThemeType, CustomFont } from './types'
 
 // 設定のみLocalStorage利用（キー簡素化）
 const SETTINGS_KEY = 'simplest-md-note'
@@ -11,6 +11,7 @@ const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard'
 const DB_NAME = 'simplest-md-note/db'
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
+const FONTS_STORE = 'fonts'
 
 export const defaultSettings: Settings = {
   token: '',
@@ -55,11 +56,11 @@ export function saveSettings(settings: Settings): void {
 }
 
 /**
- * IndexedDBを開く（note/leaves用）
+ * IndexedDBを開く（note/leaves/fonts用）
  */
 async function openAppDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
+    const request = indexedDB.open(DB_NAME, 2)
 
     request.onupgradeneeded = () => {
       const db = request.result
@@ -68,6 +69,9 @@ async function openAppDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(NOTES_STORE)) {
         db.createObjectStore(NOTES_STORE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(FONTS_STORE)) {
+        db.createObjectStore(FONTS_STORE, { keyPath: 'name' })
       }
     }
 
@@ -181,5 +185,62 @@ export async function clearAllData(): Promise<void> {
     await replaceAllInStore<Note>(db, NOTES_STORE, [])
   } catch (error) {
     console.error('Failed to clear data in IndexedDB:', error)
+  }
+}
+
+/**
+ * カスタムフォントを保存
+ */
+export async function saveCustomFont(font: CustomFont): Promise<void> {
+  try {
+    const db = await openAppDB()
+    const tx = db.transaction(FONTS_STORE, 'readwrite')
+    const store = tx.objectStore(FONTS_STORE)
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(font)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  } catch (error) {
+    console.error('Failed to save custom font to IndexedDB:', error)
+    throw error
+  }
+}
+
+/**
+ * カスタムフォントを読み込む
+ */
+export async function loadCustomFont(name: string): Promise<CustomFont | null> {
+  try {
+    const db = await openAppDB()
+    const tx = db.transaction(FONTS_STORE, 'readonly')
+    const store = tx.objectStore(FONTS_STORE)
+    return await new Promise<CustomFont | null>((resolve, reject) => {
+      const request = store.get(name)
+      request.onsuccess = () => resolve((request.result as CustomFont) || null)
+      request.onerror = () => reject(request.error)
+    })
+  } catch (error) {
+    console.error('Failed to load custom font from IndexedDB:', error)
+    return null
+  }
+}
+
+/**
+ * カスタムフォントを削除
+ */
+export async function deleteCustomFont(name: string): Promise<void> {
+  try {
+    const db = await openAppDB()
+    const tx = db.transaction(FONTS_STORE, 'readwrite')
+    const store = tx.objectStore(FONTS_STORE)
+    await new Promise<void>((resolve, reject) => {
+      const request = store.delete(name)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  } catch (error) {
+    console.error('Failed to delete custom font from IndexedDB:', error)
+    throw error
   }
 }
