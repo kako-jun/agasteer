@@ -167,6 +167,52 @@ if (contentData.content) {
 - IndexedDBは単なるキャッシュ
 - Pull成功時にIndexedDBは全削除→全作成
 
+### GitHub APIのキャッシュ問題と解決策
+
+GitHub Contents APIはレスポンスをキャッシュするため、Push直後のPullで古いデータが返される問題がありました。
+
+**問題の発見経緯:**
+
+Push回数カウント機能の実装中に、Push直後にPullしても`pushCount`が更新されない現象を発見。調査の結果、GitHub Contents APIがキャッシュを返していることが判明。
+
+**影響範囲:**
+
+- Push直後のPull: 古いノート・リーフが表示される
+- 複数デバイスでの同期: 他のデバイスでPushした変更が即座に反映されない
+- 編集の喪失: 最新のデータを取得できず、古いバージョンで上書きする可能性
+
+**解決策:**
+
+GitHub Contents API呼び出しにキャッシュバスター（タイムスタンプ）を付与。
+
+```typescript
+/**
+ * GitHub Contents APIを呼ぶヘルパー関数（キャッシュバスター付き）
+ */
+async function fetchGitHubContents(path: string, repoName: string, token: string) {
+  const url = `https://api.github.com/repos/${repoName}/contents/${path}?t=${Date.now()}`
+  return fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+```
+
+このヘルパー関数を以下の箇所で使用：
+
+1. `fetchCurrentSha` - ファイルのSHA取得
+2. `pushAllWithTreeAPI` - Push時のmetadata.json取得
+3. `pullFromGitHub` - Pull時のmetadata.json取得
+4. `pullFromGitHub` - Pull時のリーフcontent取得
+
+**効果:**
+
+- ✅ Push直後のPullでも最新データを取得
+- ✅ metadata.jsonの`pushCount`が正しく反映
+- ✅ リーフコンテンツも常に最新
+- ✅ キャッシュバスターの管理が一元化（保守性向上）
+
 ---
 
 ## ファイルパスの構築

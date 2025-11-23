@@ -188,6 +188,47 @@ location.reload()
 - 別のブラウザ/プロファイル → LocalStorageはブラウザ固有
 - シークレットモード → 通常モードでアクセス
 
+### 解決済みの問題
+
+#### GitHub APIキャッシュ問題（Version 4.3で解決）
+
+**症状**: Push直後にPullしても変更が反映されない
+
+**原因**:
+
+GitHub Contents APIがレスポンスをキャッシュするため、Push直後のPullで古いデータが返される。
+
+**発見経緯**:
+
+Push回数カウント機能の実装中に、Push直後にPullしても`pushCount`が更新されない現象を発見。この機能がなければ潜在的な問題として見過ごされていた可能性が高い。
+
+**解決策**:
+
+`fetchGitHubContents`ヘルパー関数を作成し、すべてのContents API呼び出しにキャッシュバスター（タイムスタンプ）を付与：
+
+```typescript
+async function fetchGitHubContents(path: string, repoName: string, token: string) {
+  const url = `https://api.github.com/repos/${repoName}/contents/${path}?t=${Date.now()}`
+  return fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+```
+
+**影響範囲**:
+
+- metadata.jsonの取得
+- リーフコンテンツの取得
+- ファイルSHAの取得
+
+**効果**:
+
+- ✅ Push直後のPullでも最新データを取得
+- ✅ 複数デバイス間の同期が正確に
+- ✅ データの上書き・喪失リスクを排除
+
 ---
 
 ## まとめ
