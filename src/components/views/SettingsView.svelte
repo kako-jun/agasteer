@@ -1,6 +1,12 @@
 <script lang="ts">
   import type { Settings, ThemeType } from '../../lib/types'
   import { uploadAndApplyFont, removeAndDeleteCustomFont } from '../../lib/font'
+  import {
+    uploadAndApplyBackgroundLeft,
+    uploadAndApplyBackgroundRight,
+    removeAndDeleteCustomBackgroundLeft,
+    removeAndDeleteCustomBackgroundRight,
+  } from '../../lib/background'
 
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
@@ -10,6 +16,12 @@
 
   let fileInput: HTMLInputElement
   let fontUploading = false
+  let backgroundLeftFileInput: HTMLInputElement
+  let backgroundRightFileInput: HTMLInputElement
+  let backgroundLeftUploading = false
+  let backgroundRightUploading = false
+
+  const BACKGROUND_OPACITY = 0.1
 
   function handleThemeSelect(theme: ThemeType) {
     settings.theme = theme
@@ -17,7 +29,15 @@
     onSettingsChange({ theme })
   }
 
-  type TextSettingKey = Exclude<keyof Settings, 'theme' | 'hasCustomFont'>
+  type TextSettingKey = Exclude<
+    keyof Settings,
+    | 'theme'
+    | 'hasCustomFont'
+    | 'hasCustomBackgroundLeft'
+    | 'hasCustomBackgroundRight'
+    | 'backgroundOpacityLeft'
+    | 'backgroundOpacityRight'
+  >
 
   function handleInputChange(key: TextSettingKey, value: string) {
     settings[key] = value as Settings[TextSettingKey]
@@ -74,6 +94,108 @@
     } catch (error) {
       console.error('Failed to reset font:', error)
       alert('フォントのリセットに失敗しました')
+    }
+  }
+
+  function handleBackgroundLeftButtonClick() {
+    backgroundLeftFileInput?.click()
+  }
+
+  function handleBackgroundRightButtonClick() {
+    backgroundRightFileInput?.click()
+  }
+
+  async function handleBackgroundLeftFileChange(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+
+    if (!file) return
+
+    // 画像ファイルの拡張子チェック
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+    const fileName = file.name.toLowerCase()
+    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
+      alert('対応している画像形式: .jpg, .jpeg, .png, .webp, .gif')
+      return
+    }
+
+    try {
+      backgroundLeftUploading = true
+      await uploadAndApplyBackgroundLeft(file, BACKGROUND_OPACITY)
+      settings.hasCustomBackgroundLeft = true
+      settings.backgroundOpacityLeft = BACKGROUND_OPACITY
+      onSettingsChange({
+        hasCustomBackgroundLeft: true,
+        backgroundOpacityLeft: BACKGROUND_OPACITY,
+      })
+    } catch (error) {
+      console.error('Failed to upload left background:', error)
+      alert('左ペインの背景画像の読み込みに失敗しました')
+    } finally {
+      backgroundLeftUploading = false
+      input.value = ''
+    }
+  }
+
+  async function handleBackgroundRightFileChange(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+
+    if (!file) return
+
+    // 画像ファイルの拡張子チェック
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+    const fileName = file.name.toLowerCase()
+    if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
+      alert('対応している画像形式: .jpg, .jpeg, .png, .webp, .gif')
+      return
+    }
+
+    try {
+      backgroundRightUploading = true
+      await uploadAndApplyBackgroundRight(file, BACKGROUND_OPACITY)
+      settings.hasCustomBackgroundRight = true
+      settings.backgroundOpacityRight = BACKGROUND_OPACITY
+      onSettingsChange({
+        hasCustomBackgroundRight: true,
+        backgroundOpacityRight: BACKGROUND_OPACITY,
+      })
+    } catch (error) {
+      console.error('Failed to upload right background:', error)
+      alert('右ペインの背景画像の読み込みに失敗しました')
+    } finally {
+      backgroundRightUploading = false
+      input.value = ''
+    }
+  }
+
+  async function handleResetBackgroundLeft() {
+    try {
+      await removeAndDeleteCustomBackgroundLeft()
+      settings.hasCustomBackgroundLeft = false
+      settings.backgroundOpacityLeft = BACKGROUND_OPACITY
+      onSettingsChange({
+        hasCustomBackgroundLeft: false,
+        backgroundOpacityLeft: BACKGROUND_OPACITY,
+      })
+    } catch (error) {
+      console.error('Failed to reset left background:', error)
+      alert('左ペインの背景画像のリセットに失敗しました')
+    }
+  }
+
+  async function handleResetBackgroundRight() {
+    try {
+      await removeAndDeleteCustomBackgroundRight()
+      settings.hasCustomBackgroundRight = false
+      settings.backgroundOpacityRight = BACKGROUND_OPACITY
+      onSettingsChange({
+        hasCustomBackgroundRight: false,
+        backgroundOpacityRight: BACKGROUND_OPACITY,
+      })
+    } catch (error) {
+      console.error('Failed to reset right background:', error)
+      alert('右ペインの背景画像のリセットに失敗しました')
     }
   }
 
@@ -310,6 +432,103 @@
               {/if}
             </div>
           </div>
+          <div class="background-field-wrapper">
+            <span class="sub-label">カスタム背景画像</span>
+            <div class="background-dual-pane">
+              <div class="background-pane">
+                <span class="pane-label">左ペイン</span>
+                {#if settings.hasCustomBackgroundLeft}
+                  <div class="background-preview background-preview-left">
+                    <span class="preview-label">プレビュー</span>
+                  </div>
+                {/if}
+                <div class="background-controls">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.gif"
+                    bind:this={backgroundLeftFileInput}
+                    on:change={handleBackgroundLeftFileChange}
+                    style="display: none;"
+                  />
+                  <button
+                    type="button"
+                    class="test-button"
+                    on:click={handleBackgroundLeftButtonClick}
+                    disabled={backgroundLeftUploading}
+                  >
+                    <svg
+                      class="test-icon"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                    {backgroundLeftUploading ? 'アップロード中...' : '背景画像選択'}
+                  </button>
+                  {#if settings.hasCustomBackgroundLeft}
+                    <button type="button" class="test-button" on:click={handleResetBackgroundLeft}>
+                      デフォルトに戻す
+                    </button>
+                  {/if}
+                </div>
+              </div>
+              <div class="background-pane">
+                <span class="pane-label">右ペイン</span>
+                {#if settings.hasCustomBackgroundRight}
+                  <div class="background-preview background-preview-right">
+                    <span class="preview-label">プレビュー</span>
+                  </div>
+                {/if}
+                <div class="background-controls">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.gif"
+                    bind:this={backgroundRightFileInput}
+                    on:change={handleBackgroundRightFileChange}
+                    style="display: none;"
+                  />
+                  <button
+                    type="button"
+                    class="test-button"
+                    on:click={handleBackgroundRightButtonClick}
+                    disabled={backgroundRightUploading}
+                  >
+                    <svg
+                      class="test-icon"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                    {backgroundRightUploading ? 'アップロード中...' : '背景画像選択'}
+                  </button>
+                  {#if settings.hasCustomBackgroundRight}
+                    <button type="button" class="test-button" on:click={handleResetBackgroundRight}>
+                      デフォルトに戻す
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -350,6 +569,8 @@
   .settings-content {
     max-width: 800px;
     margin: 0 auto;
+    position: relative;
+    z-index: 1;
   }
 
   h2 {
@@ -677,5 +898,62 @@
     gap: 0.5rem;
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  .background-field-wrapper {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .background-field-wrapper .sub-label {
+    margin-bottom: 0.5rem;
+  }
+
+  .background-dual-pane {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .background-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .pane-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .background-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .background-preview {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .preview-label {
+    position: relative;
+    z-index: 1;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
 </style>

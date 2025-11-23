@@ -17,9 +17,19 @@ export interface Settings {
   theme: ThemeType
   toolName: string
   hasCustomFont?: boolean
+  hasCustomBackgroundLeft?: boolean
+  hasCustomBackgroundRight?: boolean
+  backgroundOpacityLeft?: number
+  backgroundOpacityRight?: number
 }
 
 export interface CustomFont {
+  name: string
+  data: ArrayBuffer
+  type: string
+}
+
+export interface CustomBackground {
   name: string
   data: ArrayBuffer
   type: string

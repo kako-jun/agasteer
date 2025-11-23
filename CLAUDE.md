@@ -111,6 +111,7 @@
 - [x] **マークダウンプレビュー機能**（marked + DOMPurify、編集/プレビュートグル、URLルーティング対応）
 - [x] **編集/プレビュー間のスクロール同期**（同じリーフを左右で開いた際の双方向スクロール同期、無限ループ防止）
 - [x] **カスタムフォント機能**（.ttf/.otf/.woff/.woff2対応、IndexedDB保存、リロード不要で適用・削除）
+- [x] **カスタム背景画像機能**（左右ペイン別々に設定可能、.jpg/.png/.webp/.gif対応、IndexedDB保存、透明度0.1で半透明表示）
 
 #### GitHub同期
 
@@ -206,6 +207,24 @@ npm run preview
 ---
 
 ## 📝 変更履歴
+
+### Version 4.7 (2025-11-23)
+
+- **カスタム背景画像機能の実装**
+  - 左右ペイン別々に背景画像を設定可能
+  - 対応フォーマット: .jpg, .jpeg, .png, .webp, .gif
+  - IndexedDB `backgrounds` オブジェクトストアに保存（左: `custom-left`, 右: `custom-right`）
+  - FileReader APIで画像ファイルをArrayBufferとして読み込み
+  - CSS `::before`擬似要素で動的に適用（透明度0.1固定）
+  - テーマの背景色の上に半透明で画像を重ねる仕様
+  - 設定画面に左右2列レイアウトで「背景画像選択」と「デフォルトに戻す」ボタンを追加
+  - 画像削除時も即座に反映（リロード不要）
+  - `Settings.hasCustomBackgroundLeft`、`Settings.hasCustomBackgroundRight`フラグで適用状態を管理
+  - アプリ起動時に保存された画像を自動復元
+  - 設定画面の背景にも左ペインの画像を表示
+  - サーバー側に画像を持たず、完全クライアントサイドで動作
+  - 新規ファイル追加: `src/lib/background.ts` (背景画像管理モジュール)
+  - ドキュメント更新: `docs/ui-features.md`, `CLAUDE.md`
 
 ### Version 4.6 (2025-01-23)
 

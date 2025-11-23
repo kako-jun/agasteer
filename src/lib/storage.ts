@@ -3,7 +3,7 @@
  * アプリケーションデータの永続化を担当
  */
 
-import type { Settings, Note, Leaf, ThemeType, CustomFont } from './types'
+import type { Settings, Note, Leaf, ThemeType, CustomFont, CustomBackground } from './types'
 
 // 設定のみLocalStorage利用（キー簡素化）
 const SETTINGS_KEY = 'simplest-md-note'
@@ -12,6 +12,7 @@ const DB_NAME = 'simplest-md-note/db'
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
 const FONTS_STORE = 'fonts'
+const BACKGROUNDS_STORE = 'backgrounds'
 
 export const defaultSettings: Settings = {
   token: '',
@@ -56,11 +57,11 @@ export function saveSettings(settings: Settings): void {
 }
 
 /**
- * IndexedDBを開く（note/leaves/fonts用）
+ * IndexedDBを開く（note/leaves/fonts/backgrounds用）
  */
 async function openAppDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 2)
+    const request = indexedDB.open(DB_NAME, 3)
 
     request.onupgradeneeded = () => {
       const db = request.result
@@ -72,6 +73,9 @@ async function openAppDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(FONTS_STORE)) {
         db.createObjectStore(FONTS_STORE, { keyPath: 'name' })
+      }
+      if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
+        db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
       }
     }
 
@@ -241,6 +245,63 @@ export async function deleteCustomFont(name: string): Promise<void> {
     })
   } catch (error) {
     console.error('Failed to delete custom font from IndexedDB:', error)
+    throw error
+  }
+}
+
+/**
+ * カスタム背景画像を保存
+ */
+export async function saveCustomBackground(background: CustomBackground): Promise<void> {
+  try {
+    const db = await openAppDB()
+    const tx = db.transaction(BACKGROUNDS_STORE, 'readwrite')
+    const store = tx.objectStore(BACKGROUNDS_STORE)
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(background)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  } catch (error) {
+    console.error('Failed to save custom background to IndexedDB:', error)
+    throw error
+  }
+}
+
+/**
+ * カスタム背景画像を読み込む
+ */
+export async function loadCustomBackground(name: string): Promise<CustomBackground | null> {
+  try {
+    const db = await openAppDB()
+    const tx = db.transaction(BACKGROUNDS_STORE, 'readonly')
+    const store = tx.objectStore(BACKGROUNDS_STORE)
+    return await new Promise<CustomBackground | null>((resolve, reject) => {
+      const request = store.get(name)
+      request.onsuccess = () => resolve((request.result as CustomBackground) || null)
+      request.onerror = () => reject(request.error)
+    })
+  } catch (error) {
+    console.error('Failed to load custom background from IndexedDB:', error)
+    return null
+  }
+}
+
+/**
+ * カスタム背景画像を削除
+ */
+export async function deleteCustomBackground(name: string): Promise<void> {
+  try {
+    const db = await openAppDB()
+    const tx = db.transaction(BACKGROUNDS_STORE, 'readwrite')
+    const store = tx.objectStore(BACKGROUNDS_STORE)
+    await new Promise<void>((resolve, reject) => {
+      const request = store.delete(name)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  } catch (error) {
+    console.error('Failed to delete custom background from IndexedDB:', error)
     throw error
   }
 }

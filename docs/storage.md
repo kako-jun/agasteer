@@ -52,6 +52,7 @@ const SETTINGS_KEY = 'simplest-md-note/settings'
 - `notes`: ノートデータ
 - `leaves`: リーフデータ
 - `fonts`: カスタムフォントデータ
+- `backgrounds`: カスタム背景画像データ
 
 ### データ構造
 
@@ -146,6 +147,38 @@ interface CustomFont {
   - フォント適用時に `true` を設定
   - フォント削除時に `false` を設定
   - アプリ起動時、`true`の場合はIndexedDBからフォントを読み込んで適用
+
+#### `backgrounds` オブジェクトストア
+
+```typescript
+interface CustomBackground {
+  name: string // 固定キー: 'custom-left' または 'custom-right'
+  data: ArrayBuffer // 画像ファイルのバイナリデータ
+  type: string // MIMEタイプ (例: 'image/jpeg', 'image/png')
+}
+```
+
+**例:**
+
+```json
+{
+  "name": "custom-left",
+  "data": ArrayBuffer(...),
+  "type": "image/jpeg"
+}
+```
+
+**仕様:**
+
+- **同時保存数**: 左右それぞれ1つ（固定キー `'custom-left'`, `'custom-right'` で上書き保存）
+- **保存タイミング**: 背景画像選択時
+- **削除タイミング**: 「デフォルトに戻す」ボタン押下時
+- **設定フラグ**: LocalStorageに以下を保存
+  - `Settings.hasCustomBackgroundLeft` (boolean) - 左ペインの背景画像適用状態
+  - `Settings.hasCustomBackgroundRight` (boolean) - 右ペインの背景画像適用状態
+  - `Settings.backgroundOpacityLeft` (number, デフォルト: 0.1) - 左ペインの透明度
+  - `Settings.backgroundOpacityRight` (number, デフォルト: 0.1) - 右ペインの透明度
+  - アプリ起動時、フラグが`true`の場合はIndexedDBから画像を読み込んで適用
 
 ---
 

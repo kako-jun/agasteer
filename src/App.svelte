@@ -22,6 +22,7 @@
   import { clearAllData, loadSettings } from './lib/storage'
   import { applyTheme } from './lib/theme'
   import { loadAndApplyCustomFont } from './lib/font'
+  import { loadAndApplyCustomBackgrounds } from './lib/background'
   import { executePush, executePull } from './lib/sync'
   import {
     pushToastState,
@@ -243,6 +244,15 @@
     if (loadedSettings.hasCustomFont) {
       loadAndApplyCustomFont().catch((error) => {
         console.error('Failed to load custom font:', error)
+      })
+    }
+
+    // カスタム背景画像があれば適用（左右別々）
+    if (loadedSettings.hasCustomBackgroundLeft || loadedSettings.hasCustomBackgroundRight) {
+      const leftOpacity = loadedSettings.backgroundOpacityLeft ?? 0.1
+      const rightOpacity = loadedSettings.backgroundOpacityRight ?? 0.1
+      loadAndApplyCustomBackgrounds(leftOpacity, rightOpacity).catch((error) => {
+        console.error('Failed to load custom backgrounds:', error)
       })
     }
 
@@ -1360,6 +1370,7 @@
   .main-pane {
     flex: 1;
     overflow: auto;
+    position: relative;
   }
 
   .hidden {
