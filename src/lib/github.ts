@@ -302,13 +302,6 @@ export async function pushAllWithTreeAPI(
       leaves: {},
       pushCount: currentPushCount + 1,
     }
-    console.log(
-      '[Push] Creating metadata with pushCount:',
-      metadata.pushCount,
-      '(was:',
-      currentPushCount,
-      ')'
-    )
 
     // ノートのメタ情報を追加
     for (const note of notes) {
@@ -333,13 +326,6 @@ export async function pushAllWithTreeAPI(
     const metadataPath = 'notes/metadata.json'
     const metadataExisting = existingNotesFiles.get(metadataPath)
     const metadataSha = await calculateGitBlobSha(metadataContent)
-
-    console.log('[Push] metadata.json:', {
-      existingSha: metadataExisting,
-      newSha: metadataSha,
-      willSendContent: metadataExisting !== metadataSha,
-      content: metadataContent.substring(0, 200),
-    })
 
     treeItems.push({
       path: metadataPath,

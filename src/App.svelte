@@ -877,8 +877,6 @@
       // GitHubから取得したデータでIndexedDBを再作成
       updateNotes(result.notes)
       updateLeaves(result.leaves)
-      console.log('[Pull] Metadata received:', result.metadata)
-      console.log('[Pull] pushCount:', result.metadata.pushCount)
       metadata.set(result.metadata)
       isOperationsLocked = false
 
