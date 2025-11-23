@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { _ } from '../../../lib/i18n'
   import Footer from '../Footer.svelte'
 
   export let onCreateNote: () => void
@@ -12,8 +13,8 @@
     <button
       type="button"
       on:click={onCreateNote}
-      title="新規ノート"
-      aria-label="新規ノート"
+      title={$_('footer.newNote')}
+      aria-label={$_('footer.newNote')}
       {disabled}
     >
       <svg
@@ -39,8 +40,8 @@
       type="button"
       class="primary save-button"
       on:click={onSave}
-      title="保存"
-      aria-label="保存"
+      title={$_('common.save')}
+      aria-label={$_('common.save')}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

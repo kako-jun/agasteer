@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { _ } from '../../lib/i18n'
   import type { Breadcrumb } from '../../lib/types'
 
   export let breadcrumbs: Breadcrumb[]
@@ -59,8 +60,8 @@
           class="breadcrumb-button"
           class:current={index === breadcrumbs.length - 1}
           on:click={crumb.action}
-          title={index === 0 ? 'ホームへ移動' : undefined}
-          aria-label={index === 0 ? 'ホームへ移動' : crumb.label}
+          title={index === 0 ? $_('breadcrumbs.goHome') : undefined}
+          aria-label={index === 0 ? $_('breadcrumbs.goHome') : crumb.label}
         >
           {#if index === 0}
             <svg
@@ -85,7 +86,9 @@
           <button
             class="edit-button"
             on:click={() => handleStartEdit(crumb)}
-            title={crumb.type === 'leaf' ? 'リーフ名を編集' : 'ノート名を編集'}
+            title={crumb.type === 'leaf'
+              ? $_('breadcrumbs.editLeafName')
+              : $_('breadcrumbs.editNoteName')}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

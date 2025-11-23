@@ -7,6 +7,8 @@ export type UUID = string
 
 export type ThemeType = 'yomi' | 'campus' | 'greenboard' | 'whiteboard' | 'dotsD' | 'dotsF'
 
+export type Locale = 'ja' | 'en'
+
 export type View = 'home' | 'settings' | 'edit' | 'note' | 'preview'
 
 export interface Settings {
@@ -16,6 +18,7 @@ export interface Settings {
   repoName: string
   theme: ThemeType
   toolName: string
+  locale: Locale
   hasCustomFont?: boolean
   hasCustomBackgroundLeft?: boolean
   hasCustomBackgroundRight?: boolean

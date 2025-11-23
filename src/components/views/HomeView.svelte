@@ -1,5 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
+  import { _ } from '../../lib/i18n'
   import type { Note } from '../../lib/types'
   import { metadata } from '../../lib/stores'
 
@@ -19,7 +20,7 @@
 <section class="view-container">
   <div class="statistics">
     <div class="stat-item">
-      <div class="stat-label">Push回数</div>
+      <div class="stat-label">{$_('home.pushCount')}</div>
       <div class="stat-value">{$metadata.pushCount}</div>
     </div>
   </div>

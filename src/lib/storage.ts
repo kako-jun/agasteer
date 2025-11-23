@@ -21,6 +21,7 @@ export const defaultSettings: Settings = {
   repoName: '',
   theme: 'yomi',
   toolName: 'SimplestNote.md',
+  locale: 'en', // デフォルトは英語
 }
 
 /**

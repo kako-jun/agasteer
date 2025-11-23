@@ -1,0 +1,112 @@
+{
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "ok": "OK",
+    "home": "ホーム"
+  },
+  "header": {
+    "settings": "設定を開く"
+  },
+  "breadcrumbs": {
+    "goHome": "ホームへ移動",
+    "editNoteName": "ノート名を編集",
+    "editLeafName": "リーフ名を編集"
+  },
+  "home": {
+    "pushCount": "Push回数"
+  },
+  "note": {
+    "updated": "更新"
+  },
+  "footer": {
+    "newNote": "新規ノート",
+    "newLeaf": "新規リーフ",
+    "deleteNote": "ノートを削除",
+    "deleteLeaf": "リーフを削除",
+    "download": "ダウンロード",
+    "preview": "プレビュー"
+  },
+  "settings": {
+    "title": "設定",
+    "qrCodeDescription": "スマホ用QRコード",
+    "help": {
+      "text": "使い方（テキスト）",
+      "video": "使い方（動画）"
+    },
+    "github": {
+      "title": "GitHub連携",
+      "repoName": "リポジトリ名（owner/repo）",
+      "repoPlaceholder": "owner/repo",
+      "token": "GitHubトークン",
+      "tokenPlaceholder": "ghp_...",
+      "username": "コミットユーザー名",
+      "usernamePlaceholder": "your-name",
+      "email": "コミットメールアドレス",
+      "emailPlaceholder": "you@example.com",
+      "pullTest": "Pullテスト",
+      "pulling": "Pull中…"
+    },
+    "extras": {
+      "title": "おまけ",
+      "language": "言語",
+      "theme": {
+        "title": "テーマ選択",
+        "yomi": "黄泉",
+        "campus": "キャンパス",
+        "greenboard": "緑板",
+        "whiteboard": "ホワイボー",
+        "dotsD": "ドッツD",
+        "dotsF": "ドッツF"
+      },
+      "toolName": {
+        "label": "ツール名",
+        "placeholder": "SimplestNote.md"
+      },
+      "font": {
+        "title": "カスタムフォント",
+        "select": "フォント選択",
+        "reset": "デフォルトに戻す",
+        "uploading": "アップロード中...",
+        "invalidFormat": "対応しているフォント形式: .ttf, .otf, .woff, .woff2",
+        "uploadFailed": "フォントの読み込みに失敗しました",
+        "resetFailed": "フォントのリセットに失敗しました"
+      },
+      "background": {
+        "title": "カスタム背景画像",
+        "leftPane": "左ペイン",
+        "rightPane": "右ペイン",
+        "preview": "プレビュー",
+        "select": "背景画像選択",
+        "reset": "デフォルトに戻す",
+        "uploading": "アップロード中...",
+        "invalidFormat": "対応している画像形式: .jpg, .jpeg, .png, .webp, .gif",
+        "uploadFailedLeft": "左ペインの背景画像の読み込みに失敗しました",
+        "uploadFailedRight": "右ペインの背景画像の読み込みに失敗しました",
+        "resetFailedLeft": "左ペインの背景画像のリセットに失敗しました",
+        "resetFailedRight": "右ペインの背景画像のリセットに失敗しました"
+      }
+    },
+    "about": {
+      "description": "「こういうのでいいんだよ」を目指しています。",
+      "author": "作者"
+    }
+  },
+  "toast": {
+    "pullSuccess": "Pullしました",
+    "pullFailed": "Pullに失敗しました",
+    "pushSuccess": "Pushしました",
+    "pushFailed": "初回Pullが完了するまで保存できません",
+    "noLeaves": "保存するリーフがありません"
+  },
+  "modal": {
+    "unsavedChanges": "未保存の変更があります。Pullすると上書きされます。続行しますか？",
+    "deleteNote": "このノートを削除しますか？",
+    "deleteLeaf": "このリーフを削除しますか？"
+  },
+  "loading": {
+    "pulling": "Pull中...",
+    "pushing": "Push中..."
+  }
+}

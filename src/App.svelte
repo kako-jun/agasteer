@@ -21,6 +21,7 @@
   import { loadAndApplyCustomFont } from './lib/font'
   import { loadAndApplyCustomBackgrounds } from './lib/background'
   import { executePush, executePull } from './lib/sync'
+  import { initI18n } from './lib/i18n'
   import {
     pushToastState,
     pullToastState,
@@ -60,6 +61,7 @@
   let isOperationsLocked = true
   let showSettings = false
   let isPulling = false // Pull処理中はURL更新をスキップ
+  let i18nReady = false // i18n初期化完了フラグ
 
   // 左右ペイン用の状態（対等なローカル変数）
   let isDualPane = false // 画面幅で切り替え
@@ -235,26 +237,40 @@
 
   // 初期化
   onMount(() => {
-    const loadedSettings = loadSettings()
-    settings.set(loadedSettings)
-    applyTheme(loadedSettings.theme, loadedSettings)
-    document.title = loadedSettings.toolName
+    // 非同期初期化処理を即座に実行
+    ;(async () => {
+      const loadedSettings = loadSettings()
+      settings.set(loadedSettings)
 
-    // カスタムフォントがあれば適用
-    if (loadedSettings.hasCustomFont) {
-      loadAndApplyCustomFont().catch((error) => {
-        console.error('Failed to load custom font:', error)
-      })
-    }
+      // i18n初期化（翻訳読み込み完了を待機）
+      await initI18n(loadedSettings.locale)
+      i18nReady = true
 
-    // カスタム背景画像があれば適用（左右別々）
-    if (loadedSettings.hasCustomBackgroundLeft || loadedSettings.hasCustomBackgroundRight) {
-      const leftOpacity = loadedSettings.backgroundOpacityLeft ?? 0.1
-      const rightOpacity = loadedSettings.backgroundOpacityRight ?? 0.1
-      loadAndApplyCustomBackgrounds(leftOpacity, rightOpacity).catch((error) => {
-        console.error('Failed to load custom backgrounds:', error)
-      })
-    }
+      applyTheme(loadedSettings.theme, loadedSettings)
+      document.title = loadedSettings.toolName
+
+      // カスタムフォントがあれば適用
+      if (loadedSettings.hasCustomFont) {
+        loadAndApplyCustomFont().catch((error) => {
+          console.error('Failed to load custom font:', error)
+        })
+      }
+
+      // カスタム背景画像があれば適用（左右別々）
+      if (loadedSettings.hasCustomBackgroundLeft || loadedSettings.hasCustomBackgroundRight) {
+        const leftOpacity = loadedSettings.backgroundOpacityLeft ?? 0.1
+        const rightOpacity = loadedSettings.backgroundOpacityRight ?? 0.1
+        loadAndApplyCustomBackgrounds(leftOpacity, rightOpacity).catch((error) => {
+          console.error('Failed to load custom backgrounds:', error)
+        })
+      }
+
+      // 初回Pull（GitHubから最新データを取得）
+      // 重要: IndexedDBからは読み込まない
+      // Pull成功時にIndexedDBは全削除→全作成される
+      // Pull成功後、URLから状態を復元（handlePull内で実行）
+      await handlePull(true)
+    })()
 
     // アスペクト比を監視して isDualPane を更新（横 > 縦で2ペイン表示）
     const updateDualPane = () => {
@@ -263,13 +279,6 @@
     updateDualPane()
 
     window.addEventListener('resize', updateDualPane)
-    ;(async () => {
-      // 初回Pull（GitHubから最新データを取得）
-      // 重要: IndexedDBからは読み込まない
-      // Pull成功時にIndexedDBは全削除→全作成される
-      // Pull成功後、URLから状態を復元（handlePull内で実行）
-      await handlePull(true)
-    })()
 
     // ブラウザの戻る/進むボタンに対応
     const handlePopState = () => {
@@ -956,304 +965,365 @@
   }
 </script>
 
-<div class="app-container">
-  <Header
-    githubConfigured={isGitHubConfigured}
-    title={$settings.toolName}
-    onTitleClick={() => {
-      goHome('left')
-    }}
-    onSettingsClick={() => {
-      goSettings()
-    }}
-  />
-
-  <div class="content-wrapper" class:single-pane={!isDualPane}>
-    <div class="pane-divider" class:hidden={!isDualPane}></div>
-    <div class="left-column">
-      <Breadcrumbs
-        {breadcrumbs}
-        editingId={editingBreadcrumb}
-        onStartEdit={startEditingBreadcrumb}
-        onSaveEdit={saveEditBreadcrumb}
-        onCancelEdit={cancelEditBreadcrumb}
-      />
-
-      <main class="main-pane">
-        {#if leftView === 'home'}
-          <HomeView
-            notes={$rootNotes}
-            disabled={isOperationsLocked}
-            onSelectNote={(note) => selectNote(note, 'left')}
-            onCreateNote={() => createNote(undefined, 'left')}
-            onDragStart={handleDragStartNote}
-            onDragEnd={handleDragEndNote}
-            onDragOver={handleDragOverNote}
-            onDrop={handleDropNote}
-            onSave={handleSaveToGitHub}
-            {dragOverNoteId}
-            {getNoteItems}
-          />
-        {:else if leftView === 'note' && leftNote}
-          <NoteView
-            currentNote={leftNote}
-            subNotes={$notes
-              .filter((n) => n.parentId === leftNote.id)
-              .sort((a, b) => a.order - b.order)}
-            leaves={$leaves
-              .filter((l) => l.noteId === leftNote.id)
-              .sort((a, b) => a.order - b.order)}
-            disabled={isOperationsLocked}
-            onSelectNote={(note) => selectNote(note, 'left')}
-            onSelectLeaf={(leaf) => selectLeaf(leaf, 'left')}
-            onCreateNote={() => createNote(leftNote.id, 'left')}
-            onCreateLeaf={() => createLeaf('left')}
-            onDeleteNote={() => deleteNote('left')}
-            onDragStartNote={handleDragStartNote}
-            onDragStartLeaf={handleDragStartLeaf}
-            onDragEndNote={handleDragEndNote}
-            onDragEndLeaf={handleDragEndLeaf}
-            onDragOverNote={handleDragOverNote}
-            onDragOverLeaf={handleDragOverLeaf}
-            onDropNote={handleDropNote}
-            onDropLeaf={handleDropLeaf}
-            onSave={handleSaveToGitHub}
-            {dragOverNoteId}
-            {dragOverLeafId}
-            {getNoteItems}
-          />
-        {:else if leftView === 'edit' && leftLeaf}
-          <EditorView
-            bind:this={leftEditorView}
-            leaf={leftLeaf}
-            theme={$settings.theme}
-            disabled={isOperationsLocked || isPushing}
-            onContentChange={updateLeafContent}
-            onSave={handleSaveToGitHub}
-            onDownload={downloadLeaf}
-            onDelete={(leafId) => deleteLeaf(leafId, 'left')}
-            onScroll={handleLeftScroll}
-          />
-        {:else if leftView === 'preview' && leftLeaf}
-          <PreviewView bind:this={leftPreviewView} leaf={leftLeaf} onScroll={handleLeftScroll} />
-        {/if}
-      </main>
-
-      {#if leftView === 'home'}
-        <HomeFooter
-          onCreateNote={() => createNote(undefined, 'left')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-        />
-      {:else if leftView === 'note' && leftNote}
-        <NoteFooter
-          onDeleteNote={() => deleteNote('left')}
-          onCreateSubNote={() => createNote(leftNote.id, 'left')}
-          onCreateLeaf={() => createLeaf('left')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-          canHaveSubNote={!leftNote.parentId}
-        />
-      {:else if leftView === 'edit' && leftLeaf}
-        <EditorFooter
-          onDelete={() => deleteLeaf(leftLeaf.id, 'left')}
-          onDownload={() => downloadLeaf(leftLeaf.id)}
-          onTogglePreview={() => togglePreview('left')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-        />
-      {:else if leftView === 'preview' && leftLeaf}
-        <PreviewFooter
-          onDownload={() => downloadLeaf(leftLeaf.id)}
-          onToggleEdit={() => togglePreview('left')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-        />
-      {/if}
-
-      {#if pullRunning || isPushing}
-        <Loading />
-      {/if}
-    </div>
-
-    <div class="right-column" class:hidden={!isDualPane}>
-      <Breadcrumbs
-        breadcrumbs={breadcrumbsRight}
-        editingId={editingBreadcrumb}
-        onStartEdit={startEditingBreadcrumb}
-        onSaveEdit={saveEditBreadcrumb}
-        onCancelEdit={cancelEditBreadcrumb}
-      />
-
-      <main class="main-pane">
-        {#if rightView === 'home'}
-          <HomeView
-            notes={$rootNotes}
-            disabled={isOperationsLocked}
-            onSelectNote={(note) => selectNote(note, 'right')}
-            onCreateNote={() => createNote(undefined, 'right')}
-            onDragStart={handleDragStartNote}
-            onDragEnd={handleDragEndNote}
-            onDragOver={handleDragOverNote}
-            onDrop={handleDropNote}
-            onSave={handleSaveToGitHub}
-            {dragOverNoteId}
-            {getNoteItems}
-          />
-        {:else if rightView === 'note' && rightNote}
-          <NoteView
-            currentNote={rightNote}
-            subNotes={$notes
-              .filter((n) => n.parentId === rightNote.id)
-              .sort((a, b) => a.order - b.order)}
-            leaves={$leaves
-              .filter((l) => l.noteId === rightNote.id)
-              .sort((a, b) => a.order - b.order)}
-            disabled={isOperationsLocked}
-            onSelectNote={(note) => selectNote(note, 'right')}
-            onSelectLeaf={(leaf) => selectLeaf(leaf, 'right')}
-            onCreateNote={() => createNote(rightNote.id, 'right')}
-            onCreateLeaf={() => createLeaf('right')}
-            onDeleteNote={() => deleteNote('right')}
-            onDragStartNote={handleDragStartNote}
-            onDragStartLeaf={handleDragStartLeaf}
-            onDragEndNote={handleDragEndNote}
-            onDragEndLeaf={handleDragEndLeaf}
-            onDragOverNote={handleDragOverNote}
-            onDragOverLeaf={handleDragOverLeaf}
-            onDropNote={handleDropNote}
-            onDropLeaf={handleDropLeaf}
-            onSave={handleSaveToGitHub}
-            {dragOverNoteId}
-            {dragOverLeafId}
-            {getNoteItems}
-          />
-        {:else if rightView === 'edit' && rightLeaf}
-          <EditorView
-            bind:this={rightEditorView}
-            leaf={rightLeaf}
-            theme={$settings.theme}
-            disabled={isOperationsLocked}
-            onContentChange={updateLeafContent}
-            onSave={handleSaveToGitHub}
-            onDownload={downloadLeaf}
-            onDelete={(leafId) => deleteLeaf(leafId, 'right')}
-            onScroll={handleRightScroll}
-          />
-        {:else if rightView === 'preview' && rightLeaf}
-          <PreviewView bind:this={rightPreviewView} leaf={rightLeaf} onScroll={handleRightScroll} />
-        {/if}
-      </main>
-
-      {#if rightView === 'home'}
-        <HomeFooter
-          onCreateNote={() => createNote(undefined, 'right')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-        />
-      {:else if rightView === 'note' && rightNote}
-        <NoteFooter
-          onDeleteNote={() => deleteNote('right')}
-          onCreateSubNote={() => createNote(rightNote.id, 'right')}
-          onCreateLeaf={() => createLeaf('right')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-          canHaveSubNote={!rightNote.parentId}
-        />
-      {:else if rightView === 'edit' && rightLeaf}
-        <EditorFooter
-          onDelete={() => deleteLeaf(rightLeaf.id, 'right')}
-          onDownload={() => downloadLeaf(rightLeaf.id)}
-          onTogglePreview={() => togglePreview('right')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-        />
-      {:else if rightView === 'preview' && rightLeaf}
-        <PreviewFooter
-          onDownload={() => downloadLeaf(rightLeaf.id)}
-          onToggleEdit={() => togglePreview('right')}
-          onSave={handleSaveToGitHub}
-          disabled={isOperationsLocked}
-          isDirty={$isDirty}
-        />
-      {/if}
-
-      {#if pullRunning || isPushing}
-        <Loading />
-      {/if}
+{#if !i18nReady}
+  <!-- i18n読み込み中 -->
+  <div class="i18n-loading">
+    <div class="loading-spinner">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
     </div>
   </div>
+{:else}
+  <!-- メインアプリケーション -->
+  <div class="app-container">
+    <Header
+      githubConfigured={isGitHubConfigured}
+      title={$settings.toolName}
+      onTitleClick={() => {
+        goHome('left')
+      }}
+      onSettingsClick={() => {
+        goSettings()
+      }}
+    />
 
-  <Modal
-    show={$modalState.show}
-    message={$modalState.message}
-    type={$modalState.type}
-    onConfirm={$modalState.callback}
-    onClose={closeModal}
-  />
-
-  {#if showSettings}
-    <div
-      class="settings-modal-overlay"
-      role="button"
-      tabindex="0"
-      on:click={closeSettings}
-      on:keydown={handleOverlayKeydown}
-      aria-label="設定を閉じる"
-    >
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-      <div
-        class="settings-modal-content"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-        on:click={handleContentClick}
-      >
-        <button class="settings-close-button" on:click={closeSettings} aria-label="閉じる">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-        <SettingsView
-          settings={$settings}
-          onThemeChange={handleThemeChange}
-          onSettingsChange={handleSettingsChange}
-          {pullRunning}
-          onPull={handlePull}
+    <div class="content-wrapper" class:single-pane={!isDualPane}>
+      <div class="pane-divider" class:hidden={!isDualPane}></div>
+      <div class="left-column">
+        <Breadcrumbs
+          {breadcrumbs}
+          editingId={editingBreadcrumb}
+          onStartEdit={startEditingBreadcrumb}
+          onSaveEdit={saveEditBreadcrumb}
+          onCancelEdit={cancelEditBreadcrumb}
         />
+
+        <main class="main-pane">
+          {#if leftView === 'home'}
+            <HomeView
+              notes={$rootNotes}
+              disabled={isOperationsLocked}
+              onSelectNote={(note) => selectNote(note, 'left')}
+              onCreateNote={() => createNote(undefined, 'left')}
+              onDragStart={handleDragStartNote}
+              onDragEnd={handleDragEndNote}
+              onDragOver={handleDragOverNote}
+              onDrop={handleDropNote}
+              onSave={handleSaveToGitHub}
+              {dragOverNoteId}
+              {getNoteItems}
+            />
+          {:else if leftView === 'note' && leftNote}
+            <NoteView
+              currentNote={leftNote}
+              subNotes={$notes
+                .filter((n) => n.parentId === leftNote.id)
+                .sort((a, b) => a.order - b.order)}
+              leaves={$leaves
+                .filter((l) => l.noteId === leftNote.id)
+                .sort((a, b) => a.order - b.order)}
+              disabled={isOperationsLocked}
+              onSelectNote={(note) => selectNote(note, 'left')}
+              onSelectLeaf={(leaf) => selectLeaf(leaf, 'left')}
+              onCreateNote={() => createNote(leftNote.id, 'left')}
+              onCreateLeaf={() => createLeaf('left')}
+              onDeleteNote={() => deleteNote('left')}
+              onDragStartNote={handleDragStartNote}
+              onDragStartLeaf={handleDragStartLeaf}
+              onDragEndNote={handleDragEndNote}
+              onDragEndLeaf={handleDragEndLeaf}
+              onDragOverNote={handleDragOverNote}
+              onDragOverLeaf={handleDragOverLeaf}
+              onDropNote={handleDropNote}
+              onDropLeaf={handleDropLeaf}
+              onSave={handleSaveToGitHub}
+              {dragOverNoteId}
+              {dragOverLeafId}
+              {getNoteItems}
+            />
+          {:else if leftView === 'edit' && leftLeaf}
+            <EditorView
+              bind:this={leftEditorView}
+              leaf={leftLeaf}
+              theme={$settings.theme}
+              disabled={isOperationsLocked || isPushing}
+              onContentChange={updateLeafContent}
+              onSave={handleSaveToGitHub}
+              onDownload={downloadLeaf}
+              onDelete={(leafId) => deleteLeaf(leafId, 'left')}
+              onScroll={handleLeftScroll}
+            />
+          {:else if leftView === 'preview' && leftLeaf}
+            <PreviewView bind:this={leftPreviewView} leaf={leftLeaf} onScroll={handleLeftScroll} />
+          {/if}
+        </main>
+
+        {#if leftView === 'home'}
+          <HomeFooter
+            onCreateNote={() => createNote(undefined, 'left')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+          />
+        {:else if leftView === 'note' && leftNote}
+          <NoteFooter
+            onDeleteNote={() => deleteNote('left')}
+            onCreateSubNote={() => createNote(leftNote.id, 'left')}
+            onCreateLeaf={() => createLeaf('left')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+            canHaveSubNote={!leftNote.parentId}
+          />
+        {:else if leftView === 'edit' && leftLeaf}
+          <EditorFooter
+            onDelete={() => deleteLeaf(leftLeaf.id, 'left')}
+            onDownload={() => downloadLeaf(leftLeaf.id)}
+            onTogglePreview={() => togglePreview('left')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+          />
+        {:else if leftView === 'preview' && leftLeaf}
+          <PreviewFooter
+            onDownload={() => downloadLeaf(leftLeaf.id)}
+            onToggleEdit={() => togglePreview('left')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+          />
+        {/if}
+
+        {#if pullRunning || isPushing}
+          <Loading />
+        {/if}
+      </div>
+
+      <div class="right-column" class:hidden={!isDualPane}>
+        <Breadcrumbs
+          breadcrumbs={breadcrumbsRight}
+          editingId={editingBreadcrumb}
+          onStartEdit={startEditingBreadcrumb}
+          onSaveEdit={saveEditBreadcrumb}
+          onCancelEdit={cancelEditBreadcrumb}
+        />
+
+        <main class="main-pane">
+          {#if rightView === 'home'}
+            <HomeView
+              notes={$rootNotes}
+              disabled={isOperationsLocked}
+              onSelectNote={(note) => selectNote(note, 'right')}
+              onCreateNote={() => createNote(undefined, 'right')}
+              onDragStart={handleDragStartNote}
+              onDragEnd={handleDragEndNote}
+              onDragOver={handleDragOverNote}
+              onDrop={handleDropNote}
+              onSave={handleSaveToGitHub}
+              {dragOverNoteId}
+              {getNoteItems}
+            />
+          {:else if rightView === 'note' && rightNote}
+            <NoteView
+              currentNote={rightNote}
+              subNotes={$notes
+                .filter((n) => n.parentId === rightNote.id)
+                .sort((a, b) => a.order - b.order)}
+              leaves={$leaves
+                .filter((l) => l.noteId === rightNote.id)
+                .sort((a, b) => a.order - b.order)}
+              disabled={isOperationsLocked}
+              onSelectNote={(note) => selectNote(note, 'right')}
+              onSelectLeaf={(leaf) => selectLeaf(leaf, 'right')}
+              onCreateNote={() => createNote(rightNote.id, 'right')}
+              onCreateLeaf={() => createLeaf('right')}
+              onDeleteNote={() => deleteNote('right')}
+              onDragStartNote={handleDragStartNote}
+              onDragStartLeaf={handleDragStartLeaf}
+              onDragEndNote={handleDragEndNote}
+              onDragEndLeaf={handleDragEndLeaf}
+              onDragOverNote={handleDragOverNote}
+              onDragOverLeaf={handleDragOverLeaf}
+              onDropNote={handleDropNote}
+              onDropLeaf={handleDropLeaf}
+              onSave={handleSaveToGitHub}
+              {dragOverNoteId}
+              {dragOverLeafId}
+              {getNoteItems}
+            />
+          {:else if rightView === 'edit' && rightLeaf}
+            <EditorView
+              bind:this={rightEditorView}
+              leaf={rightLeaf}
+              theme={$settings.theme}
+              disabled={isOperationsLocked}
+              onContentChange={updateLeafContent}
+              onSave={handleSaveToGitHub}
+              onDownload={downloadLeaf}
+              onDelete={(leafId) => deleteLeaf(leafId, 'right')}
+              onScroll={handleRightScroll}
+            />
+          {:else if rightView === 'preview' && rightLeaf}
+            <PreviewView
+              bind:this={rightPreviewView}
+              leaf={rightLeaf}
+              onScroll={handleRightScroll}
+            />
+          {/if}
+        </main>
+
+        {#if rightView === 'home'}
+          <HomeFooter
+            onCreateNote={() => createNote(undefined, 'right')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+          />
+        {:else if rightView === 'note' && rightNote}
+          <NoteFooter
+            onDeleteNote={() => deleteNote('right')}
+            onCreateSubNote={() => createNote(rightNote.id, 'right')}
+            onCreateLeaf={() => createLeaf('right')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+            canHaveSubNote={!rightNote.parentId}
+          />
+        {:else if rightView === 'edit' && rightLeaf}
+          <EditorFooter
+            onDelete={() => deleteLeaf(rightLeaf.id, 'right')}
+            onDownload={() => downloadLeaf(rightLeaf.id)}
+            onTogglePreview={() => togglePreview('right')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+          />
+        {:else if rightView === 'preview' && rightLeaf}
+          <PreviewFooter
+            onDownload={() => downloadLeaf(rightLeaf.id)}
+            onToggleEdit={() => togglePreview('right')}
+            onSave={handleSaveToGitHub}
+            disabled={isOperationsLocked}
+            isDirty={$isDirty}
+          />
+        {/if}
+
+        {#if pullRunning || isPushing}
+          <Loading />
+        {/if}
       </div>
     </div>
-  {/if}
 
-  <Toast
-    pullMessage={$pullToastState.message}
-    pullVariant={$pullToastState.variant}
-    pushMessage={$pushToastState.message}
-    pushVariant={$pushToastState.variant}
-  />
-</div>
+    <Modal
+      show={$modalState.show}
+      message={$modalState.message}
+      type={$modalState.type}
+      onConfirm={$modalState.callback}
+      onClose={closeModal}
+    />
+
+    {#if showSettings}
+      <div
+        class="settings-modal-overlay"
+        role="button"
+        tabindex="0"
+        on:click={closeSettings}
+        on:keydown={handleOverlayKeydown}
+        aria-label="設定を閉じる"
+      >
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+        <div
+          class="settings-modal-content"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-title"
+          on:click={handleContentClick}
+        >
+          <button class="settings-close-button" on:click={closeSettings} aria-label="閉じる">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <SettingsView
+            settings={$settings}
+            onThemeChange={handleThemeChange}
+            onSettingsChange={handleSettingsChange}
+            {pullRunning}
+            onPull={handlePull}
+          />
+        </div>
+      </div>
+    {/if}
+
+    <Toast
+      pullMessage={$pullToastState.message}
+      pullVariant={$pullToastState.variant}
+      pushMessage={$pushToastState.message}
+      pushVariant={$pushToastState.variant}
+    />
+  </div>
+{/if}
 
 <style>
+  .i18n-loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-primary, #1a1a1a);
+  }
+
+  .loading-spinner {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .loading-spinner .dot {
+    width: 12px;
+    height: 12px;
+    background: var(--accent-color, #8b5cf6);
+    border-radius: 50%;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  .loading-spinner .dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .loading-spinner .dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes pulse {
+    0%,
+    80%,
+    100% {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    40% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
   :global(*) {
     box-sizing: border-box;
     margin: 0;

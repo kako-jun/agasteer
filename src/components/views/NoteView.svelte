@@ -1,5 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
+  import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
 
   export let currentNote: Note
@@ -83,7 +84,7 @@
       >
         <strong>{leaf.title}</strong>
         <div class="card-meta">
-          <small>更新: {formatDateTime(leaf.updatedAt)}</small>
+          <small>{$_('note.updated')}: {formatDateTime(leaf.updatedAt)}</small>
         </div>
       </div>
     {/each}

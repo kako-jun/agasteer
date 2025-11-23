@@ -342,3 +342,267 @@ CodeMirrorは独自の背景色を持つため、`!important`で強制的に透�
 - **Blobベース読み込み**: `URL.createObjectURL()`で安全に適用
 - **クライアントサイド完結**: サーバーに画像ファイルをアップロードしない
 - **XSS対策**: Blob URLを使用し、直接HTMLに挿入しない
+
+---
+
+## 国際化（i18n）機能
+
+### 概要
+
+アプリケーション全体を多言語対応にする機能。ブラウザの言語設定を自動検出し、適切な言語で表示する。ユーザーは設定画面で手動で言語を切り替えることも可能。
+
+### 対応言語
+
+- **日本語（ja）**: 日本語UI
+- **英語（en）**: 英語UI（デフォルト）
+
+### 技術実装
+
+#### ライブラリ
+
+**svelte-i18n**を使用：
+
+- Svelte公式コミュニティで最も使われている
+- TypeScript完全対応
+- ローディング状態の管理が簡単
+- フォールバック機能あり
+
+#### 翻訳ファイル
+
+`src/lib/i18n/locales/` に配置：
+
+```
+src/lib/i18n/
+├── index.ts          # i18n初期化とストア
+└── locales/
+    ├── en.json       # 英語翻訳
+    └── ja.json       # 日本語翻訳
+```
+
+翻訳ファイルの構造例：
+
+```json
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "ok": "OK"
+  },
+  "settings": {
+    "title": "Settings",
+    "github": {
+      "title": "GitHub Integration",
+      "repoName": "Repository (owner/repo)"
+    }
+  }
+}
+```
+
+#### 初期化処理
+
+```typescript
+import { register, init, waitLocale, getLocaleFromNavigator } from 'svelte-i18n'
+import type { Locale } from '../types'
+
+// 翻訳ファイルを登録（動的インポート）
+register('ja', () => import('./locales/ja.json'))
+register('en', () => import('./locales/en.json'))
+
+export async function initI18n(savedLocale?: Locale): Promise<void> {
+  if (savedLocale) {
+    // 保存された設定を使用
+    init({
+      fallbackLocale: 'en',
+      initialLocale: savedLocale,
+    })
+    await waitLocale(savedLocale)
+    return
+  }
+
+  // ブラウザの言語設定を検出
+  const browserLocale = getLocaleFromNavigator()
+  const detectedLocale: Locale = browserLocale?.startsWith('ja') ? 'ja' : 'en'
+
+  init({
+    fallbackLocale: 'en',
+    initialLocale: detectedLocale,
+  })
+
+  await waitLocale(detectedLocale)
+}
+```
+
+#### アプリ起動時の待機処理
+
+```svelte
+<script>
+  import { initI18n } from './lib/i18n'
+
+  let i18nReady = false
+
+  onMount(async () => {
+    const loadedSettings = loadSettings()
+
+    // i18n初期化（翻訳読み込み完了を待機）
+    await initI18n(loadedSettings.locale)
+    i18nReady = true
+  })
+</script>
+
+{#if !i18nReady}
+  <!-- ローディング画面 -->
+  <div class="i18n-loading">
+    <div class="loading-spinner">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+{:else}
+  <!-- メインアプリケーション -->
+  <div class="app-container">
+    <!-- ... -->
+  </div>
+{/if}
+```
+
+#### コンポーネントでの使用
+
+```svelte
+<script>
+  import { _ } from '../../lib/i18n'
+</script>
+
+<button on:click={handleSave}>
+  {$_('common.save')}
+</button>
+
+<label for="repo-name">
+  {$_('settings.github.repoName')}
+</label>
+```
+
+### UI/UX
+
+#### 言語自動検出
+
+初回訪問時、ブラウザの言語設定を自動検出：
+
+| ブラウザ言語  | 表示言語           |
+| ------------- | ------------------ |
+| `ja`, `ja-JP` | 日本語             |
+| `en-US`       | 英語               |
+| `zh-CN`       | 英語（デフォルト） |
+| `ko-KR`       | 英語（デフォルト） |
+| その他        | 英語（デフォルト） |
+
+**検出ロジック**:
+
+```typescript
+const browserLocale = getLocaleFromNavigator()
+const detectedLocale: Locale = browserLocale?.startsWith('ja') ? 'ja' : 'en'
+```
+
+日本語（`ja`）で始まる場合のみ日本語、それ以外は全て英語。
+
+#### 手動言語切替
+
+設定画面に言語選択ドロップダウンを配置：
+
+```svelte
+<label for="language">Language / 言語</label>
+<select id="language" bind:value={settings.locale} on:change={handleLocaleChange}>
+  <option value="en">English</option>
+  <option value="ja">日本語</option>
+</select>
+```
+
+言語切替処理：
+
+```typescript
+function handleLocaleChange(event: Event) {
+  const value = (event.target as HTMLSelectElement).value as Locale
+
+  // 即座に言語を切り替え
+  locale.set(value)
+
+  // 設定を保存
+  settings.locale = value
+  onSettingsChange({ locale: value })
+}
+```
+
+#### ローディング画面
+
+翻訳ファイル読み込み中は、3つのドットのパルスアニメーションを表示：
+
+```css
+.i18n-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.loading-spinner .dot {
+  width: 12px;
+  height: 12px;
+  background: var(--accent-color);
+  border-radius: 50%;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+```
+
+### 仕様
+
+- **デフォルト言語**: 英語（en）
+- **サポート言語**: 日本語（ja）、英語（en）
+- **保存場所**: LocalStorage `Settings.locale`
+- **ローディング**: 翻訳ファイルは動的インポート（コード分割）
+- **フォールバック**: 翻訳が見つからない場合は英語表示
+- **リアルタイム切替**: 言語変更は即座に反映（リロード不要）
+- **永続化**: 選択した言語はLocalStorageに保存され、次回起動時に復元
+
+### 翻訳対象
+
+以下の全UIテキストが翻訳対象：
+
+- **共通要素**: ボタン（保存、キャンセル、削除、OK）
+- **ヘッダー**: 設定ボタン
+- **パンくずリスト**: ホームへ移動、編集ボタン
+- **ホーム画面**: Push回数ラベル
+- **ノート画面**: 更新ラベル
+- **フッター**: 新規ノート、新規リーフ、削除、ダウンロード、プレビュー、保存
+- **設定画面**: 全セクション（GitHub連携、テーマ、フォント、背景画像、ツール名など）
+- **トースト通知**: Pull/Push成功/失敗メッセージ
+- **モーダル**: 確認ダイアログ、エラーメッセージ
+- **ローディング**: Pull中、Push中
+
+### パフォーマンス
+
+#### バンドルサイズ
+
+```
+dist/assets/ja-CwwTm2-M.js    2.00 kB │ gzip:  1.43 kB
+dist/assets/en-DLi_lTuS.js    2.42 kB │ gzip:  1.10 kB
+```
+
+- 翻訳ファイルは動的インポート
+- 使用する言語のみロード
+- gzip圧縮で1.4KB程度
+
+#### 初期化時間
+
+- 翻訳ファイルの読み込み: ~10-50ms
+- ローディング画面はほぼ一瞬（体感できないレベル）
+
+### セキュリティ
+
+- **XSS対策**: 翻訳文字列はエスケープ処理済み
+- **JSONバリデーション**: svelte-i18nが型安全性を保証
+- **静的ファイル**: 翻訳ファイルは静的JSON（実行コードなし）

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { _ } from '../../lib/i18n'
   import type { ModalType } from '../../lib/types'
 
   export let show: boolean
@@ -24,10 +25,10 @@
       <p>{message}</p>
       <div class="modal-buttons">
         {#if type === 'confirm'}
-          <button on:click={handleConfirm}>OK</button>
-          <button on:click={onClose}>キャンセル</button>
+          <button on:click={handleConfirm}>{$_('common.ok')}</button>
+          <button on:click={onClose}>{$_('common.cancel')}</button>
         {:else}
-          <button on:click={onClose}>OK</button>
+          <button on:click={onClose}>{$_('common.ok')}</button>
         {/if}
       </div>
     </div>

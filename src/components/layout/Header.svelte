@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { _ } from '../../lib/i18n'
+
   export let githubConfigured: boolean
   export let title: string = 'SimplestNote.md'
   export let onTitleClick: () => void
@@ -10,8 +12,8 @@
   <button
     class="settings-button"
     on:click={onSettingsClick}
-    title="設定を開く"
-    aria-label="設定を開く"
+    title={$_('header.settings')}
+    aria-label={$_('header.settings')}
   >
     <svg
       xmlns="http://www.w3.org/2000/svg"

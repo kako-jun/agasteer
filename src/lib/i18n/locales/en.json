@@ -1,0 +1,112 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "ok": "OK",
+    "home": "Home"
+  },
+  "header": {
+    "settings": "Open settings"
+  },
+  "breadcrumbs": {
+    "goHome": "Go to home",
+    "editNoteName": "Edit note name",
+    "editLeafName": "Edit leaf name"
+  },
+  "home": {
+    "pushCount": "Push Count"
+  },
+  "note": {
+    "updated": "Updated"
+  },
+  "footer": {
+    "newNote": "New note",
+    "newLeaf": "New leaf",
+    "deleteNote": "Delete note",
+    "deleteLeaf": "Delete leaf",
+    "download": "Download",
+    "preview": "Preview"
+  },
+  "settings": {
+    "title": "Settings",
+    "qrCodeDescription": "QR Code for Mobile",
+    "help": {
+      "text": "How to Use (Text)",
+      "video": "How to Use (Video)"
+    },
+    "github": {
+      "title": "GitHub Integration",
+      "repoName": "Repository (owner/repo)",
+      "repoPlaceholder": "owner/repo",
+      "token": "GitHub Token",
+      "tokenPlaceholder": "ghp_...",
+      "username": "Commit Username",
+      "usernamePlaceholder": "your-name",
+      "email": "Commit Email",
+      "emailPlaceholder": "you@example.com",
+      "pullTest": "Test Pull",
+      "pulling": "Pulling..."
+    },
+    "extras": {
+      "title": "Extras",
+      "language": "Language",
+      "theme": {
+        "title": "Select Theme",
+        "yomi": "Yomi",
+        "campus": "Campus",
+        "greenboard": "Green Board",
+        "whiteboard": "Whiteboard",
+        "dotsD": "Dots Dark",
+        "dotsF": "Dots Frost"
+      },
+      "toolName": {
+        "label": "Tool Name",
+        "placeholder": "SimplestNote.md"
+      },
+      "font": {
+        "title": "Custom Font",
+        "select": "Select Font",
+        "reset": "Reset to Default",
+        "uploading": "Uploading...",
+        "invalidFormat": "Supported formats: .ttf, .otf, .woff, .woff2",
+        "uploadFailed": "Failed to load font",
+        "resetFailed": "Failed to reset font"
+      },
+      "background": {
+        "title": "Custom Background Image",
+        "leftPane": "Left Pane",
+        "rightPane": "Right Pane",
+        "preview": "Preview",
+        "select": "Select Background",
+        "reset": "Reset to Default",
+        "uploading": "Uploading...",
+        "invalidFormat": "Supported formats: .jpg, .jpeg, .png, .webp, .gif",
+        "uploadFailedLeft": "Failed to load left pane background",
+        "uploadFailedRight": "Failed to load right pane background",
+        "resetFailedLeft": "Failed to reset left pane background",
+        "resetFailedRight": "Failed to reset right pane background"
+      }
+    },
+    "about": {
+      "description": "We aim for \"This is all I need.\"",
+      "author": "Author"
+    }
+  },
+  "toast": {
+    "pullSuccess": "Pulled successfully",
+    "pullFailed": "Pull failed",
+    "pushSuccess": "Pushed successfully",
+    "pushFailed": "Cannot save until initial pull completes",
+    "noLeaves": "No leaves to save"
+  },
+  "modal": {
+    "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
+    "deleteNote": "Delete this note?",
+    "deleteLeaf": "Delete this leaf?"
+  },
+  "loading": {
+    "pulling": "Pulling...",
+    "pushing": "Pushing..."
+  }
+}

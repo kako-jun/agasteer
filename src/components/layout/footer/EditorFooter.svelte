@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { _ } from '../../../lib/i18n'
   import Footer from '../Footer.svelte'
 
   export let onDelete: () => void
@@ -14,8 +15,8 @@
     <button
       type="button"
       on:click={onDelete}
-      title="リーフを削除"
-      aria-label="リーフを削除"
+      title={$_('footer.deleteLeaf')}
+      aria-label={$_('footer.deleteLeaf')}
       {disabled}
     >
       <svg
@@ -40,8 +41,8 @@
     <button
       type="button"
       on:click={onDownload}
-      title="ダウンロード"
-      aria-label="ダウンロード"
+      title={$_('footer.download')}
+      aria-label={$_('footer.download')}
       {disabled}
     >
       <svg
@@ -66,8 +67,8 @@
     <button
       type="button"
       on:click={onTogglePreview}
-      title="プレビュー"
-      aria-label="プレビュー"
+      title={$_('footer.preview')}
+      aria-label={$_('footer.preview')}
       {disabled}
     >
       <svg
@@ -91,8 +92,8 @@
       type="button"
       class="primary save-button"
       on:click={onSave}
-      title="保存"
-      aria-label="保存"
+      title={$_('common.save')}
+      aria-label={$_('common.save')}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

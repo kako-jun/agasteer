@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Settings, ThemeType } from '../../lib/types'
+  import { _, locale } from '../../lib/i18n'
+  import type { Settings, ThemeType, Locale } from '../../lib/types'
   import { uploadAndApplyFont, removeAndDeleteCustomFont } from '../../lib/font'
   import {
     uploadAndApplyBackgroundLeft,
@@ -32,6 +33,7 @@
   type TextSettingKey = Exclude<
     keyof Settings,
     | 'theme'
+    | 'locale'
     | 'hasCustomFont'
     | 'hasCustomBackgroundLeft'
     | 'hasCustomBackgroundRight'
@@ -54,6 +56,13 @@
     handleInputChange('toolName', value)
   }
 
+  function handleLocaleChange(event: Event) {
+    const value = (event.target as HTMLSelectElement).value as Locale
+    locale.set(value)
+    settings.locale = value
+    onSettingsChange({ locale: value })
+  }
+
   function handleFontButtonClick() {
     fileInput?.click()
   }
@@ -68,7 +77,7 @@
     const validExtensions = ['.ttf', '.otf', '.woff', '.woff2']
     const fileName = file.name.toLowerCase()
     if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      alert('対応しているフォント形式: .ttf, .otf, .woff, .woff2')
+      alert($_('settings.extras.font.invalidFormat'))
       return
     }
 
@@ -79,7 +88,7 @@
       onSettingsChange({ hasCustomFont: true })
     } catch (error) {
       console.error('Failed to upload font:', error)
-      alert('フォントの読み込みに失敗しました')
+      alert($_('settings.extras.font.uploadFailed'))
     } finally {
       fontUploading = false
       input.value = ''
@@ -93,7 +102,7 @@
       onSettingsChange({ hasCustomFont: false })
     } catch (error) {
       console.error('Failed to reset font:', error)
-      alert('フォントのリセットに失敗しました')
+      alert($_('settings.extras.font.resetFailed'))
     }
   }
 
@@ -115,7 +124,7 @@
     const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
     const fileName = file.name.toLowerCase()
     if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      alert('対応している画像形式: .jpg, .jpeg, .png, .webp, .gif')
+      alert($_('settings.extras.background.invalidFormat'))
       return
     }
 
@@ -130,7 +139,7 @@
       })
     } catch (error) {
       console.error('Failed to upload left background:', error)
-      alert('左ペインの背景画像の読み込みに失敗しました')
+      alert($_('settings.extras.background.uploadFailedLeft'))
     } finally {
       backgroundLeftUploading = false
       input.value = ''
@@ -147,7 +156,7 @@
     const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
     const fileName = file.name.toLowerCase()
     if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      alert('対応している画像形式: .jpg, .jpeg, .png, .webp, .gif')
+      alert($_('settings.extras.background.invalidFormat'))
       return
     }
 
@@ -162,7 +171,7 @@
       })
     } catch (error) {
       console.error('Failed to upload right background:', error)
-      alert('右ペインの背景画像の読み込みに失敗しました')
+      alert($_('settings.extras.background.uploadFailedRight'))
     } finally {
       backgroundRightUploading = false
       input.value = ''
@@ -180,7 +189,7 @@
       })
     } catch (error) {
       console.error('Failed to reset left background:', error)
-      alert('左ペインの背景画像のリセットに失敗しました')
+      alert($_('settings.extras.background.resetFailedLeft'))
     }
   }
 
@@ -195,7 +204,7 @@
       })
     } catch (error) {
       console.error('Failed to reset right background:', error)
-      alert('右ペインの背景画像のリセットに失敗しました')
+      alert($_('settings.extras.background.resetFailedRight'))
     }
   }
 
@@ -204,12 +213,12 @@
 
 <section class="settings-container">
   <div class="settings-content">
-    <h2 id="settings-title">設定</h2>
+    <h2 id="settings-title">{$_('settings.title')}</h2>
 
     <div class="qr-code-container">
       <div class="qr-code-wrapper">
-        <img src="/assets/qr.webp" alt="QRコード" class="qr-code-image" />
-        <p class="qr-code-description">スマホ用QRコード</p>
+        <img src="/assets/qr.webp" alt="QR Code" class="qr-code-image" />
+        <p class="qr-code-description">{$_('settings.qrCodeDescription')}</p>
       </div>
     </div>
 
@@ -234,7 +243,7 @@
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         </svg>
-        <span>使い方（テキスト）</span>
+        <span>{$_('settings.help.text')}</span>
       </a>
       <a
         href="https://www.youtube.com/watch?v=example"
@@ -255,55 +264,55 @@
         >
           <polygon points="5 3 19 12 5 21 5 3" />
         </svg>
-        <span>使い方（動画）</span>
+        <span>{$_('settings.help.video')}</span>
       </a>
     </div>
 
     <hr />
 
     <div class="form-section">
-      <h3>GitHub連携</h3>
+      <h3>{$_('settings.github.title')}</h3>
       <div class="form-row">
         <div class="form-field">
-          <label for="repo-name">リポジトリ名（owner/repo）</label>
+          <label for="repo-name">{$_('settings.github.repoName')}</label>
           <input
             id="repo-name"
             type="text"
             bind:value={settings.repoName}
             on:input={(e) => handleTextInput('repoName', e)}
-            placeholder="owner/repo"
+            placeholder={$_('settings.github.repoPlaceholder')}
           />
         </div>
         <div class="form-field">
-          <label for="github-token">GitHubトークン</label>
+          <label for="github-token">{$_('settings.github.token')}</label>
           <input
             id="github-token"
             type="password"
             bind:value={settings.token}
             on:input={(e) => handleTextInput('token', e)}
-            placeholder="ghp_..."
+            placeholder={$_('settings.github.tokenPlaceholder')}
           />
         </div>
       </div>
       <div class="form-row">
         <div class="form-field">
-          <label for="commit-username">コミットユーザー名</label>
+          <label for="commit-username">{$_('settings.github.username')}</label>
           <input
             id="commit-username"
             type="text"
             bind:value={settings.username}
             on:input={(e) => handleTextInput('username', e)}
-            placeholder="your-name"
+            placeholder={$_('settings.github.usernamePlaceholder')}
           />
         </div>
         <div class="form-field">
-          <label for="commit-email">コミットメールアドレス</label>
+          <label for="commit-email">{$_('settings.github.email')}</label>
           <input
             id="commit-email"
             type="email"
             bind:value={settings.email}
             on:input={(e) => handleTextInput('email', e)}
-            placeholder="you@example.com"
+            placeholder={$_('settings.github.emailPlaceholder')}
           />
         </div>
       </div>
@@ -324,14 +333,23 @@
               stroke-linejoin="round"
             />
           </svg>
-          {pullRunning ? 'Pull中…' : 'Pullテスト'}
+          {pullRunning ? $_('settings.github.pulling') : $_('settings.github.pullTest')}
         </button>
       </div>
       <hr />
       <div class="form-row">
         <div class="form-field">
-          <h3>おまけ</h3>
-          <span class="sub-label">テーマ選択</span>
+          <h3>{$_('settings.extras.title')}</h3>
+
+          <label for="language">{$_('settings.extras.language')}</label>
+          <select id="language" bind:value={settings.locale} on:change={handleLocaleChange}>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+
+          <span class="sub-label" style="margin-top: 1rem;"
+            >{$_('settings.extras.theme.title')}</span
+          >
           <div class="theme-buttons">
             <div class="theme-button-row">
               <button
@@ -339,21 +357,21 @@
                 class:active={settings.theme === 'yomi'}
                 on:click={() => handleThemeSelect('yomi')}
               >
-                黄泉
+                {$_('settings.extras.theme.yomi')}
               </button>
               <button
                 type="button"
                 class:active={settings.theme === 'campus'}
                 on:click={() => handleThemeSelect('campus')}
               >
-                キャンパス
+                {$_('settings.extras.theme.campus')}
               </button>
               <button
                 type="button"
                 class:active={settings.theme === 'greenboard'}
                 on:click={() => handleThemeSelect('greenboard')}
               >
-                緑板
+                {$_('settings.extras.theme.greenboard')}
               </button>
             </div>
             <div class="theme-button-row">
@@ -362,36 +380,36 @@
                 class:active={settings.theme === 'whiteboard'}
                 on:click={() => handleThemeSelect('whiteboard')}
               >
-                ホワイボー
+                {$_('settings.extras.theme.whiteboard')}
               </button>
               <button
                 type="button"
                 class:active={settings.theme === 'dotsD'}
                 on:click={() => handleThemeSelect('dotsD')}
               >
-                ドッツD
+                {$_('settings.extras.theme.dotsD')}
               </button>
               <button
                 type="button"
                 class:active={settings.theme === 'dotsF'}
                 on:click={() => handleThemeSelect('dotsF')}
               >
-                ドッツF
+                {$_('settings.extras.theme.dotsF')}
               </button>
             </div>
           </div>
           <div class="tool-name-field">
-            <label for="tool-name">ツール名</label>
+            <label for="tool-name">{$_('settings.extras.toolName.label')}</label>
             <input
               id="tool-name"
               type="text"
               bind:value={settings.toolName}
-              placeholder="SimplestNote.md"
+              placeholder={$_('settings.extras.toolName.placeholder')}
               on:input={handleToolNameInput}
             />
           </div>
           <div class="font-field">
-            <span class="sub-label">カスタムフォント</span>
+            <span class="sub-label">{$_('settings.extras.font.title')}</span>
             <div class="font-controls">
               <input
                 type="file"
@@ -423,23 +441,25 @@
                   <path d="M8 7h8" />
                   <path d="M8 11h8" />
                 </svg>
-                {fontUploading ? 'アップロード中...' : 'フォント選択'}
+                {fontUploading
+                  ? $_('settings.extras.font.uploading')
+                  : $_('settings.extras.font.select')}
               </button>
               {#if settings.hasCustomFont}
                 <button type="button" class="test-button" on:click={handleResetFont}>
-                  デフォルトに戻す
+                  {$_('settings.extras.font.reset')}
                 </button>
               {/if}
             </div>
           </div>
           <div class="background-field-wrapper">
-            <span class="sub-label">カスタム背景画像</span>
+            <span class="sub-label">{$_('settings.extras.background.title')}</span>
             <div class="background-dual-pane">
               <div class="background-pane">
-                <span class="pane-label">左ペイン</span>
+                <span class="pane-label">{$_('settings.extras.background.leftPane')}</span>
                 {#if settings.hasCustomBackgroundLeft}
                   <div class="background-preview background-preview-left">
-                    <span class="preview-label">プレビュー</span>
+                    <span class="preview-label">{$_('settings.extras.background.preview')}</span>
                   </div>
                 {/if}
                 <div class="background-controls">
@@ -472,20 +492,22 @@
                       <circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
                     </svg>
-                    {backgroundLeftUploading ? 'アップロード中...' : '背景画像選択'}
+                    {backgroundLeftUploading
+                      ? $_('settings.extras.background.uploading')
+                      : $_('settings.extras.background.select')}
                   </button>
                   {#if settings.hasCustomBackgroundLeft}
                     <button type="button" class="test-button" on:click={handleResetBackgroundLeft}>
-                      デフォルトに戻す
+                      {$_('settings.extras.background.reset')}
                     </button>
                   {/if}
                 </div>
               </div>
               <div class="background-pane">
-                <span class="pane-label">右ペイン</span>
+                <span class="pane-label">{$_('settings.extras.background.rightPane')}</span>
                 {#if settings.hasCustomBackgroundRight}
                   <div class="background-preview background-preview-right">
-                    <span class="preview-label">プレビュー</span>
+                    <span class="preview-label">{$_('settings.extras.background.preview')}</span>
                   </div>
                 {/if}
                 <div class="background-controls">
@@ -518,11 +540,13 @@
                       <circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
                     </svg>
-                    {backgroundRightUploading ? 'アップロード中...' : '背景画像選択'}
+                    {backgroundRightUploading
+                      ? $_('settings.extras.background.uploading')
+                      : $_('settings.extras.background.select')}
                   </button>
                   {#if settings.hasCustomBackgroundRight}
                     <button type="button" class="test-button" on:click={handleResetBackgroundRight}>
-                      デフォルトに戻す
+                      {$_('settings.extras.background.reset')}
                     </button>
                   {/if}
                 </div>
@@ -535,9 +559,9 @@
 
     <div class="about-section">
       <img src="/assets/app-icon.svg" alt="SimplestNote.md" class="about-icon" />
-      <p>「こういうのでいいんだよ」を目指しています。</p>
+      <p>{$_('settings.about.description')}</p>
       <p class="author">
-        作者: <strong>kako-jun</strong>
+        {$_('settings.about.author')}: <strong>kako-jun</strong>
         <a
           href="https://github.com/kako-jun/simplest-note-md"
           target="_blank"
