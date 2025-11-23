@@ -229,7 +229,7 @@ simplest-note-md/
 - 2ペイン表示の管理（アスペクト比判定、左右独立ナビゲーション）
 - ビューのルーティング（home/note/edit/preview/settings）
 - CRUD操作（ノート・リーフ作成/削除/更新）
-- ドラッグ&ドロップ処理（並び替え、リーフ移動）
+- ドラッグ&ドロップ処理（ノート・リーフの並び替え）
 - GitHub同期の呼び出し
 - モーダル管理
 - URLルーティング
@@ -260,9 +260,9 @@ simplest-note-md/
 
 **設定コンポーネント:**
 
-- `ThemeSelector.svelte`: テーマ選択（ライト、ダーク、黒板、かわいい、カスタム）
+- `ThemeSelector.svelte`: テーマ選択（yomi, campus, greenboard, whiteboard, dotsD, dotsF）
 - `FontCustomizer.svelte`: カスタムフォント機能（.ttf/.otf/.woff/.woff2）
-- `BackgroundCustomizer.svelte`: カスタム背景画像機能（.jpg/.png/.webp/.gif、透明度調整）
+- `BackgroundCustomizer.svelte`: カスタム背景画像機能（.jpg/.png/.webp/.gif、透明度0.1固定）
 - `GitHubSettings.svelte`: GitHub連携設定（Token、リポジトリ名、ユーザー名、メール）
 
 **共通コンポーネント:**

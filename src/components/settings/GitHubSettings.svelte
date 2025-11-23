@@ -168,4 +168,10 @@
     height: 18px;
     flex-shrink: 0;
   }
+
+  @media (max-width: 600px) {
+    .form-row {
+      flex-direction: column;
+    }
+  }
 </style>

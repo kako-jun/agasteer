@@ -195,7 +195,7 @@ npm run preview
 - **ソースファイル数**: 38個（.svelte + .ts）
 - **コンポーネント数**: 22個
 - **libモジュール数**: 13個
-- **ドキュメント数**: 13個（このファイル + README.md + docs/下の11個）
+- **ドキュメント数**: 15個（CLAUDE.md + README.md + CONTRIBUTING.md + docs/下の12個）
 
 ### 主要技術
 
@@ -205,7 +205,7 @@ npm run preview
 | **TypeScript**  | 5.7.2      | 型安全性の提供                      |
 | **Vite**        | 5.4.10     | ビルドツール & 開発サーバー         |
 | **CodeMirror**  | 6.0.1      | 高機能エディタ                      |
-| **marked**      | 12+        | マークダウン→HTML変換（プレビュー） |
+| **marked**      | 17+        | マークダウン→HTML変換（プレビュー） |
 | **DOMPurify**   | 3+         | XSSサニタイゼーション               |
 | **svelte-i18n** | 4+         | 国際化（i18n）対応                  |
 
@@ -428,7 +428,7 @@ npm run preview
 
 ## 📞 サポート
 
-- **リポジトリ**: [simplest-note-md](https://github.com/ariori/simplest-note-md)
+- **リポジトリ**: [simplest-note-md](https://github.com/kako-jun/simplest-note-md)
 - **デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
 - **デプロイ**: Cloudflare Pages（自動デプロイ）
 
