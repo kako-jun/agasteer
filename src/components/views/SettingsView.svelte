@@ -467,10 +467,6 @@
     display: block;
   }
 
-  .about-section h3 {
-    color: var(--text-primary);
-  }
-
   .about-section p {
     margin: 1rem 0;
     line-height: 1.6;
