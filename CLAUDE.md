@@ -23,10 +23,25 @@
 
 ### 機能実装
 
-- **[主要機能の実装](./docs/features.md)**
+- **[基本機能の実装](./docs/features.md)**
   - エディタ管理（CodeMirror統合）
   - パンくずナビゲーション
   - モーダルシステム
+  - ノート階層制限
+
+- **[UI/UX機能](./docs/ui-features.md)**
+  - 2ペイン表示（アスペクト比判定、レスポンシブ対応）
+
+- **[コンテンツ同期機能](./docs/content-sync.md)**
+  - リーフのタイトルと#見出しの双方向同期
+
+- **[プレビュー機能](./docs/preview-features.md)**
+  - マークダウンプレビュー（marked + DOMPurify）
+  - 編集/プレビュー間のスクロール同期
+
+- **[データ保護機能](./docs/data-protection.md)**
+  - Push回数カウント
+  - 未保存変更の確認
 
 - **[GitHub API統合](./docs/github-integration.md)**
   - 認証とファイルパス構築
