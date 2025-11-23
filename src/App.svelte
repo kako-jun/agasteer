@@ -1275,8 +1275,8 @@
             <button
               type="button"
               on:click={() => downloadLeaf($currentLeaf.id)}
-              title="Download"
-              aria-label="Download"
+              title="ダウンロード"
+              aria-label="ダウンロード"
               disabled={isOperationsLocked}
             >
               <svg
@@ -1326,8 +1326,8 @@
               type="button"
               class="primary save-button"
               on:click={handleSaveToGitHub}
-              title="Save"
-              aria-label="Save"
+              title="保存"
+              aria-label="保存"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -1355,8 +1355,8 @@
             <button
               type="button"
               on:click={() => downloadLeaf($currentLeaf.id)}
-              title="Download"
-              aria-label="Download"
+              title="ダウンロード"
+              aria-label="ダウンロード"
               disabled={isOperationsLocked}
             >
               <svg
@@ -1406,8 +1406,8 @@
               type="button"
               class="primary save-button"
               on:click={handleSaveToGitHub}
-              title="Save"
-              aria-label="Save"
+              title="保存"
+              aria-label="保存"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -1711,8 +1711,8 @@
             <button
               type="button"
               on:click={() => downloadLeaf(rightLeaf.id)}
-              title="Download"
-              aria-label="Download"
+              title="ダウンロード"
+              aria-label="ダウンロード"
               disabled={isOperationsLocked}
             >
               <svg
@@ -1762,8 +1762,8 @@
               type="button"
               class="primary save-button"
               on:click={handleSaveToGitHub}
-              title="Save"
-              aria-label="Save"
+              title="保存"
+              aria-label="保存"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -1791,8 +1791,8 @@
             <button
               type="button"
               on:click={() => downloadLeaf(rightLeaf.id)}
-              title="Download"
-              aria-label="Download"
+              title="ダウンロード"
+              aria-label="ダウンロード"
               disabled={isOperationsLocked}
             >
               <svg
@@ -1842,8 +1842,8 @@
               type="button"
               class="primary save-button"
               on:click={handleSaveToGitHub}
-              title="Save"
-              aria-label="Save"
+              title="保存"
+              aria-label="保存"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"

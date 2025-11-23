@@ -38,7 +38,10 @@
     <h2 id="settings-title">設定</h2>
 
     <div class="qr-code-container">
-      <img src="/assets/qr-code.svg" alt="QRコード" class="qr-code-image" />
+      <div class="qr-code-wrapper">
+        <img src="/assets/qr.webp" alt="QRコード" class="qr-code-image" />
+        <p class="qr-code-description">スマホ用QRコード</p>
+      </div>
     </div>
 
     <div class="help-links">
@@ -271,6 +274,13 @@
     margin-bottom: 1.5rem;
   }
 
+  .qr-code-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
   .qr-code-image {
     width: 100px;
     height: 100px;
@@ -279,6 +289,12 @@
     border-radius: 8px;
     padding: 0.5rem;
     background: white;
+  }
+
+  .qr-code-description {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
   }
 
   .help-links {
