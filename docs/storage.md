@@ -124,16 +124,22 @@ interface Leaf {
 
 - 全ノート
 - 全リーフのMarkdownファイル
+- メタデータファイル（`metadata.json`）
 
 ### ファイルパス構造
 
 ```
 notes/
+  ├── metadata.json  ← メタデータファイル
+  ├── .gitkeep
   ├── ノート名1/
+  │   ├── .gitkeep
   │   ├── サブノート名/
+  │   │   ├── .gitkeep
   │   │   └── リーフタイトル.md
   │   └── リーフタイトル.md
   └── ノート名2/
+      ├── .gitkeep
       └── リーフタイトル.md
 ```
 
@@ -141,13 +147,69 @@ notes/
 
 ```
 notes/
+  ├── metadata.json
+  ├── .gitkeep
   ├── 仕事/
+  │   ├── .gitkeep
   │   ├── プロジェクトA/
+  │   │   ├── .gitkeep
   │   │   └── 会議メモ.md
   │   └── TODO.md
   └── プライベート/
+      ├── .gitkeep
       └── 買い物リスト.md
 ```
+
+### metadata.json の構造
+
+ノート・リーフのメタ情報（ID、並び順、更新日時）と統計情報を保存します。
+
+```json
+{
+  "version": 1,
+  "pushCount": 42,
+  "notes": {
+    "仕事": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "order": 0
+    },
+    "仕事/プロジェクトA": {
+      "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "order": 0
+    }
+  },
+  "leaves": {
+    "仕事/プロジェクトA/会議メモ.md": {
+      "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "updatedAt": 1703000000000,
+      "order": 0
+    }
+  }
+}
+```
+
+#### フィールド説明
+
+| フィールド  | 型     | 説明                                              |
+| ----------- | ------ | ------------------------------------------------- |
+| `version`   | number | メタデータのバージョン（現在は常に1）             |
+| `pushCount` | number | GitHub Pushの累積回数（統計情報）                 |
+| `notes`     | object | ノートのメタ情報（パス → {id, order}）            |
+| `leaves`    | object | リーフのメタ情報（パス → {id, updatedAt, order}） |
+
+#### pushCount フィールド
+
+- **用途**: アプリの使用状況を可視化する統計情報
+- **更新タイミング**: 毎回Pushする際に自動的にインクリメント
+- **表示場所**: ホーム画面の右下に表示
+- **初期値**: 0（存在しない場合はフォールバック）
+
+**動作:**
+
+1. Push前に既存の `metadata.json` から `pushCount` を取得
+2. `pushCount + 1` を新しい `metadata.json` に保存
+3. Pull時に `pushCount` を取得してSvelteストアに保存
+4. ホーム画面で `$metadata.pushCount` として表示
 
 ### 同期タイミング
 

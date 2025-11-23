@@ -43,6 +43,18 @@ export interface PullResult {
   metadata: Metadata
 }
 /**
+ * GitHub Contents APIを呼ぶヘルパー関数（キャッシュバスター付き）
+ */
+async function fetchGitHubContents(path: string, repoName: string, token: string) {
+  const url = `https://api.github.com/repos/${repoName}/contents/${path}?t=${Date.now()}`
+  return fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+
+/**
  * UTF-8テキストをBase64エンコード
  */
 function encodeContent(content: string): string {
@@ -81,14 +93,8 @@ function buildPath(leaf: Leaf, notes: Note[]): string {
  * ファイルが存在しない場合はnullを返す
  */
 export async function fetchCurrentSha(path: string, settings: Settings): Promise<string | null> {
-  const url = `https://api.github.com/repos/${settings.repoName}/contents/${path}`
-
   try {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${settings.token}`,
-      },
-    })
+    const response = await fetchGitHubContents(path, settings.repoName, settings.token)
 
     if (response.ok) {
       const data = await response.json()
@@ -271,9 +277,10 @@ export async function pushAllWithTreeAPI(
     // 既存のmetadata.jsonからpushCountを取得
     let currentPushCount = 0
     try {
-      const metadataRes = await fetch(
-        `https://api.github.com/repos/${settings.repoName}/contents/notes/metadata.json`,
-        { headers }
+      const metadataRes = await fetchGitHubContents(
+        'notes/metadata.json',
+        settings.repoName,
+        settings.token
       )
       if (metadataRes.ok) {
         const metadataData = await metadataRes.json()
@@ -295,6 +302,13 @@ export async function pushAllWithTreeAPI(
       leaves: {},
       pushCount: currentPushCount + 1,
     }
+    console.log(
+      '[Push] Creating metadata with pushCount:',
+      metadata.pushCount,
+      '(was:',
+      currentPushCount,
+      ')'
+    )
 
     // ノートのメタ情報を追加
     for (const note of notes) {
@@ -319,6 +333,13 @@ export async function pushAllWithTreeAPI(
     const metadataPath = 'notes/metadata.json'
     const metadataExisting = existingNotesFiles.get(metadataPath)
     const metadataSha = await calculateGitBlobSha(metadataContent)
+
+    console.log('[Push] metadata.json:', {
+      existingSha: metadataExisting,
+      newSha: metadataSha,
+      willSendContent: metadataExisting !== metadataSha,
+      content: metadataContent.substring(0, 200),
+    })
 
     treeItems.push({
       path: metadataPath,
@@ -540,9 +561,10 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
     // notes/metadata.jsonを取得
     let metadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     try {
-      const metadataRes = await fetch(
-        `https://api.github.com/repos/${settings.repoName}/contents/notes/metadata.json`,
-        { headers }
+      const metadataRes = await fetchGitHubContents(
+        'notes/metadata.json',
+        settings.repoName,
+        settings.token
       )
       if (metadataRes.ok) {
         const metadataData = await metadataRes.json()
@@ -609,10 +631,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
       const noteId = ensureNotePath(parts)
 
       // fetch content
-      const contentRes = await fetch(
-        `https://api.github.com/repos/${settings.repoName}/contents/${entry.path}`,
-        { headers }
-      )
+      const contentRes = await fetchGitHubContents(entry.path, settings.repoName, settings.token)
       if (!contentRes.ok) continue
       const contentData = await contentRes.json()
       let content = ''
