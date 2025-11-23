@@ -156,12 +156,16 @@
   .editor-container {
     height: 100%;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
   }
 
   :global(.cm-editor) {
     height: 100%;
     border: none !important;
     outline: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   :global(.cm-scroller) {
@@ -169,5 +173,11 @@
     font-family: 'Courier New', monospace;
     font-size: 14px;
     line-height: 1.6;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  :global(.cm-content) {
+    padding: 0.5rem !important;
   }
 </style>

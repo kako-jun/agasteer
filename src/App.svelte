@@ -33,6 +33,7 @@
   import { resolvePath, buildPath } from './lib/routing'
   import Header from './components/layout/Header.svelte'
   import Breadcrumbs from './components/layout/Breadcrumbs.svelte'
+  import Footer from './components/layout/Footer.svelte'
   import Modal from './components/layout/Modal.svelte'
   import Toast from './components/layout/Toast.svelte'
   import HomeView from './components/views/HomeView.svelte'
@@ -909,15 +910,13 @@
   <div class="content-wrapper" class:single-pane={!isDualPane}>
     <div class="pane-divider" class:hidden={!isDualPane}></div>
     <div class="left-column">
-      <div class="breadcrumbs-pane">
-        <Breadcrumbs
-          {breadcrumbs}
-          editingId={editingBreadcrumb}
-          onStartEdit={startEditingBreadcrumb}
-          onSaveEdit={saveEditBreadcrumb}
-          onCancelEdit={cancelEditBreadcrumb}
-        />
-      </div>
+      <Breadcrumbs
+        {breadcrumbs}
+        editingId={editingBreadcrumb}
+        onStartEdit={startEditingBreadcrumb}
+        onSaveEdit={saveEditBreadcrumb}
+        onCancelEdit={cancelEditBreadcrumb}
+      />
 
       <main class="main-pane">
         {#if $currentView === 'home'}
@@ -970,18 +969,265 @@
           />
         {/if}
       </main>
+
+      {#if $currentView === 'home'}
+        <Footer>
+          <svelte:fragment slot="left">
+            <button
+              type="button"
+              on:click={() => createNote()}
+              title="新規ノート"
+              aria-label="新規ノート"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path
+                  d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                />
+                <line x1="12" y1="11" x2="12" y2="17" />
+                <line x1="9" y1="14" x2="15" y2="14" />
+              </svg>
+            </button>
+          </svelte:fragment>
+          <svelte:fragment slot="right">
+            <button
+              type="button"
+              class="primary"
+              on:click={handleSaveToGitHub}
+              title="保存"
+              aria-label="保存"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </svelte:fragment>
+        </Footer>
+      {:else if $currentView === 'note' && $currentNote}
+        <Footer>
+          <svelte:fragment slot="left">
+            <button
+              type="button"
+              on:click={deleteNote}
+              title="ノートを削除"
+              aria-label="ノートを削除"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path
+                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
+
+            {#if !$currentNote.parentId}
+              <button
+                type="button"
+                on:click={() => createNote($currentNote.id)}
+                title="新規サブノート"
+                aria-label="新規サブノート"
+                disabled={isOperationsLocked}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="button-icon"
+                >
+                  <path
+                    d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                  />
+                  <line x1="12" y1="11" x2="12" y2="17" />
+                  <line x1="9" y1="14" x2="15" y2="14" />
+                </svg>
+              </button>
+            {/if}
+
+            <button
+              type="button"
+              on:click={createLeaf}
+              title="新規リーフ"
+              aria-label="新規リーフ"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="18" x2="12" y2="12" />
+                <line x1="9" y1="15" x2="15" y2="15" />
+              </svg>
+            </button>
+          </svelte:fragment>
+          <svelte:fragment slot="right">
+            <button
+              type="button"
+              class="primary"
+              on:click={handleSaveToGitHub}
+              title="保存"
+              aria-label="保存"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </svelte:fragment>
+        </Footer>
+      {:else if $currentView === 'edit' && $currentLeaf}
+        <Footer>
+          <svelte:fragment slot="left">
+            <button
+              type="button"
+              on:click={() => deleteLeaf($currentLeaf.id)}
+              title="リーフを削除"
+              aria-label="リーフを削除"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path
+                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              on:click={() => downloadLeaf($currentLeaf.id)}
+              title="Download"
+              aria-label="Download"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
+          </svelte:fragment>
+          <svelte:fragment slot="right">
+            <button
+              type="button"
+              class="primary"
+              on:click={handleSaveToGitHub}
+              title="Save"
+              aria-label="Save"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </svelte:fragment>
+        </Footer>
+      {/if}
     </div>
 
     <div class="right-column" class:hidden={!isDualPane}>
-      <div class="breadcrumbs-pane">
-        <Breadcrumbs
-          breadcrumbs={breadcrumbsRight}
-          editingId={editingBreadcrumb}
-          onStartEdit={startEditingBreadcrumb}
-          onSaveEdit={saveEditBreadcrumb}
-          onCancelEdit={cancelEditBreadcrumb}
-        />
-      </div>
+      <Breadcrumbs
+        breadcrumbs={breadcrumbsRight}
+        editingId={editingBreadcrumb}
+        onStartEdit={startEditingBreadcrumb}
+        onSaveEdit={saveEditBreadcrumb}
+        onCancelEdit={cancelEditBreadcrumb}
+      />
 
       <main class="main-pane">
         {#if rightView === 'home'}
@@ -1038,6 +1284,255 @@
           />
         {/if}
       </main>
+
+      {#if rightView === 'home'}
+        <Footer>
+          <svelte:fragment slot="left">
+            <button
+              type="button"
+              on:click={() => createNoteRight()}
+              title="新規ノート"
+              aria-label="新規ノート"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path
+                  d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                />
+                <line x1="12" y1="11" x2="12" y2="17" />
+                <line x1="9" y1="14" x2="15" y2="14" />
+              </svg>
+            </button>
+          </svelte:fragment>
+          <svelte:fragment slot="right">
+            <button
+              type="button"
+              class="primary"
+              on:click={handleSaveToGitHub}
+              title="保存"
+              aria-label="保存"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </svelte:fragment>
+        </Footer>
+      {:else if rightView === 'note' && rightNote}
+        <Footer>
+          <svelte:fragment slot="left">
+            <button
+              type="button"
+              on:click={deleteNote}
+              title="ノートを削除"
+              aria-label="ノートを削除"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path
+                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
+
+            {#if !rightNote.parentId}
+              <button
+                type="button"
+                on:click={() => createNoteRight(rightNote.id)}
+                title="新規サブノート"
+                aria-label="新規サブノート"
+                disabled={isOperationsLocked}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="button-icon"
+                >
+                  <path
+                    d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                  />
+                  <line x1="12" y1="11" x2="12" y2="17" />
+                  <line x1="9" y1="14" x2="15" y2="14" />
+                </svg>
+              </button>
+            {/if}
+
+            <button
+              type="button"
+              on:click={createLeafRight}
+              title="新規リーフ"
+              aria-label="新規リーフ"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="18" x2="12" y2="12" />
+                <line x1="9" y1="15" x2="15" y2="15" />
+              </svg>
+            </button>
+          </svelte:fragment>
+          <svelte:fragment slot="right">
+            <button
+              type="button"
+              class="primary"
+              on:click={handleSaveToGitHub}
+              title="保存"
+              aria-label="保存"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </svelte:fragment>
+        </Footer>
+      {:else if rightView === 'edit' && rightLeaf}
+        <Footer>
+          <svelte:fragment slot="left">
+            <button
+              type="button"
+              on:click={() => deleteLeaf(rightLeaf.id)}
+              title="リーフを削除"
+              aria-label="リーフを削除"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path
+                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              on:click={() => downloadLeaf(rightLeaf.id)}
+              title="Download"
+              aria-label="Download"
+              disabled={isOperationsLocked}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
+          </svelte:fragment>
+          <svelte:fragment slot="right">
+            <button
+              type="button"
+              class="primary"
+              on:click={handleSaveToGitHub}
+              title="Save"
+              aria-label="Save"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="button-icon"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </svelte:fragment>
+        </Footer>
+      {/if}
     </div>
   </div>
 
@@ -1119,9 +1614,10 @@
 
   .app-container {
     width: 100%;
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .content-wrapper {
@@ -1129,7 +1625,6 @@
     grid-template-columns: 1fr 1fr;
     gap: 0;
     flex: 1;
-    height: calc(100vh - 80px);
     overflow: hidden;
     position: relative;
   }
@@ -1164,13 +1659,9 @@
     overflow: hidden;
   }
 
-  .breadcrumbs-pane {
-    flex-shrink: 0;
-  }
-
   .main-pane {
     flex: 1;
-    overflow: hidden;
+    overflow: auto;
   }
 
   .hidden {
