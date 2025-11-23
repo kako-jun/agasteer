@@ -4,12 +4,36 @@
   import type { Leaf } from '../../lib/types'
 
   export let leaf: Leaf
+  export let onScroll: ((scrollTop: number, scrollHeight: number) => void) | null = null
+
+  let previewSection: HTMLElement
+  let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
 
   // マークダウンをHTMLに変換してサニタイズ
   $: htmlContent = DOMPurify.sanitize(marked(leaf.content) as string)
+
+  // 外部からスクロール位置を設定する関数
+  export function scrollTo(scrollTop: number) {
+    if (!previewSection || isScrollingSynced) return
+
+    isScrollingSynced = true
+    previewSection.scrollTop = scrollTop
+    // 次のイベントループでフラグをリセット
+    setTimeout(() => {
+      isScrollingSynced = false
+    }, 0)
+  }
+
+  function handleScroll(event: Event) {
+    if (isScrollingSynced || !onScroll) return
+    const target = event.target as HTMLElement
+    if (target) {
+      onScroll(target.scrollTop, target.scrollHeight)
+    }
+  }
 </script>
 
-<section class="preview-section">
+<section class="preview-section" bind:this={previewSection} on:scroll={handleScroll}>
   <div class="preview-content">
     {@html htmlContent}
   </div>

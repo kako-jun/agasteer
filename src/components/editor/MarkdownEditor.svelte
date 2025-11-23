@@ -11,10 +11,27 @@
   export let content: string
   export let theme: ThemeType
   export let onChange: (newContent: string) => void
+  export let onScroll: ((scrollTop: number, scrollHeight: number) => void) | null = null
 
   let editorContainer: HTMLDivElement
   let editorView: EditorView | null = null
   let currentExtensions: any[] = []
+  let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
+
+  // 外部からスクロール位置を設定する関数
+  export function scrollTo(scrollTop: number) {
+    if (!editorView || isScrollingSynced) return
+
+    isScrollingSynced = true
+    const scroller = editorView.scrollDOM
+    if (scroller) {
+      scroller.scrollTop = scrollTop
+    }
+    // 次のイベントループでフラグをリセット
+    setTimeout(() => {
+      isScrollingSynced = false
+    }, 0)
+  }
 
   const darkThemes: ThemeType[] = ['greenboard', 'dotsD', 'dotsF']
 
@@ -94,6 +111,15 @@
           // エディタで変更があったらダーティフラグを立てる（Push成功まで解除されない）
           isDirty.set(true)
         }
+      }),
+      EditorView.domEventHandlers({
+        scroll: (event) => {
+          if (isScrollingSynced || !onScroll) return
+          const target = event.target as HTMLElement
+          if (target) {
+            onScroll(target.scrollTop, target.scrollHeight)
+          }
+        },
       }),
     ]
 

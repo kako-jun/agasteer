@@ -64,6 +64,41 @@
   let rightLeaf: Leaf | null = null
   let rightView: View = 'home'
 
+  // スクロール同期用のコンポーネント参照
+  let leftEditorView: any = null
+  let leftPreviewView: any = null
+  let rightEditorView: any = null
+  let rightPreviewView: any = null
+
+  // スクロール同期関数
+  function handleLeftScroll(scrollTop: number, scrollHeight: number) {
+    // 同じリーフで、左がedit/previewで右がその逆の場合のみ同期
+    if (!isDualPane || !$currentLeaf || !rightLeaf || $currentLeaf.id !== rightLeaf.id) return
+    if (
+      ($currentView === 'edit' && rightView === 'preview') ||
+      ($currentView === 'preview' && rightView === 'edit')
+    ) {
+      const target = rightView === 'edit' ? rightEditorView : rightPreviewView
+      if (target && target.scrollTo) {
+        target.scrollTo(scrollTop)
+      }
+    }
+  }
+
+  function handleRightScroll(scrollTop: number, scrollHeight: number) {
+    // 同じリーフで、右がedit/previewで左がその逆の場合のみ同期
+    if (!isDualPane || !$currentLeaf || !rightLeaf || $currentLeaf.id !== rightLeaf.id) return
+    if (
+      (rightView === 'edit' && $currentView === 'preview') ||
+      (rightView === 'preview' && $currentView === 'edit')
+    ) {
+      const target = $currentView === 'edit' ? leftEditorView : leftPreviewView
+      if (target && target.scrollTo) {
+        target.scrollTo(scrollTop)
+      }
+    }
+  }
+
   // リアクティブ宣言
   $: breadcrumbs = getBreadcrumbs($currentView, $currentNote, $currentLeaf, $notes)
   $: breadcrumbsRight = getBreadcrumbsRight(rightView, rightNote, rightLeaf, $notes)
@@ -1015,6 +1050,7 @@
           />
         {:else if $currentView === 'edit' && $currentLeaf}
           <EditorView
+            bind:this={leftEditorView}
             leaf={$currentLeaf}
             theme={$settings.theme}
             disabled={isOperationsLocked || isPushing}
@@ -1022,9 +1058,14 @@
             onSave={handleSaveToGitHub}
             onDownload={downloadLeaf}
             onDelete={deleteLeaf}
+            onScroll={handleLeftScroll}
           />
         {:else if $currentView === 'preview' && $currentLeaf}
-          <PreviewView leaf={$currentLeaf} />
+          <PreviewView
+            bind:this={leftPreviewView}
+            leaf={$currentLeaf}
+            onScroll={handleLeftScroll}
+          />
         {/if}
       </main>
 
@@ -1449,6 +1490,7 @@
           />
         {:else if rightView === 'edit' && rightLeaf}
           <EditorView
+            bind:this={rightEditorView}
             leaf={rightLeaf}
             theme={$settings.theme}
             disabled={isOperationsLocked}
@@ -1456,9 +1498,10 @@
             onSave={handleSaveToGitHub}
             onDownload={downloadLeaf}
             onDelete={deleteLeaf}
+            onScroll={handleRightScroll}
           />
         {:else if rightView === 'preview' && rightLeaf}
-          <PreviewView leaf={rightLeaf} />
+          <PreviewView bind:this={rightPreviewView} leaf={rightLeaf} onScroll={handleRightScroll} />
         {/if}
       </main>
 
