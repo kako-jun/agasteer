@@ -280,20 +280,21 @@
               />
               <button
                 type="button"
-                class="font-button"
+                class="test-button"
                 on:click={handleFontButtonClick}
                 disabled={fontUploading}
               >
                 <svg
+                  class="test-icon"
                   xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
                 >
                   <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                   <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
@@ -303,7 +304,7 @@
                 {fontUploading ? 'アップロード中...' : 'フォント選択'}
               </button>
               {#if settings.hasCustomFont}
-                <button type="button" class="font-reset-button" on:click={handleResetFont}>
+                <button type="button" class="test-button" on:click={handleResetFont}>
                   デフォルトに戻す
                 </button>
               {/if}
@@ -671,54 +672,6 @@
     gap: 0.5rem;
     align-items: center;
     flex-wrap: wrap;
-  }
-
-  .font-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .font-button:hover:not(:disabled) {
-    background: var(--accent-color);
-    color: white;
-    border-color: var(--accent-color);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .font-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .font-button svg {
-    flex-shrink: 0;
-  }
-
-  .font-reset-button {
-    padding: 0.6rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .font-reset-button:hover {
-    background: #ff4444;
-    color: white;
-    border-color: #ff4444;
   }
 
   .font-help-text {
