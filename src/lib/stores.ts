@@ -4,7 +4,7 @@
  */
 
 import { writable, derived } from 'svelte/store'
-import type { Settings, Note, Leaf, View } from './types'
+import type { Settings, Note, Leaf, View, Metadata } from './types'
 import { defaultSettings, saveSettings, saveNotes, saveLeaves } from './storage'
 
 // 基本ストア
@@ -14,6 +14,7 @@ export const leaves = writable<Leaf[]>([])
 export const currentView = writable<View>('home')
 export const currentNote = writable<Note | null>(null)
 export const currentLeaf = writable<Leaf | null>(null)
+export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
 
 // 派生ストア
 export const rootNotes = derived(notes, ($notes) =>

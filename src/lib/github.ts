@@ -3,17 +3,7 @@
  * GitHubへのファイル保存とSHA取得を担当
  */
 
-import type { Leaf, Note, Settings } from './types'
-
-/**
- * メタデータファイルの型定義
- * パス（相対パス）をキーにして、order, id, updatedAtを保存
- */
-interface Metadata {
-  version: number
-  notes: Record<string, { id: string; order: number }> // "仕事" or "仕事/会議"
-  leaves: Record<string, { id: string; updatedAt: number; order: number }> // "仕事/議事録.md"
-}
+import type { Leaf, Note, Settings, Metadata } from './types'
 
 /**
  * Git blob形式のSHA-1を計算
@@ -50,6 +40,7 @@ export interface PullResult {
   message: string
   notes: Note[]
   leaves: Leaf[]
+  metadata: Metadata
 }
 /**
  * UTF-8テキストをBase64エンコード
@@ -277,11 +268,32 @@ export async function pushAllWithTreeAPI(
     // .gitkeep用の空コンテンツのSHA（常に同じ）
     const emptyGitkeepSha = await calculateGitBlobSha('')
 
+    // 既存のmetadata.jsonからpushCountを取得
+    let currentPushCount = 0
+    try {
+      const metadataRes = await fetch(
+        `https://api.github.com/repos/${settings.repoName}/contents/notes/metadata.json`,
+        { headers }
+      )
+      if (metadataRes.ok) {
+        const metadataData = await metadataRes.json()
+        if (metadataData.content) {
+          const base64 = metadataData.content.replace(/\n/g, '')
+          const decoded = atob(base64)
+          const existingMetadata: Metadata = JSON.parse(decoded)
+          currentPushCount = existingMetadata.pushCount || 0
+        }
+      }
+    } catch (e) {
+      // エラーは無視（初回Pushの場合）
+    }
+
     // metadata.jsonを生成
     const metadata: Metadata = {
       version: 1,
       notes: {},
       leaves: {},
+      pushCount: currentPushCount + 1,
     }
 
     // ノートのメタ情報を追加
@@ -450,8 +462,16 @@ export async function pushAllWithTreeAPI(
  * データのマージはせず、アクセス可否だけを確認する
  */
 export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
+  const defaultMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
+
   if (!settings.token) {
-    return { success: false, message: '❌ トークンが未設定です', notes: [], leaves: [] }
+    return {
+      success: false,
+      message: '❌ トークンが未設定です',
+      notes: [],
+      leaves: [],
+      metadata: defaultMetadata,
+    }
   }
   if (!settings.repoName || !settings.repoName.includes('/')) {
     return {
@@ -459,6 +479,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
       message: '❌ リポジトリ名が不正です（owner/repo）',
       notes: [],
       leaves: [],
+      metadata: defaultMetadata,
     }
   }
 
@@ -469,7 +490,13 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
   try {
     const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
     if (repoRes.status === 404) {
-      return { success: false, message: '❌ リポジトリが見つかりません', notes: [], leaves: [] }
+      return {
+        success: false,
+        message: '❌ リポジトリが見つかりません',
+        notes: [],
+        leaves: [],
+        metadata: defaultMetadata,
+      }
     }
     if (repoRes.status === 401 || repoRes.status === 403) {
       return {
@@ -477,6 +504,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
         message: '❌ リポジトリへの権限がありません',
         notes: [],
         leaves: [],
+        metadata: defaultMetadata,
       }
     }
     if (!repoRes.ok) {
@@ -485,6 +513,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
         message: `❌ リポジトリ確認に失敗 (${repoRes.status})`,
         notes: [],
         leaves: [],
+        metadata: defaultMetadata,
       }
     }
 
@@ -501,6 +530,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
         message: `❌ ツリー取得に失敗 (${treeRes.status})`,
         notes: [],
         leaves: [],
+        metadata: defaultMetadata,
       }
     }
 
@@ -508,7 +538,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
     const entries: { path: string; type: string }[] = treeData.tree || []
 
     // notes/metadata.jsonを取得
-    let metadata: Metadata = { version: 1, notes: {}, leaves: {} }
+    let metadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     try {
       const metadataRes = await fetch(
         `https://api.github.com/repos/${settings.repoName}/contents/notes/metadata.json`,
@@ -519,7 +549,14 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
         if (metadataData.content) {
           const base64 = metadataData.content.replace(/\n/g, '')
           const jsonText = decodeURIComponent(escape(atob(base64)))
-          metadata = JSON.parse(jsonText)
+          const parsed = JSON.parse(jsonText)
+          // 古いmetadata.jsonにはpushCountがない可能性があるので、デフォルト値を設定
+          metadata = {
+            version: parsed.version || 1,
+            notes: parsed.notes || {},
+            leaves: parsed.leaves || {},
+            pushCount: parsed.pushCount || 0,
+          }
         }
       }
     } catch (e) {
@@ -616,10 +653,17 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
       message: '✅ Pull OK',
       notes: sortedNotes,
       leaves: sortedLeaves,
+      metadata,
     }
   } catch (error) {
     console.error('GitHub pull error:', error)
-    return { success: false, message: '❌ ネットワークエラー', notes: [], leaves: [] }
+    return {
+      success: false,
+      message: '❌ ネットワークエラー',
+      notes: [],
+      leaves: [],
+      metadata: defaultMetadata,
+    }
   }
 }
 

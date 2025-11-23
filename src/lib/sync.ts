@@ -1,4 +1,4 @@
-import type { Note, Leaf, Settings } from './types'
+import type { Note, Leaf, Settings, Metadata } from './types'
 import { pushAllWithTreeAPI, pullFromGitHub } from './github'
 
 /**
@@ -19,6 +19,7 @@ export interface PullResult {
   variant: 'success' | 'error'
   notes: Note[]
   leaves: Leaf[]
+  metadata: Metadata
 }
 
 /**
@@ -89,6 +90,7 @@ export async function executePull(settings: Settings, isInitial = false): Promis
       variant: 'success',
       notes: result.notes,
       leaves: result.leaves,
+      metadata: result.metadata,
     }
   } else {
     return {
@@ -97,6 +99,7 @@ export async function executePull(settings: Settings, isInitial = false): Promis
       variant: 'error',
       notes: [],
       leaves: [],
+      metadata: result.metadata,
     }
   }
 }

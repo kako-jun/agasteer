@@ -18,6 +18,13 @@ export interface Settings {
   toolName: string
 }
 
+export interface Metadata {
+  version: number
+  notes: Record<string, { id: string; order: number }>
+  leaves: Record<string, { id: string; updatedAt: number; order: number }>
+  pushCount: number
+}
+
 export interface Note {
   id: UUID
   name: string

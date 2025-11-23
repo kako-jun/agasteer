@@ -1,6 +1,7 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
   import type { Note } from '../../lib/types'
+  import { metadata } from '../../lib/stores'
 
   export let notes: Note[]
   export let onSelectNote: (note: Note) => void
@@ -16,6 +17,13 @@
 </script>
 
 <section class="view-container">
+  <div class="statistics">
+    <div class="stat-item">
+      <div class="stat-label">Push回数</div>
+      <div class="stat-value">{$metadata.pushCount}</div>
+    </div>
+  </div>
+
   <div class="card-grid">
     {#each notes as note (note.id)}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -49,12 +57,40 @@
     padding: 1rem;
     height: 100%;
     overflow-y: auto;
+    position: relative;
+  }
+
+  .statistics {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 0;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .stat-item {
+    text-align: right;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--accent-color);
   }
 
   .card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 240px));
     gap: 1rem;
+    position: relative;
+    z-index: 1;
   }
 
   .note-card {

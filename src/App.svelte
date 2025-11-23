@@ -13,6 +13,7 @@
     subNotes,
     currentNoteLeaves,
     githubConfigured,
+    metadata,
     updateSettings,
     updateNotes,
     updateLeaves,
@@ -876,6 +877,7 @@
       // GitHubから取得したデータでIndexedDBを再作成
       updateNotes(result.notes)
       updateLeaves(result.leaves)
+      metadata.set(result.metadata)
       isOperationsLocked = false
 
       // 初回Pull時はURLから状態を復元（既にisRestoringFromUrl=trueを設定済み）
