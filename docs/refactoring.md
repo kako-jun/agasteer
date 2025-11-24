@@ -1131,6 +1131,355 @@ NoteView.svelteに欠けていたスタイルを追加:
 
 ---
 
+## 11. ボタンコンポーネントの共通化（実装済み 2025-11-24）
+
+Version 6.1では、すべてのボタンを`IconButton`コンポーネントと個別のアイコンコンポーネントに分割し、コードの重複を大幅に削減しました。
+
+### 問題点
+
+**重複したボタン実装:**
+
+- ヘッダー、パンくずリスト、シェアメニュー、フッターの各所で同じスタイルのボタンが重複実装されていた
+- SVGアイコンが各コンポーネントに埋め込まれていた（約400行のSVG重複）
+- スタイルが各コンポーネントに分散していた
+- ボタンのサイズが18pxと20pxで不統一
+- ホバー効果がバラバラ（opacity変更、background変更）
+
+**メンテナンス性の問題:**
+
+- ボタンのスタイルを変更する際、10箇所以上を修正する必要があった
+- 新しいボタン追加時に、毎回同じスタイルとSVGを書く必要があった
+- 一貫性の保証が困難
+
+### 実施した変更
+
+#### 1. IconButtonコンポーネントの作成
+
+**汎用的なアイコンボタン:**
+
+```svelte
+<!-- src/components/buttons/IconButton.svelte -->
+<script lang="ts">
+  export let onClick: () => void
+  export let title = ''
+  export let ariaLabel = ''
+  export let disabled = false
+  export let variant: 'default' | 'primary' = 'default'
+  export let iconSize = 18
+</script>
+
+<button
+  type="button"
+  on:click={onClick}
+  {title}
+  aria-label={ariaLabel}
+  {disabled}
+  class="icon-button"
+  class:primary={variant === 'primary'}
+  style="--icon-size: {iconSize}px"
+>
+  <slot />
+</button>
+
+<style>
+  .icon-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s;
+    position: relative;
+  }
+
+  .icon-button:hover:not(:disabled) {
+    opacity: 0.7;
+  }
+
+  .icon-button.primary {
+    color: var(--accent-color);
+  }
+
+  .icon-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .icon-button :global(svg) {
+    width: var(--icon-size);
+    height: var(--icon-size);
+  }
+</style>
+```
+
+**特徴:**
+
+- `variant`プロパティでprimary/defaultを切り替え
+- `iconSize`でアイコンサイズをカスタマイズ可能
+- 統一されたホバー効果（opacity: 0.7）
+- `<slot>`により任意のアイコンを挿入可能
+- disabled状態のサポート
+
+#### 2. 14個のアイコンコンポーネントの作成
+
+**SVGアイコンを独立したコンポーネント化:**
+
+```
+src/components/icons/
+├── SettingsIcon.svelte    # 設定（ヘッダー）
+├── HomeIcon.svelte        # ホーム（パンくずリスト）
+├── EditIcon.svelte        # 編集（パンくずリスト）
+├── ShareIcon.svelte       # シェア（パンくずリスト）
+├── SaveIcon.svelte        # 保存（フッター）
+├── DeleteIcon.svelte      # 削除（フッター）
+├── DownloadIcon.svelte    # ダウンロード（フッター）
+├── EyeIcon.svelte         # プレビュー（フッター）
+├── FolderPlusIcon.svelte  # ノート作成（フッター）
+├── FilePlusIcon.svelte    # リーフ作成（フッター）
+├── LinkIcon.svelte        # URLコピー（シェアメニュー）
+├── CopyIcon.svelte        # コピー（シェアメニュー）
+├── UploadIcon.svelte      # アップロード（シェアメニュー）
+└── FileEditIcon.svelte    # 編集（フッター）
+```
+
+**アイコンコンポーネントの例:**
+
+```svelte
+<!-- src/components/icons/SaveIcon.svelte -->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+  <polyline points="17 21 17 13 7 13 7 21" />
+  <polyline points="7 3 7 8 15 8" />
+</svg>
+```
+
+**特徴:**
+
+- SVG定義のみのシンプルなコンポーネント
+- サイズは親コンポーネント（IconButton）で制御
+- `currentColor`により親の色を継承
+
+#### 3. 既存コンポーネントのリファクタリング
+
+**Header.svelte:**
+
+```svelte
+<!-- 修正前 -->
+<button class="settings-button" on:click={onSettingsClick}>
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" ...>
+    <!-- 長いSVGパス -->
+  </svg>
+</button>
+
+<!-- 修正後 -->
+<IconButton onClick={onSettingsClick} title={$_('header.settings')}>
+  <SettingsIcon />
+</IconButton>
+```
+
+**Breadcrumbs.svelte:**
+
+```svelte
+<!-- 修正前 -->
+<button class="breadcrumb-button" on:click={crumb.action}>
+  {#if index === 0}
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" ...>
+      <!-- 長いSVGパス -->
+    </svg>
+  {:else}
+    {crumb.label}
+  {/if}
+</button>
+
+<!-- 修正後 -->
+{#if index === 0}
+  <IconButton onClick={crumb.action} title={$_('breadcrumbs.goHome')}>
+    <HomeIcon />
+  </IconButton>
+{:else}
+  <button class="breadcrumb-button" on:click={crumb.action}>
+    {crumb.label}
+  </button>
+{/if}
+```
+
+**ShareButton.svelte:**
+
+```svelte
+<!-- 修正前 -->
+<button class="share-button" on:click={toggleMenu}>
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" ...>
+    <!-- 長いSVGパス -->
+  </svg>
+</button>
+<div class="share-menu">
+  <button class="menu-item" on:click={handleCopyUrl}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" ...>
+      <!-- 長いSVGパス -->
+    </svg>
+    <span>{$_('share.copyUrl')}</span>
+  </button>
+  <!-- 他のメニューアイテム -->
+</div>
+
+<!-- 修正後 -->
+<IconButton onClick={toggleMenu} title={$_('share.title')}>
+  <ShareIcon />
+</IconButton>
+<div class="share-menu">
+  <button class="menu-item" on:click={handleCopyUrl}>
+    <LinkIcon />
+    <span>{$_('share.copyUrl')}</span>
+  </button>
+  <!-- 他のメニューアイテム -->
+</div>
+```
+
+**SaveButton.svelte:**
+
+```svelte
+<!-- 修正前 -->
+<button type="button" class="primary save-button" on:click={onSave}>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" ...>
+    <!-- 長いSVGパス -->
+  </svg>
+  {#if isDirty}
+    <span class="notification-badge"></span>
+  {/if}
+</button>
+
+<!-- 修正後 -->
+<div class="save-button-wrapper">
+  <IconButton onClick={onSave} title={$_('common.save')} variant="primary">
+    <SaveIcon />
+  </IconButton>
+  {#if isDirty}
+    <span class="notification-badge"></span>
+  {/if}
+</div>
+```
+
+**フッターコンポーネント（HomeFooter, NoteFooter, EditorFooter, PreviewFooter）:**
+
+```svelte
+<!-- 修正前 -->
+<button type="button" on:click={onDelete} {disabled}>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" ...>
+    <!-- 長いSVGパス -->
+  </svg>
+</button>
+
+<!-- 修正後 -->
+<IconButton onClick={onDelete} title={$_('footer.deleteLeaf')} {disabled}>
+  <DeleteIcon />
+</IconButton>
+```
+
+#### 4. Footer.svelteの簡略化
+
+**不要なグローバルスタイルを削除:**
+
+```css
+/* 削除されたスタイル（約30行） */
+:global(.footer-fixed button) {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+:global(.footer-fixed button:hover) {
+  opacity: 0.7;
+}
+
+:global(.footer-fixed button.primary) {
+  color: var(--accent-color);
+}
+
+:global(.footer-fixed button svg) {
+  width: 18px;
+  height: 18px;
+}
+
+:global(.footer-fixed button:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:global(.footer-fixed .button-icon) {
+  margin: 0;
+}
+```
+
+これらのスタイルはすべて`IconButton.svelte`に集約されました。
+
+### 成果
+
+**コード削減:**
+
+- **517行削除** → **464行追加** = **差し引き53行削減**
+- SVG定義の重複削減（約400行相当）
+- Footer.svelteから約30行のグローバルスタイルを削除
+
+**ファイル数の変化:**
+
+- コンポーネント数: 22個 → 38個
+  - IconButtonコンポーネント: 1個
+  - アイコンコンポーネント: 14個
+  - 既存コンポーネントの改修: 8個
+- 総ファイル数: 38個 → 56個
+
+**スタイルの統一:**
+
+- アイコンサイズ: 全て18pxに統一
+- ホバー効果: 全て`opacity: 0.7`に統一
+- 色: var(--text-primary)（保存ボタンのみvar(--accent-color)）
+
+**メンテナンス性の向上:**
+
+- **1箇所の修正で全体に反映**: IconButton.svelteを修正するだけで、全ボタンのスタイルが変更される
+- **一貫性の保証**: すべてのボタンが同じスタイル・動作を持つ
+- **新しいボタン追加が容易**: アイコンコンポーネントを作成して`<IconButton>`に渡すだけ
+- **型安全性**: TypeScriptによるpropsの型チェック
+
+**再利用性の向上:**
+
+- IconButtonは他のプロジェクトでも再利用可能
+- アイコンコンポーネントは独立しており、どこでも使用可能
+- `variant`プロパティにより、様々なスタイルに対応可能
+
+### 設計原則
+
+**コンポーネントの責務分離:**
+
+- **IconButton**: ボタンの挙動とスタイルを担当
+- **アイコンコンポーネント**: SVG定義のみを担当
+- **親コンポーネント**: イベントハンドリングとビジネスロジックを担当
+
+**Composition over Configuration:**
+
+- 複雑な設定より、シンプルな組み合わせを優先
+- `<slot>`により柔軟な拡張性を実現
+- variantは最小限（default/primary）
+
+---
+
 ## まとめ
 
 SimplestNote.mdは、継続的なリファクタリングにより以下を達成しました：
@@ -1141,6 +1490,7 @@ SimplestNote.mdは、継続的なリファクタリングにより以下を達�
 - **Version 3.0**: 約2,178行の15ファイル
 - **Version 5.0**: 完全な左右対称設計（約100行削減）
 - **Version 6.0**: 約6,300行の38ファイル（22コンポーネント、13モジュール）
+- **Version 6.1**: 約8,100行の56ファイル（38コンポーネント、14モジュール）
 
 ### リファクタリングの成果
 
@@ -1154,6 +1504,7 @@ SimplestNote.mdは、継続的なリファクタリングにより以下を達�
 8. **汎用化**: ジェネリック型による再利用性向上
 9. **UI一貫性**: 共通コンポーネントによる統一
 10. **国際化対応**: svelte-i18nによる多言語サポート
+11. **ボタン共通化**: IconButton + 14アイコン（約53行削減、SVG重複約400行削減）
 
 ### 設計原則
 

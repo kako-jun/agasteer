@@ -46,10 +46,30 @@ SimplestNote.mdは、**コンポーネントベースアーキテクチャ**を�
          │         ├─── BackgroundCustomizer.svelte
          │         └─── GitHubSettings.svelte
          │
+         ├─── Buttons
+         │    ├─── IconButton.svelte
+         │    ├─── SaveButton.svelte
+         │    └─── ShareButton.svelte
+         │
+         ├─── Icons (14個)
+         │    ├─── SettingsIcon.svelte
+         │    ├─── HomeIcon.svelte
+         │    ├─── EditIcon.svelte
+         │    ├─── ShareIcon.svelte
+         │    ├─── SaveIcon.svelte
+         │    ├─── DeleteIcon.svelte
+         │    ├─── DownloadIcon.svelte
+         │    ├─── EyeIcon.svelte
+         │    ├─── FolderPlusIcon.svelte
+         │    ├─── FilePlusIcon.svelte
+         │    ├─── LinkIcon.svelte
+         │    ├─── CopyIcon.svelte
+         │    ├─── UploadIcon.svelte
+         │    └─── FileEditIcon.svelte
+         │
          ├─── Shared Components
          │    ├─── MarkdownEditor.svelte
-         │    ├─── NoteCard.svelte
-         │    └─── SaveButton.svelte
+         │    └─── NoteCard.svelte
          │
          └─── Utilities
               ├─── breadcrumbs.ts
@@ -80,10 +100,10 @@ SimplestNote.mdは、**コンポーネントベースアーキテクチャ**を�
    │   API    │        │          │        │ Storage  │
    └──────────┘        └──────────┘        └──────────┘
 
-総行数: 約6,300行（コメント・空行含む）
-総ファイル数: 38個（.svelte + .ts）
-コンポーネント数: 22個
-libモジュール数: 13個
+総行数: 約8,100行（コメント・空行含む）
+総ファイル数: 56個（.svelte + .ts）
+コンポーネント数: 38個（23個の一般 + 14個のアイコン + IconButton）
+libモジュール数: 14個
 ```
 
 ---
@@ -616,7 +636,7 @@ SimplestNote.mdは、Svelteのリアクティブシステムとコンポーネ�
 
 **主要な特徴:**
 
-- 約6,300行のコード（38ファイル、22コンポーネント、13モジュール）
+- 約8,100行のコード（56ファイル、38コンポーネント、14モジュール）
 - 完全なブラウザベース実装
 - GitHub API直接統合
 - IndexedDB/LocalStorageによる永続化
@@ -624,14 +644,16 @@ SimplestNote.mdは、Svelteのリアクティブシステムとコンポーネ�
 - カスタムフォント・背景画像機能
 - 国際化対応（日本語・英語）
 - 徹底的なコード重複削減（DRY原則）
+- 共通化されたIconButtonとアイコンコンポーネント
 
 **2025-11-24 - 大規模リファクタリング:**
 
-- 約372行のコード削減
-- コンポーネント分割（15個→22個）
-- モジュール化（7個→13個）
+- 約372行のコード削減（状態管理・ナビゲーション統一）
+- コンポーネント分割（15個→38個）
+- モジュール化（7個→14個）
 - 汎用ユーティリティ関数の導入
 - 完全な左右対称設計
+- ボタン共通化（IconButton + 14アイコン）
 
 **2025-11-24 - パフォーマンス最適化:**
 
