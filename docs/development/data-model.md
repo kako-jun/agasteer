@@ -75,11 +75,16 @@ type View = 'home' | 'settings' | 'edit' | 'folder'
 
 ### データの一意性とリレーション
 
-```
-Folder (id: uuid-1, parentId: null)         // ルートフォルダ
-   ├─ Folder (id: uuid-2, parentId: uuid-1) // サブフォルダ
-   │    └─ Note (id: uuid-5, folderId: uuid-2)
-   └─ Note (id: uuid-3, folderId: uuid-1)
+```mermaid
+graph TB
+    F1["Folder<br/>(id: uuid-1, parentId: null)<br/>ルートフォルダ"]
+    F2["Folder<br/>(id: uuid-2, parentId: uuid-1)<br/>サブフォルダ"]
+    N3["Note<br/>(id: uuid-3, folderId: uuid-1)"]
+    N5["Note<br/>(id: uuid-5, folderId: uuid-2)"]
+
+    F1 --> F2
+    F1 --> N3
+    F2 --> N5
 ```
 
 **UUIDの使用理由:**

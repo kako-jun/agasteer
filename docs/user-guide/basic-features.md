@@ -8,13 +8,20 @@
 
 SimplestNote.mdは2階層の構造でノートを管理します。
 
-```
-ノート（フォルダ）
-├── リーフ（Markdownファイル）
-├── リーフ（Markdownファイル）
-└── サブノート（フォルダ）
-    ├── リーフ（Markdownファイル）
-    └── リーフ（Markdownファイル）
+```mermaid
+graph TB
+    note["ノート（フォルダ）"]
+    leaf1["リーフ（Markdownファイル）"]
+    leaf2["リーフ（Markdownファイル）"]
+    subnote["サブノート（フォルダ）"]
+    leaf3["リーフ（Markdownファイル）"]
+    leaf4["リーフ（Markdownファイル）"]
+
+    note --> leaf1
+    note --> leaf2
+    note --> subnote
+    subnote --> leaf3
+    subnote --> leaf4
 ```
 
 - **ノート**: フォルダのような役割（最大2階層まで）

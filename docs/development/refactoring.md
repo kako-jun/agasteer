@@ -1544,9 +1544,15 @@ Version 6.2では、SettingsView.svelteを完全にセクションごとのコ�
 <!-- 約490行 -->
 <script lang="ts">
   // 3つのハンドラー関数（33行）
-  function handleToolNameInput(event: Event) { ... }
-  function handleLocaleChange(event: Event) { ... }
-  function handleVimModeChange(event: Event) { ... }
+  function handleToolNameInput(event: Event) {
+    /* ... */
+  }
+  function handleLocaleChange(event: Event) {
+    /* ... */
+  }
+  function handleVimModeChange(event: Event) {
+    /* ... */
+  }
 </script>
 
 <section class="settings-container">

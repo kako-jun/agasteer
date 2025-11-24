@@ -9,10 +9,6 @@
 </p>
 
 <p align="center">
-  作者: <a href="https://github.com/kako-jun">kako-jun</a>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square" alt="Version 1.0.0">
   <img src="https://img.shields.io/badge/Made%20with-Svelte-FF3E00?style=flat-square&logo=svelte" alt="Made with Svelte">
   <img src="https://img.shields.io/badge/Build-Vite-646CFF?style=flat-square&logo=vite" alt="Build with Vite">
@@ -70,32 +66,13 @@ CodeMirror 6による快適な編集環境を提供します。
 
 ## 🚀 クイックスタート
 
-### デモサイト
+すぐに試せるデモサイトを用意しています：
 
-すぐに試せます：[https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+**[https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)**
 
-### セットアップ
+ブラウザで開くだけで、すぐにノートの作成・編集が可能です。
 
-```bash
-# リポジトリをクローン
-git clone https://github.com/kako-jun/simplest-note-md.git
-cd simplest-note-md
-
-# 依存パッケージをインストール
-npm install
-
-# 開発サーバーを起動
-npm run dev
-```
-
-ブラウザで `http://localhost:5173` を開きます。
-
-### 本番環境用ビルド
-
-```bash
-npm run build
-npm run preview
-```
+開発環境のセットアップについては、[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。
 
 ---
 
@@ -131,20 +108,6 @@ SimplestNote.mdの技術仕様と開発ガイドです。
 
 ---
 
-## 🛠️ 技術スタック
-
-| 技術            | バージョン | 役割                                |
-| --------------- | ---------- | ----------------------------------- |
-| **Svelte**      | 4.2.19     | リアクティブUIフレームワーク        |
-| **TypeScript**  | 5.7.2      | 型安全性の提供                      |
-| **Vite**        | 5.4.10     | ビルドツール & 開発サーバー         |
-| **CodeMirror**  | 6.0.1      | 高機能エディタ                      |
-| **marked**      | 17+        | マークダウン→HTML変換（プレビュー） |
-| **DOMPurify**   | 3+         | XSSサニタイゼーション               |
-| **svelte-i18n** | 4+         | 国際化（i18n）対応                  |
-
----
-
 ## 🤝 コントリビューション
 
 Issue、Pull Requestを歓迎します！詳しくは[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。
@@ -169,6 +132,4 @@ Issue、Pull Requestを歓迎します！詳しくは[CONTRIBUTING.md](./CONTRIB
 
 ---
 
-**SimplestNote.md** - シンプルで強力なMarkdownノート管理
-
-Version 1.0.0 | MIT License | © 2025 kako-jun
+© kako-jun

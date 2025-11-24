@@ -390,14 +390,22 @@ function createNote(parentId?: string) {
 
 ### 階層構造
 
-```
-ホーム
-├── ノート1 (ルートノート)
-│   ├── サブノート1 ← サブノート作成可能
-│   │   └── リーフ ← サブノート作成不可、リーフのみ作成可能
-│   └── サブノート2
-└── ノート2 (ルートノート)
-    └── サブノート3
+```mermaid
+graph TB
+    home["ホーム"]
+    note1["ノート1<br/>(ルートノート)"]
+    note2["ノート2<br/>(ルートノート)"]
+    subnote1["サブノート1<br/>サブノート作成可能"]
+    subnote2["サブノート2"]
+    subnote3["サブノート3"]
+    leaf["リーフ<br/>サブノート作成不可<br/>リーフのみ作成可能"]
+
+    home --> note1
+    home --> note2
+    note1 --> subnote1
+    note1 --> subnote2
+    note2 --> subnote3
+    subnote1 --> leaf
 ```
 
 ---

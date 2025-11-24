@@ -16,47 +16,6 @@ SimplestNote.mdはすぐに試すことができます。
 
 ---
 
-## 💻 開発環境のセットアップ
-
-自分の環境で動かす場合は、以下の手順でセットアップできます。
-
-### 1. リポジトリをクローン
-
-```bash
-git clone https://github.com/kako-jun/simplest-note-md.git
-cd simplest-note-md
-```
-
-### 2. 依存パッケージをインストール
-
-```bash
-npm install
-```
-
-### 3. 開発サーバーを起動
-
-```bash
-npm run dev
-```
-
-ブラウザで `http://localhost:5173` を開きます。
-
-### 4. 本番環境用にビルド
-
-```bash
-npm run build
-```
-
-`dist/`ディレクトリに出力されます。
-
-### 5. ビルド結果をプレビュー
-
-```bash
-npm run preview
-```
-
----
-
 ## ⚙️ 初期設定
 
 SimplestNote.mdを初めて使う際の設定手順です。
