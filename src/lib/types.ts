@@ -13,8 +13,6 @@ export type View = 'home' | 'settings' | 'edit' | 'note' | 'preview'
 
 export interface Settings {
   token: string
-  username: string
-  email: string
   repoName: string
   theme: ThemeType
   toolName: string

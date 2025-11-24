@@ -21,15 +21,19 @@ const SETTINGS_KEY = 'simplest-md-note/settings'
 ```json
 {
   "token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "username": "yamada",
-  "email": "yamada@example.com",
   "repoName": "yamada/my-notes",
   "theme": "yomi",
   "toolName": "SimplestNote.md",
-  "customBgPrimary": "#ffffff",
-  "customAccentColor": "#0f766e"
+  "locale": "ja",
+  "hasCustomFont": false,
+  "hasCustomBackgroundLeft": false,
+  "hasCustomBackgroundRight": false,
+  "backgroundOpacityLeft": 0.1,
+  "backgroundOpacityRight": 0.1
 }
 ```
+
+**注意**: コミット時のユーザー名とメールアドレスは固定値（`simplest-note-md` / `simplest-note-md@example.com`）を使用するため、設定に含まれません。
 
 ### 保存タイミング
 

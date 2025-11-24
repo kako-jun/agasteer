@@ -7,7 +7,7 @@
   export let pullRunning: boolean = false
   export let onPull: (isInitial?: boolean) => void
 
-  type TextSettingKey = 'repoName' | 'token' | 'username' | 'email'
+  type TextSettingKey = 'repoName' | 'token'
 
   function handleTextInput(key: TextSettingKey, event: Event) {
     const value = (event.target as HTMLInputElement).value
@@ -20,45 +20,52 @@
   <h3>{$_('settings.github.title')}</h3>
   <div class="form-row">
     <div class="form-field">
-      <label for="repo-name">{$_('settings.github.repoName')}</label>
-      <input
-        id="repo-name"
-        type="text"
-        bind:value={settings.repoName}
-        on:input={(e) => handleTextInput('repoName', e)}
-        placeholder={$_('settings.github.repoPlaceholder')}
-      />
+      <label for="repo-name">{$_('settings.github.repoName')} <span class="required">*</span></label
+      >
+      <div class="input-with-button">
+        <input
+          id="repo-name"
+          type="text"
+          bind:value={settings.repoName}
+          on:input={(e) => handleTextInput('repoName', e)}
+          placeholder={$_('settings.github.repoPlaceholder')}
+        />
+        {#if settings.repoName}
+          <a
+            href="https://github.com/{settings.repoName}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="repo-link-button"
+            title="Open repository on GitHub"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+          </a>
+        {/if}
+      </div>
     </div>
     <div class="form-field">
-      <label for="github-token">{$_('settings.github.token')}</label>
+      <label for="github-token">{$_('settings.github.token')} <span class="required">*</span></label
+      >
       <input
         id="github-token"
         type="password"
         bind:value={settings.token}
         on:input={(e) => handleTextInput('token', e)}
         placeholder={$_('settings.github.tokenPlaceholder')}
-      />
-    </div>
-  </div>
-  <div class="form-row">
-    <div class="form-field">
-      <label for="commit-username">{$_('settings.github.username')}</label>
-      <input
-        id="commit-username"
-        type="text"
-        bind:value={settings.username}
-        on:input={(e) => handleTextInput('username', e)}
-        placeholder={$_('settings.github.usernamePlaceholder')}
-      />
-    </div>
-    <div class="form-field">
-      <label for="commit-email">{$_('settings.github.email')}</label>
-      <input
-        id="commit-email"
-        type="email"
-        bind:value={settings.email}
-        on:input={(e) => handleTextInput('email', e)}
-        placeholder={$_('settings.github.emailPlaceholder')}
       />
     </div>
   </div>
@@ -110,9 +117,44 @@
     font-weight: 500;
   }
 
+  .required {
+    color: #e74c3c;
+    font-weight: bold;
+  }
+
+  .input-with-button {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .input-with-button input {
+    flex: 1;
+  }
+
+  .repo-link-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .repo-link-button:hover {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+  }
+
   input[type='text'],
-  input[type='password'],
-  input[type='email'] {
+  input[type='password'] {
     padding: 0.5rem;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -122,8 +164,7 @@
   }
 
   input[type='text']:focus,
-  input[type='password']:focus,
-  input[type='email']:focus {
+  input[type='password']:focus {
     outline: none;
     border-color: var(--accent-color);
   }

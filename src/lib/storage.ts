@@ -16,8 +16,6 @@ const BACKGROUNDS_STORE = 'backgrounds'
 
 export const defaultSettings: Settings = {
   token: '',
-  username: '',
-  email: '',
   repoName: '',
   theme: 'yomi',
   toolName: 'SimplestNote.md',

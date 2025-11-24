@@ -606,3 +606,148 @@ dist/assets/en-DLi_lTuS.js    2.42 kB │ gzip:  1.10 kB
 - **XSS対策**: 翻訳文字列はエスケープ処理済み
 - **JSONバリデーション**: svelte-i18nが型安全性を保証
 - **静的ファイル**: 翻訳ファイルは静的JSON（実行コードなし）
+
+---
+
+## その他のUI改善
+
+### GitHub設定画面の改善
+
+#### 必須項目マーク
+
+Repository (owner/repo)とGitHub Tokenの入力欄に赤いアスタリスク（\*）で必須であることを表示。
+
+```svelte
+<label for="repo-name">
+  {$_('settings.github.repoName')} <span class="required">*</span>
+</label>
+```
+
+```css
+.required {
+  color: #e74c3c;
+  font-weight: bold;
+}
+```
+
+#### リポジトリを開くボタン
+
+Repository入力欄の右にGitHubリポジトリを直接開けるリンクボタンを配置。
+
+```svelte
+<div class="input-with-button">
+  <input type="text" bind:value={settings.repoName} />
+  {#if settings.repoName}
+    <a
+      href="https://github.com/{settings.repoName}"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="repo-link-button"
+      title="Open repository on GitHub"
+    >
+      <svg><!-- 外部リンクアイコン --></svg>
+    </a>
+  {/if}
+</div>
+```
+
+**機能:**
+
+- リポジトリ名が入力されている場合のみ表示
+- 新しいタブでGitHubリポジトリを開く
+- ホバー時にアクセントカラーに変化
+
+#### スマホ対応
+
+画面幅600px以下では、GitHub設定の入力欄を縦1列に配置。
+
+```css
+@media (max-width: 600px) {
+  .form-row {
+    flex-direction: column;
+  }
+}
+```
+
+### GitHub Sponsorsリンク
+
+設定画面の最下部にGitHub Sponsorsへのリンクボタンを配置。
+
+```svelte
+<div class="sponsor-section">
+  <a
+    href="https://github.com/sponsors/kako-jun"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="sponsor-link"
+  >
+    <svg class="heart-icon"><!-- ハートアイコン --></svg>
+    <span>Sponsor on GitHub</span>
+  </a>
+</div>
+```
+
+**デザイン:**
+
+- 他のボタンと統一したスタイル
+- ハートアイコンにビートアニメーション（鼓動エフェクト）
+- ホバー時にアクセントカラーに変化
+
+```css
+@keyframes heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  10%,
+  30% {
+    transform: scale(1.1);
+  }
+  20%,
+  40% {
+    transform: scale(1);
+  }
+}
+```
+
+### プッシュカウントの表示改善
+
+ホーム画面のPush回数表示に3桁カンマ区切りを適用。
+
+```svelte
+<div class="stat-value">{$metadata.pushCount.toLocaleString()}</div>
+```
+
+**例:**
+
+- 100 → 100
+- 1,000 → 1,000
+- 1,234,567 → 1,234,567
+
+### Languageドロップダウンのカスタム矢印
+
+ブラウザデフォルトの矢印を無効化し、カスタムCSS矢印を使用。テーマカラーに合わせて変化。
+
+```css
+select {
+  appearance: none;
+  padding-right: 2rem;
+}
+
+.select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--text-primary);
+}
+```
+
+**メリット:**
+
+- 右端からの距離を完全にコントロール可能
+- テーマの色に自動的に追従
+- 一貫したデザイン

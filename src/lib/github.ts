@@ -145,8 +145,8 @@ export async function saveToGitHub(
     message: 'auto-sync',
     content: encodedContent,
     committer: {
-      name: settings.username || 'SimplestNote User',
-      email: settings.email || 'user@example.com',
+      name: 'simplest-note-md',
+      email: 'simplest-note-md@example.com',
     },
   }
 
@@ -310,12 +310,12 @@ export async function pushAllWithTreeAPI(
       // エラーは無視（初回Pushの場合）
     }
 
-    // metadata.jsonを生成
+    // metadata.jsonを生成（pushCountはまだインクリメントしない）
     const metadata: Metadata = {
       version: 1,
       notes: {},
       leaves: {},
-      pushCount: currentPushCount + 1,
+      pushCount: currentPushCount,
     }
 
     // ノートのメタ情報を追加
@@ -336,20 +336,6 @@ export async function pushAllWithTreeAPI(
         order: leaf.order,
       }
     }
-
-    const metadataContent = JSON.stringify(metadata, null, 2)
-    const metadataPath = 'notes/metadata.json'
-    const metadataExisting = existingNotesFiles.get(metadataPath)
-    const metadataSha = await calculateGitBlobSha(metadataContent)
-
-    treeItems.push({
-      path: metadataPath,
-      mode: '100644',
-      type: 'blob',
-      ...(metadataExisting === metadataSha
-        ? { sha: metadataExisting }
-        : { content: metadataContent }),
-    })
 
     // notes/.gitkeep を追加（notesディレクトリが空でも削除されないように）
     const notesGitkeepPath = 'notes/.gitkeep'
@@ -405,6 +391,25 @@ export async function pushAllWithTreeAPI(
       })
     }
 
+    // 変更があるか確認（contentを使っているアイテムがあるか）
+    const hasChanges = treeItems.some((item) => 'content' in item)
+    if (!hasChanges) {
+      // 変更がない場合は何もせずに成功を返す
+      return { success: true, message: '✅ 変更なし（Pushスキップ）' }
+    }
+
+    // 変更がある場合のみpushCountをインクリメント
+    metadata.pushCount = currentPushCount + 1
+    const metadataContent = JSON.stringify(metadata, null, 2)
+
+    // metadata.jsonをtreeItemsに追加
+    treeItems.push({
+      path: 'notes/metadata.json',
+      mode: '100644',
+      type: 'blob',
+      content: metadataContent,
+    })
+
     // 6. 新しいTreeを作成（base_treeなし、全ファイルを明示的に指定）
     const newTreeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
       method: 'POST',
@@ -431,12 +436,12 @@ export async function pushAllWithTreeAPI(
           tree: newTreeSha,
           parents: [currentCommitSha],
           committer: {
-            name: settings.username || 'SimplestNote User',
-            email: settings.email || 'user@example.com',
+            name: 'simplest-note-md',
+            email: 'simplest-note-md@example.com',
           },
           author: {
-            name: settings.username || 'SimplestNote User',
-            email: settings.email || 'user@example.com',
+            name: 'simplest-note-md',
+            email: 'simplest-note-md@example.com',
           },
         }),
       }

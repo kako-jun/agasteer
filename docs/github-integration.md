@@ -138,6 +138,48 @@ async function handleSaveToGitHub() {
 }
 ```
 
+### コミッター情報の固定値
+
+コミット時のユーザー名とメールアドレスは固定値を使用。設定画面での入力は不要。
+
+```typescript
+{
+  message: 'auto-sync',
+  tree: newTreeSha,
+  parents: [currentCommitSha],
+  committer: {
+    name: 'simplest-note-md',
+    email: 'simplest-note-md@example.com',
+  },
+  author: {
+    name: 'simplest-note-md',
+    email: 'simplest-note-md@example.com',
+  },
+}
+```
+
+### Push最適化（変更がない場合はスキップ）
+
+実質的な変更がない場合（すべてのファイルのSHAが既存と一致）は、コミットを作成せずに早期リターン。pushCountもインクリメントされない。
+
+```typescript
+// 変更があるか確認（contentを使っているアイテムがあるか）
+const hasChanges = treeItems.some((item) => 'content' in item)
+if (!hasChanges) {
+  // 変更がない場合は何もせずに成功を返す
+  return { success: true, message: '✅ 変更なし（Pushスキップ）' }
+}
+
+// 変更がある場合のみpushCountをインクリメント
+metadata.pushCount = currentPushCount + 1
+```
+
+**メリット:**
+
+- 無駄なコミットを作成しない
+- pushCountが不必要にインクリメントされない
+- GitHubのコミット履歴が整理される
+
 ---
 
 ## Pull処理

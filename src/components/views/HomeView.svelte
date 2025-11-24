@@ -21,7 +21,7 @@
   <div class="statistics">
     <div class="stat-item">
       <div class="stat-label">{$_('home.pushCount')}</div>
-      <div class="stat-value">{$metadata.pushCount}</div>
+      <div class="stat-value">{$metadata.pushCount.toLocaleString()}</div>
     </div>
   </div>
 

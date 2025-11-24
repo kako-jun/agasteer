@@ -13,14 +13,19 @@ SimplestNote.mdのデータモデル、型定義、状態管理について説�
 ```typescript
 type Settings = {
   token: string // GitHub Personal Access Token
-  username: string // コミット用ユーザー名
-  email: string // コミット用メールアドレス
   repoName: string // "owner/repo"形式
-  theme: 'light' | 'dark' | 'blackboard' | 'kawaii' | 'custom'
-  customBgPrimary: string // カスタムテーマ背景色
-  customAccentColor: string // カスタムテーマアクセントカラー
+  theme: ThemeType // 'yomi' | 'campus' | 'greenboard' | 'whiteboard' | 'dotsD' | 'dotsF'
+  toolName: string // アプリケーション名（タブタイトル）
+  locale: Locale // 'ja' | 'en'
+  hasCustomFont?: boolean // カスタムフォント適用フラグ
+  hasCustomBackgroundLeft?: boolean // 左ペイン背景画像適用フラグ
+  hasCustomBackgroundRight?: boolean // 右ペイン背景画像適用フラグ
+  backgroundOpacityLeft?: number // 左ペイン背景画像透明度
+  backgroundOpacityRight?: number // 右ペイン背景画像透明度
 }
 ```
+
+**注意**: コミット時のユーザー名とメールアドレスは固定値（`simplest-note-md` / `simplest-note-md@example.com`）を使用します。
 
 #### `Folder`
 
