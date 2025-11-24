@@ -142,11 +142,10 @@
    - ヘッダー右上の⚙️アイコンをクリック
 
 2. **GitHub連携を設定**
-   - **Personal Access Token**: GitHubで生成したトークンを入力
+   - **Personal Access Token**: GitHubで生成したトークンを入力（必須）
      - [トークンの作成方法](#github-personal-access-tokenの取得)
-   - **ユーザー名**: GitHubのコミット履歴に表示される名前
-   - **メールアドレス**: コミット情報に使用されるメール
-   - **リポジトリ名**: `owner/repo`形式（例: `yamada/my-notes`）
+   - **リポジトリ名**: `owner/repo`形式（例: `yamada/my-notes`）（必須）
+   - コミット情報（ユーザー名・メールアドレス）は自動設定されます
 
 3. **テーマを選択**
    - yomi, campus, greenboard, whiteboard, dotsD, dotsFから選択

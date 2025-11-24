@@ -611,6 +611,25 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
       return parentId || ''
     }
 
+    // まず.gitkeepファイルから空ノートを復元
+    const gitkeepPaths = entries.filter(
+      (e) =>
+        e.type === 'blob' &&
+        e.path.startsWith('notes/') &&
+        e.path.endsWith('.gitkeep') &&
+        e.path !== 'notes/.gitkeep' // notes/.gitkeepは除外（ルートディレクトリ用）
+    )
+
+    for (const entry of gitkeepPaths) {
+      const relativePath = entry.path.replace(/^notes\//, '').replace(/\/\.gitkeep$/, '')
+      const parts = relativePath.split('/').filter(Boolean)
+      if (parts.length === 0) continue
+
+      // .gitkeepがあるディレクトリのノートを復元
+      ensureNotePath(parts)
+    }
+
+    // 次に.mdファイル（リーフ）を復元
     const notePaths = entries.filter(
       (e) =>
         e.type === 'blob' &&
