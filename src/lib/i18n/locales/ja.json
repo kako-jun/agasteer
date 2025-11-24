@@ -74,6 +74,7 @@
     "extras": {
       "title": "おまけ",
       "language": "言語",
+      "vimMode": "Vimモードを有効にする",
       "theme": {
         "title": "テーマ選択",
         "yomi": "黄泉",

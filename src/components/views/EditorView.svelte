@@ -4,8 +4,10 @@
 
   export let leaf: Leaf
   export let theme: ThemeType
+  export let vimMode: boolean = false
   export let onContentChange: (content: string, leafId: string) => void
   export let onSave: () => void
+  export let onClose: (() => void) | null = null
   export let onDownload: (leafId: string) => void
   export let onDelete: (leafId: string) => void
   export let disabled: boolean = false
@@ -38,7 +40,10 @@
     bind:this={markdownEditor}
     content={leaf.content}
     {theme}
+    {vimMode}
     onChange={handleContentChange}
+    {onSave}
+    {onClose}
     {onScroll}
   />
 </section>

@@ -20,6 +20,7 @@ export const defaultSettings: Settings = {
   theme: 'yomi',
   toolName: 'SimplestNote.md',
   locale: 'en', // デフォルトは英語
+  vimMode: false, // デフォルトはVimモードオフ
 }
 
 /**

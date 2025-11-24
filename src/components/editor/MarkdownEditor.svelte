@@ -5,7 +5,10 @@
 
   export let content: string
   export let theme: ThemeType
+  export let vimMode: boolean = false
   export let onChange: (newContent: string) => void
+  export let onSave: (() => void) | null = null
+  export let onClose: (() => void) | null = null
   export let onScroll: ((scrollTop: number, scrollHeight: number) => void) | null = null
 
   let editorContainer: HTMLDivElement
@@ -23,6 +26,8 @@
   let historyKeymap: any
   let markdown: any
   let basicSetup: any
+  let vim: any
+  let Vim: any
 
   // 外部からスクロール位置を設定する関数
   export function scrollTo(scrollTop: number) {
@@ -49,12 +54,14 @@
       { defaultKeymap: dk, history: h, historyKeymap: hk },
       { markdown: md },
       { basicSetup: bs },
+      { vim: v, Vim: V },
     ] = await Promise.all([
       import('@codemirror/state'),
       import('@codemirror/view'),
       import('@codemirror/commands'),
       import('@codemirror/lang-markdown'),
       import('codemirror'),
+      import('@replit/codemirror-vim'),
     ])
 
     EditorState = ES
@@ -65,6 +72,8 @@
     historyKeymap = hk
     markdown = md
     basicSetup = bs
+    vim = v
+    Vim = V
     isLoading = false
   }
 
@@ -160,6 +169,39 @@
       }),
     ]
 
+    // Vimモードが有効な場合は追加
+    if (vimMode && vim && Vim) {
+      // 拡張を追加してから定義する必要がある
+      extensions.push(vim())
+
+      // エディタ初期化後にVimコマンドを定義（遅延実行）
+      setTimeout(() => {
+        if (!Vim) return
+
+        // :w コマンドをカスタマイズしてGitHub Pushを実行
+        if (onSave) {
+          Vim.defineEx('write', 'w', function () {
+            onSave()
+          })
+          Vim.defineEx('wq', 'wq', function () {
+            onSave()
+            // :wq の場合は保存後に閉じる
+            if (onClose) {
+              setTimeout(() => {
+                onClose()
+              }, 100)
+            }
+          })
+        }
+        // :q コマンドをカスタマイズして親ノートに遷移
+        if (onClose) {
+          Vim.defineEx('quit', 'q', function () {
+            onClose()
+          })
+        }
+      }, 100)
+    }
+
     // ダーク系テーマの場合はエディタの配色も揃える
     if (darkThemes.includes(theme)) {
       extensions.push(createEditorDarkTheme())
@@ -195,8 +237,8 @@
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
-  // テーマ変更時にエディタを再初期化
-  $: if (editorView && theme) {
+  // テーマまたはVimモード変更時にエディタを再初期化
+  $: if (editorView && (theme || vimMode !== undefined)) {
     editorView.destroy()
     editorView = null
     initializeEditor()
@@ -300,5 +342,28 @@
 
   :global(.cm-content) {
     padding: 0.5rem !important;
+  }
+
+  /* Vimコマンドラインのスタイル */
+  :global(.cm-vim-panel) {
+    padding: 0.5rem 0.5rem 0.4rem 0.5rem;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: 'Courier New', monospace !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    border-top: 1px solid var(--border-color);
+  }
+
+  :global(.cm-vim-panel input) {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    color: var(--text-primary) !important;
+    font-family: 'Courier New', monospace !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    margin: 1px 0 0 0.25rem !important;
   }
 </style>

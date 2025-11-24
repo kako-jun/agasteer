@@ -17,6 +17,7 @@ export interface Settings {
   theme: ThemeType
   toolName: string
   locale: Locale
+  vimMode?: boolean
   hasCustomFont?: boolean
   hasCustomBackgroundLeft?: boolean
   hasCustomBackgroundRight?: boolean

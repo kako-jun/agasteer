@@ -74,6 +74,7 @@
     "extras": {
       "title": "Extras",
       "language": "Language",
+      "vimMode": "Enable Vim Mode",
       "theme": {
         "title": "Select Theme",
         "yomi": "Yomi",

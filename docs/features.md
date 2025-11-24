@@ -68,6 +68,89 @@ EditorView.updateListener.of((update) => {
 })
 ```
 
+### Vimモード
+
+#### 概要
+
+CodeMirror Vimプラグインを使用したVimキーバインディングをサポート。設定画面から有効/無効を切り替え可能。
+
+#### 有効化方法
+
+1. 設定画面を開く
+2. 「おまけ」セクションの「Vimモードを有効にする」チェックボックスをオン
+3. 設定はLocalStorageに保存され、次回起動時も維持される
+
+#### カスタムコマンド
+
+Vimモードでは、以下のカスタムコマンドが使用可能：
+
+| コマンド | 動作                   | 説明                                   |
+| -------- | ---------------------- | -------------------------------------- |
+| `:w`     | GitHub Push            | 現在のリーフをGitHubにプッシュ（保存） |
+| `:wq`    | Push後に親ノートへ遷移 | 保存して編集画面を閉じる               |
+| `:q`     | 親ノートへ遷移         | 保存せずに編集画面を閉じる             |
+
+#### メリット
+
+- **キーボードのみで完結**: マウス操作不要
+- **ブラウザのショートカットと競合しない**: Ctrl+Sなどと干渉しない
+- **Vimユーザーにとって自然な操作**: 標準的なVimコマンドで保存・終了が可能
+
+#### 実装
+
+```typescript
+// Vimモード有効時の拡張追加
+if (vimMode && vim && Vim) {
+  extensions.push(vim())
+
+  // エディタ初期化後にカスタムコマンドを定義
+  setTimeout(() => {
+    if (!Vim) return
+
+    // :w でGitHub Pushを実行
+    if (onSave) {
+      Vim.defineEx('write', 'w', function () {
+        onSave()
+      })
+      Vim.defineEx('wq', 'wq', function () {
+        onSave()
+        if (onClose) {
+          setTimeout(() => {
+            onClose()
+          }, 100)
+        }
+      })
+    }
+    // :q で親ノートに遷移
+    if (onClose) {
+      Vim.defineEx('quit', 'q', function () {
+        onClose()
+      })
+    }
+  }, 100)
+}
+```
+
+#### コマンドラインのスタイリング
+
+Vimコマンドライン（`:` 入力部分）のスタイルは、アプリのテーマに合わせて調整されます：
+
+```css
+.cm-vim-panel {
+  padding: 0.5rem 0.5rem 0.4rem 0.5rem;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1;
+  border-top: 1px solid var(--border-color);
+}
+
+.cm-vim-panel input {
+  margin: 1px 0 0 0.25rem; /* `:` と入力欄を垂直方向で揃える */
+}
+```
+
 ---
 
 ## パンくずナビゲーション

@@ -371,6 +371,16 @@
     }
   }
 
+  function closeLeaf(pane: Pane) {
+    const leaf = pane === 'left' ? leftLeaf : rightLeaf
+    if (!leaf) return
+
+    const parentNote = $notes.find((n) => n.id === leaf.noteId)
+    if (parentNote) {
+      selectNote(parentNote, pane)
+    }
+  }
+
   function togglePreview(pane: Pane) {
     if (pane === 'left') {
       if (leftView === 'edit') {
@@ -1112,9 +1122,11 @@
               bind:this={leftEditorView}
               leaf={leftLeaf}
               theme={$settings.theme}
+              vimMode={$settings.vimMode ?? false}
               disabled={isOperationsLocked || isPushing}
               onContentChange={updateLeafContent}
               onSave={handleSaveToGitHub}
+              onClose={() => closeLeaf('left')}
               onDownload={downloadLeafAsMarkdown}
               onDelete={(leafId) => deleteLeaf(leafId, 'left')}
               onScroll={handleLeftScroll}
@@ -1226,9 +1238,11 @@
               bind:this={rightEditorView}
               leaf={rightLeaf}
               theme={$settings.theme}
+              vimMode={$settings.vimMode ?? false}
               disabled={isOperationsLocked}
               onContentChange={updateLeafContent}
               onSave={handleSaveToGitHub}
+              onClose={() => closeLeaf('right')}
               onDownload={downloadLeafAsMarkdown}
               onDelete={(leafId) => deleteLeaf(leafId, 'right')}
               onScroll={handleRightScroll}
