@@ -870,3 +870,103 @@ URL.revokeObjectURL(url)
 
 - **原因**: ブラウザのポップアップブロック
 - **対策**: ユーザーアクション（ボタンクリック）から直接呼び出しているため通常は発生しない
+
+---
+
+## プレビュー画像シェア機能
+
+### 概要
+
+プレビュー表示時のシェアボタンの動作を、編集モードとプレビューモードで自動的に切り替えます。編集モードではMarkdownテキストをコピー、プレビューモードでは画像をクリップボードにコピー、またはWeb Share APIを使って他のアプリに直接共有できます。
+
+### 使用シーン
+
+- **スマホでLINEに送信**: プレビュー → シェア → 画像を共有 → LINEを選択
+- **デスクトップで画像コピー**: プレビュー → シェア → 画像をコピー → 他のアプリに貼り付け
+- **Markdownコピー**: 編集 → シェア → Markdownをコピー
+
+### 画像生成の共通化
+
+すべての画像関連機能（ダウンロード、クリップボード、共有）は `captureAsBlob()` という内部関数を共通で使用します。
+
+```typescript
+// 内部関数 - 画像生成ロジックを共通化
+async function captureAsBlob(): Promise<Blob | null>
+
+// この関数を呼び出す3つの機能
+export async function captureAsImage(filename: string) // ダウンロード
+export async function copyImageToClipboard() // クリップボード
+export async function shareImage(filename: string) // Web Share API
+```
+
+### Clipboard API実装
+
+```typescript
+export async function copyImageToClipboard(): Promise<void> {
+  const blob = await captureAsBlob()
+  if (!blob) return
+
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      'image/png': blob,
+    }),
+  ])
+}
+```
+
+### Web Share API実装
+
+```typescript
+export async function shareImage(filename: string): Promise<void> {
+  const blob = await captureAsBlob()
+  if (!blob) return
+
+  if (!navigator.share || !navigator.canShare) {
+    throw new Error('Web Share API is not supported')
+  }
+
+  const file = new File([blob], `${filename}.png`, { type: 'image/png' })
+  const shareData = { files: [file], title: filename }
+
+  if (navigator.canShare(shareData)) {
+    await navigator.share(shareData)
+  }
+}
+```
+
+### フォールバック処理
+
+```typescript
+try {
+  await previewView.shareImage(leaf.title)
+} catch (error: any) {
+  // Web Share API非対応時はクリップボードにコピー
+  if (error.message === 'Web Share API is not supported') {
+    await handleCopyImageToClipboard(pane)
+  } else if (error.name === 'AbortError') {
+    // ユーザーキャンセル時は何もしない
+  }
+}
+```
+
+### ブラウザ互換性
+
+#### Clipboard API（画像コピー）
+
+| ブラウザ       | 対応状況              |
+| -------------- | --------------------- |
+| Chrome/Edge    | ✅ 完全対応（v76+）   |
+| Firefox        | ✅ 完全対応（v87+）   |
+| Safari         | ✅ 完全対応（v13.1+） |
+| iOS Safari     | ✅ 対応（iOS 13.4+）  |
+| Android Chrome | ✅ 対応               |
+
+#### Web Share API（画像共有）
+
+| ブラウザ       | 対応状況               |
+| -------------- | ---------------------- |
+| Chrome/Edge    | ⚠️ デスクトップは制限  |
+| Firefox        | ❌ 非対応              |
+| Safari         | ✅ 対応（macOS 12.3+） |
+| iOS Safari     | ✅ 完全対応（iOS 14+） |
+| Android Chrome | ✅ 完全対応            |
