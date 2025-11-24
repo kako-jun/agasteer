@@ -1,0 +1,162 @@
+# 初期設定とクイックスタート
+
+> SimplestNote.mdを使い始めるための手順を説明します。
+
+---
+
+## 🌐 デモサイトで試す
+
+SimplestNote.mdはすぐに試すことができます。
+
+**デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+
+1. ブラウザでデモサイトにアクセス
+2. すぐにノートの作成・編集が可能
+3. データはブラウザのIndexedDBに保存されます
+
+---
+
+## 💻 開発環境のセットアップ
+
+自分の環境で動かす場合は、以下の手順でセットアップできます。
+
+### 1. リポジトリをクローン
+
+```bash
+git clone https://github.com/kako-jun/simplest-note-md.git
+cd simplest-note-md
+```
+
+### 2. 依存パッケージをインストール
+
+```bash
+npm install
+```
+
+### 3. 開発サーバーを起動
+
+```bash
+npm run dev
+```
+
+ブラウザで `http://localhost:5173` を開きます。
+
+### 4. 本番環境用にビルド
+
+```bash
+npm run build
+```
+
+`dist/`ディレクトリに出力されます。
+
+### 5. ビルド結果をプレビュー
+
+```bash
+npm run preview
+```
+
+---
+
+## ⚙️ 初期設定
+
+SimplestNote.mdを初めて使う際の設定手順です。
+
+### 1. 設定画面を開く
+
+- ヘッダー右上の⚙️アイコンをクリック
+
+### 2. GitHub連携を設定（オプション）
+
+GitHub連携を使わない場合は、この手順をスキップできます。ローカルのIndexedDBだけで動作します。
+
+#### 必須項目
+
+- **Personal Access Token**: GitHubで生成したトークンを入力
+  - [トークンの取得方法は共有ドキュメント参照](../shared/github-token.md)
+- **リポジトリ名**: `owner/repo`形式（例: `yamada/my-notes`）
+
+#### 自動設定項目
+
+以下の項目は自動的に設定されます（変更も可能）：
+
+- **コミットユーザー名**: GitHubのユーザー名
+- **コミットメールアドレス**: GitHubのメールアドレス
+
+### 3. テーマを選択
+
+6種類のテーマから選択できます：
+
+1. **yomi** - シンプルで読みやすいデフォルトテーマ
+2. **campus** - 落ち着いた色合いのキャンパステーマ
+3. **greenboard** - 緑色の黒板風デザイン
+4. **whiteboard** - 明るいホワイトボード風デザイン
+5. **dotsD** - ドット柄のダークテーマ
+6. **dotsF** - ドット柄の明るいテーマ
+
+### 4. カスタムフォントを設定（オプション）
+
+- 「フォント選択」ボタンから.ttf/.otf/.woff/.woff2ファイルをアップロード
+- 即座にアプリ全体に適用（リロード不要）
+- 「デフォルトに戻す」ボタンで元に戻せます
+
+### 5. カスタム背景画像を設定（オプション）
+
+- 左右ペイン別々に背景画像を設定可能
+- 「背景画像選択」ボタンから.jpg/.png/.webp/.gifファイルをアップロード
+- 透明度0.1で半透明表示されます
+- 「デフォルトに戻す」ボタンで削除
+
+### 6. 言語を選択
+
+- 日本語 / English
+- 初回は自動検出、以降は手動切替可能
+
+### 7. 設定を保存
+
+- 💾ボタン（保存）をクリック
+- GitHub連携が設定されている場合、GitHubに自動Push
+
+---
+
+## 🚀 Cloudflare Pagesでの公開
+
+SimplestNote.mdは静的サイトとしてCloudflare Pagesで簡単に公開できます。
+
+### 1. Cloudflareアカウントにログイン
+
+[Cloudflare Pages](https://pages.cloudflare.com/)にアクセス
+
+### 2. プロジェクトを作成
+
+1. Pages → Create a project
+2. GitHubリポジトリを接続
+
+### 3. ビルド設定
+
+- **Framework preset**: Vite
+- **Build command**: `npm run build`
+- **Build output directory**: `dist`
+
+### 4. デプロイ開始
+
+- 「Save and Deploy」をクリック
+- 数分でデプロイが完了します
+
+### 5. カスタムドメインの設定（オプション）
+
+- プロジェクト設定から独自ドメインを追加可能
+
+---
+
+## 🎉 次のステップ
+
+初期設定が完了したら、次は基本機能を学びましょう。
+
+→ [ノートとリーフの管理](./basic-features.md)
+
+---
+
+**関連ドキュメント**:
+
+- [GitHub Personal Access Tokenの取得](../shared/github-token.md)
+- [カスタマイズ](./customization.md)

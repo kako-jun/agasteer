@@ -7,29 +7,43 @@
 
 ## 📚 ドキュメント目次
 
-### 基本設計
+### ユーザー向けドキュメント
 
-- **[アーキテクチャ](./docs/architecture.md)**
+- **[ユーザーガイド](./docs/user-guide/index.md)** - SimplestNote.mdの使い方
+  - [初期設定とクイックスタート](./docs/user-guide/getting-started.md)
+  - [ノートとリーフの管理](./docs/user-guide/basic-features.md)
+  - [応用機能（2ペイン、プレビュー、Vimモード）](./docs/user-guide/advanced-features.md)
+  - [GitHub連携](./docs/user-guide/github-sync.md)
+  - [カスタマイズ（テーマ、フォント、背景画像）](./docs/user-guide/customization.md)
+  - [よくある質問（FAQ）](./docs/user-guide/faq.md)
+
+### 開発者向けドキュメント
+
+- **[開発者向けドキュメント](./docs/development/index.md)** - 技術仕様と開発ガイド
+
+#### 基本設計
+
+- **[アーキテクチャ](./docs/development/architecture.md)**
   - アーキテクチャ概要と設計哲学
   - 技術スタック（Svelte, TypeScript, Vite, CodeMirror）
   - プロジェクト構造とファイル構成
   - コードアーキテクチャとレイヤー構造
 
-- **[データモデルと状態管理](./docs/data-model.md)**
+- **[データモデルと状態管理](./docs/development/data-model.md)**
   - TypeScript型定義（Settings, Folder, Note, View）
   - データの一意性とリレーション
   - 状態管理とデータフロー
   - CRUD操作のパターン
 
-### 機能実装
+#### 機能実装
 
-- **[基本機能の実装](./docs/features.md)**
+- **[基本機能の実装](./docs/development/features.md)**
   - エディタ管理（CodeMirror統合）
   - パンくずナビゲーション
   - モーダルシステム
   - ノート階層制限
 
-- **[UI/UX機能](./docs/ui-features.md)**
+- **[UI/UX機能](./docs/development/ui-features.md)**
   - 2ペイン表示（アスペクト比判定、レスポンシブ対応）
   - カスタムフォント機能（クライアントサイド保存、リロード不要）
   - カスタム背景画像機能（左右ペイン別々に設定可能）
@@ -39,48 +53,52 @@
   - タイトルリンク化（別タブで開く）
   - GitHub設定ヘルプ（?アイコンでモーダル表示）
 
-- **[コンテンツ同期機能](./docs/content-sync.md)**
+- **[コンテンツ同期機能](./docs/development/content-sync.md)**
   - リーフのタイトルと#見出しの双方向同期
 
-- **[プレビュー機能](./docs/preview-features.md)**
+- **[プレビュー機能](./docs/development/preview-features.md)**
   - マークダウンプレビュー（marked + DOMPurify）
   - 編集/プレビュー間のスクロール同期
   - プレビュー画像ダウンロード（html2canvas、全体キャプチャ）
   - プレビュー画像シェア（Clipboard API、Web Share API）
 
-- **[データ保護機能](./docs/data-protection.md)**
+- **[データ保護機能](./docs/development/data-protection.md)**
   - Push回数カウント
   - 未保存変更の確認
 
-- **[GitHub API統合](./docs/github-integration.md)**
+- **[GitHub API統合](./docs/development/github-integration.md)**
   - 認証とファイルパス構築
   - 既存ファイルのSHA取得
   - ファイル保存とBase64エンコーディング
 
-- **[データ永続化とストレージ](./docs/storage.md)**
+- **[データ永続化とストレージ](./docs/development/storage.md)**
   - LocalStorage（設定情報）
   - IndexedDB（ノート・リーフ・カスタムフォントデータ）
   - GitHub（リモートリポジトリ）
   - テーマシステム
 
-### 開発・運用
+#### 開発・運用
 
-- **[実装されたリファクタリング](./docs/refactoring.md)**
+- **[実装されたリファクタリング](./docs/development/refactoring.md)**
   - コンポーネント分割の経緯
   - 状態管理の改善（Svelteストア導入）
   - ビジネスロジックの分離
   - モジュール分離の完了（sync.ts, ui.ts, Toast.svelte）
 
-- **[開発ガイド](./docs/development.md)**
+- **[開発ガイド](./docs/development/development.md)**
   - 開発ワークフロー
   - パフォーマンス最適化
   - セキュリティ考慮事項
   - トラブルシューティング
 
-- **[拡張計画と既知の課題](./docs/future-plans.md)**
+- **[拡張計画と既知の課題](./docs/development/future-plans.md)**
   - 短期・中期・長期的な拡張計画
   - 既知の課題（メタデータの永続化問題）
-  - 次の実装計画（2ペイン表示、パスベースURLルーティング）
+  - 次の実装計画
+
+### 共有リソース
+
+- **[GitHub Personal Access Tokenの取得](./docs/shared/github-token.md)** - トークン取得の詳細な手順
 
 ---
 
@@ -212,7 +230,7 @@ npm run preview
 - **ソースファイル数**: 59個（.svelte + .ts）
 - **コンポーネント数**: 45個（30個の一般コンポーネント + 14個のアイコン + 1個のIconButton）
 - **libモジュール数**: 14個
-- **ドキュメント数**: 15個（CLAUDE.md + README.md + CONTRIBUTING.md + docs/下の12個）
+- **ドキュメント数**: 24個（CLAUDE.md + README.md + CONTRIBUTING.md + user-guide/7個 + development/13個 + shared/1個）
 
 ### 主要技術
 

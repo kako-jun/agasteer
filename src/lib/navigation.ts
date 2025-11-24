@@ -380,19 +380,32 @@ export function navigateGrid(
 
 /**
  * グリッドのカラム数を計算
+ * 実際のDOM要素の位置から正確に計算
  */
 export function calculateGridColumns(): number {
-  // .main-pane の幅を取得
-  const pane = document.querySelector('.main-pane')
-  if (!pane) return 3 // デフォルト値
+  // .card-grid 内のカード要素を取得
+  const cards = document.querySelectorAll('.card-grid > .note-card, .card-grid > .leaf-card')
+  if (cards.length === 0) return 1 // カードがない場合は1カラム
 
-  const paneWidth = pane.clientWidth
-  const cardMinWidth = 200 // NoteCard の min-width
-  const gap = 16 // 1rem = 16px
+  if (cards.length === 1) return 1 // カードが1つしかない場合は1カラム
 
-  // グリッドのカラム数を計算
-  const columns = Math.floor((paneWidth + gap) / (cardMinWidth + gap))
-  return Math.max(1, columns)
+  // 最初のカードの上端Y座標を取得
+  const firstCardTop = cards[0].getBoundingClientRect().top
+
+  // 同じ行にあるカードを数える（Y座標が同じもの）
+  let columnsInFirstRow = 0
+  for (let i = 0; i < cards.length; i++) {
+    const cardTop = cards[i].getBoundingClientRect().top
+    // 1px以内の誤差は同じ行とみなす
+    if (Math.abs(cardTop - firstCardTop) < 1) {
+      columnsInFirstRow++
+    } else {
+      // 次の行に到達したら終了
+      break
+    }
+  }
+
+  return Math.max(1, columnsInFirstRow)
 }
 
 /**
