@@ -2,8 +2,9 @@
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
   import type { Note, Leaf, Breadcrumb, View } from './lib/types'
+  import * as nav from './lib/navigation'
+  import type { Pane } from './lib/navigation'
 
-  type Pane = 'left' | 'right'
   import {
     settings,
     notes,
@@ -343,248 +344,105 @@
     }
   })
 
-  // ナビゲーション（左右共通）
-  function goHome(pane: Pane) {
-    if (pane === 'left') {
-      leftView = 'home'
-      leftNote = null
-      leftLeaf = null
-    } else {
-      rightView = 'home'
-      rightNote = null
-      rightLeaf = null
+  // ========================================
+  // ナビゲーション制御（navigation.ts を使用）
+  // ========================================
+
+  // ナビゲーション状態を取得する関数
+  function getNavState(): nav.NavigationState {
+    return {
+      leftView,
+      leftNote,
+      leftLeaf,
+      rightView,
+      rightNote,
+      rightLeaf,
+      isDualPane,
+      focusedPane,
+      selectedIndexLeft,
+      selectedIndexRight,
+      showSettings,
+      isOperationsLocked,
+      leftEditorView,
+      rightEditorView,
     }
+  }
+
+  // ナビゲーション依存関係を取得する関数
+  function getNavDeps(): nav.NavigationDependencies {
+    return {
+      notes,
+      leaves,
+      rootNotes,
+    }
+  }
+
+  // ナビゲーション関数実行後に状態を同期
+  function syncNavState(state: nav.NavigationState) {
+    leftView = state.leftView
+    leftNote = state.leftNote
+    leftLeaf = state.leftLeaf
+    rightView = state.rightView
+    rightNote = state.rightNote
+    rightLeaf = state.rightLeaf
+    focusedPane = state.focusedPane
+    selectedIndexLeft = state.selectedIndexLeft
+    selectedIndexRight = state.selectedIndexRight
+  }
+
+  // 公開ナビゲーション関数（navigation.tsのラッパー）
+  function goHome(pane: Pane) {
+    const state = getNavState()
+    nav.goHome(state, getNavDeps(), pane)
+    syncNavState(state)
   }
 
   function selectNote(note: Note, pane: Pane) {
-    if (pane === 'left') {
-      leftNote = note
-      leftLeaf = null
-      leftView = 'note'
-    } else {
-      rightNote = note
-      rightLeaf = null
-      rightView = 'note'
-    }
+    const state = getNavState()
+    nav.selectNote(state, getNavDeps(), note, pane)
+    syncNavState(state)
   }
 
   function selectLeaf(leaf: Leaf, pane: Pane) {
-    const note = $notes.find((n) => n.id === leaf.noteId)
-    if (note) {
-      if (pane === 'left') {
-        leftNote = note
-        leftLeaf = leaf
-        leftView = 'edit'
-      } else {
-        rightNote = note
-        rightLeaf = leaf
-        rightView = 'edit'
-      }
-    }
+    const state = getNavState()
+    nav.selectLeaf(state, getNavDeps(), leaf, pane)
+    syncNavState(state)
   }
 
   function closeLeaf(pane: Pane) {
-    const leaf = pane === 'left' ? leftLeaf : rightLeaf
-    if (!leaf) return
-
-    const parentNote = $notes.find((n) => n.id === leaf.noteId)
-    if (parentNote) {
-      selectNote(parentNote, pane)
-    }
+    const state = getNavState()
+    nav.closeLeaf(state, getNavDeps(), pane)
+    syncNavState(state)
   }
 
   function switchPane(pane: Pane) {
-    // 2ペイン表示時のみ有効
-    if (!isDualPane) return
+    const state = getNavState()
+    nav.switchPane(state, getNavDeps(), pane)
+    syncNavState(state)
+  }
 
-    // もう一方のペインに切り替え
-    focusedPane = pane === 'left' ? 'right' : 'left'
+  function togglePreview(pane: Pane) {
+    const state = getNavState()
+    nav.togglePreview(state, getNavDeps(), pane)
+    syncNavState(state)
+    updateUrlFromState()
   }
 
   // キーボードナビゲーション
   function handleGlobalKeyDown(e: KeyboardEvent) {
-    // event.targetを取得してどこから来たイベントか判定
-    const target = e.target as HTMLElement
-    if (!target) return
-
-    // CodeMirrorエディタ内からのイベントは無視
-    const isInEditor = target.closest('.cm-content') || target.closest('.cm-editor')
-    if (isInEditor) return
-
-    // input/textarea内からのイベントは無視
-    if (target.tagName === 'INPUT') return
-    if (target.tagName === 'TEXTAREA') return
-
-    // contenteditable要素内からのイベントは無視
-    if (target.getAttribute('contenteditable') === 'true') return
-    if (target.closest('[contenteditable="true"]')) return
-
-    // 設定画面が開いている場合も無効化
-    if (showSettings) return
-
-    // フォーカス中のペインがhome/noteビューでない場合は無効化
-    const currentView = focusedPane === 'left' ? leftView : rightView
-    if (currentView !== 'home' && currentView !== 'note') return
-
-    // 処理するキーの場合のみデフォルト動作を防止
-    if (['h', 'j', 'k', 'l', 'Enter', 'Escape', ' '].includes(e.key)) {
-      e.preventDefault()
-    } else {
-      return // 処理対象外のキーは無視
-    }
-
-    // 現在のビューに応じてアイテムリストを取得
-    const items = getCurrentItems(focusedPane)
-    const selectedIndex = focusedPane === 'left' ? selectedIndexLeft : selectedIndexRight
-
-    switch (e.key) {
-      case ' ':
-        // スペースでペイン切り替え（2ペイン表示時のみ）
-        if (isDualPane) {
-          switchPane(focusedPane)
-        }
-        break
-      case 'h':
-        navigateGrid('left', items, selectedIndex)
-        break
-      case 'j':
-        navigateGrid('down', items, selectedIndex)
-        break
-      case 'k':
-        navigateGrid('up', items, selectedIndex)
-        break
-      case 'l':
-        navigateGrid('right', items, selectedIndex)
-        break
-      case 'Enter':
-        openSelectedItem(items, selectedIndex)
-        break
-      case 'Escape':
-        goBackToParent(focusedPane)
-        break
-    }
-  }
-
-  // 現在のビューに応じたアイテムリストを取得
-  function getCurrentItems(pane: Pane): Array<Note | Leaf> {
-    const view = pane === 'left' ? leftView : rightView
-    const note = pane === 'left' ? leftNote : rightNote
-
-    if (view === 'home') {
-      return $rootNotes
-    } else if (view === 'note' && note) {
-      // サブノートとリーフを結合
-      const subNotes = $notes
-        .filter((n) => n.parentId === note.id)
-        .sort((a, b) => a.order - b.order)
-      const leaves = $leaves.filter((l) => l.noteId === note.id).sort((a, b) => a.order - b.order)
-      return [...subNotes, ...leaves]
-    }
-    return []
-  }
-
-  // グリッドナビゲーション（方向指定）
-  function navigateGrid(
-    direction: 'up' | 'down' | 'left' | 'right',
-    items: Array<Note | Leaf>,
-    currentIndex: number
-  ) {
-    if (items.length === 0) return
-
-    // グリッドのカラム数を計算（CSS Gridの設定に合わせる）
-    // NoteCard/LeafCard は min-width: 200px, gap: 1rem
-    const gridColumns = calculateGridColumns()
-
-    let newIndex = currentIndex
-
-    switch (direction) {
-      case 'up':
-        newIndex = Math.max(0, currentIndex - gridColumns)
-        break
-      case 'down':
-        newIndex = Math.min(items.length - 1, currentIndex + gridColumns)
-        break
-      case 'left':
-        if (currentIndex % gridColumns !== 0) {
-          newIndex = Math.max(0, currentIndex - 1)
-        }
-        break
-      case 'right':
-        if ((currentIndex + 1) % gridColumns !== 0 && currentIndex < items.length - 1) {
-          newIndex = Math.min(items.length - 1, currentIndex + 1)
-        }
-        break
-    }
-
-    // 選択インデックスを更新
-    if (focusedPane === 'left') {
-      selectedIndexLeft = newIndex
-    } else {
-      selectedIndexRight = newIndex
-    }
-  }
-
-  // グリッドのカラム数を計算
-  function calculateGridColumns(): number {
-    // .main-pane の幅を取得
-    const pane = document.querySelector('.main-pane')
-    if (!pane) return 3 // デフォルト値
-
-    const paneWidth = pane.clientWidth
-    const cardMinWidth = 200 // NoteCard の min-width
-    const gap = 16 // 1rem = 16px
-
-    // グリッドのカラム数を計算
-    const columns = Math.floor((paneWidth + gap) / (cardMinWidth + gap))
-    return Math.max(1, columns)
-  }
-
-  // 選択中のアイテムを開く
-  function openSelectedItem(items: Array<Note | Leaf>, index: number) {
-    if (index < 0 || index >= items.length) return
-
-    const item = items[index]
-    if ('noteId' in item) {
-      // Leaf
-      selectLeaf(item as Leaf, focusedPane)
-    } else {
-      // Note
-      selectNote(item as Note, focusedPane)
-    }
-  }
-
-  // 親に戻る
-  function goBackToParent(pane: Pane) {
-    const view = pane === 'left' ? leftView : rightView
-    const note = pane === 'left' ? leftNote : rightNote
-
-    if (view === 'note' && note) {
-      const parentNote = $notes.find((n) => n.id === note.parentId)
-      if (parentNote) {
-        selectNote(parentNote, pane)
-      } else {
-        goHome(pane)
-      }
-    } else if (view === 'home') {
-      // ホーム画面では何もしない
-    }
-  }
-
-  function togglePreview(pane: Pane) {
-    if (pane === 'left') {
-      if (leftView === 'edit') {
-        leftView = 'preview'
-      } else if (leftView === 'preview') {
-        leftView = 'edit'
-      }
-    } else {
-      if (rightView === 'edit') {
-        rightView = 'preview'
-      } else if (rightView === 'preview') {
-        rightView = 'edit'
-      }
-    }
-    updateUrlFromState()
+    const state = getNavState()
+    nav.handleGlobalKeyDown(state, getNavDeps(), e, {
+      onSwitchPane: (pane) => switchPane(pane),
+      onNavigateGrid: (direction) => {
+        nav.navigateGrid(state, getNavDeps(), direction)
+        syncNavState(state)
+      },
+      onOpenSelectedItem: () => nav.openSelectedItem(state, getNavDeps(), selectLeaf, selectNote),
+      onGoBackToParent: () => {
+        nav.goBackToParent(state, getNavDeps())
+        syncNavState(state)
+      },
+    })
   }
 
   async function goSettings() {
@@ -760,10 +618,23 @@
       updateNotes(allNotes.filter((f) => f.id !== noteId))
 
       const parentNote = allNotes.find((f) => f.id === parentId)
+
+      // 現在のペインをナビゲート
       if (parentNote) {
         selectNote(parentNote, pane)
       } else {
         goHome(pane)
+      }
+
+      // 他方のペインも同じノートを表示している場合はナビゲート
+      const otherPane = pane === 'left' ? 'right' : 'left'
+      const otherNote = otherPane === 'left' ? leftNote : rightNote
+      if (otherNote && otherNote.id === noteId) {
+        if (parentNote) {
+          selectNote(parentNote, otherPane)
+        } else {
+          goHome(otherPane)
+        }
       }
     })
   }
@@ -854,10 +725,23 @@
       updateLeaves(allLeaves.filter((n) => n.id !== leafId))
 
       const note = $notes.find((f) => f.id === targetLeaf.noteId)
+
+      // 現在のペインをナビゲート
       if (note) {
         selectNote(note, pane)
       } else {
         goHome(pane)
+      }
+
+      // 他方のペインも同じリーフを表示している場合はナビゲート
+      const otherPane = pane === 'left' ? 'right' : 'left'
+      const otherLeaf = otherPane === 'left' ? leftLeaf : rightLeaf
+      if (otherLeaf && otherLeaf.id === leafId) {
+        if (note) {
+          selectNote(note, otherPane)
+        } else {
+          goHome(otherPane)
+        }
       }
     })
   }
@@ -1316,6 +1200,7 @@
               leaf={leftLeaf}
               theme={$settings.theme}
               vimMode={$settings.vimMode ?? false}
+              pane="left"
               disabled={isOperationsLocked || isPushing}
               onContentChange={updateLeafContent}
               onSave={handleSaveToGitHub}
@@ -1437,6 +1322,7 @@
               leaf={rightLeaf}
               theme={$settings.theme}
               vimMode={$settings.vimMode ?? false}
+              pane="right"
               disabled={isOperationsLocked}
               onContentChange={updateLeafContent}
               onSave={handleSaveToGitHub}

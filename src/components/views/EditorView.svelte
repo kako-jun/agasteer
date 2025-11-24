@@ -1,10 +1,12 @@
 <script lang="ts">
   import MarkdownEditor from '../editor/MarkdownEditor.svelte'
   import type { Leaf, ThemeType } from '../../lib/types'
+  import type { Pane } from '../../lib/navigation'
 
   export let leaf: Leaf
   export let theme: ThemeType
   export let vimMode: boolean = false
+  export let pane: Pane
   export let onContentChange: (content: string, leafId: string) => void
   export let onSave: () => void
   export let onClose: (() => void) | null = null
@@ -34,6 +36,13 @@
       markdownEditor.scrollTo(scrollTop)
     }
   }
+
+  // 外部からエディタにフォーカスを当てる関数
+  export function focusEditor() {
+    if (markdownEditor && markdownEditor.focus) {
+      markdownEditor.focus()
+    }
+  }
 </script>
 
 <section class="editor-section">
@@ -42,6 +51,7 @@
     content={leaf.content}
     {theme}
     {vimMode}
+    {pane}
     onChange={handleContentChange}
     {onSave}
     {onClose}

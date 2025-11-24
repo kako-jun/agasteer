@@ -84,50 +84,112 @@ CodeMirror Vimプラグインを使用したVimキーバインディングをサ
 
 Vimモードでは、以下のカスタムコマンドが使用可能：
 
-| コマンド | 動作                   | 説明                                   |
-| -------- | ---------------------- | -------------------------------------- |
-| `:w`     | GitHub Push            | 現在のリーフをGitHubにプッシュ（保存） |
-| `:wq`    | Push後に親ノートへ遷移 | 保存して編集画面を閉じる               |
-| `:q`     | 親ノートへ遷移         | 保存せずに編集画面を閉じる             |
+| コマンド  | 動作                   | 説明                                    |
+| --------- | ---------------------- | --------------------------------------- |
+| `:w`      | GitHub Push            | 現在のリーフをGitHubにプッシュ（保存）  |
+| `:wq`     | Push後に親ノートへ遷移 | 保存して編集画面を閉じる                |
+| `:q`      | 親ノートへ遷移         | 保存せずに編集画面を閉じる              |
+| `<Space>` | ペイン切り替え         | もう一方のペインに切り替え（2ペイン時） |
+
+#### 2ペイン対応
+
+左右のペインで独立したVimコマンド実行が可能。**今フォーカスされているエディタのペインを判定**し、適切なコールバックを実行します。
+
+**動作例**:
+
+- 右ペインで `:q` → 右ペインのみ閉じる
+- 左ペインで `:q` → 左ペインのみ閉じる
+- 左ペインで `<Space>` → 右ペインに切り替え
+- 右ペインで `<Space>` → 左ペインに切り替え
 
 #### メリット
 
 - **キーボードのみで完結**: マウス操作不要
 - **ブラウザのショートカットと競合しない**: Ctrl+Sなどと干渉しない
 - **Vimユーザーにとって自然な操作**: 標準的なVimコマンドで保存・終了が可能
+- **2ペイン対応**: 左右のペインで独立した操作が可能
 
 #### 実装
 
+##### 1. ペイン情報の管理
+
+各エディタにペイン情報を付与：
+
 ```typescript
-// Vimモード有効時の拡張追加
-if (vimMode && vim && Vim) {
-  extensions.push(vim())
+// DOM要素にペイン情報をマーク
+editorView.dom.dataset.pane = pane // 'left' or 'right'
+```
 
-  // エディタ初期化後にカスタムコマンドを定義
-  setTimeout(() => {
-    if (!Vim) return
+##### 2. グローバルコールバックマップ
 
-    // :w でGitHub Pushを実行
-    if (onSave) {
-      Vim.defineEx('write', 'w', function () {
-        onSave()
-      })
-      Vim.defineEx('wq', 'wq', function () {
-        onSave()
-        if (onClose) {
-          setTimeout(() => {
-            onClose()
-          }, 100)
-        }
-      })
+ペイン別にコールバックを登録：
+
+```typescript
+// window経由でペイン別コールバックを共有
+if (!window.editorCallbacks) {
+  window.editorCallbacks = {}
+}
+window.editorCallbacks[pane] = {
+  onSave,
+  onClose,
+  onSwitchPane,
+}
+```
+
+##### 3. フォーカス中のペイン判定
+
+実行時にフォーカスされているエディタのペインを取得：
+
+```typescript
+const getCurrentPane = () => {
+  const activeEditor = document.activeElement?.closest('.cm-editor')
+  return activeEditor?.getAttribute('data-pane') || null
+}
+```
+
+##### 4. Vimコマンドの定義
+
+グローバルに1回だけ定義し、実行時にペインを判定：
+
+```typescript
+// 初回のみVimコマンドを定義
+if (!window.vimCommandsInitialized) {
+  // :q コマンド
+  Vim.defineEx('quit', 'q', function () {
+    const paneId = getCurrentPane()
+    const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
+    if (callbacks?.onClose) {
+      callbacks.onClose()
     }
-    // :q で親ノートに遷移
-    if (onClose) {
-      Vim.defineEx('quit', 'q', function () {
-        onClose()
-      })
+  })
+
+  // スペースキーでペイン切り替え
+  Vim.defineAction('switchPane', function () {
+    const paneId = getCurrentPane()
+    const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
+    if (callbacks?.onSwitchPane) {
+      callbacks.onSwitchPane()
     }
-  }, 100)
+  })
+  Vim.mapCommand('<Space>', 'action', 'switchPane')
+
+  window.vimCommandsInitialized = true
+}
+```
+
+##### 型定義
+
+```typescript
+// src/global.d.ts
+interface Window {
+  editorCallbacks?: {
+    [paneId: string]: {
+      onSave?: (() => void) | null
+      onClose?: (() => void) | null
+      onSwitchPane?: (() => void) | null
+    }
+  }
+  vimCommandsInitialized?: boolean
 }
 ```
 

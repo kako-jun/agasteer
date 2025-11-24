@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import type { ThemeType } from '../../lib/types'
+  import type { Pane } from '../../lib/navigation'
   import { isDirty } from '../../lib/stores'
 
   export let content: string
   export let theme: ThemeType
   export let vimMode: boolean = false
+  export let pane: Pane
   export let onChange: (newContent: string) => void
   export let onSave: (() => void) | null = null
   export let onClose: (() => void) | null = null
@@ -43,6 +45,13 @@
     setTimeout(() => {
       isScrollingSynced = false
     }, 0)
+  }
+
+  // 外部からエディタにフォーカスを当てる関数
+  export function focus() {
+    if (editorView) {
+      editorView.focus()
+    }
   }
 
   const darkThemes: ThemeType[] = ['greenboard', 'dotsD', 'dotsF']
@@ -175,37 +184,74 @@
       // 拡張を追加してから定義する必要がある
       extensions.push(vim())
 
+      // グローバルなコールバックマップを初期化（window経由で共有）
+      if (typeof window !== 'undefined') {
+        if (!window.editorCallbacks) {
+          window.editorCallbacks = {}
+        }
+        window.editorCallbacks[pane] = {
+          onSave,
+          onClose,
+          onSwitchPane,
+        }
+      }
+
       // エディタ初期化後にVimコマンドを定義（遅延実行）
+      // Vimコマンドはグローバルなので、最初の1回だけ定義
       setTimeout(() => {
         if (!Vim) return
 
-        // :w コマンドをカスタマイズしてGitHub Pushを実行
-        if (onSave) {
+        // 初回のみVimコマンドを定義
+        if (typeof window !== 'undefined' && !window.vimCommandsInitialized) {
+          // 現在フォーカスされているエディタのペインを取得する関数
+          const getCurrentPane = () => {
+            const activeEditor = document.activeElement?.closest('.cm-editor')
+            return activeEditor?.getAttribute('data-pane') || null
+          }
+
+          // :w コマンド - 実行時にpaneを判定
           Vim.defineEx('write', 'w', function () {
-            onSave()
+            const paneId = getCurrentPane()
+            const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
+            if (callbacks?.onSave) {
+              callbacks.onSave()
+            }
           })
+
+          // :wq コマンド - 保存後に閉じる
           Vim.defineEx('wq', 'wq', function () {
-            onSave()
-            // :wq の場合は保存後に閉じる
-            if (onClose) {
+            const paneId = getCurrentPane()
+            const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
+            if (callbacks?.onSave) {
+              callbacks.onSave()
+            }
+            if (callbacks?.onClose) {
               setTimeout(() => {
-                onClose()
+                callbacks.onClose()
               }, 100)
             }
           })
-        }
-        // :q コマンドをカスタマイズして親ノートに遷移
-        if (onClose) {
+
+          // :q コマンド - 閉じる
           Vim.defineEx('quit', 'q', function () {
-            onClose()
+            const paneId = getCurrentPane()
+            const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
+            if (callbacks?.onClose) {
+              callbacks.onClose()
+            }
           })
-        }
-        // スペースキーでペイン切り替え（ノーマルモード）
-        if (onSwitchPane) {
+
+          // スペースキーでペイン切り替え
           Vim.defineAction('switchPane', function () {
-            onSwitchPane()
+            const paneId = getCurrentPane()
+            const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
+            if (callbacks?.onSwitchPane) {
+              callbacks.onSwitchPane()
+            }
           })
           Vim.mapCommand('<Space>', 'action', 'switchPane')
+
+          window.vimCommandsInitialized = true
         }
       }, 100)
     }
@@ -228,6 +274,12 @@
       state: startState,
       parent: editorContainer,
     })
+
+    // DOM要素にペイン情報をマーク（Vimコマンドで参照するため）
+    editorView.dom.dataset.pane = pane
+
+    // エディタにフォーカスを当てる
+    editorView.focus()
   }
 
   function updateEditorContent(newContent: string) {
