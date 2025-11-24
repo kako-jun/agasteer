@@ -60,6 +60,7 @@
   import EditorView from './components/views/EditorView.svelte'
   import PreviewView from './components/views/PreviewView.svelte'
   import SettingsView from './components/views/SettingsView.svelte'
+  import SettingsIcon from './components/icons/SettingsIcon.svelte'
 
   // ローカル状態
   let breadcrumbs: Breadcrumb[] = []
@@ -1463,6 +1464,9 @@
           </p>
           <div class="welcome-buttons">
             <button class="welcome-button primary" on:click={openSettingsFromWelcome}>
+              <span class="button-icon">
+                <SettingsIcon />
+              </span>
               {$_('welcome.openSettings')}
             </button>
             <button class="welcome-button secondary" on:click={closeWelcome}>
@@ -1710,6 +1714,10 @@
   }
 
   .welcome-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
     padding: 0.75rem 2rem;
     border-radius: 8px;
     font-size: 1rem;
@@ -1717,6 +1725,13 @@
     cursor: pointer;
     transition: all 0.2s;
     border: none;
+  }
+
+  .welcome-button .button-icon {
+    display: flex;
+    align-items: center;
+    width: 20px;
+    height: 20px;
   }
 
   .welcome-button.primary {
