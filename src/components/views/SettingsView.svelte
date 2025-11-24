@@ -158,12 +158,12 @@
           </svg>
         </a>
       </p>
-      <div class="sponsor-section">
+      <div class="support-section">
         <a
           href="https://github.com/sponsors/kako-jun"
           target="_blank"
           rel="noopener noreferrer"
-          class="sponsor-link"
+          class="support-link"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -406,12 +406,12 @@
     color: var(--accent-color);
   }
 
-  .sponsor-section {
+  .support-section {
     margin-top: 0;
     margin-bottom: 3rem;
   }
 
-  .sponsor-link {
+  .support-link {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -425,7 +425,7 @@
     transition: all 0.2s;
   }
 
-  .sponsor-link:hover {
+  .support-link:hover {
     background: var(--accent-color);
     color: white;
     border-color: var(--accent-color);
