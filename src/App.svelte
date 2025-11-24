@@ -1325,7 +1325,8 @@
 
   .app-container {
     width: 100%;
-    height: 100vh;
+    height: 100vh; /* フォールバック */
+    height: 100dvh; /* モバイルブラウザのアドレスバーを考慮 */
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1366,13 +1367,14 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    height: 100%;
+    min-height: 0;
     overflow: hidden;
     position: relative;
   }
 
   .main-pane {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     position: relative;
   }
