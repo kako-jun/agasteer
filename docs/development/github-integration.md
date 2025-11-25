@@ -186,6 +186,13 @@ metadata.pushCount = currentPushCount + 1
 
 GitHubから全データをPull。
 
+### 高速化の実装（2025-11）
+
+- 生テキスト取得: `Accept: application/vnd.github.raw` を付け、Base64/JSON 経由をやめて `.md` を直接取得（GitHub 側の gzip が効く）。
+- 並列取得: リーフ本文の取得を 6 並列で実行（`CONTENT_FETCH_CONCURRENCY = 6`）。過剰な同時接続を避けつつ待ち時間を圧縮。
+- 優先取得: URL などで開いているパスを `priorityPaths` として先に取得するキューを用意。
+- 段階通知: `pullFromGitHub` は `onStructure`（ノート構造とメタデータを先出し）と `onLeaf`（各リーフ取得完了を逐次通知）のコールバックをオプションで受け取る。未指定なら従来のシリアル動作のまま（後方互換）。
+
 ### Base64デコード
 
 GitHub APIは改行付きのBase64を返すため、改行を削除してからデコード。
