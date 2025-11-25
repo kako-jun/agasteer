@@ -42,6 +42,31 @@ export interface PullResult {
   leaves: Leaf[]
   metadata: Metadata
 }
+
+// コンテンツ取得を並列化する際の上限
+const CONTENT_FETCH_CONCURRENCY = 6
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R | null>
+): Promise<R[]> {
+  const results: R[] = []
+  let index = 0
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const currentIndex = index++
+      if (currentIndex >= items.length) break
+      const item = items[currentIndex]
+      const result = await worker(item, currentIndex)
+      if (result !== null) {
+        results.push(result)
+      }
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
 /**
  * GitHub設定を検証
  */
@@ -58,12 +83,22 @@ function validateGitHubSettings(settings: Settings): { valid: boolean; error?: s
 /**
  * GitHub Contents APIを呼ぶヘルパー関数（キャッシュバスター付き）
  */
-async function fetchGitHubContents(path: string, repoName: string, token: string) {
+async function fetchGitHubContents(
+  path: string,
+  repoName: string,
+  token: string,
+  options?: { raw?: boolean }
+) {
   const url = `https://api.github.com/repos/${repoName}/contents/${path}?t=${Date.now()}`
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  }
+  // RawモードはBase64デコードを省きレスポンスサイズを抑える
+  if (options?.raw) {
+    headers.Accept = 'application/vnd.github.raw'
+  }
   return fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
   })
 }
 
@@ -584,7 +619,6 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
     }
 
     const noteMap = new Map<string, Note>()
-    const leaves: Leaf[] = []
 
     const ensureNotePath = (pathParts: string[]): string => {
       let parentId: string | undefined
@@ -638,47 +672,45 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
         !e.path.endsWith('.gitkeep') // .gitkeepは除外
     )
 
-    for (const entry of notePaths) {
+    // コンテンツ取得用のターゲットを事前に作成（メタデータ取得はここで済ませる）
+    const leafTargets = notePaths.map((entry, idx) => {
       const relativePath = entry.path.replace(/^notes\//, '')
       const parts = relativePath.split('/').filter(Boolean)
-      if (parts.length === 0) continue
-
-      const fileName = parts.pop()!
+      const fileName = parts.pop() || ''
       const title = fileName.replace(/\.md$/i, '') || 'Untitled'
       const noteId = ensureNotePath(parts)
-
-      // fetch content
-      const contentRes = await fetchGitHubContents(entry.path, settings.repoName, settings.token)
-      if (!contentRes.ok) continue
-      const contentData = await contentRes.json()
-      let content = ''
-      if (contentData.content) {
-        try {
-          // GitHub APIは改行付きBase64を返すので改行を削除
-          const base64 = contentData.content.replace(/\n/g, '')
-          content = decodeURIComponent(escape(atob(base64)))
-        } catch (e) {
-          content = ''
-        }
-      }
-
-      // metadata.jsonからメタ情報を取得
       const leafPath = entry.path.replace(/^notes\//, '')
       const leafMeta = metadata.leaves[leafPath] || {
         id: crypto.randomUUID(),
         updatedAt: Date.now(),
-        order: leaves.length,
+        order: idx,
       }
+      return { entry, title, noteId, leafMeta }
+    })
 
-      leaves.push({
-        id: leafMeta.id,
-        title,
-        noteId,
-        content,
-        updatedAt: leafMeta.updatedAt,
-        order: leafMeta.order,
-      })
-    }
+    const leaves = await runWithConcurrency(
+      leafTargets,
+      CONTENT_FETCH_CONCURRENCY,
+      async (target) => {
+        const contentRes = await fetchGitHubContents(
+          target.entry.path,
+          settings.repoName,
+          settings.token,
+          { raw: true }
+        )
+        if (!contentRes.ok) return null
+        const content = await contentRes.text()
+
+        return {
+          id: target.leafMeta.id,
+          title: target.title,
+          noteId: target.noteId,
+          content,
+          updatedAt: target.leafMeta.updatedAt,
+          order: target.leafMeta.order,
+        }
+      }
+    )
 
     // orderでソート（同一親ノート内、同一noteId内でソート）
     const sortedNotes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
