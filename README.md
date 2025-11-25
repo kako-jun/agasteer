@@ -1,4 +1,4 @@
-# SimplestNote.md
+﻿# Agasteer
 
 <p align="center">
   <picture>
@@ -71,7 +71,7 @@ CodeMirror 6による快適な編集環境を提供します。
 
 すぐに試せるデモサイトを用意しています：
 
-**[https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)**
+**[https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)**
 
 ブラウザで開くだけで、すぐにノートの作成・編集が可能です。
 
@@ -83,7 +83,7 @@ CodeMirror 6による快適な編集環境を提供します。
 
 ### ユーザー向けドキュメント
 
-SimplestNote.mdの使い方を学ぶための包括的なガイドです。
+Agasteerの使い方を学ぶための包括的なガイドです。
 
 → **[ユーザーガイド](./docs/user-guide/index.md)**
 
@@ -96,7 +96,7 @@ SimplestNote.mdの使い方を学ぶための包括的なガイドです。
 
 ### 開発者向けドキュメント
 
-SimplestNote.mdの技術仕様と開発ガイドです。
+Agasteerの技術仕様と開発ガイドです。
 
 → **[開発者向けドキュメント](./docs/development/index.md)**
 

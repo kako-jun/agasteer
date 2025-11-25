@@ -21,7 +21,7 @@ export function getBreadcrumbs(
   const suffix = pane === 'right' ? '-right' : ''
 
   crumbs.push({
-    label: 'SimplestNote.md',
+    label: 'Agasteer',
     action: () => goHome(pane),
     id: `home${suffix}`,
     type: 'home',

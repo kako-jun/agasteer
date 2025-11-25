@@ -1,14 +1,14 @@
-# 初期設定とクイックスタート
+﻿# 初期設定とクイックスタート
 
-> SimplestNote.mdを使い始めるための手順を説明します。
+> Agasteerを使い始めるための手順を説明します。
 
 ---
 
 ## 🌐 デモサイトで試す
 
-SimplestNote.mdはすぐに試すことができます。
+Agasteerはすぐに試すことができます。
 
-**デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+**デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 
 1. ブラウザでデモサイトにアクセス
 2. すぐにノートの作成・編集が可能
@@ -18,7 +18,7 @@ SimplestNote.mdはすぐに試すことができます。
 
 ## ⚙️ 初期設定
 
-SimplestNote.mdを初めて使う際の設定手順です。
+Agasteerを初めて使う際の設定手順です。
 
 ### 1. 設定画面を開く
 
@@ -79,7 +79,7 @@ GitHub連携を使わない場合は、この手順をスキップできます�
 
 ## 🚀 Cloudflare Pagesでの公開
 
-SimplestNote.mdは静的サイトとしてCloudflare Pagesで簡単に公開できます。
+Agasteerは静的サイトとしてCloudflare Pagesで簡単に公開できます。
 
 ### 1. Cloudflareアカウントにログイン
 

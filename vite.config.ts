@@ -27,8 +27,8 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'SimplestNote.md',
-        short_name: 'SimplestNote',
+        name: 'Agasteer',
+        short_name: 'Agasteer',
         description: 'A simple markdown note-taking app with GitHub sync',
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',

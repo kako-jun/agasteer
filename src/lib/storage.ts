@@ -18,7 +18,7 @@ export const defaultSettings: Settings = {
   token: '',
   repoName: '',
   theme: 'yomi',
-  toolName: 'SimplestNote.md',
+  toolName: 'Agasteer',
   locale: 'en', // デフォルトは英語
   vimMode: false, // デフォルトはVimモードオフ
 }

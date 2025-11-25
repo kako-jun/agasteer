@@ -1,6 +1,6 @@
-# SimplestNote.md ユーザーガイド
+﻿# Agasteer ユーザーガイド
 
-> SimplestNote.mdの使い方を学ぶための包括的なガイドです。
+> Agasteerの使い方を学ぶための包括的なガイドです。
 
 ---
 
@@ -77,7 +77,7 @@
 ## 📞 サポート
 
 - **リポジトリ**: [simplest-note-md](https://github.com/kako-jun/simplest-note-md)
-- **デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+- **デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 
 ---
 

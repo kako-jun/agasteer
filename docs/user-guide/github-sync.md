@@ -1,6 +1,6 @@
-# GitHub連携
+﻿# GitHub連携
 
-> SimplestNote.mdとGitHubの同期方法を説明します。
+> AgasteerとGitHubの同期方法を説明します。
 
 ---
 
@@ -63,7 +63,7 @@ GitHub連携を使うには、以下の準備が必要です。
 
 ### Pushの仕組み
 
-SimplestNote.mdは**Git Tree API**を使用して一括Pushを行います。
+Agasteerは**Git Tree API**を使用して一括Pushを行います。
 
 - **SHA最適化**: 変更されていないファイルは転送しません
 - **削除・リネーム対応**: ファイルの削除やリネームも自動的に反映されます
@@ -121,7 +121,7 @@ notes/
 
 ## ⚠️ 未保存変更の確認
 
-SimplestNote.mdは未保存の変更を追跡し、データ損失を防ぎます。
+Agasteerは未保存の変更を追跡し、データ損失を防ぎます。
 
 ### 未保存変更の表示
 
@@ -162,7 +162,7 @@ SimplestNote.mdは未保存の変更を追跡し、データ損失を防ぎま�
 
 ## 🔄 複数デバイスでの同期
 
-SimplestNote.mdは複数デバイスでの同期に対応しています。
+Agasteerは複数デバイスでの同期に対応しています。
 
 ### 同期の手順
 

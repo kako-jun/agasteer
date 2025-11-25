@@ -1,6 +1,6 @@
-# よくある質問（FAQ）
+﻿# よくある質問（FAQ）
 
-> SimplestNote.mdについてよくある質問と回答をまとめました。
+> Agasteerについてよくある質問と回答をまとめました。
 
 ---
 
@@ -41,7 +41,7 @@
 ただし、以下の方法で既存のファイルを読み込めます：
 
 1. GitHub上の`notes/`ディレクトリに手動でMarkdownファイルを配置
-2. SimplestNote.mdでPullを実行
+2. AgasteerでPullを実行
 3. ファイルがIndexedDBに読み込まれます
 
 ### Q: データはどこに保存されますか？

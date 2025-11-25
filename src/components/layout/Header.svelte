@@ -4,7 +4,7 @@
   import SettingsIcon from '../icons/SettingsIcon.svelte'
 
   export let githubConfigured: boolean
-  export let title: string = 'SimplestNote.md'
+  export let title: string = 'Agasteer'
   export let onTitleClick: () => void
   export let onSettingsClick: () => void
 </script>

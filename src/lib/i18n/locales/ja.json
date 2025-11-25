@@ -89,7 +89,7 @@
       },
       "toolName": {
         "label": "ツール名",
-        "placeholder": "SimplestNote.md"
+        "placeholder": "Agasteer"
       },
       "font": {
         "title": "カスタムフォント",
@@ -139,7 +139,7 @@
     "pushing": "Push中..."
   },
   "welcome": {
-    "title": "SimplestNote.mdに\n興味をもってくれてありがとう！",
+    "title": "Agasteerに\n興味をもってくれてありがとう！",
     "message1": "ノートを保存するために、GitHubの設定が必要です。",
     "message2": "設定画面でリポジトリとトークンを設定してください。",
     "openSettings": "設定を開く",

@@ -89,7 +89,7 @@
       },
       "toolName": {
         "label": "Tool Name",
-        "placeholder": "SimplestNote.md"
+        "placeholder": "Agasteer"
       },
       "font": {
         "title": "Custom Font",
@@ -139,7 +139,7 @@
     "pushing": "Pushing..."
   },
   "welcome": {
-    "title": "Thank you for your interest in SimplestNote.md!",
+    "title": "Thank you for your interest in Agasteer!",
     "message1": "To save your notes, GitHub configuration is required.",
     "message2": "Please set up your repository and token in settings.",
     "openSettings": "Open Settings",
