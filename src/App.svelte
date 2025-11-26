@@ -555,6 +555,16 @@
 
     if (type === 'note') {
       const currentNote = $notes.find((f) => f.id === actualId)
+      const siblingWithSameName = $notes.find(
+        (n) =>
+          n.id !== actualId &&
+          (n.parentId || null) === (currentNote?.parentId || null) &&
+          n.name.trim() === trimmed
+      )
+      if (siblingWithSameName) {
+        showAlert('同じ階層に同名のノートがあります。別の名前を入力してください。')
+        return
+      }
       if (currentNote && currentNote.name === trimmed) {
         refreshBreadcrumbs()
         editingBreadcrumb = null
@@ -579,6 +589,13 @@
     } else if (type === 'leaf') {
       const allLeaves = $leaves
       const targetLeaf = allLeaves.find((n) => n.id === actualId)
+      const siblingLeafWithSameName = allLeaves.find(
+        (l) => l.id !== actualId && l.noteId === targetLeaf?.noteId && l.title.trim() === trimmed
+      )
+      if (siblingLeafWithSameName) {
+        showAlert('同じノートに同名のリーフがあります。別の名前を入力してください。')
+        return
+      }
 
       if (targetLeaf && targetLeaf.title === trimmed) {
         refreshBreadcrumbs()
