@@ -4,5 +4,5 @@
 </script>
 
 <BaseIcon {color}>
-  <path d="M12 4 20 18H4Z" fill={color} />
+  <path d="M12 6 18 18H6Z" fill={color} />
 </BaseIcon>
