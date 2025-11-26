@@ -492,13 +492,9 @@ export async function pushAllWithTreeAPI(
     // metadata差分を含めて変更チェック（pushCountのインクリメントは除外）
     const normalizedExisting = normalizeMetadata(existingMetadata, currentPushCount)
     const normalizedCurrent = normalizeMetadata(metadata, currentPushCount)
-    const metaChanged =
-      stableStringify(normalizedExisting) !== stableStringify(normalizedCurrent)
+    const metaChanged = stableStringify(normalizedExisting) !== stableStringify(normalizedCurrent)
 
-    const hasChanges =
-      hasContentChanges ||
-      changedContentPaths.length > 0 ||
-      metaChanged
+    const hasChanges = hasContentChanges || changedContentPaths.length > 0 || metaChanged
     if (!hasChanges) {
       // 変更がない場合は何もせずに成功を返す
       return { success: true, message: '✅ 変更なし（Pushスキップ）' }

@@ -1920,6 +1920,16 @@
     background: var(--surface-2);
   }
 
+  @media (max-width: 600px) {
+    .welcome-buttons {
+      flex-direction: column;
+    }
+
+    .welcome-button {
+      width: 100%;
+    }
+  }
+
   .config-required-overlay {
     position: absolute;
     top: 0;
