@@ -137,10 +137,14 @@
         display: 'flex',
         alignItems: 'center',
         lineHeight: '1.6',
-        padding: '6px 0',
+        padding: '0',
+      },
+      '.cm-foldGutter .cm-gutterElement': {
+        justifyContent: 'center',
+        color: 'var(--text-muted)',
       },
       '.cm-activeLineGutter': {
-        backgroundColor: 'var(--surface-1)',
+        backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
       },
     })
   }
@@ -185,10 +189,14 @@
           display: 'flex',
           alignItems: 'center',
           lineHeight: '1.6',
-          padding: '6px 0',
+          padding: '0',
+        },
+        '.cm-foldGutter .cm-gutterElement': {
+          justifyContent: 'center',
+          color: 'var(--text-muted)',
         },
         '.cm-activeLineGutter': {
-          backgroundColor: 'var(--surface-1)',
+          backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
         },
       },
       { dark: true }
@@ -206,6 +214,12 @@
         },
         '.cm-gutters': {
           borderRight: `1px solid ${borderColor}`,
+        },
+        '.cm-gutterElement': {
+          padding: '6px 0',
+        },
+        '.cm-activeLineGutter': {
+          backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
         },
       },
       isDark ? { dark: true } : {}
