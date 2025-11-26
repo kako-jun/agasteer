@@ -3,7 +3,7 @@
   import AppIcon from '../icons/AppIcon.svelte'
   import { defaultSettings } from '../../lib/storage'
   import IconButton from '../buttons/IconButton.svelte'
-  import DownloadIcon from '../icons/DownloadIcon.svelte'
+  import OctocatPullIcon from '../icons/OctocatPullIcon.svelte'
   import SettingsIcon from '../icons/SettingsIcon.svelte'
 
   export let githubConfigured: boolean
@@ -34,14 +34,18 @@
         }
       }}>{title}</a
     >
-    <IconButton
-      onClick={onPull}
-      title={$_('header.pull')}
-      ariaLabel={$_('header.pull')}
-      disabled={pullDisabled}
-    >
-      <DownloadIcon />
-    </IconButton>
+    <div class="pull-button">
+      <IconButton
+        onClick={onPull}
+        title={$_('header.pull')}
+        ariaLabel={$_('header.pull')}
+        disabled={pullDisabled}
+        iconWidth={32}
+        iconHeight={20}
+      >
+        <OctocatPullIcon />
+      </IconButton>
+    </div>
   </div>
   <div class="settings-button-wrapper">
     <IconButton
@@ -121,5 +125,17 @@
     background: #ef4444;
     border-radius: 50%;
     pointer-events: none;
+  }
+
+  .pull-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2rem 0.3rem;
+    border-radius: 999px;
+  }
+
+  .pull-button :global(.icon-button) {
+    padding: 0.15rem;
   }
 </style>

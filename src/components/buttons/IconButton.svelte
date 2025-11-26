@@ -5,6 +5,8 @@
   export let disabled = false
   export let variant: 'default' | 'primary' = 'default'
   export let iconSize = 18
+  export let iconWidth: number | null = null
+  export let iconHeight: number | null = null
 </script>
 
 <button
@@ -15,7 +17,7 @@
   {disabled}
   class="icon-button"
   class:primary={variant === 'primary'}
-  style="--icon-size: {iconSize}px"
+  style={`--icon-width: ${iconWidth ?? iconSize}px; --icon-height: ${iconHeight ?? iconSize}px;`}
 >
   <slot />
 </button>
@@ -48,7 +50,7 @@
   }
 
   .icon-button :global(svg) {
-    width: var(--icon-size);
-    height: var(--icon-size);
+    width: var(--icon-width);
+    height: var(--icon-height);
   }
 </style>
