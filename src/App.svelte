@@ -906,7 +906,18 @@
 
     // コンテンツの1行目が # 見出しの場合、リーフのタイトルも自動更新
     const h1Title = extractH1Title(content)
-    const newTitle = h1Title || targetLeaf.title
+    let newTitle = h1Title || targetLeaf.title
+
+    if (h1Title && targetLeaf) {
+      const trimmed = h1Title.trim()
+      const hasDuplicate = allLeaves.some(
+        (l) => l.id !== leafId && l.noteId === targetLeaf.noteId && l.title.trim() === trimmed
+      )
+      if (hasDuplicate) {
+        showAlert('同じノートに同名のリーフがあります。別の見出しにしてください。')
+        newTitle = targetLeaf.title
+      }
+    }
 
     // グローバルストアを更新（左右ペイン両方に反映される）
     const updatedLeaves = allLeaves.map((n) =>
