@@ -509,14 +509,21 @@
   }
 
   function saveEditBreadcrumb(id: string, newName: string, type: Breadcrumb['type']) {
-    if (!newName.trim()) return
+    const trimmed = newName.trim()
+    if (!trimmed) return
 
     // 右ペインのパンくずリストかどうかを判定
     const isRight = id.endsWith('-right')
     const actualId = isRight ? id.replace('-right', '') : id
 
     if (type === 'note') {
-      updateNoteName(actualId, newName.trim())
+      const currentNote = $notes.find((f) => f.id === actualId)
+      if (currentNote && currentNote.name === trimmed) {
+        refreshBreadcrumbs()
+        editingBreadcrumb = null
+        return
+      }
+      updateNoteName(actualId, trimmed)
       const updatedNote = $notes.find((f) => f.id === actualId)
       if (updatedNote) {
         if (leftNote?.id === actualId) {
@@ -536,15 +543,21 @@
       const allLeaves = $leaves
       const targetLeaf = allLeaves.find((n) => n.id === actualId)
 
+      if (targetLeaf && targetLeaf.title === trimmed) {
+        refreshBreadcrumbs()
+        editingBreadcrumb = null
+        return
+      }
+
       // リーフのコンテンツの1行目が # 見出しの場合、見出しテキストも更新
       let updatedContent = targetLeaf?.content || ''
       if (targetLeaf && extractH1Title(targetLeaf.content)) {
-        updatedContent = updateH1Title(targetLeaf.content, newName.trim())
+        updatedContent = updateH1Title(targetLeaf.content, trimmed)
       }
 
       const updatedLeaves = allLeaves.map((n) =>
         n.id === actualId
-          ? { ...n, title: newName.trim(), content: updatedContent, updatedAt: Date.now() }
+          ? { ...n, title: trimmed, content: updatedContent, updatedAt: Date.now() }
           : n
       )
       updateLeaves(updatedLeaves)
