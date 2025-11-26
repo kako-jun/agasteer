@@ -13,7 +13,7 @@
   --error: #b42318;
 
   /* derived */
-  --selection: color-mix(in srgb, var(--accent) 35%, var(--bg) 65%);
+  --selection: color-mix(in srgb, var(--accent) 70%, var(--bg) 30%);
   --text-muted: color-mix(in srgb, var(--text) 70%, var(--bg) 30%);
   --surface-1: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
   --surface-2: color-mix(in srgb, var(--bg) 86%, var(--text) 14%);
