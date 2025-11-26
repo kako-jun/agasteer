@@ -1120,6 +1120,7 @@
 
       isImporting = true
       try {
+        showPushToast($_('settings.importExport.importStarting'), 'success')
         const parsed = await parseSimpleNoteFile(file)
         if (!parsed || parsed.leaves.length === 0) {
           showPushToast($_('settings.importExport.unsupportedFile'), 'error')
@@ -1214,6 +1215,7 @@
         if (parsed.errors?.length) {
           console.warn('Import skipped items:', parsed.errors)
         }
+        showPushToast($_('settings.importExport.importDone'), 'success')
       } catch (error) {
         console.error('Import failed:', error)
         showPushToast($_('settings.importExport.importFailed'), 'error')

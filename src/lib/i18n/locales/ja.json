@@ -158,7 +158,9 @@
       "importReportPerItemHeader": "各項目:",
       "importReportPerItemLine": "- {title}: プレーンテキストで取り込み。スキップしたメタ: ピン留め、タグ、作成日時、添付/メディア、リッチ書式。",
       "importReportErrorsHeader": "エラー/スキップ:",
-      "importReportErrorLine": "- {message}"
+      "importReportErrorLine": "- {message}",
+      "importStarting": "SimpleNote のエクスポートをインポート中...",
+      "importDone": "インポート完了。サマリーリーフを追加しました。"
     }
   },
   "toast": {
