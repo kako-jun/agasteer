@@ -22,7 +22,9 @@
   <div class="modal-overlay" on:click={onClose} role="presentation">
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
     <div class="modal-content" on:click|stopPropagation role="dialog" aria-modal="true">
-      <p>{message}</p>
+      {#each message.split('\n') as line}
+        <p>{line}</p>
+      {/each}
       <div class="modal-buttons">
         {#if type === 'confirm'}
           <button on:click={handleConfirm}>{$_('common.ok')}</button>
