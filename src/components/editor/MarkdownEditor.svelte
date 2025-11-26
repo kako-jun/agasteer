@@ -217,11 +217,11 @@
     return syntaxHighlighting(
       HighlightStyle.define([
         {
-          tag: [tags.heading, tags.heading1, tags.heading2, tags.heading3, tags.headingMark],
+          tag: [tags.heading, tags.heading1, tags.heading2, tags.heading3],
           color: 'var(--accent)',
         },
-        { tag: [tags.listMark], color: 'var(--accent)' },
-        { tag: [tags.quote, tags.quoteMark], color: 'var(--text-muted)' },
+        { tag: [tags.list], color: 'var(--accent)' },
+        { tag: [tags.quote], color: 'var(--text-muted)' },
         { tag: [tags.emphasis], color: 'var(--accent)' },
         { tag: [tags.strong], color: 'var(--accent)', fontWeight: '600' },
         { tag: [tags.link, tags.url], color: 'var(--accent)' },
