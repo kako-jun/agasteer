@@ -79,6 +79,7 @@
   let totalLeafCount = 0 // ホーム統計用: リーフ総数
   let totalLeafChars = 0 // ホーム統計用: リーフ総文字数（空白除く）
   const leafCharCounts = new Map<string, number>() // リーフごとの文字数キャッシュ
+  let settingsPointerFromContent = false // 設定モーダル内でドラッグ開始したかを判定
 
   // 左右ペイン用の状態（対等なローカル変数）
   let isDualPane = false // 画面幅で切り替え
@@ -485,6 +486,23 @@
       e.preventDefault()
       closeSettings()
     }
+  }
+
+  function handleSettingsOverlayClick() {
+    // モーダル内でドラッグ開始→外でmouseupされた場合は閉じない
+    if (settingsPointerFromContent) {
+      settingsPointerFromContent = false
+      return
+    }
+    closeSettings()
+  }
+
+  function handleSettingsContentPointerDown() {
+    settingsPointerFromContent = true
+  }
+
+  function handleSettingsContentPointerUp() {
+    settingsPointerFromContent = false
   }
 
   function handleContentClick(e: MouseEvent) {
@@ -1550,7 +1568,7 @@
         class="settings-modal-overlay"
         role="button"
         tabindex="0"
-        on:click={closeSettings}
+        on:click={handleSettingsOverlayClick}
         on:keydown={handleOverlayKeydown}
         aria-label="設定を閉じる"
       >
@@ -1562,6 +1580,8 @@
           role="dialog"
           aria-modal="true"
           aria-labelledby="settings-title"
+          on:pointerdown={handleSettingsContentPointerDown}
+          on:pointerup={handleSettingsContentPointerUp}
           on:click={handleContentClick}
         >
           <button class="settings-close-button" on:click={closeSettings} aria-label="閉じる">
