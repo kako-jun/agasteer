@@ -240,7 +240,9 @@ export async function pushAllWithTreeAPI(
     if (Array.isArray(value)) {
       return `[${value.map(stableStringify).join(',')}]`
     }
-    const keys = Object.keys(value).sort()
+    const keys = Object.keys(value)
+      .filter((k) => value[k] !== undefined)
+      .sort()
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`
   }
 
@@ -365,27 +367,29 @@ export async function pushAllWithTreeAPI(
       pushCount: currentPushCount,
     }
 
-    // ノートのメタ情報を追加
+    // ノートのメタ情報を追加（undefinedは含めない）
     for (const note of notes) {
       const folderPath = getFolderPath(note, notes)
-      metadata.notes[folderPath] = {
+      const meta: Record<string, unknown> = {
         id: note.id,
         order: note.order,
-        badgeIcon: note.badgeIcon,
-        badgeColor: note.badgeColor,
       }
+      if (note.badgeIcon !== undefined) meta.badgeIcon = note.badgeIcon
+      if (note.badgeColor !== undefined) meta.badgeColor = note.badgeColor
+      metadata.notes[folderPath] = meta as Metadata['notes'][string]
     }
 
-    // リーフのメタ情報を追加
+    // リーフのメタ情報を追加（undefinedは含めない）
     for (const leaf of leaves) {
       const path = buildPath(leaf, notes).replace(/^notes\//, '') // "notes/"を除去
-      metadata.leaves[path] = {
+      const meta: Record<string, unknown> = {
         id: leaf.id,
         updatedAt: leaf.updatedAt,
         order: leaf.order,
-        badgeIcon: leaf.badgeIcon,
-        badgeColor: leaf.badgeColor,
       }
+      if (leaf.badgeIcon !== undefined) meta.badgeIcon = leaf.badgeIcon
+      if (leaf.badgeColor !== undefined) meta.badgeColor = leaf.badgeColor
+      metadata.leaves[path] = meta as Metadata['leaves'][string]
     }
 
     // notes/.gitkeep を追加（notesディレクトリが空でも削除されないように）
