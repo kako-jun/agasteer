@@ -7,7 +7,8 @@
     "home": "Home"
   },
   "header": {
-    "settings": "Open settings"
+    "settings": "Open settings",
+    "pull": "Pull"
   },
   "breadcrumbs": {
     "goHome": "Go to home",
