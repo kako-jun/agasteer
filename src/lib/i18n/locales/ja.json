@@ -7,7 +7,8 @@
     "home": "ホーム"
   },
   "header": {
-    "settings": "設定を開く"
+    "settings": "設定を開く",
+    "pull": "Pullする"
   },
   "breadcrumbs": {
     "goHome": "ホームへ移動",

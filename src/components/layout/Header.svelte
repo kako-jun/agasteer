@@ -1,12 +1,15 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
   import IconButton from '../buttons/IconButton.svelte'
+  import DownloadIcon from '../icons/DownloadIcon.svelte'
   import SettingsIcon from '../icons/SettingsIcon.svelte'
 
   export let githubConfigured: boolean
   export let title: string = 'Agasteer'
   export let onTitleClick: () => void
   export let onSettingsClick: () => void
+  export let onPull: () => void
+  export let pullDisabled: boolean = false
 </script>
 
 <header>
@@ -20,17 +23,27 @@
       }
     }}>{title}</a
   >
-  <div class="settings-button-wrapper">
+  <div class="actions">
     <IconButton
-      onClick={onSettingsClick}
-      title={$_('header.settings')}
-      ariaLabel={$_('header.settings')}
+      onClick={onPull}
+      title={$_('header.pull')}
+      ariaLabel={$_('header.pull')}
+      disabled={pullDisabled}
     >
-      <SettingsIcon />
+      <DownloadIcon />
     </IconButton>
-    {#if !githubConfigured}
-      <span class="notification-badge"></span>
-    {/if}
+    <div class="settings-button-wrapper">
+      <IconButton
+        onClick={onSettingsClick}
+        title={$_('header.settings')}
+        ariaLabel={$_('header.settings')}
+      >
+        <SettingsIcon />
+      </IconButton>
+      {#if !githubConfigured}
+        <span class="notification-badge"></span>
+      {/if}
+    </div>
   </div>
 </header>
 
@@ -67,6 +80,12 @@
 
   .title-button:hover {
     color: var(--accent);
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
   }
 
   .settings-button-wrapper {

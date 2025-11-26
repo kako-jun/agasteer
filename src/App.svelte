@@ -1202,6 +1202,8 @@
       onSettingsClick={() => {
         goSettings()
       }}
+      onPull={() => handlePull(false)}
+      pullDisabled={pullRunning || isPushing}
     />
 
     <div class="content-wrapper" class:single-pane={!isDualPane}>
