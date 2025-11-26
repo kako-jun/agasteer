@@ -233,6 +233,17 @@ export async function pushAllWithTreeAPI(
   notes: Note[],
   settings: Settings
 ): Promise<SaveResult> {
+  const stableStringify = (value: any): string => {
+    if (value === null || typeof value !== 'object') {
+      return JSON.stringify(value)
+    }
+    if (Array.isArray(value)) {
+      return `[${value.map(stableStringify).join(',')}]`
+    }
+    const keys = Object.keys(value).sort()
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`
+  }
+
   // 設定の検証
   const validation = validateGitHubSettings(settings)
   if (!validation.valid) {
@@ -326,6 +337,7 @@ export async function pushAllWithTreeAPI(
 
     // 既存のmetadata.jsonからpushCountを取得
     let currentPushCount = 0
+    let existingMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     try {
       const metadataRes = await fetchGitHubContents(
         'notes/metadata.json',
@@ -337,7 +349,7 @@ export async function pushAllWithTreeAPI(
         if (metadataData.content) {
           const base64 = metadataData.content.replace(/\n/g, '')
           const decoded = atob(base64)
-          const existingMetadata: Metadata = JSON.parse(decoded)
+          existingMetadata = JSON.parse(decoded)
           currentPushCount = existingMetadata.pushCount || 0
         }
       }
@@ -430,24 +442,33 @@ export async function pushAllWithTreeAPI(
       })
     }
 
-    // 変更がある場合のみpushCountをインクリメント
+    // metadata差分を含めて変更チェック（pushCountのインクリメントは除外）
+    const metadataForCompare: Metadata = { ...metadata, pushCount: currentPushCount }
+    const existingMetadataForCompare: Metadata = {
+      ...existingMetadata,
+      pushCount: currentPushCount,
+      notes: existingMetadata.notes || {},
+      leaves: existingMetadata.leaves || {},
+    }
+    const metaChanged =
+      stableStringify(metadataForCompare) !== stableStringify(existingMetadataForCompare)
+
+    const hasChanges = treeItems.some((item) => 'content' in item) || metaChanged
+    if (!hasChanges) {
+      // 変更がない場合は何もせずに成功を返す
+      return { success: true, message: '✅ 変更なし（Pushスキップ）' }
+    }
+
+    // 変更がある場合のみpushCountをインクリメントし、metadata.jsonを追加
     metadata.pushCount = currentPushCount + 1
     const metadataContent = JSON.stringify(metadata, null, 2)
 
-    // metadata.jsonをtreeItemsに追加
     treeItems.push({
       path: 'notes/metadata.json',
       mode: '100644',
       type: 'blob',
       content: metadataContent,
     })
-
-    // 変更があるか確認（contentを使っているアイテムがあるか）
-    const hasChanges = treeItems.some((item) => 'content' in item)
-    if (!hasChanges) {
-      // 変更がない場合は何もせずに成功を返す
-      return { success: true, message: '✅ 変更なし（Pushスキップ）' }
-    }
 
     // 6. 新しいTreeを作成（base_treeなし、全ファイルを明示的に指定）
     const newTreeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
