@@ -13,17 +13,17 @@
 </script>
 
 <header>
-  <a
-    class="title-button"
-    href="/"
-    on:click={(e) => {
-      if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
-        e.preventDefault()
-        onTitleClick()
-      }
-    }}>{title}</a
-  >
-  <div class="actions">
+  <div class="title-group">
+    <a
+      class="title-button"
+      href="/"
+      on:click={(e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
+          e.preventDefault()
+          onTitleClick()
+        }
+      }}>{title}</a
+    >
     <IconButton
       onClick={onPull}
       title={$_('header.pull')}
@@ -32,18 +32,18 @@
     >
       <DownloadIcon />
     </IconButton>
-    <div class="settings-button-wrapper">
-      <IconButton
-        onClick={onSettingsClick}
-        title={$_('header.settings')}
-        ariaLabel={$_('header.settings')}
-      >
-        <SettingsIcon />
-      </IconButton>
-      {#if !githubConfigured}
-        <span class="notification-badge"></span>
-      {/if}
-    </div>
+  </div>
+  <div class="settings-button-wrapper">
+    <IconButton
+      onClick={onSettingsClick}
+      title={$_('header.settings')}
+      ariaLabel={$_('header.settings')}
+    >
+      <SettingsIcon />
+    </IconButton>
+    {#if !githubConfigured}
+      <span class="notification-badge"></span>
+    {/if}
   </div>
 </header>
 
@@ -82,10 +82,10 @@
     color: var(--accent);
   }
 
-  .actions {
+  .title-group {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.35rem;
   }
 
   .settings-button-wrapper {
