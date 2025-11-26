@@ -88,6 +88,9 @@
     -webkit-mask-size: contain;
     mask-position: center;
     -webkit-mask-position: center;
+    animation: leaf-drift 10s ease-in-out infinite;
+    transform-origin: 50% 60%;
+    will-change: transform;
   }
 
   @supports not (mask-image: url('')) {
@@ -161,7 +164,34 @@
     }
     20%,
     40% {
-      transform: scale(1);
+    transform: scale(1);
+    }
+  }
+
+  @keyframes leaf-drift {
+    0% {
+      transform: translateY(0) rotate(0deg) scale(1, 1);
+    }
+    20% {
+      transform: translateY(-4px) rotate(-4deg) scale(0.97, 1.03);
+    }
+    45% {
+      transform: translateY(5px) rotate(6deg) scale(1.03, 0.96);
+    }
+    70% {
+      transform: translateY(-3px) rotate(-3deg) scale(0.98, 1.02);
+    }
+    100% {
+      transform: translateY(0) rotate(0deg) scale(1, 1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .about-icon {
+      animation: none;
+    }
+    .heart-icon {
+      animation: none;
     }
   }
 </style>
