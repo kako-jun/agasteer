@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Note } from '../../lib/types'
-  import IconBadgePicker from '../badges/IconBadgePicker.svelte'
+  import BadgeButton from '../badges/BadgeButton.svelte'
 
   export let note: Note
   export let dragOver: boolean = false
@@ -34,7 +34,7 @@
   on:drop|preventDefault={onDrop}
   on:click={onSelect}
 >
-  <IconBadgePicker icon={badgeIcon} color={badgeColor} onChange={onBadgeChange} />
+  <BadgeButton icon={badgeIcon} color={badgeColor} onChange={onBadgeChange} />
   <strong class="text-ellipsis">{note.name}</strong>
   <div class="card-meta">
     {#each items as item}

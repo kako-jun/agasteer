@@ -690,8 +690,25 @@
     updateNotes(updatedNotes)
   }
 
+  function normalizeBadgeValue(value: string | undefined | null): string {
+    return value || ''
+  }
+
   function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string) {
-    const updated = $notes.map((n) => (n.id === noteId ? { ...n, badgeIcon, badgeColor } : n))
+    const current = $notes.find((n) => n.id === noteId)
+    if (!current) return
+    const nextIcon = normalizeBadgeValue(badgeIcon)
+    const nextColor = normalizeBadgeValue(badgeColor)
+    if (
+      normalizeBadgeValue(current.badgeIcon) === nextIcon &&
+      normalizeBadgeValue(current.badgeColor) === nextColor
+    ) {
+      return
+    }
+
+    const updated = $notes.map((n) =>
+      n.id === noteId ? { ...n, badgeIcon: nextIcon, badgeColor: nextColor } : n
+    )
     updateNotes(updated)
   }
 
@@ -851,16 +868,35 @@
 
   function updateLeafBadge(leafId: string, badgeIcon: string, badgeColor: string) {
     const allLeaves = $leaves
+    const current = allLeaves.find((l) => l.id === leafId)
+    if (!current) return
+
+    const nextIcon = normalizeBadgeValue(badgeIcon)
+    const nextColor = normalizeBadgeValue(badgeColor)
+    if (
+      normalizeBadgeValue(current.badgeIcon) === nextIcon &&
+      normalizeBadgeValue(current.badgeColor) === nextColor
+    ) {
+      return
+    }
+
     const updatedLeaves = allLeaves.map((n) =>
-      n.id === leafId ? { ...n, badgeIcon, badgeColor, updatedAt: Date.now() } : n
+      n.id === leafId
+        ? { ...n, badgeIcon: nextIcon, badgeColor: nextColor, updatedAt: Date.now() }
+        : n
     )
     updateLeaves(updatedLeaves)
 
     if (leftLeaf?.id === leafId) {
-      leftLeaf = { ...leftLeaf, badgeIcon, badgeColor, updatedAt: Date.now() }
+      leftLeaf = { ...leftLeaf, badgeIcon: nextIcon, badgeColor: nextColor, updatedAt: Date.now() }
     }
     if (rightLeaf?.id === leafId) {
-      rightLeaf = { ...rightLeaf, badgeIcon, badgeColor, updatedAt: Date.now() }
+      rightLeaf = {
+        ...rightLeaf,
+        badgeIcon: nextIcon,
+        badgeColor: nextColor,
+        updatedAt: Date.now(),
+      }
     }
   }
 

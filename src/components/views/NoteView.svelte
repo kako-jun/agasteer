@@ -3,7 +3,7 @@
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
   import NoteCard from '../cards/NoteCard.svelte'
-  import IconBadgePicker from '../badges/IconBadgePicker.svelte'
+  import BadgeButton from '../badges/BadgeButton.svelte'
 
   export let currentNote: Note
   export let subNotes: Note[]
@@ -110,7 +110,7 @@
           on:click={() => onSelectLeaf(leaf)}
           animate:flip={{ duration: 300 }}
         >
-          <IconBadgePicker
+          <BadgeButton
             icon={leaf.badgeIcon || ''}
             color={leaf.badgeColor || ''}
             onChange={(icon, color) => onUpdateLeafBadge(leaf.id, icon, color)}
