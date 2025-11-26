@@ -77,6 +77,12 @@
   --error-color: #ff6666;
 }
 
+:global(.text-ellipsis) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body {
   background: var(--bg-primary);
   color: var(--text-primary);

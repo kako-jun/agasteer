@@ -30,10 +30,10 @@
   on:drop|preventDefault={onDrop}
   on:click={onSelect}
 >
-  <strong>{note.name}</strong>
+  <strong class="text-ellipsis">{note.name}</strong>
   <div class="card-meta">
     {#each items as item}
-      <small class="note-item">{item}</small>
+      <small class="note-item text-ellipsis">{item}</small>
     {/each}
   </div>
 </div>
@@ -46,6 +46,12 @@
     background: var(--bg-secondary);
     cursor: pointer;
     transition: all 0.2s;
+    overflow: hidden;
+  }
+
+  .note-card strong {
+    display: block;
+    max-width: 100%;
   }
 
   .note-group-card {
@@ -74,6 +80,7 @@
 
   .note-item {
     display: block;
+    max-width: 100%;
   }
 
   .drag-over {

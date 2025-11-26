@@ -78,7 +78,7 @@
             </IconButton>
           {:else}
             <button
-              class="breadcrumb-button"
+              class="breadcrumb-button text-ellipsis"
               class:current={index === breadcrumbs.length - 1}
               on:click={crumb.action}
             >
@@ -148,6 +148,8 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
+    max-width: 320px;
+    min-width: 0;
   }
 
   .breadcrumb-button {
@@ -158,6 +160,7 @@
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     transition: background 0.2s;
+    max-width: 100%;
   }
   .breadcrumb-button.current {
     color: var(--text-primary);

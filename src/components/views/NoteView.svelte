@@ -83,7 +83,7 @@
           on:click={() => onSelectLeaf(leaf)}
           animate:flip={{ duration: 300 }}
         >
-          <strong>{leaf.title}</strong>
+          <strong class="text-ellipsis">{leaf.title}</strong>
           <div class="card-meta">
             <small>{$_('note.updated')}: {formatDateTime(leaf.updatedAt)}</small>
           </div>
@@ -113,6 +113,7 @@
     background: var(--bg-secondary);
     cursor: pointer;
     transition: all 0.2s;
+    overflow: hidden;
   }
 
   /* リーフは角丸を外してノートと区別する */
@@ -139,6 +140,8 @@
     gap: 0.25rem;
     align-items: flex-end;
     text-align: right;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .drag-over {
