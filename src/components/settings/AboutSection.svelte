@@ -75,10 +75,16 @@
     text-align: center;
     color: var(--text-muted);
     font-size: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .about-icon-wrap {
+    display: inline-flex;
     width: 100px;
+    align-items: center;
+    justify-content: center;
     margin: 0 auto 1rem;
   }
 
