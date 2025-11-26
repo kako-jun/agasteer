@@ -1111,7 +1111,7 @@
 
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.json,.zip,.txt'
+    input.accept = '.json,.zip'
     input.multiple = false
 
     input.onchange = async () => {
