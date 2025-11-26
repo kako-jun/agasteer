@@ -6,7 +6,10 @@
   export let pushCount = 0
 </script>
 
-<div class="statistics">
+<div
+  class="statistics"
+  style="position: absolute; bottom: 1rem; right: 1rem; opacity: 0.5; pointer-events: none;"
+>
   <div class="stat-item">
     <div class="stat-label">{$_('home.leafCount')}</div>
     <div class="stat-value">{leafCount.toLocaleString()}</div>
@@ -23,12 +26,7 @@
 
 <style>
   .statistics {
-    position: absolute;
-    bottom: 1rem;
-    right: 1rem;
     z-index: 1;
-    opacity: 0.5;
-    pointer-events: none;
   }
 
   .stat-item {
