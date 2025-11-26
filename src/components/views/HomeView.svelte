@@ -65,7 +65,7 @@
     position: absolute;
     bottom: 1rem;
     right: 1rem;
-    z-index: -1;
+    z-index: 1;
     opacity: 0.5;
     pointer-events: none;
   }
