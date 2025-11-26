@@ -179,7 +179,12 @@
     "unsavedChanges": "未保存の変更があります。Pullすると上書きされます。続行しますか？",
     "deleteLeaf": "このリーフを削除しますか？",
     "deleteRootNote": "このノートを削除しますか？直下のサブノートとリーフもまとめて削除されます。",
-    "deleteSubNote": "このサブノートを削除しますか？直下のリーフもまとめて削除されます。"
+    "deleteSubNote": "このサブノートを削除しますか？直下のリーフもまとめて削除されます。",
+    "duplicateLeafDestination": "移動先に同名のリーフがあります。名前を変更してから移動してください。",
+    "duplicateNoteDestination": "移動先に同名のノートがあります。名前を変更してから移動してください。",
+    "duplicateNoteSameLevel": "同じ階層に同名のノートがあります。別の名前を入力してください。",
+    "duplicateLeafSameNote": "同じノートに同名のリーフがあります。別の名前を入力してください。",
+    "duplicateLeafHeading": "同じノートに同名のリーフがあります。別の見出しにしてください。"
   },
   "loading": {
     "pulling": "Pull中...",

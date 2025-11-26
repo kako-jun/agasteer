@@ -562,7 +562,7 @@
           n.name.trim() === trimmed
       )
       if (siblingWithSameName) {
-        showAlert('同じ階層に同名のノートがあります。別の名前を入力してください。')
+        showAlert($_('modal.duplicateNoteSameLevel'))
         return
       }
       if (currentNote && currentNote.name === trimmed) {
@@ -593,7 +593,7 @@
         (l) => l.id !== actualId && l.noteId === targetLeaf?.noteId && l.title.trim() === trimmed
       )
       if (siblingLeafWithSameName) {
-        showAlert('同じノートに同名のリーフがあります。別の名前を入力してください。')
+        showAlert($_('modal.duplicateLeafSameNote'))
         return
       }
 
@@ -914,7 +914,7 @@
         (l) => l.id !== leafId && l.noteId === targetLeaf.noteId && l.title.trim() === trimmed
       )
       if (hasDuplicate) {
-        showAlert('同じノートに同名のリーフがあります。別の見出しにしてください。')
+        showAlert($_('modal.duplicateLeafHeading'))
         newTitle = targetLeaf.title
       }
     }
@@ -1090,7 +1090,7 @@
       (l) => l.noteId === destNoteId && l.title.trim() === leaf.title.trim()
     )
     if (hasDuplicate) {
-      showAlert('移動先に同名のリーフがあります。名前を変更してから移動してください。')
+      showAlert($_('modal.duplicateLeafDestination'))
       return
     }
 
@@ -1145,7 +1145,7 @@
         n.name.trim() === note.name.trim()
     )
     if (hasDuplicate) {
-      showAlert('移動先に同名のノートがあります。名前を変更してから移動してください。')
+      showAlert($_('modal.duplicateNoteDestination'))
       return
     }
 

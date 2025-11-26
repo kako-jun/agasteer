@@ -178,7 +178,12 @@
     "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
     "deleteRootNote": "Delete this note? Its direct sub-notes and leaves will also be deleted.",
     "deleteSubNote": "Delete this sub-note? Its leaves will also be deleted.",
-    "deleteLeaf": "Delete this leaf?"
+    "deleteLeaf": "Delete this leaf?",
+    "duplicateLeafDestination": "A leaf with the same name already exists in the destination. Rename before moving.",
+    "duplicateNoteDestination": "A note with the same name already exists in the destination. Rename before moving.",
+    "duplicateNoteSameLevel": "A note with the same name exists in this level. Please choose a different name.",
+    "duplicateLeafSameNote": "A leaf with the same name exists in this note. Please choose a different name.",
+    "duplicateLeafHeading": "A leaf with the same name exists in this note. Use a different heading."
   },
   "loading": {
     "pulling": "Pulling...",
