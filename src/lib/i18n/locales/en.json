@@ -93,7 +93,8 @@
       },
       "toolName": {
         "label": "Tool Name",
-        "placeholder": "Agasteer"
+        "placeholder": "Agasteer",
+        "reset": "Reset to Default"
       },
       "font": {
         "title": "Custom Font",
