@@ -177,7 +177,9 @@
     "unsavedChanges": "未保存の変更があります。Pullすると上書きされます。続行しますか？",
     "deleteNote": "このノートを削除しますか？",
     "deleteLeaf": "このリーフを削除しますか？",
-    "deleteNoteWithChildren": "このノートと直下のサブノート・リーフをすべて削除しますか？"
+    "deleteNoteWithChildren": "このノートと直下のサブノート・リーフをすべて削除しますか？",
+    "deleteRootNoteWithChildren": "このノートと直下のサブノート・リーフをすべて削除しますか？",
+    "deleteSubNoteWithChildren": "このサブノートとリーフをすべて削除しますか？"
   },
   "loading": {
     "pulling": "Pull中...",

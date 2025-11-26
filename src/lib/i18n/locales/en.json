@@ -176,7 +176,8 @@
     "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
     "deleteNote": "Delete this note?",
     "deleteLeaf": "Delete this leaf?",
-    "deleteNoteWithChildren": "Delete this note and its direct sub-notes/leaves?"
+    "deleteRootNoteWithChildren": "Delete this note and its direct sub-notes/leaves?",
+    "deleteSubNoteWithChildren": "Delete this sub-note and its leaves?"
   },
   "loading": {
     "pulling": "Pulling...",

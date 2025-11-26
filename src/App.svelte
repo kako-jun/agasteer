@@ -722,12 +722,14 @@
       navigateAfterDelete(otherPane)
     }
 
-    if (hasSubNotes || hasLeaves) {
-      showConfirm($_('modal.deleteNoteWithChildren'), deleteNoteAndDescendants)
-      return
-    }
+    const confirmMessage =
+      hasSubNotes || hasLeaves
+        ? targetNote.parentId
+          ? $_('modal.deleteSubNoteWithChildren')
+          : $_('modal.deleteRootNoteWithChildren')
+        : $_('modal.deleteNote')
 
-    showConfirm($_('modal.deleteNote'), deleteNoteAndDescendants)
+    showConfirm(confirmMessage, deleteNoteAndDescendants)
   }
 
   function updateNoteName(noteId: string, newName: string) {
