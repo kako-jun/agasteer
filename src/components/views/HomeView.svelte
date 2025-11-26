@@ -18,10 +18,20 @@
   export let selectedIndex: number = 0
   export let isActive: boolean = true
   export let vimMode: boolean = false
+  export let leafCount: number = 0
+  export let leafCharCount: number = 0
 </script>
 
 <section class="view-container">
   <div class="statistics">
+    <div class="stat-item">
+      <div class="stat-label">{$_('home.leafCount')}</div>
+      <div class="stat-value">{leafCount.toLocaleString()}</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">{$_('home.charCount')}</div>
+      <div class="stat-value">{leafCharCount.toLocaleString()}</div>
+    </div>
     <div class="stat-item">
       <div class="stat-label">{$_('home.pushCount')}</div>
       <div class="stat-value">{$metadata.pushCount.toLocaleString()}</div>
@@ -72,6 +82,10 @@
 
   .stat-item {
     text-align: right;
+  }
+
+  .stat-item + .stat-item {
+    margin-top: 0.35rem;
   }
 
   .stat-label {

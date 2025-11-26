@@ -76,6 +76,9 @@
   let isPulling = false // Pull処理中はURL更新をスキップ
   let i18nReady = false // i18n初期化完了フラグ
   let showWelcome = false // ウェルカムモーダル表示フラグ
+  let totalLeafCount = 0 // ホーム統計用: リーフ総数
+  let totalLeafChars = 0 // ホーム統計用: リーフ総文字数（空白除く）
+  const leafCharCounts = new Map<string, number>() // リーフごとの文字数キャッシュ
 
   // 左右ペイン用の状態（対等なローカル変数）
   let isDualPane = false // 画面幅で切り替え
@@ -561,6 +564,14 @@
           : n
       )
       updateLeaves(updatedLeaves)
+
+      if (targetLeaf) {
+        const prevChars = leafCharCounts.get(actualId) ?? computeLeafCharCount(targetLeaf.content)
+        const nextChars = computeLeafCharCount(updatedContent)
+        leafCharCounts.set(actualId, nextChars)
+        totalLeafChars += nextChars - prevChars
+      }
+
       const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
       if (updatedLeaf) {
         if (leftLeaf?.id === actualId) {
@@ -741,6 +752,11 @@
       order: noteLeaves.length,
     }
 
+    const newLeafChars = computeLeafCharCount(newLeaf.content)
+    leafCharCounts.set(newLeaf.id, newLeafChars)
+    totalLeafCount += 1
+    totalLeafChars += newLeafChars
+
     updateLeaves([...allLeaves, newLeaf])
     selectLeaf(newLeaf, pane)
   }
@@ -755,8 +771,14 @@
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
+    const prevChars = leafCharCounts.get(leafId) ?? computeLeafCharCount(targetLeaf.content)
+
     showConfirm('このリーフを削除しますか？', () => {
       updateLeaves(allLeaves.filter((n) => n.id !== leafId))
+
+      leafCharCounts.delete(leafId)
+      totalLeafCount = Math.max(0, totalLeafCount - 1)
+      totalLeafChars = Math.max(0, totalLeafChars - prevChars)
 
       const note = $notes.find((f) => f.id === targetLeaf.noteId)
 
@@ -790,6 +812,9 @@
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
+    const previousChars = leafCharCounts.get(leafId) ?? computeLeafCharCount(targetLeaf.content)
+    const nextChars = computeLeafCharCount(content)
+
     // コンテンツの1行目が # 見出しの場合、リーフのタイトルも自動更新
     const h1Title = extractH1Title(content)
     const newTitle = h1Title || targetLeaf.title
@@ -799,6 +824,9 @@
       n.id === leafId ? { ...n, content, title: newTitle, updatedAt: Date.now() } : n
     )
     updateLeaves(updatedLeaves)
+
+    leafCharCounts.set(leafId, nextChars)
+    totalLeafChars += nextChars - previousChars
 
     // 左ペインのリーフを編集している場合は leftLeaf も更新
     if (leftLeaf?.id === leafId) {
@@ -869,6 +897,26 @@
 
   function getLeafCount(noteId: string): number {
     return $leaves.filter((n) => n.noteId === noteId).length
+  }
+
+  function resetLeafStats() {
+    leafCharCounts.clear()
+    totalLeafCount = 0
+    totalLeafChars = 0
+  }
+
+  function computeLeafCharCount(content: string): number {
+    return content.replace(/\s+/g, '').length
+  }
+
+  function rebuildLeafStats(allLeaves: Leaf[]) {
+    resetLeafStats()
+    for (const leaf of allLeaves) {
+      const chars = computeLeafCharCount(leaf.content)
+      leafCharCounts.set(leaf.id, chars)
+      totalLeafCount += 1
+      totalLeafChars += chars
+    }
   }
 
   function getNoteItems(noteId: string): string[] {
@@ -1088,6 +1136,7 @@
     await clearAllData() // IndexedDB全削除
     notes.set([])
     leaves.set([])
+    resetLeafStats()
     leftNote = null
     leftLeaf = null
     rightNote = null
@@ -1105,6 +1154,7 @@
       // GitHubから取得したデータでIndexedDBを再作成
       updateNotes(result.notes)
       updateLeaves(result.leaves)
+      rebuildLeafStats(result.leaves)
       metadata.set(result.metadata)
       isOperationsLocked = false
 
@@ -1186,6 +1236,8 @@
               onSave={handleSaveToGitHub}
               {dragOverNoteId}
               {getNoteItems}
+              leafCount={totalLeafCount}
+              leafCharCount={totalLeafChars}
             />
           {:else if leftView === 'note' && leftNote}
             <NoteView
@@ -1314,6 +1366,8 @@
               onSave={handleSaveToGitHub}
               {dragOverNoteId}
               {getNoteItems}
+              leafCount={totalLeafCount}
+              leafCharCount={totalLeafChars}
             />
           {:else if rightView === 'note' && rightNote}
             <NoteView

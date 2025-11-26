@@ -28,6 +28,8 @@
     "shareFailed": "共有に失敗しました"
   },
   "home": {
+    "leafCount": "リーフ数",
+    "charCount": "文字数",
     "pushCount": "Push回数",
     "noNotes": "ノートがまだありません。\n左下のボタンから新規ノートを作成できます。"
   },

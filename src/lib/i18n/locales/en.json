@@ -28,6 +28,8 @@
     "shareFailed": "Failed to share"
   },
   "home": {
+    "leafCount": "Leaves",
+    "charCount": "Characters",
     "pushCount": "Push Count",
     "noNotes": "No notes yet.\nYou can create a new note using the button at the bottom left."
   },
