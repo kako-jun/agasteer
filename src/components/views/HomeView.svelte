@@ -24,7 +24,7 @@
 </script>
 
 <section class="view-container">
-  <StatsPanel {leafCount} {leafCharCount} pushCount={pushCount} />
+  <StatsPanel {leafCount} {leafCharCount} {pushCount} />
 
   <div class="card-grid">
     {#if notes.length === 0 && !disabled}
