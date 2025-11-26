@@ -1,8 +1,9 @@
 <script lang="ts">
-  // __BUILD_DATE__ is injected at build time by Vite
+  // __BUILD_DATE__ is injected at build time by Vite (vite.config.ts)
+  const buildDate = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : 'dev'
 </script>
 
-<div class="version">v{__BUILD_DATE__}</div>
+<div class="version">v{buildDate}</div>
 
 <style>
   .version {

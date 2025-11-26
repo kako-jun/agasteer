@@ -1238,6 +1238,7 @@
               {getNoteItems}
               leafCount={totalLeafCount}
               leafCharCount={totalLeafChars}
+              pushCount={$metadata.pushCount}
             />
           {:else if leftView === 'note' && leftNote}
             <NoteView
@@ -1368,6 +1369,7 @@
               {getNoteItems}
               leafCount={totalLeafCount}
               leafCharCount={totalLeafChars}
+              pushCount={$metadata.pushCount}
             />
           {:else if rightView === 'note' && rightNote}
             <NoteView
