@@ -33,6 +33,9 @@
   let vim: any
   let Vim: any
   let lineNumbers: any
+  let HighlightStyle: any
+  let syntaxHighlighting: any
+  let tags: any
 
   // 外部からスクロール位置を設定する関数
   export function scrollTo(scrollTop: number) {
@@ -67,6 +70,7 @@
       { markdown: md },
       { basicSetup: bs },
       { vim: v, Vim: V },
+      { HighlightStyle: HS, syntaxHighlighting: sh },
     ] = await Promise.all([
       import('@codemirror/state'),
       import('@codemirror/view'),
@@ -74,6 +78,7 @@
       import('@codemirror/lang-markdown'),
       import('codemirror'),
       import('@replit/codemirror-vim'),
+      import('@codemirror/language'),
     ])
 
     EditorState = ES
@@ -87,6 +92,9 @@
     vim = v
     Vim = V
     lineNumbers = ln
+    HighlightStyle = HS
+    syntaxHighlighting = sh
+    tags = (await import('@lezer/highlight')).tags
     isLoading = false
   }
 
@@ -201,6 +209,24 @@
         },
       },
       isDark ? { dark: true } : {}
+    )
+  }
+
+  function createMarkdownHighlightStyle() {
+    if (!HighlightStyle || !syntaxHighlighting || !tags) return null
+    return syntaxHighlighting(
+      HighlightStyle.define([
+        {
+          tag: [tags.heading, tags.heading1, tags.heading2, tags.heading3, tags.headingMark],
+          color: 'var(--accent)',
+        },
+        { tag: [tags.listMark], color: 'var(--accent)' },
+        { tag: [tags.quote, tags.quoteMark], color: 'var(--text-muted)' },
+        { tag: [tags.emphasis], color: 'var(--accent)' },
+        { tag: [tags.strong], color: 'var(--accent)', fontWeight: '600' },
+        { tag: [tags.link, tags.url], color: 'var(--accent)' },
+        { tag: [tags.monospace], color: 'var(--text)' },
+      ])
     )
   }
 
@@ -321,6 +347,11 @@
         if (lineNumbers) extensions.push(lineNumbers())
         extensions.push(createLinedTheme(false))
       }
+    }
+
+    const mdHighlight = createMarkdownHighlightStyle()
+    if (mdHighlight) {
+      extensions.push(mdHighlight)
     }
 
     currentExtensions = extensions
