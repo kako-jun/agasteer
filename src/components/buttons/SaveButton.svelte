@@ -1,7 +1,7 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
   import IconButton from './IconButton.svelte'
-  import SaveIcon from '../icons/SaveIcon.svelte'
+  import OctocatPushIcon from '../icons/OctocatPushIcon.svelte'
 
   export let onSave: () => void
   export let isDirty: boolean
@@ -13,8 +13,10 @@
     title={$_('common.save')}
     ariaLabel={$_('common.save')}
     variant="primary"
+    iconWidth={32}
+    iconHeight={20}
   >
-    <SaveIcon />
+    <OctocatPushIcon />
   </IconButton>
   {#if isDirty}
     <span class="notification-badge"></span>
