@@ -94,25 +94,25 @@
   function createEditorLightTheme() {
     return EditorView.theme({
       '&': {
-        backgroundColor: 'var(--bg-primary)',
-        color: 'var(--text-primary)',
+        backgroundColor: 'var(--bg)',
+        color: 'var(--text)',
         border: 'none',
       },
       '.cm-content': {
-        caretColor: 'var(--accent-color)',
+        caretColor: 'var(--accent)',
       },
       '.cm-cursor, .cm-dropCursor': {
-        borderLeftColor: 'var(--accent-color)',
+        borderLeftColor: 'var(--accent)',
       },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
+        backgroundColor: 'var(--selection)',
       },
       '.cm-activeLine': {
-        backgroundColor: 'var(--bg-secondary)',
+        backgroundColor: 'var(--surface-1)',
       },
       '.cm-gutters': {
-        backgroundColor: 'var(--bg-primary)',
-        color: 'var(--text-secondary)',
+        backgroundColor: 'var(--bg)',
+        color: 'var(--text-muted)',
         border: 'none',
         padding: '0 8px 0 0',
       },
@@ -123,7 +123,7 @@
         padding: '6px 0',
       },
       '.cm-activeLineGutter': {
-        backgroundColor: 'var(--bg-secondary)',
+        backgroundColor: 'var(--surface-1)',
       },
     })
   }
@@ -133,25 +133,25 @@
     return EditorView.theme(
       {
         '&': {
-          backgroundColor: 'var(--bg-primary)',
-          color: 'var(--text-primary)',
+          backgroundColor: 'var(--bg)',
+          color: 'var(--text)',
           border: 'none',
         },
         '.cm-content': {
-          caretColor: 'var(--accent-color)',
+          caretColor: 'var(--accent)',
         },
         '.cm-cursor, .cm-dropCursor': {
-          borderLeftColor: 'var(--accent-color)',
+          borderLeftColor: 'var(--accent)',
         },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-          backgroundColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
+          backgroundColor: 'var(--selection)',
         },
         '.cm-activeLine': {
-          backgroundColor: 'var(--bg-secondary)',
+          backgroundColor: 'var(--surface-1)',
         },
         '.cm-gutters': {
-          backgroundColor: 'var(--bg-primary)',
-          color: 'var(--text-secondary)',
+          backgroundColor: 'var(--bg)',
+          color: 'var(--text-muted)',
           border: 'none',
           padding: '0 8px 0 0',
         },
@@ -162,7 +162,7 @@
           padding: '6px 0',
         },
         '.cm-activeLineGutter': {
-          backgroundColor: 'var(--bg-secondary)',
+          backgroundColor: 'var(--surface-1)',
         },
       },
       { dark: true }
@@ -381,7 +381,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: var(--bg-primary);
+    background-color: var(--bg);
   }
 
   .loading-dots {
@@ -392,7 +392,7 @@
   .loading-dots span {
     width: 12px;
     height: 12px;
-    background-color: var(--accent-color);
+    background-color: var(--accent);
     border-radius: 50%;
     animation: pulse 1.4s infinite ease-in-out both;
   }
@@ -449,19 +449,19 @@
   /* Vimコマンドラインのスタイル */
   :global(.cm-vim-panel) {
     padding: 0.5rem 0.5rem 0.4rem 0.5rem;
-    background-color: var(--bg-secondary);
-    color: var(--text-primary);
+    background-color: var(--surface-1);
+    color: var(--text);
     font-family: 'Courier New', monospace !important;
     font-size: 14px !important;
     line-height: 1 !important;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border);
   }
 
   :global(.cm-vim-panel input) {
     background: transparent !important;
     border: none !important;
     outline: none !important;
-    color: var(--text-primary) !important;
+    color: var(--text) !important;
     font-family: 'Courier New', monospace !important;
     font-size: 14px !important;
     line-height: 1 !important;

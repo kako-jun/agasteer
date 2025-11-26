@@ -42,9 +42,9 @@
   }
 
   .toast {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    background: var(--surface-1);
+    color: var(--text);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 0.5rem 0.75rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -56,12 +56,12 @@
   }
 
   .toast.success {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .toast.error {
-    border-color: var(--error-color);
-    color: var(--error-color);
+    border-color: var(--error);
+    color: var(--error);
   }
 </style>

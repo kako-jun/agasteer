@@ -41,9 +41,9 @@
 <style>
   .note-card {
     padding: 1rem;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--bg-secondary);
+    background: var(--surface-1);
     cursor: pointer;
     transition: all 0.2s;
     overflow: hidden;
@@ -55,23 +55,23 @@
   }
 
   .note-group-card {
-    background: var(--bg-tertiary);
+    background: var(--surface-2);
   }
 
   .note-card:hover {
-    border-color: var(--accent-color);
+    border-color: var(--accent);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
   .note-card.selected {
-    border-color: var(--accent-color);
-    background: var(--bg-tertiary);
-    box-shadow: 0 0 0 2px var(--accent-color);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 2px var(--accent);
   }
 
   .card-meta {
     margin-top: 0.5rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -84,8 +84,8 @@
   }
 
   .drag-over {
-    border-color: var(--accent-color);
-    background: var(--bg-tertiary);
-    box-shadow: 0 0 0 2px var(--accent-color);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 2px var(--accent);
   }
 </style>

@@ -1517,7 +1517,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-primary, #1a1a1a);
+    background: var(--bg, #1a1a1a);
   }
 
   .loading-spinner {
@@ -1528,7 +1528,7 @@
   .loading-spinner .dot {
     width: 12px;
     height: 12px;
-    background: var(--accent-color, #8b5cf6);
+    background: var(--accent, #8b5cf6);
     border-radius: 50%;
     animation: pulse 1.4s ease-in-out infinite;
   }
@@ -1562,8 +1562,8 @@
   :global(body) {
     font-family:
       -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
   }
 
   .app-container {
@@ -1643,7 +1643,7 @@
   }
 
   .settings-modal-content {
-    background: var(--bg-primary);
+    background: var(--bg);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     max-width: 900px;
@@ -1659,7 +1659,7 @@
     right: 1rem;
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 4px;
@@ -1668,8 +1668,8 @@
   }
 
   .settings-close-button:hover {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    background: var(--surface-1);
+    color: var(--text);
   }
 
   :global(.save-button) {
@@ -1703,7 +1703,7 @@
   }
 
   .welcome-modal-content {
-    background: var(--bg-primary);
+    background: var(--bg);
     border-radius: 16px;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
     padding: 3rem 2rem;
@@ -1715,7 +1715,7 @@
   .welcome-title {
     font-size: 1.5rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text);
     margin-bottom: 1.5rem;
     line-height: 1.4;
     white-space: pre-line;
@@ -1723,7 +1723,7 @@
 
   .welcome-message {
     font-size: 1rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     margin-bottom: 1rem;
     line-height: 1.6;
   }
@@ -1757,7 +1757,7 @@
   }
 
   .welcome-button.primary {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
   }
 
@@ -1767,12 +1767,12 @@
   }
 
   .welcome-button.secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    background: var(--surface-1);
+    color: var(--text);
   }
 
   .welcome-button.secondary:hover {
-    background: var(--bg-tertiary);
+    background: var(--surface-2);
   }
 
   .config-required-overlay {

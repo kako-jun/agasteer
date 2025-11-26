@@ -91,8 +91,8 @@
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    background: var(--bg-primary);
-    border: 1px solid var(--text-secondary);
+    background: var(--bg);
+    border: 1px solid var(--text-muted);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     padding: 0.5rem 0;
@@ -120,14 +120,14 @@
     padding: 0.75rem 1rem;
     background: none;
     border: none;
-    color: var(--text-primary);
+    color: var(--text);
     cursor: pointer;
     transition: background 0.15s;
     font-size: 0.9rem;
   }
 
   .menu-item:hover {
-    background: var(--bg-secondary);
+    background: var(--surface-1);
   }
 
   .menu-item :global(svg) {

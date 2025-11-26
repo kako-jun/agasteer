@@ -57,7 +57,7 @@
   .title-button {
     font-size: 1.5rem;
     font-weight: bold;
-    color: var(--text-primary);
+    color: var(--text);
     background: none;
     border: none;
     cursor: pointer;
@@ -66,7 +66,7 @@
   }
 
   .title-button:hover {
-    color: var(--accent-color);
+    color: var(--accent);
   }
 
   .settings-button-wrapper {

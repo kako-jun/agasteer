@@ -29,7 +29,7 @@
 
   .dot {
     font-size: 2rem;
-    color: var(--accent-color);
+    color: var(--accent);
     animation: pulse 1.5s ease-in-out infinite;
   }
 

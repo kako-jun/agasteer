@@ -6,75 +6,54 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  --bg-primary: #fdfdfc;
-  --bg-secondary: #f5f6f8;
-  --bg-tertiary: #e9edf2;
-  --text-primary: #1f2933;
-  --text-secondary: #4b5563;
-  --border-color: #e5e7eb;
-  --border-input: #d7dce3;
-  --accent-color: #c7a443;
-  --error-color: #b42318;
+  /* core colors */
+  --bg: #fdfdfc;
+  --text: #1f2933;
+  --accent: #c7a443;
+  --error: #b42318;
+
+  /* derived */
+  --selection: color-mix(in srgb, var(--accent) 35%, var(--bg) 65%);
+  --text-muted: color-mix(in srgb, var(--text) 70%, var(--bg) 30%);
+  --surface-1: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
+  --surface-2: color-mix(in srgb, var(--bg) 86%, var(--text) 14%);
+  --border: color-mix(in srgb, var(--text) 15%, var(--bg) 85%);
+  --border-strong: color-mix(in srgb, var(--text) 25%, var(--bg) 75%);
 }
 
 :root[data-theme='campus'] {
-  --bg-primary: #fdf8ec;
-  --bg-secondary: #fbf3df;
-  --bg-tertiary: #e9ddc3;
-  --text-primary: #1f2937;
-  --text-secondary: #334155;
-  --border-color: #e2d7bd;
-  --border-input: #d8c9a7;
-  --accent-color: #2f56c6;
-  --error-color: #b42318;
+  --bg: #fdf8ec;
+  --text: #1f2937;
+  --accent: #2f56c6;
+  --error: #b42318;
 }
 
 :root[data-theme='greenboard'] {
-  --bg-primary: #102117;
-  --bg-secondary: #142a1c;
-  --bg-tertiary: #1d3a29;
-  --text-primary: #e6f0e7;
-  --text-secondary: #b7cbb9;
-  --border-color: #1f3b2b;
-  --border-input: #2a4d39;
-  --accent-color: #96d46a;
-  --error-color: #ff9f9f;
+  --bg: #102117;
+  --text: #e6f0e7;
+  --accent: #96d46a;
+  --error: #ff9f9f;
 }
 
 :root[data-theme='whiteboard'] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f7fb;
-  --bg-tertiary: #dfe7f5;
-  --text-primary: #1f2933;
-  --text-secondary: #4b5563;
-  --border-color: #dbe4f2;
-  --border-input: #cdd8e9;
-  --accent-color: #3b82f6;
-  --error-color: #b42318;
+  --bg: #ffffff;
+  --text: #1f2933;
+  --accent: #3b82f6;
+  --error: #b42318;
 }
 
 :root[data-theme='dotsD'] {
-  --bg-primary: #05080f;
-  --bg-secondary: #0b1220;
-  --bg-tertiary: #111a2c;
-  --text-primary: #e2ecff;
-  --text-secondary: #9fb4d3;
-  --border-color: #ffffff;
-  --border-input: #ffffff;
-  --accent-color: #666666;
-  --error-color: #f472b6;
+  --bg: #05080f;
+  --text: #e2ecff;
+  --accent: #666666;
+  --error: #f472b6;
 }
 
 :root[data-theme='dotsF'] {
-  --bg-primary: #0000aa;
-  --bg-secondary: #0000cc;
-  --bg-tertiary: #0000ff;
-  --text-primary: #ffffff;
-  --text-secondary: #ccccff;
-  --border-color: #ffffff;
-  --border-input: #ffffff;
-  --accent-color: #5ca8ff;
-  --error-color: #ff6666;
+  --bg: #0000aa;
+  --text: #ffffff;
+  --accent: #5ca8ff;
+  --error: #ff6666;
 }
 
 :global(.text-ellipsis) {
@@ -84,8 +63,13 @@
 }
 
 body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--bg);
+  color: var(--text);
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--text);
 }
 
 * {
@@ -97,7 +81,7 @@ body {
 }
 
 button {
-  background: var(--accent-color);
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -110,9 +94,9 @@ button {
 }
 
 button.secondary {
-  background: var(--bg-primary);
-  color: var(--accent-color);
-  border: 1px solid var(--accent-color);
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 
 button.icon-button {
@@ -122,13 +106,13 @@ button.icon-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-primary);
+  color: var(--text);
   border-radius: 6px;
   transition: background-color 0.2s;
 }
 
 button.icon-button:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-1);
 }
 
 button.breadcrumb-link {
@@ -137,7 +121,7 @@ button.breadcrumb-link {
   padding: 4px 8px;
   font-size: 14px;
   font-weight: normal;
-  color: var(--accent-color);
+  color: var(--accent);
   border-radius: 4px;
   transition: background-color 0.2s;
   min-height: 24px;
@@ -145,11 +129,11 @@ button.breadcrumb-link {
 }
 
 button.breadcrumb-link:hover:not(:disabled) {
-  background: var(--bg-primary);
+  background: var(--bg);
 }
 
 button.breadcrumb-link:disabled {
-  color: var(--text-primary);
+  color: var(--text);
   cursor: default;
   font-weight: 600;
 }
@@ -175,7 +159,7 @@ button.breadcrumb-link:disabled {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--border-input);
+  background-color: var(--border-strong);
   transition: 0.3s;
   border-radius: 28px;
 }
@@ -193,7 +177,7 @@ button.breadcrumb-link:disabled {
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background-color: var(--accent-color);
+  background-color: var(--accent);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
@@ -206,10 +190,10 @@ select {
   width: 100%;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid var(--border-input);
+  border: 1px solid var(--border-strong);
   font-size: 14px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--bg);
+  color: var(--text);
 }
 
 section {
@@ -217,7 +201,7 @@ section {
   border-radius: 0;
   padding: 16px;
   margin-bottom: 0;
-  background: var(--bg-primary);
+  background: var(--bg);
 }
 
 .flex-row {
@@ -238,16 +222,16 @@ section {
 }
 
 .note-card {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
-  background: var(--bg-secondary);
+  background: var(--surface-1);
 }
 
 .badge {
   display: inline-block;
-  background: var(--bg-tertiary);
-  color: var(--accent-color);
+  background: var(--surface-2);
+  color: var(--accent);
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
@@ -261,17 +245,17 @@ section {
 
 .status {
   font-size: 13px;
-  color: var(--accent-color);
+  color: var(--accent);
 }
 
 .error {
-  color: var(--error-color);
+  color: var(--error);
 }
 
 .cm-editor {
-  border: 1px solid var(--border-input);
+  border: 1px solid var(--border-strong);
   border-radius: 0;
-  background: var(--bg-primary);
+  background: var(--bg);
   height: 100%;
   padding-bottom: 15px;
 }
@@ -281,8 +265,8 @@ header {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -307,7 +291,7 @@ h3 {
 }
 
 small {
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 main {

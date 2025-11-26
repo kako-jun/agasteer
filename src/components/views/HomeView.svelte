@@ -76,14 +76,14 @@
 
   .stat-label {
     font-size: 0.75rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     margin-bottom: 0.25rem;
   }
 
   .stat-value {
     font-size: 2rem;
     font-weight: bold;
-    color: var(--accent-color);
+    color: var(--accent);
   }
 
   .card-grid {
@@ -99,7 +99,7 @@
     transform: translate(-50%, -50%);
     text-align: center;
     padding: 2rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 0.95rem;
     line-height: 1.6;
     width: 100%;

@@ -203,7 +203,7 @@
   h3 {
     margin-top: 0;
     margin-bottom: 1rem;
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   .form-row {
@@ -221,7 +221,7 @@
   label {
     display: block;
     margin-bottom: 0.5rem;
-    color: var(--text-primary);
+    color: var(--text);
     font-size: 0.9rem;
     font-weight: 500;
   }
@@ -246,10 +246,10 @@
     align-items: center;
     justify-content: center;
     padding: 0.5rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text-primary);
+    color: var(--text);
     text-decoration: none;
     cursor: pointer;
     transition: all 0.2s;
@@ -257,25 +257,25 @@
   }
 
   .repo-link-button:hover {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
   }
 
   input[type='text'],
   input[type='password'] {
     padding: 0.5rem;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
     font-size: 0.9rem;
   }
 
   input[type='text']:focus,
   input[type='password']:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
   }
 
   .test-actions {
@@ -291,19 +291,19 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.6rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: var(--text-primary);
+    color: var(--text);
     font-size: 0.9rem;
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .test-button:hover:not(:disabled) {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
@@ -335,7 +335,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: var(--accent-color);
+    color: var(--accent);
     transition: all 0.2s;
     opacity: 0.7;
   }
@@ -360,7 +360,7 @@
   }
 
   .modal-content {
-    background: var(--bg-primary);
+    background: var(--bg);
     border-radius: 12px;
     max-width: 800px;
     width: 100%;
@@ -374,19 +374,19 @@
     justify-content: space-between;
     align-items: center;
     padding: 1.5rem;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border);
   }
 
   .modal-header h3 {
     margin: 0;
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   .close-button {
     background: none;
     border: none;
     font-size: 2rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     cursor: pointer;
     line-height: 1;
     padding: 0;
@@ -399,7 +399,7 @@
   }
 
   .close-button:hover {
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   .modal-body {
@@ -409,13 +409,13 @@
   .help-image {
     width: 100%;
     height: auto;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
     border-radius: 8px;
     margin-bottom: 1rem;
   }
 
   .help-description {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     line-height: 1.6;
     margin: 0;
   }

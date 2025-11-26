@@ -70,7 +70,7 @@
   .about-section {
     margin-top: 3rem;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 0.9rem;
   }
 
@@ -79,7 +79,7 @@
     height: 100px;
     margin: 0 auto 1rem;
     display: block;
-    background-color: var(--accent-color);
+    background-color: var(--accent);
     mask-image: url('/assets/agasteer-icon.webp');
     -webkit-mask-image: url('/assets/agasteer-icon.webp');
     mask-repeat: no-repeat;
@@ -110,14 +110,14 @@
   }
 
   .author a {
-    color: var(--text-primary);
+    color: var(--text);
     display: flex;
     align-items: center;
     transition: color 0.2s;
   }
 
   .author a:hover {
-    color: var(--accent-color);
+    color: var(--accent);
   }
 
   .support-section {
@@ -130,9 +130,9 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.6rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text);
     text-decoration: none;
     border-radius: 6px;
     font-size: 0.9rem;
@@ -140,9 +140,9 @@
   }
 
   .support-link:hover {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
   }
 
   .heart-icon {

@@ -33,22 +33,22 @@
   label {
     display: block;
     margin-bottom: 0.5rem;
-    color: var(--text-primary);
+    color: var(--text);
     font-size: 0.9rem;
     font-weight: 500;
   }
 
   input[type='text'] {
     padding: 0.5rem;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
     font-size: 0.9rem;
   }
 
   input[type='text']:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
   }
 </style>

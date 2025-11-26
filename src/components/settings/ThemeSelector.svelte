@@ -73,7 +73,7 @@
   .sub-label {
     display: inline-block;
     margin-bottom: 0.5rem;
-    color: var(--text-primary);
+    color: var(--text);
     font-size: 0.9rem;
     font-weight: 500;
   }
@@ -89,7 +89,7 @@
   .theme-button-row {
     display: flex;
     gap: 0;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
     overflow: hidden;
   }
 
@@ -110,9 +110,9 @@
   .theme-button-row button {
     padding: 0.5rem 1rem;
     border: none;
-    border-right: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    border-right: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text);
     cursor: pointer;
     transition:
       background 0.2s,
@@ -144,12 +144,12 @@
   }
 
   .theme-button-row button.active {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
-    box-shadow: inset 0 0 0 1px var(--accent-color);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
 
   .theme-button-row button:hover:not(.active) {
-    background: var(--bg-primary);
+    background: var(--bg);
   }
 </style>

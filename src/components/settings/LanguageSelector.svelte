@@ -31,17 +31,17 @@
   label {
     display: block;
     margin-bottom: 0.5rem;
-    color: var(--text-primary);
+    color: var(--text);
     font-size: 0.9rem;
     font-weight: 500;
   }
 
   select {
     padding: 0.5rem;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
     font-size: 0.9rem;
     appearance: none;
     padding-right: 2rem;
@@ -64,11 +64,11 @@
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 6px solid var(--text-primary);
+    border-top: 6px solid var(--text);
   }
 
   select:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
   }
 </style>

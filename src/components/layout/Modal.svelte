@@ -50,7 +50,7 @@
   }
 
   .modal-content {
-    background: var(--bg-primary);
+    background: var(--bg);
     padding: 2rem;
     border-radius: 8px;
     max-width: 400px;
@@ -59,7 +59,7 @@
 
   .modal-content p {
     margin-bottom: 1.5rem;
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   .modal-buttons {
@@ -77,12 +77,12 @@
   }
 
   .modal-buttons button:first-child {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
   }
 
   .modal-buttons button:last-child {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    background: var(--surface-1);
+    color: var(--text);
   }
 </style>

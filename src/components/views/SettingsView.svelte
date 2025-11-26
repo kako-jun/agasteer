@@ -69,13 +69,13 @@
 
   h2 {
     margin-bottom: 1.5rem;
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   h3 {
     margin-top: 0;
     margin-bottom: 1rem;
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   .form-section {
@@ -98,7 +98,7 @@
 
   hr {
     border: none;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border);
     margin: 2rem 0;
   }
 </style>

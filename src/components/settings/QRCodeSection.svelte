@@ -27,7 +27,7 @@
     width: 100px;
     height: 100px;
     object-fit: contain;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border);
     border-radius: 8px;
     padding: 0.5rem;
     background: white;
@@ -35,7 +35,7 @@
 
   .qr-code-description {
     margin: 0;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 0.85rem;
   }
 </style>

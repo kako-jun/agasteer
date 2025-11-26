@@ -204,7 +204,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: var(--bg-primary);
+    background-color: var(--bg);
   }
 
   .loading-dots {
@@ -215,7 +215,7 @@
   .loading-dots span {
     width: 12px;
     height: 12px;
-    background-color: var(--accent-color);
+    background-color: var(--accent);
     border-radius: 50%;
     animation: pulse 1.4s infinite ease-in-out both;
   }
@@ -248,7 +248,7 @@
       -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     font-size: 16px;
     line-height: 1.6;
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   /* マークダウン要素のスタイリング */
@@ -256,7 +256,7 @@
     font-size: 2em;
     margin: 0.67em 0;
     font-weight: bold;
-    border-bottom: 2px solid var(--accent-color);
+    border-bottom: 2px solid var(--accent);
     padding-bottom: 0.3em;
   }
 
@@ -264,7 +264,7 @@
     font-size: 1.5em;
     margin: 0.75em 0;
     font-weight: bold;
-    border-bottom: 1px solid var(--text-secondary);
+    border-bottom: 1px solid var(--text-muted);
     padding-bottom: 0.3em;
   }
 
@@ -297,7 +297,7 @@
   }
 
   .preview-content :global(a) {
-    color: var(--accent-color);
+    color: var(--accent);
     text-decoration: none;
   }
 
@@ -306,7 +306,7 @@
   }
 
   .preview-content :global(code) {
-    background: var(--bg-secondary);
+    background: var(--surface-1);
     padding: 0.2em 0.4em;
     border-radius: 3px;
     font-family: 'Courier New', monospace;
@@ -314,7 +314,7 @@
   }
 
   .preview-content :global(pre) {
-    background: var(--bg-secondary);
+    background: var(--surface-1);
     padding: 1em;
     border-radius: 5px;
     overflow-x: auto;
@@ -327,10 +327,10 @@
   }
 
   .preview-content :global(blockquote) {
-    border-left: 4px solid var(--accent-color);
+    border-left: 4px solid var(--accent);
     padding-left: 1em;
     margin: 1em 0;
-    color: var(--text-secondary);
+    color: var(--text-muted);
   }
 
   .preview-content :global(ul),
@@ -351,13 +351,13 @@
 
   .preview-content :global(th),
   .preview-content :global(td) {
-    border: 1px solid var(--text-secondary);
+    border: 1px solid var(--text-muted);
     padding: 0.5em;
     text-align: left;
   }
 
   .preview-content :global(th) {
-    background: var(--bg-secondary);
+    background: var(--surface-1);
     font-weight: bold;
   }
 
@@ -368,7 +368,7 @@
 
   .preview-content :global(hr) {
     border: none;
-    border-top: 1px solid var(--text-secondary);
+    border-top: 1px solid var(--text-muted);
     margin: 2em 0;
   }
 </style>

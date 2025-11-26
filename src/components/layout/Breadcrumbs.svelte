@@ -141,7 +141,7 @@
   }
 
   .separator {
-    color: var(--text-secondary);
+    color: var(--text-muted);
   }
 
   .breadcrumb-item {
@@ -155,7 +155,7 @@
   .breadcrumb-button {
     background: none;
     border: none;
-    color: var(--accent-color);
+    color: var(--accent);
     cursor: pointer;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
@@ -163,7 +163,7 @@
     max-width: 100%;
   }
   .breadcrumb-button.current {
-    color: var(--text-primary);
+    color: var(--text);
     cursor: default;
   }
 
@@ -173,10 +173,10 @@
 
   .breadcrumb-input {
     padding: 0.25rem 0.5rem;
-    border: 1px solid var(--accent-color);
+    border: 1px solid var(--accent);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
     font-size: 0.9rem;
     outline: none;
   }

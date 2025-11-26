@@ -90,7 +90,7 @@ export async function applyCustomBackgrounds(
     .main-pane,
     .settings-container {
       position: relative;
-      background: var(--bg-primary);
+      background: var(--bg);
     }
 
     .main-pane > * {
@@ -217,7 +217,7 @@ export function removeCustomBackgrounds(): void {
       .cm-editor,
       .cm-scroller,
       .cm-content {
-        background: var(--bg-primary) !important;
+        background: var(--bg) !important;
       }
     `
   }

@@ -62,10 +62,10 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.6rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: var(--text-primary);
+    color: var(--text);
     text-decoration: none;
     font-size: 0.9rem;
     cursor: pointer;
@@ -73,9 +73,9 @@
   }
 
   .help-link:hover {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
-    border-color: var(--accent-color);
+    border-color: var(--accent);
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }

@@ -26,7 +26,7 @@
     border: none;
     cursor: pointer;
     padding: 0.25rem;
-    color: var(--text-primary);
+    color: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -39,7 +39,7 @@
   }
 
   .icon-button.primary {
-    color: var(--accent-color);
+    color: var(--accent);
   }
 
   .icon-button:disabled {

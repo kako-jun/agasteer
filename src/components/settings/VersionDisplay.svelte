@@ -10,7 +10,7 @@
     bottom: 0.5rem;
     right: 1rem;
     font-size: 0.75rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     opacity: 0.6;
   }
 </style>
