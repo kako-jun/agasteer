@@ -6,10 +6,8 @@
   export let pushCount = 0
 </script>
 
-<div
-  class="statistics"
-  style="position: absolute; bottom: 1rem; right: 1rem; opacity: 0.5; pointer-events: none;"
->
+<div class="stats-overlay"></div>
+<div class="statistics">
   <div class="stat-item">
     <div class="stat-label">{$_('home.leafCount')}</div>
     <div class="stat-value">{leafCount.toLocaleString()}</div>
@@ -25,8 +23,29 @@
 </div>
 
 <style>
-  .statistics {
+  /* 右下の三角形グラデーション背景 */
+  .stats-overlay {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 400px;
+    height: 400px;
+    background: linear-gradient(
+      135deg,
+      transparent 45%,
+      color-mix(in srgb, var(--bg) 60%, transparent) 65%,
+      color-mix(in srgb, var(--bg) 80%, transparent) 100%
+    );
+    pointer-events: none;
     z-index: 1;
+  }
+
+  .statistics {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    pointer-events: none;
+    z-index: 2;
   }
 
   .stat-item {
