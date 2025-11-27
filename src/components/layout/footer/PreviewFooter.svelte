@@ -13,6 +13,7 @@
   export let onSave: () => void
   export let disabled: boolean
   export let isDirty: boolean
+  export let saveDisabled: boolean = false
 </script>
 
 <Footer>
@@ -40,6 +41,6 @@
       <FileEditIcon />
     </IconButton>
 
-    <SaveButton {onSave} {isDirty} />
+    <SaveButton {onSave} {isDirty} disabled={saveDisabled} />
   </svelte:fragment>
 </Footer>

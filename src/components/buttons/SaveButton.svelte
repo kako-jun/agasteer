@@ -5,6 +5,7 @@
 
   export let onSave: () => void
   export let isDirty: boolean
+  export let disabled: boolean = false
 </script>
 
 <div class="save-button-wrapper">
@@ -15,6 +16,7 @@
     variant="primary"
     iconWidth={32}
     iconHeight={20}
+    {disabled}
   >
     <OctocatPushIcon />
   </IconButton>

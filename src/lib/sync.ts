@@ -2,7 +2,7 @@ import type { Note, Leaf, Settings, Metadata } from './types'
 import { pushAllWithTreeAPI, pullFromGitHub, fetchRemotePushCount } from './github'
 import type { PullOptions } from './github'
 
-export type { PullOptions, PullPriority } from './github'
+export type { PullOptions, PullPriority, LeafSkeleton } from './github'
 
 /**
  * Push操作の結果

@@ -23,7 +23,7 @@
   import { loadAndApplyCustomFont } from './lib/font'
   import { loadAndApplyCustomBackgrounds } from './lib/background'
   import { executePush, executePull, checkIfStaleEdit } from './lib/sync'
-  import type { PullOptions, PullPriority } from './lib/sync'
+  import type { PullOptions, PullPriority, LeafSkeleton } from './lib/sync'
   import { initI18n, _ } from './lib/i18n'
   import { parseSimpleNoteFile } from './lib/importers'
   import {
@@ -165,6 +165,10 @@
   )
   $: isGitHubConfigured = $githubConfigured
   $: document.title = $settings.toolName
+
+  // Pull/Push中はボタンを無効化（リアクティブに追跡）
+  $: canPull = !isPulling && !isPushing
+  $: canPush = !isPulling && !isPushing
 
   // URLルーティング
   let isRestoringFromUrl = false
@@ -348,6 +352,9 @@
 
   // 未取得リーフのID（ローディング表示用）
   let loadingLeafIds = new Set<string>()
+
+  // スケルトン表示用のリーフメタ情報（Pull中のみ使用）
+  let leafSkeletonMap = new Map<string, LeafSkeleton>()
 
   // 左ペインの状態変更をURLに反映
   $: if (leftNote || leftLeaf || (!leftNote && !leftLeaf) || leftView) {
@@ -1732,11 +1739,17 @@
     rightLeaf = null
 
     const options: PullOptions = {
-      // ノート構造確定時: ノートを表示可能に、優先情報を計算して返す
-      onStructure: (notesFromGitHub, metadataFromGitHub) => {
+      // ノート構造確定時: ノートを表示可能に、スケルトン情報を設定、優先情報を計算して返す
+      onStructure: (notesFromGitHub, metadataFromGitHub, leafSkeletons) => {
         // ノートを先に反映（ナビゲーション可能に）
         notes.set(notesFromGitHub)
         metadata.set(metadataFromGitHub)
+
+        // スケルトン情報を保存（NoteViewでスケルトン表示に使用）
+        leafSkeletonMap = new Map(leafSkeletons.map((s) => [s.id, s]))
+
+        // 全リーフIDをローディング中として登録
+        loadingLeafIds = new Set(leafSkeletons.map((s) => s.id))
 
         // URLから優先情報を計算して返す
         return getPriorityFromUrl(notesFromGitHub)
@@ -1820,7 +1833,7 @@
         goSettings()
       }}
       onPull={() => handlePull(false)}
-      pullDisabled={!canSync().canPull}
+      pullDisabled={!canPull}
     />
 
     <div class="content-wrapper" class:single-pane={!isDualPane}>
@@ -1892,6 +1905,8 @@
               {getNoteItems}
               onUpdateNoteBadge={updateNoteBadge}
               onUpdateLeafBadge={updateLeafBadge}
+              {loadingLeafIds}
+              {leafSkeletonMap}
             />
           {:else if leftView === 'edit' && leftLeaf}
             <EditorView
@@ -1921,6 +1936,7 @@
             onSave={handleSaveToGitHub}
             disabled={isOperationsLocked}
             isDirty={$isDirty}
+            saveDisabled={!canPush}
           />
         {:else if leftView === 'note' && leftNote}
           <NoteFooter
@@ -1932,6 +1948,7 @@
             disabled={isOperationsLocked}
             isDirty={$isDirty}
             canHaveSubNote={!leftNote.parentId}
+            saveDisabled={!canPush}
           />
         {:else if leftView === 'edit' && leftLeaf}
           <EditorFooter
@@ -1942,6 +1959,7 @@
             onSave={handleSaveToGitHub}
             disabled={isOperationsLocked}
             isDirty={$isDirty}
+            saveDisabled={!canPush}
           />
         {:else if leftView === 'preview' && leftLeaf}
           <PreviewFooter
@@ -1951,6 +1969,7 @@
             onSave={handleSaveToGitHub}
             disabled={isOperationsLocked}
             isDirty={$isDirty}
+            saveDisabled={!canPush}
           />
         {/if}
 
@@ -2029,6 +2048,8 @@
               {getNoteItems}
               onUpdateNoteBadge={updateNoteBadge}
               onUpdateLeafBadge={updateLeafBadge}
+              {loadingLeafIds}
+              {leafSkeletonMap}
             />
           {:else if rightView === 'edit' && rightLeaf}
             <EditorView
@@ -2062,6 +2083,7 @@
             onSave={handleSaveToGitHub}
             disabled={isOperationsLocked}
             isDirty={$isDirty}
+            saveDisabled={!canPush}
           />
         {:else if rightView === 'note' && rightNote}
           <NoteFooter
@@ -2073,6 +2095,7 @@
             disabled={isOperationsLocked}
             isDirty={$isDirty}
             canHaveSubNote={!rightNote.parentId}
+            saveDisabled={!canPush}
           />
         {:else if rightView === 'edit' && rightLeaf}
           <EditorFooter
@@ -2083,6 +2106,7 @@
             onSave={handleSaveToGitHub}
             disabled={isOperationsLocked}
             isDirty={$isDirty}
+            saveDisabled={!canPush}
           />
         {:else if rightView === 'preview' && rightLeaf}
           <PreviewFooter
@@ -2092,6 +2116,7 @@
             onSave={handleSaveToGitHub}
             disabled={isOperationsLocked}
             isDirty={$isDirty}
+            saveDisabled={!canPush}
           />
         {/if}
 

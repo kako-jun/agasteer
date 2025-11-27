@@ -54,11 +54,27 @@ export interface PullPriority {
 }
 
 /**
+ * リーフのメタ情報（コンテンツ取得前に分かる情報）
+ */
+export interface LeafSkeleton {
+  id: string
+  title: string
+  noteId: string
+  order: number
+  badgeIcon?: string
+  badgeColor?: string
+}
+
+/**
  * Pull時のオプション
  */
 export interface PullOptions {
   /** ノート構造確定時のコールバック（リーフ取得前に呼ばれる）。優先情報を返す */
-  onStructure?: (notes: Note[], metadata: Metadata) => PullPriority | void
+  onStructure?: (
+    notes: Note[],
+    metadata: Metadata,
+    leafSkeletons: LeafSkeleton[]
+  ) => PullPriority | void
   /** 各リーフ取得完了時のコールバック */
   onLeaf?: (leaf: Leaf) => void
   /** 第1優先リーフ全取得完了時のコールバック */
@@ -804,7 +820,18 @@ export async function pullFromGitHub(
 
     // ノート構造確定 → onStructureコールバック（優先情報を返してもらう）
     const sortedNotes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
-    const priority = options?.onStructure?.(sortedNotes, metadata)
+
+    // リーフのスケルトン情報を作成（コンテンツ取得前に分かる情報）
+    const leafSkeletons: LeafSkeleton[] = leafTargets.map((target) => ({
+      id: target.leafMeta.id,
+      title: target.title,
+      noteId: target.noteId,
+      order: target.leafMeta.order,
+      badgeIcon: target.leafMeta.badgeIcon,
+      badgeColor: target.leafMeta.badgeColor,
+    }))
+
+    const priority = options?.onStructure?.(sortedNotes, metadata, leafSkeletons)
 
     // 優先度でソート（priorityがvoidの場合は空セット）
     const priorityLeafPaths = new Set(priority && 'leafPaths' in priority ? priority.leafPaths : [])

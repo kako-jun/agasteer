@@ -2,6 +2,7 @@
   import { flip } from 'svelte/animate'
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
+  import type { LeafSkeleton } from '../../lib/sync'
   import NoteCard from '../cards/NoteCard.svelte'
   import BadgeButton from '../badges/BadgeButton.svelte'
 
@@ -31,6 +32,24 @@
   export let vimMode: boolean = false
   export let onUpdateNoteBadge: (noteId: string, icon: string, color: string) => void
   export let onUpdateLeafBadge: (leafId: string, icon: string, color: string) => void
+  export let loadingLeafIds: Set<string> = new Set()
+  export let leafSkeletonMap: Map<string, LeafSkeleton> = new Map()
+
+  // このノートに属するスケルトン（まだleavesに存在しないもの）
+  $: skeletons = Array.from(leafSkeletonMap.values())
+    .filter((s) => s.noteId === currentNote.id && !leaves.some((l) => l.id === s.id))
+    .sort((a, b) => a.order - b.order)
+
+  // 表示用: 実リーフ + スケルトンを統合してorder順にソート
+  type DisplayItem = { type: 'leaf'; leaf: Leaf } | { type: 'skeleton'; skeleton: LeafSkeleton }
+  $: displayItems = [
+    ...leaves.map((leaf): DisplayItem => ({ type: 'leaf', leaf })),
+    ...skeletons.map((skeleton): DisplayItem => ({ type: 'skeleton', skeleton })),
+  ].sort((a, b) => {
+    const orderA = a.type === 'leaf' ? a.leaf.order : a.skeleton.order
+    const orderB = b.type === 'leaf' ? b.leaf.order : b.skeleton.order
+    return orderA - orderB
+  })
 
   // リアクティブ宣言: ノートが変わるたびに再計算
   $: canHaveSubNote = !currentNote.parentId
@@ -70,11 +89,11 @@
 
 <section class="view-container">
   <div class="card-grid">
-    {#if subNotes.length === 0 && leaves.length === 0 && !disabled}
+    {#if subNotes.length === 0 && displayItems.length === 0 && !disabled}
       <div class="empty-state">
         <p>{currentNote.parentId ? $_('note.noLeaves') : $_('note.noItems')}</p>
       </div>
-    {:else if subNotes.length > 0 || leaves.length > 0}
+    {:else if subNotes.length > 0 || displayItems.length > 0}
       {#each subNotes as subNote, index (subNote.id)}
         <NoteCard
           note={subNote}
@@ -93,43 +112,59 @@
           onBadgeChange={(icon, color) => onUpdateNoteBadge(subNote.id, icon, color)}
         />
       {/each}
-      {#each leaves as leaf, leafIndex (leaf.id)}
+      {#each displayItems as item, itemIndex (item.type === 'leaf' ? item.leaf.id : item.skeleton.id)}
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           class="note-card leaf-card"
-          class:drag-over={dragOverLeafId === leaf.id}
-          class:selected={vimMode && isActive && subNotes.length + leafIndex === selectedIndex}
-          draggable="true"
-          role="button"
-          tabindex="0"
-          on:dragstart={() => onDragStartLeaf(leaf)}
+          class:loading={item.type === 'skeleton'}
+          class:fade-in={item.type === 'leaf'}
+          class:drag-over={item.type === 'leaf' && dragOverLeafId === item.leaf.id}
+          class:selected={item.type === 'leaf' &&
+            vimMode &&
+            isActive &&
+            subNotes.length + itemIndex === selectedIndex}
+          draggable={item.type === 'leaf'}
+          role={item.type === 'leaf' ? 'button' : undefined}
+          tabindex={item.type === 'leaf' ? 0 : -1}
+          on:dragstart={() => item.type === 'leaf' && onDragStartLeaf(item.leaf)}
           on:dragend={onDragEndLeaf}
-          on:dragover={(e) => onDragOverLeaf(e, leaf)}
-          on:drop|preventDefault={() => onDropLeaf(leaf)}
-          on:click={() => onSelectLeaf(leaf)}
+          on:dragover={(e) => item.type === 'leaf' && onDragOverLeaf(e, item.leaf)}
+          on:drop|preventDefault={() => item.type === 'leaf' && onDropLeaf(item.leaf)}
+          on:click={() => item.type === 'leaf' && onSelectLeaf(item.leaf)}
           animate:flip={{ duration: 300 }}
         >
-          <BadgeButton
-            icon={leaf.badgeIcon || ''}
-            color={leaf.badgeColor || ''}
-            onChange={(icon, color) => onUpdateLeafBadge(leaf.id, icon, color)}
-          />
-          <strong class="text-ellipsis">{leaf.title}</strong>
-          <div class="card-meta">
-            {#if leaf.content}
-              <small class="note-stats">
-                {formatLeafStats(leaf.content)}
+          {#if item.type === 'skeleton'}
+            <!-- スケルトン表示 -->
+            <div class="skeleton-badge"></div>
+            <div class="skeleton-title"></div>
+            <div class="skeleton-meta">
+              <div class="skeleton-stats"></div>
+              <div class="skeleton-date"></div>
+            </div>
+          {:else}
+            <!-- 実リーフ表示 -->
+            <BadgeButton
+              icon={item.leaf.badgeIcon || ''}
+              color={item.leaf.badgeColor || ''}
+              onChange={(icon, color) => onUpdateLeafBadge(item.leaf.id, icon, color)}
+            />
+            <strong class="text-ellipsis">{item.leaf.title}</strong>
+            <div class="card-meta">
+              {#if item.leaf.content}
+                <small class="note-stats">
+                  {formatLeafStats(item.leaf.content)}
+                </small>
+              {/if}
+              <small
+                class="note-updated"
+                title={`${$_('note.updated')}: ${formatDateTime(item.leaf.updatedAt, 'long')}`}
+                aria-label={`${$_('note.updated')}: ${formatDateTime(item.leaf.updatedAt, 'long')}`}
+              >
+                {formatDateTime(item.leaf.updatedAt, 'short')}
               </small>
-            {/if}
-            <small
-              class="note-updated"
-              title={`${$_('note.updated')}: ${formatDateTime(leaf.updatedAt, 'long')}`}
-              aria-label={`${$_('note.updated')}: ${formatDateTime(leaf.updatedAt, 'long')}`}
-            >
-              {formatDateTime(leaf.updatedAt, 'short')}
-            </small>
-          </div>
+            </div>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -169,9 +204,24 @@
     max-width: 100%;
   }
 
-  /* リーフは角丸を外してノートと区別する */
+  /* リーフカード内のタイトルは2行まで、それ以上は省略 */
+  .leaf-card strong {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    max-height: 2.6em;
+  }
+
+  /* リーフは角丸を外してノートと区別する、高さ固定でレイアウト安定 */
   .leaf-card {
     border-radius: 0;
+    height: 120px;
+    min-height: 120px;
+    max-height: 120px;
+    overflow: hidden;
   }
 
   .note-card:hover {
@@ -231,5 +281,103 @@
     margin: 0;
     opacity: 0.8;
     white-space: pre-line;
+  }
+
+  /* ローディング中のカード */
+  .note-card.loading {
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* 読み込み完了時のフェードイン */
+  .note-card.fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* スケルトン表示用スタイル */
+  .skeleton-badge {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-1) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .skeleton-title {
+    height: 1.2em;
+    width: 70%;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-1) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .skeleton-meta {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    align-items: flex-end;
+  }
+
+  .skeleton-stats {
+    height: 0.9em;
+    width: 80px;
+    border-radius: 4px;
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-1) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .skeleton-date {
+    height: 0.9em;
+    width: 100px;
+    border-radius: 4px;
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-1) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
   }
 </style>
