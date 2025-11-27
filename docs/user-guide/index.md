@@ -76,7 +76,7 @@
 
 ## 📞 サポート
 
-- **リポジトリ**: [simplest-note-md](https://github.com/kako-jun/simplest-note-md)
+- **リポジトリ**: [agasteer](https://github.com/kako-jun/agasteer)
 - **デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 
 ---

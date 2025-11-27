@@ -1,6 +1,6 @@
-# SimplestNote.md - 開発者向けドキュメント
+# Agasteer - 開発者向けドキュメント
 
-> このドキュメントは、SimplestNote.mdの全体像を把握するための目次とプロジェクト進捗管理を提供します。
+> このドキュメントは、Agasteerの全体像を把握するための目次とプロジェクト進捗管理を提供します。
 > 詳細なドキュメントは[docs/](./docs/)ディレクトリに分割して配置されています。
 
 ---
@@ -9,7 +9,7 @@
 
 ### ユーザー向けドキュメント
 
-- **[ユーザーガイド](./docs/user-guide/index.md)** - SimplestNote.mdの使い方
+- **[ユーザーガイド](./docs/user-guide/index.md)** - Agasteerの使い方
   - [初期設定とクイックスタート](./docs/user-guide/getting-started.md)
   - [ノートとリーフの管理](./docs/user-guide/basic-features.md)
   - [応用機能（2ペイン、プレビュー、Vimモード）](./docs/user-guide/advanced-features.md)
@@ -255,8 +255,8 @@ npm run preview
 
 ## 📞 サポート
 
-- **リポジトリ**: [simplest-note-md](https://github.com/kako-jun/simplest-note-md)
-- **デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+- **リポジトリ**: [agasteer](https://github.com/kako-jun/agasteer)
+- **デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 - **デプロイ**: Cloudflare Pages（自動デプロイ）
 
 ---

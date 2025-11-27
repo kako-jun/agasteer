@@ -1,6 +1,6 @@
 # 基本機能の実装
 
-SimplestNote.mdの基本機能の実装詳細について説明します。
+Agasteerの基本機能の実装詳細について説明します。
 
 ## エディタ管理
 
@@ -230,7 +230,7 @@ function getBreadcrumbs() {
 
   // 常にホームを追加
   crumbs.push({
-    label: 'SimplestNote.md',
+    label: 'Agasteer',
     action: goHome,
     id: 'home',
     type: 'home',

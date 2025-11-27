@@ -1,6 +1,6 @@
 # データモデルと状態管理
 
-SimplestNote.mdのデータモデル、型定義、状態管理について説明します。
+Agasteerのデータモデル、型定義、状態管理について説明します。
 
 ## データモデルと型定義
 
@@ -25,7 +25,7 @@ type Settings = {
 }
 ```
 
-**注意**: コミット時のユーザー名とメールアドレスは固定値（`simplest-note-md` / `simplest-note-md@example.com`）を使用します。
+**注意**: コミット時のユーザー名とメールアドレスは固定値（`agasteer` / `agasteer@example.com`）を使用します。
 
 #### `Folder`
 
@@ -99,7 +99,7 @@ graph TB
 
 ### Svelteストア
 
-SimplestNote.mdは、Svelteの`writable`と`derived`ストアを使用して状態を管理します。
+Agasteerは、Svelteの`writable`と`derived`ストアを使用して状態を管理します。
 
 #### 基本ストア（グローバル）
 
@@ -186,7 +186,7 @@ export const githubConfigured = derived(
 
 ### データ永続化の仕様
 
-SimplestNote.mdは、データを2つの異なるストレージに保存します。
+Agasteerは、データを2つの異なるストレージに保存します。
 
 #### LocalStorage
 

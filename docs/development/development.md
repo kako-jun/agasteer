@@ -1,6 +1,6 @@
 # 開発ガイド
 
-SimplestNote.mdの開発ワークフロー、パフォーマンス最適化、セキュリティ、トラブルシューティングについて説明します。
+Agasteerの開発ワークフロー、パフォーマンス最適化、セキュリティ、トラブルシューティングについて説明します。
 
 ## 開発ワークフロー
 
@@ -53,17 +53,17 @@ git push origin main
 
 ```javascript
 // ブラウザコンソールで実行
-console.log('Settings:', localStorage.getItem('simplest-md-note/settings'))
-console.log('Folders:', localStorage.getItem('simplest-md-note/folders'))
-console.log('Notes:', localStorage.getItem('simplest-md-note/notes'))
+console.log('Settings:', localStorage.getItem('agasteer/settings'))
+console.log('Folders:', localStorage.getItem('agasteer/folders'))
+console.log('Notes:', localStorage.getItem('agasteer/notes'))
 ```
 
 #### LocalStorageのリセット
 
 ```javascript
-localStorage.removeItem('simplest-md-note/settings')
-localStorage.removeItem('simplest-md-note/folders')
-localStorage.removeItem('simplest-md-note/notes')
+localStorage.removeItem('agasteer/settings')
+localStorage.removeItem('agasteer/folders')
+localStorage.removeItem('agasteer/notes')
 location.reload()
 ```
 
@@ -321,7 +321,7 @@ async function fetchGitHubContents(path: string, repoName: string, token: string
 
 ## まとめ
 
-SimplestNote.mdは、シンプルさを追求した軽量Markdownノートアプリです。単一ファイルアーキテクチャにより、小規模プロジェクトとして理解しやすく、カスタマイズも容易です。
+Agasteerは、シンプルさを追求した軽量Markdownノートアプリです。単一ファイルアーキテクチャにより、小規模プロジェクトとして理解しやすく、カスタマイズも容易です。
 
 ### 主要な技術的特徴
 
@@ -340,4 +340,4 @@ SimplestNote.mdは、シンプルさを追求した軽量Markdownノートアプ
 3. **拡張性**: プラグインシステム、ルーティング（検討中）
 4. **機能追加**: 検索、双方向同期、履歴管理（今後の機能）
 
-このドキュメントが、SimplestNote.mdの理解と今後の開発に役立つことを願っています。
+このドキュメントが、Agasteerの理解と今後の開発に役立つことを願っています。

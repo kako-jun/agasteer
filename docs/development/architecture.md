@@ -1,10 +1,10 @@
 # アーキテクチャドキュメント
 
-SimplestNote.mdのアーキテクチャ、技術スタック、プロジェクト構造について説明します。
+Agasteerのアーキテクチャ、技術スタック、プロジェクト構造について説明します。
 
 ## アーキテクチャ概要
 
-SimplestNote.mdは、**コンポーネントベースアーキテクチャ**を採用した軽量Markdownノートアプリケーションです。
+Agasteerは、**コンポーネントベースアーキテクチャ**を採用した軽量Markdownノートアプリケーションです。
 
 ### 設計哲学
 
@@ -17,7 +17,7 @@ SimplestNote.mdは、**コンポーネントベースアーキテクチャ**を�
 
 ### アーキテクチャパターン
 
-SimplestNote.mdは4層のレイヤー構造で設計されています。
+Agasteerは4層のレイヤー構造で設計されています。
 
 ```mermaid
 graph TB
@@ -87,7 +87,7 @@ import { basicSetup } from 'codemirror'
 ## プロジェクト構造
 
 ```
-simplest-note-md/
+agasteer/
 ├── .husky/
 │   └── pre-commit                       # npm run lintを実行
 ├── public/
@@ -342,8 +342,8 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'SimplestNote.md',
-        short_name: 'SimplestNote',
+        name: 'Agasteer',
+        short_name: 'Agasteer',
         description: 'A simple markdown note-taking app with GitHub sync',
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',
@@ -479,7 +479,7 @@ export async function loadLeavesFromDB(): Promise<Leaf[]>
 
 このプロジェクトはCloudflare Pagesでホスティングされています。
 
-- **デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+- **デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 - **デプロイ**: GitHubリポジトリ連携による自動デプロイ
 - **ビルドコマンド**: `npm run build`
 - **ビルド出力**: `dist/`
@@ -583,7 +583,7 @@ Service Workerによる静的アセットとAPIレスポンスのキャッシュ
 
 ## まとめ
 
-SimplestNote.mdは、Svelteのリアクティブシステムとコンポーネントベースアーキテクチャを活用した、シンプルで強力なMarkdownノートアプリケーションです。
+Agasteerは、Svelteのリアクティブシステムとコンポーネントベースアーキテクチャを活用した、シンプルで強力なMarkdownノートアプリケーションです。
 
 **主要な特徴:**
 

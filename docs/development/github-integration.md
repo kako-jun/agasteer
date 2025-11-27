@@ -1,6 +1,6 @@
 # GitHub API統合
 
-SimplestNote.mdのGitHub API統合について説明します。
+AgasteerのGitHub API統合について説明します。
 
 ## 認証
 
@@ -148,12 +148,12 @@ async function handleSaveToGitHub() {
   tree: newTreeSha,
   parents: [currentCommitSha],
   committer: {
-    name: 'simplest-note-md',
-    email: 'simplest-note-md@example.com',
+    name: 'agasteer',
+    email: 'agasteer@example.com',
   },
   author: {
-    name: 'simplest-note-md',
-    email: 'simplest-note-md@example.com',
+    name: 'agasteer',
+    email: 'agasteer@example.com',
   },
 }
 ```

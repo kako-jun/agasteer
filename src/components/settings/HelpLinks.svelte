@@ -4,7 +4,7 @@
 
 <div class="help-links">
   <a
-    href="https://github.com/kako-jun/simplest-note-md#readme"
+    href="https://github.com/kako-jun/agasteer#readme"
     target="_blank"
     rel="noopener noreferrer"
     class="help-link"

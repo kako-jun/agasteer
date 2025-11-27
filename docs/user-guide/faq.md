@@ -230,7 +230,7 @@ graph TB
 
 **A:** GitHubのIssueで報告してください。
 
-- **リポジトリ**: [simplest-note-md](https://github.com/kako-jun/simplest-note-md)
+- **リポジトリ**: [agasteer](https://github.com/kako-jun/agasteer)
 - Issueページで「New Issue」をクリック
 - バグの詳細を記載してください
 

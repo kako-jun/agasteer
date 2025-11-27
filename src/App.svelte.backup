@@ -65,9 +65,9 @@
 
   type View = 'home' | 'settings' | 'edit' | 'folder'
 
-  const SETTINGS_KEY = 'simplest-md-note/settings'
-  const NOTES_KEY = 'simplest-md-note/notes'
-  const FOLDERS_KEY = 'simplest-md-note/folders'
+  const SETTINGS_KEY = 'agasteer/settings'
+  const NOTES_KEY = 'agasteer/notes'
+  const FOLDERS_KEY = 'agasteer/folders'
 
   const defaultSettings: Settings = {
     token: '',
@@ -838,7 +838,7 @@
 </script>
 
 <header>
-  <h1 style="cursor: pointer;" on:click={() => (currentView = 'home')}>SimplestNote.md</h1>
+  <h1 style="cursor: pointer;" on:click={() => (currentView = 'home')}>Agasteer</h1>
   {#if currentView !== 'settings'}
     <button
       class="icon-button"
@@ -1073,7 +1073,7 @@
       <hr style="border: none; border-top: 1px solid var(--border-color); margin: 24px -16px;" />
 
       <div style="text-align: center; color: var(--text-secondary); font-size: 14px;">
-        <h3 style="color: var(--text-primary); margin-bottom: 8px;">SimplestNote.md</h3>
+        <h3 style="color: var(--text-primary); margin-bottom: 8px;">Agasteer</h3>
         <p style="margin: 8px 0; line-height: 1.6;">
           コンフリクトばかりのObsidianや<br />
           シンプルでないSimplenoteがいやになって作りました。<br />
@@ -1084,7 +1084,7 @@
         >
           作者: <strong>kako-jun</strong>
           <a
-            href="https://github.com/kako-jun/simplest-note-md"
+            href="https://github.com/kako-jun/agasteer"
             target="_blank"
             rel="noopener noreferrer"
             style="color: var(--text-primary); display: flex; align-items: center;"

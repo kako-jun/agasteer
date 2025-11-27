@@ -1,6 +1,6 @@
-# SimplestNote.md - 開発者向けドキュメント
+# Agasteer - 開発者向けドキュメント
 
-> SimplestNote.mdの技術仕様と開発ガイドです。
+> Agasteerの技術仕様と開発ガイドです。
 
 ---
 
@@ -138,8 +138,8 @@ Issue、Pull Requestを歓迎します！詳しくは[CONTRIBUTING.md](../../CON
 
 ## 📞 サポート
 
-- **リポジトリ**: [simplest-note-md](https://github.com/kako-jun/simplest-note-md)
-- **デモサイト**: [https://simplest-note-md.llll-ll.com](https://simplest-note-md.llll-ll.com)
+- **リポジトリ**: [agasteer](https://github.com/kako-jun/agasteer)
+- **デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 - **デプロイ**: Cloudflare Pages（自動デプロイ）
 
 ---

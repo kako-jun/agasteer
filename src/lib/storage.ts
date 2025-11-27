@@ -7,9 +7,9 @@ import type { Settings, Note, Leaf, ThemeType, CustomFont, CustomBackground, Loc
 import { getLocaleFromNavigator } from 'svelte-i18n'
 
 // 設定のみLocalStorage利用（キー簡素化）
-const SETTINGS_KEY = 'simplest-md-note'
+const SETTINGS_KEY = 'agasteer'
 const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dotsD', 'dotsF']
-const DB_NAME = 'simplest-md-note/db'
+const DB_NAME = 'agasteer/db'
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
 const FONTS_STORE = 'fonts'

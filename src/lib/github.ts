@@ -180,8 +180,8 @@ export async function saveToGitHub(
     message: 'Agasteer push',
     content: encodedContent,
     committer: {
-      name: 'simplest-note-md',
-      email: 'simplest-note-md@example.com',
+      name: 'agasteer',
+      email: 'agasteer@example.com',
     },
   }
 
@@ -537,12 +537,12 @@ export async function pushAllWithTreeAPI(
           tree: newTreeSha,
           parents: [currentCommitSha],
           committer: {
-            name: 'simplest-note-md',
-            email: 'simplest-note-md@example.com',
+            name: 'agasteer',
+            email: 'agasteer@example.com',
           },
           author: {
-            name: 'simplest-note-md',
-            email: 'simplest-note-md@example.com',
+            name: 'agasteer',
+            email: 'agasteer@example.com',
           },
         }),
       }

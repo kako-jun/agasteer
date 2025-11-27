@@ -11,7 +11,7 @@
   <p class="author">
     {$_('settings.about.author')}: <strong>kako-jun</strong>
     <a
-      href="https://github.com/kako-jun/simplest-note-md"
+      href="https://github.com/kako-jun/agasteer"
       target="_blank"
       rel="noopener noreferrer"
       title="GitHub"

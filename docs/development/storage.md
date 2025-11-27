@@ -1,6 +1,6 @@
 # データ永続化とストレージ
 
-SimplestNote.mdのデータ永続化スキーマについて説明します。
+Agasteerのデータ永続化スキーマについて説明します。
 
 ## LocalStorage
 
@@ -11,19 +11,19 @@ SimplestNote.mdのデータ永続化スキーマについて説明します。
 ### キー定義
 
 ```typescript
-const SETTINGS_KEY = 'simplest-md-note/settings'
+const SETTINGS_KEY = 'agasteer/settings'
 ```
 
 ### データ構造
 
-#### `simplest-md-note/settings`
+#### `agasteer/settings`
 
 ```json
 {
   "token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
   "repoName": "yamada/my-notes",
   "theme": "yomi",
-  "toolName": "SimplestNote.md",
+  "toolName": "Agasteer",
   "locale": "ja",
   "hasCustomFont": false,
   "hasCustomBackgroundLeft": false,
@@ -33,7 +33,7 @@ const SETTINGS_KEY = 'simplest-md-note/settings'
 }
 ```
 
-**注意**: コミット時のユーザー名とメールアドレスは固定値（`simplest-note-md` / `simplest-note-md@example.com`）を使用するため、設定に含まれません。
+**注意**: コミット時のユーザー名とメールアドレスは固定値（`agasteer` / `agasteer@example.com`）を使用するため、設定に含まれません。
 
 ### 保存タイミング
 
@@ -49,7 +49,7 @@ const SETTINGS_KEY = 'simplest-md-note/settings'
 
 ### データベース名
 
-`simplest-note-md`
+`agasteer`
 
 ### オブジェクトストア
 

@@ -1,6 +1,6 @@
 # UI/UX機能
 
-SimplestNote.mdのUI/UX関連機能の実装詳細について説明します。
+AgasteerのUI/UX関連機能の実装詳細について説明します。
 
 ## 2ペイン表示
 
@@ -872,8 +872,8 @@ VitePWA({
     ],
   },
   manifest: {
-    name: 'SimplestNote.md',
-    short_name: 'SimplestNote',
+    name: 'Agasteer',
+    short_name: 'Agasteer',
     description: 'A simple markdown note-taking app with GitHub sync',
     theme_color: '#1a1a1a',
     background_color: '#1a1a1a',

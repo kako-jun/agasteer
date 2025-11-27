@@ -1,6 +1,6 @@
 # コントリビューションガイド
 
-SimplestNote.mdへのコントリビューションを歓迎します！
+Agasteerへのコントリビューションを歓迎します！
 
 ## コントリビューション方法
 
@@ -22,8 +22,8 @@ SimplestNote.mdへのコントリビューションを歓迎します！
 1. **リポジトリをクローン**
 
    ```bash
-   git clone https://github.com/kako-jun/simplest-note-md.git
-   cd simplest-note-md
+   git clone https://github.com/kako-jun/agasteer.git
+   cd agasteer
    ```
 
 2. **依存パッケージをインストール**

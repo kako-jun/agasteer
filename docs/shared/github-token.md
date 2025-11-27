@@ -1,6 +1,6 @@
 # GitHub Personal Access Tokenの取得
 
-> SimplestNote.mdでGitHub連携を使用するために必要なPersonal Access Tokenの取得方法を説明します。
+> AgasteerでGitHub連携を使用するために必要なPersonal Access Tokenの取得方法を説明します。
 
 ---
 
@@ -44,7 +44,7 @@ Personal Access Token（個人アクセストークン）は、GitHubのAPIを�
 #### Note（トークン名）
 
 - わかりやすい名前を付けます
-- 例: `SimplestNote.md`、`My Notes App`
+- 例: `Agasteer`、`My Notes App`
 
 #### Expiration（有効期限）
 
@@ -69,7 +69,7 @@ Personal Access Token（個人アクセストークン）は、GitHubのAPIを�
 - `repo:invite`
 - `security_events`
 
-これにより、SimplestNote.mdはリポジトリに読み書きできるようになります。
+これにより、Agasteerはリポジトリに読み書きできるようになります。
 
 **他のスコープは不要です。**
 
@@ -113,7 +113,7 @@ Personal Access Token（個人アクセストークン）は、GitHubのAPIを�
 1. トークン一覧で対象のトークンを探す
 2. 「Regenerate token」ボタンをクリック
 3. 新しいトークンが生成されます
-4. 新しいトークンをコピーして、SimplestNote.mdの設定を更新します
+4. 新しいトークンをコピーして、Agasteerの設定を更新します
 
 ---
 
@@ -180,7 +180,7 @@ Personal Access Token（個人アクセストークン）は、GitHubのAPIを�
 
 ## 🎯 次のステップ
 
-トークンを取得したら、SimplestNote.mdの設定画面で入力してください。
+トークンを取得したら、Agasteerの設定画面で入力してください。
 
 → [初期設定とクイックスタート](../user-guide/getting-started.md)
 

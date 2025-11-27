@@ -1,6 +1,6 @@
 # 拡張計画と既知の課題
 
-SimplestNote.mdの将来的な拡張計画と既知の課題について説明します。
+Agasteerの将来的な拡張計画と既知の課題について説明します。
 
 ## 拡張の可能性
 
@@ -167,10 +167,10 @@ SimplestNote.mdの将来的な拡張計画と既知の課題について説明�
 
 ```
 # 現在（UUIDベース）
-https://example.com/simplest-note-md?note=550e8400-e29b-41d4-a716-446655440000&leaf=7c9e6679-7425-40de-944b-e07fc1f90ae7
+https://example.com/agasteer?note=550e8400-e29b-41d4-a716-446655440000&leaf=7c9e6679-7425-40de-944b-e07fc1f90ae7
 
 # 新設計（パス文字列ベース、2ペイン対応）
-https://example.com/simplest-note-md?left=/仕事/会議&right=/仕事/会議/議事録
+https://example.com/agasteer?left=/仕事/会議&right=/仕事/会議/議事録
 ```
 
 #### UI設計
