@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { afterUpdate } from 'svelte'
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
   import NoteCard from '../cards/NoteCard.svelte'
@@ -24,6 +25,18 @@
   export let priorityLeaf: Leaf | null = null
   export let onSelectPriority: () => void
   export let onUpdatePriorityBadge: (icon: string, color: string) => void
+
+  // Vimモードで選択が変わったら選択中のカードが見えるようにスクロール
+  afterUpdate(() => {
+    if (vimMode && isActive) {
+      const selectedCard = document.querySelector(
+        '.note-card.selected, .leaf-card.selected'
+      ) as HTMLElement
+      if (selectedCard) {
+        selectedCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+  })
 
   function formatDateTime(timestamp: number, variant: 'short' | 'long' = 'long'): string {
     const date = new Date(timestamp)

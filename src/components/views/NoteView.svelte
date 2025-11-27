@@ -1,5 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
+  import { afterUpdate } from 'svelte'
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
   import type { LeafSkeleton } from '../../lib/api'
@@ -29,6 +30,16 @@
   export let onUpdateNoteBadge: (noteId: string, icon: string, color: string) => void
   export let onUpdateLeafBadge: (leafId: string, icon: string, color: string) => void
   export let leafSkeletonMap: Map<string, LeafSkeleton> = new Map()
+
+  // Vimモードで選択が変わったら選択中のカードが見えるようにスクロール
+  afterUpdate(() => {
+    if (vimMode && isActive) {
+      const selectedCard = document.querySelector('.note-card.selected') as HTMLElement
+      if (selectedCard) {
+        selectedCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+  })
 
   // このノートに属するスケルトン（まだleavesに存在しないもの）
   $: skeletons = Array.from(leafSkeletonMap.values())

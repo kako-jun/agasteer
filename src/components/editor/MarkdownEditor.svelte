@@ -21,6 +21,14 @@
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
   let isLoading = true // CodeMirrorローディング中フラグ
 
+  // モバイル判定（タッチデバイスかつ画面幅が小さい）
+  function isMobileDevice(): boolean {
+    if (typeof window === 'undefined') return false
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+    const isNarrow = window.innerWidth <= 768
+    return hasTouch && isNarrow
+  }
+
   // 動的インポート用の変数
   let EditorState: any
   let EditorView: any
@@ -287,6 +295,10 @@
           }
         },
       }),
+      // モバイルでキーボード表示時にカーソルが見えるようにマージンを確保
+      EditorView.scrollMargins.of(() => ({
+        bottom: isMobileDevice() ? 200 : 0,
+      })),
     ]
 
     // Vimモードが有効な場合は追加
@@ -401,8 +413,10 @@
     // DOM要素にペイン情報をマーク（Vimコマンドで参照するため）
     editorView.dom.dataset.pane = pane
 
-    // エディタにフォーカスを当てる
-    editorView.focus()
+    // モバイルではautofocusを無効（キーボードが自動で出ないように）
+    if (!isMobileDevice()) {
+      editorView.focus()
+    }
   }
 
   function updateEditorContent(newContent: string) {
