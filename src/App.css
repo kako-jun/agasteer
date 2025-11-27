@@ -437,11 +437,15 @@ body {
 html,
 body {
   height: 100%;
-  overflow: hidden;
 }
 
 /* PWAスタンドアロンモードでのビューポート修正 */
 @media all and (display-mode: standalone) {
+  html,
+  body {
+    overflow: hidden; /* PWAモードのみoverflow: hidden */
+  }
+
   .app-container {
     /* iOSのセーフエリアに対応 */
     padding-bottom: env(safe-area-inset-bottom, 0);
