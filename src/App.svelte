@@ -371,74 +371,6 @@
     }
   }
 
-  /**
-   * URLから優先情報を取得（Pull時の優先度ソート用）
-   * リーフパスとノートIDを返す
-   */
-  function getPriorityFromUrl(allNotes: Note[]): PullPriority {
-    const params = new URLSearchParams(window.location.search)
-    const leftPath = params.get('left')
-    const rightPath = params.get('right')
-
-    const leafPaths: string[] = []
-    const noteIds: string[] = []
-
-    const processPath = (path: string | null) => {
-      if (!path || path === '/') return
-
-      // :previewサフィックスを除去
-      const cleanPath = path.endsWith(':preview') ? path.slice(0, -8) : path
-
-      // パスを分割（">" で区切る）
-      const segments = cleanPath.split('>').map((s) => decodeURIComponent(s))
-      if (segments.length === 0) return
-
-      // ルートノートを探す
-      const rootNote = allNotes.find((n) => !n.parentId && n.name === segments[0])
-      if (!rootNote) return
-
-      if (segments.length === 1) {
-        // ルートノートのみ → そのノート配下を優先
-        noteIds.push(rootNote.id)
-        return
-      }
-
-      // サブノートを探す
-      const subNote = allNotes.find((n) => n.parentId === rootNote.id && n.name === segments[1])
-
-      if (subNote && segments.length === 2) {
-        // サブノートのみ → そのノート配下を優先
-        noteIds.push(subNote.id)
-        return
-      }
-
-      if (!subNote && segments.length === 2) {
-        // ルートノート配下のリーフ
-        const leafPath = `${segments[0]}/${segments[1]}.md`
-        leafPaths.push(leafPath)
-        noteIds.push(rootNote.id)
-        return
-      }
-
-      if (subNote && segments.length === 3) {
-        // サブノート配下のリーフ
-        const leafPath = `${segments[0]}/${segments[1]}/${segments[2]}.md`
-        leafPaths.push(leafPath)
-        noteIds.push(subNote.id)
-        return
-      }
-    }
-
-    processPath(leftPath)
-    processPath(rightPath)
-
-    // 重複を除去
-    return {
-      leafPaths: [...new Set(leafPaths)],
-      noteIds: [...new Set(noteIds)],
-    }
-  }
-
   // 未取得リーフのID（ローディング表示用）
   let loadingLeafIds = new Set<string>()
 
@@ -1456,7 +1388,7 @@
         loadingLeafIds = new Set(leafSkeletons.map((s) => s.id))
 
         // URLから優先情報を計算して返す
-        return getPriorityFromUrl(notesFromGitHub)
+        return nav.getPriorityFromUrl(notesFromGitHub)
       },
 
       // 各リーフ取得完了時: leavesストアに追加
