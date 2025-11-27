@@ -372,12 +372,12 @@
   let leafSkeletonMap = new Map<string, LeafSkeleton>()
 
   // 左ペインの状態変更をURLに反映
-  $: if (leftNote || leftLeaf || (!leftNote && !leftLeaf) || leftView) {
+  $: if ($leftNote || $leftLeaf || (!$leftNote && !$leftLeaf) || $leftView) {
     updateUrlFromState()
   }
 
   // 右ペインの状態変更をURLに反映
-  $: if (rightNote || rightLeaf || (!rightNote && !rightLeaf) || rightView) {
+  $: if ($rightNote || $rightLeaf || (!$rightNote && !$rightLeaf) || $rightView) {
     updateUrlFromState()
   }
 

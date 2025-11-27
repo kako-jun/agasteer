@@ -439,6 +439,16 @@ body {
   height: 100%;
 }
 
+/* iOS Safari（ブラウザモード）での100vhの問題を回避 */
+/* PWAスタンドアロンモードでは100dvhが正しく動作するため除外 */
+@supports (-webkit-touch-callout: none) {
+  @media not all and (display-mode: standalone) {
+    .app-container {
+      height: -webkit-fill-available;
+    }
+  }
+}
+
 /* PWAスタンドアロンモードでのビューポート修正 */
 @media all and (display-mode: standalone) {
   html,
@@ -447,15 +457,9 @@ body {
   }
 
   .app-container {
+    /* 100dvhを明示的に使用（iOSセーフエリア対応） */
+    height: 100dvh;
     /* iOSのセーフエリアに対応 */
     padding-bottom: env(safe-area-inset-bottom, 0);
-  }
-}
-
-/* iOS PWAでのキーボード表示時の対応 */
-@supports (-webkit-touch-callout: none) {
-  .app-container {
-    /* iOS Safari/PWAでの100vhの問題を回避 */
-    height: -webkit-fill-available;
   }
 }
