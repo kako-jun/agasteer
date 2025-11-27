@@ -818,6 +818,38 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
 }
 
 /**
+ * リモートのpushCountを取得（stale編集検出用）
+ * @returns pushCount（取得失敗時は0）
+ */
+export async function fetchRemotePushCount(settings: Settings): Promise<number> {
+  const validation = validateGitHubSettings(settings)
+  if (!validation.valid) {
+    return 0
+  }
+
+  try {
+    const metadataRes = await fetchGitHubContents(
+      'notes/metadata.json',
+      settings.repoName,
+      settings.token
+    )
+    if (metadataRes.ok) {
+      const metadataData = await metadataRes.json()
+      if (metadataData.content) {
+        const base64 = metadataData.content.replace(/\n/g, '')
+        const jsonText = decodeURIComponent(escape(atob(base64)))
+        const parsed = JSON.parse(jsonText)
+        return parsed.pushCount || 0
+      }
+    }
+    return 0
+  } catch (e) {
+    console.warn('Failed to fetch remote pushCount:', e)
+    return 0
+  }
+}
+
+/**
  * GitHub接続テスト（認証＋リポジトリ参照）
  */
 export async function testGitHubConnection(settings: Settings): Promise<TestResult> {

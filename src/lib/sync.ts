@@ -1,5 +1,5 @@
 import type { Note, Leaf, Settings, Metadata } from './types'
-import { pushAllWithTreeAPI, pullFromGitHub } from './github'
+import { pushAllWithTreeAPI, pullFromGitHub, fetchRemotePushCount } from './github'
 
 /**
  * Push操作の結果
@@ -102,4 +102,20 @@ export async function executePull(settings: Settings, isInitial = false): Promis
       metadata: result.metadata,
     }
   }
+}
+
+/**
+ * stale編集かどうかを判定
+ * リモートのpushCountがローカルのlastPulledPushCountより大きければstale
+ *
+ * @param settings - GitHub設定
+ * @param lastPulledPushCount - 最後にPullしたときのpushCount
+ * @returns staleならtrue
+ */
+export async function checkIfStaleEdit(
+  settings: Settings,
+  lastPulledPushCount: number
+): Promise<boolean> {
+  const remotePushCount = await fetchRemotePushCount(settings)
+  return remotePushCount > lastPulledPushCount
 }

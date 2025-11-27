@@ -13,6 +13,7 @@
     githubConfigured,
     metadata,
     isDirty,
+    lastPulledPushCount,
     updateSettings,
     updateNotes,
     updateLeaves,
@@ -21,7 +22,7 @@
   import { applyTheme } from './lib/theme'
   import { loadAndApplyCustomFont } from './lib/font'
   import { loadAndApplyCustomBackgrounds } from './lib/background'
-  import { executePush, executePull } from './lib/sync'
+  import { executePush, executePull, checkIfStaleEdit } from './lib/sync'
   import { initI18n, _ } from './lib/i18n'
   import { parseSimpleNoteFile } from './lib/importers'
   import {
@@ -1233,6 +1234,29 @@
 
     isPushing = true
     try {
+      // stale編集かどうかチェック
+      const isStale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
+      if (isStale) {
+        // staleの場合は確認ダイアログを表示
+        isPushing = false
+        showConfirm($_('modal.staleEdit'), () => executePushInternal())
+        return
+      }
+
+      // staleでなければそのままPush
+      await executePushInternal()
+    } catch (e) {
+      console.error('Push check failed:', e)
+      // チェック失敗時もPushを続行
+      await executePushInternal()
+    } finally {
+      isPushing = false
+    }
+  }
+
+  async function executePushInternal() {
+    isPushing = true
+    try {
       // Push開始を通知
       showPushToast('Pushします')
 
@@ -1241,9 +1265,11 @@
       // 結果を通知
       showPushToast(result.message, result.variant)
 
-      // Push成功時にダーティフラグをクリア
+      // Push成功時にダーティフラグをクリアし、pushCountを更新
       if (result.variant === 'success') {
         isDirty.set(false)
+        // Push成功後はリモートと同期したのでpushCountを+1
+        lastPulledPushCount.update((n) => n + 1)
       }
     } finally {
       isPushing = false
@@ -1637,6 +1663,9 @@
 
       // Pull成功時はGitHubと同期したのでダーティフラグをクリア
       isDirty.set(false)
+
+      // stale編集検出用にpushCountを記録
+      lastPulledPushCount.set(result.metadata.pushCount)
 
       // Pull後はURLから状態を復元（初回Pullも含む）
       if (isInitial) {

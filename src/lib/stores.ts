@@ -13,6 +13,8 @@ export const notes = writable<Note[]>([])
 export const leaves = writable<Leaf[]>([])
 export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
 export const isDirty = writable<boolean>(false)
+// Pull成功時のリモートpushCountを保持（stale編集検出用）
+export const lastPulledPushCount = writable<number>(0)
 
 // 派生ストア
 export const rootNotes = derived(notes, ($notes) =>

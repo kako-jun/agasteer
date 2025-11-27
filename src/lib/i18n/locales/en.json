@@ -176,6 +176,7 @@
     "imageDownloadFailed": "Failed to download image"
   },
   "modal": {
+    "staleEdit": "Remote has newer changes. Saving will overwrite them. Continue?",
     "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
     "deleteRootNote": "Delete this note? Its direct sub-notes and leaves will also be deleted.",
     "deleteSubNote": "Delete this sub-note? Its leaves will also be deleted.",
