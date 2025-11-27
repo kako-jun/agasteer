@@ -25,8 +25,8 @@
 <style>
   /* 右下の三角形グラデーション背景 */
   .stats-overlay {
-    position: absolute;
-    bottom: 0;
+    position: fixed;
+    bottom: 40px; /* フッターの高さ */
     right: 0;
     width: 400px;
     height: 400px;
@@ -41,8 +41,8 @@
   }
 
   .statistics {
-    position: absolute;
-    bottom: 1rem;
+    position: fixed;
+    bottom: calc(40px + 1rem); /* フッターの高さ + 余白 */
     right: 1rem;
     pointer-events: none;
     z-index: 2;
