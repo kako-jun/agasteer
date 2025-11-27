@@ -186,12 +186,125 @@ metadata.pushCount = currentPushCount + 1
 
 GitHubから全データをPull。
 
-### 高速化の実装（2025-11）
+### 優先度ベースの段階的ローディング（2025-11）
 
-- 生テキスト取得: `Accept: application/vnd.github.raw` を付け、Base64/JSON 経由をやめて `.md` を直接取得（GitHub 側の gzip が効く）。
-- 並列取得: リーフ本文の取得を 6 並列で実行（`CONTENT_FETCH_CONCURRENCY = 6`）。過剰な同時接続を避けつつ待ち時間を圧縮。
-- 優先取得: URL などで開いているパスを `priorityPaths` として先に取得するキューを用意。
-- 段階通知: `pullFromGitHub` は `onStructure`（ノート構造とメタデータを先出し）と `onLeaf`（各リーフ取得完了を逐次通知）のコールバックをオプションで受け取る。未指定なら従来のシリアル動作のまま（後方互換）。
+200件以上のリーフがある場合、全件取得には10秒以上かかります。ユーザー体験を改善するため、URLで指定されたコンテンツを優先的に取得し、UIを早期に解放する仕組みを実装。
+
+#### 処理フロー
+
+1. **Phase 1**: リポジトリ情報取得 → ツリー + metadata.json を並列取得
+2. **Phase 2**: ノート構造を確定 → `onStructure`コールバックで通知
+3. **Phase 3**: リーフを優先度順にソートしてキューイング
+4. **Phase 4**: 10並列でリーフを取得、各完了時に`onLeaf`コールバック
+5. **Phase 5**: 第1優先リーフ完了時に`onPriorityComplete`コールバック → UIロック解除
+
+#### 優先度の定義
+
+```typescript
+export interface PullPriority {
+  leafPaths: string[] // 第1優先: URLで指定されたリーフのパス
+  noteIds: string[] // 第2優先: 第1優先リーフと同じノート配下
+}
+```
+
+**優先度レベル:**
+
+- **優先度0**: URLで直接指定されたリーフ（`?left=Note>Leaf`）
+- **優先度1**: 第1優先リーフと同じノート配下のリーフ
+- **優先度2**: その他すべてのリーフ
+
+#### コールバックインターフェース
+
+```typescript
+export interface PullOptions {
+  // ノート構造確定時（優先情報を返す）
+  onStructure?: (notes: Note[], metadata: Metadata) => PullPriority | void
+  // 各リーフ取得完了時
+  onLeaf?: (leaf: Leaf) => void
+  // 第1優先リーフ取得完了時（UIロック解除のタイミング）
+  onPriorityComplete?: () => void
+}
+```
+
+#### App.svelteでの使用例
+
+```typescript
+const options: PullOptions = {
+  onStructure: (notesFromGitHub, metadataFromGitHub) => {
+    // ノートを先に反映（ナビゲーション可能に）
+    notes.set(notesFromGitHub)
+    metadata.set(metadataFromGitHub)
+    // URLから優先情報を計算して返す
+    return getPriorityFromUrl(notesFromGitHub)
+  },
+  onLeaf: (leaf) => {
+    // 各リーフをストアに追加
+    leaves.update((current) => [...current, leaf])
+  },
+  onPriorityComplete: () => {
+    // UIロック解除、ガラス効果解除
+    isOperationsLocked = false
+    isLoadingUI = false
+    // URL復元
+    restoreStateFromUrl(true)
+  },
+}
+
+const result = await executePull($settings, options)
+```
+
+#### 優先度0リーフが0件の場合
+
+両方のペインがノートを表示している場合（`?left=ideas&right=SimpleNote1`）、第1優先リーフは存在しません。この場合、リーフ取得開始**前**に`onPriorityComplete`を呼び出してUIを即座に解放します。
+
+```typescript
+const priority1Count = sortedTargets.filter((t) => getPriority(t) === 0).length
+
+// 第1優先リーフが0件なら、リーフ取得開始前にUIロック解除
+if (priority1Count === 0) {
+  priority1CallbackFired = true
+  options?.onPriorityComplete?.()
+}
+```
+
+### 交通整理（canSync関数）
+
+Pull/Push操作の排他制御を一元管理する関数。
+
+```typescript
+function canSync(): { canPull: boolean; canPush: boolean } {
+  // Pull中またはPush中は両方とも不可
+  if (isPulling || isPushing) {
+    return { canPull: false, canPush: false }
+  }
+  return { canPull: true, canPush: true }
+}
+```
+
+**使用箇所:**
+
+- `handleSaveToGitHub()`: `if (!canSync().canPush) return`
+- `handlePull()`: `if (!isInitial && !canSync().canPull) return`
+- Header: `pullDisabled={!canSync().canPull}`
+
+これにより、ボタンクリックでもVimの`:w`でも、同じ条件でブロックされます。
+
+### UI状態フラグ
+
+```typescript
+let isLoadingUI = false // ガラス効果・操作不可（優先リーフ完了で解除）
+let isPulling = false // Pull処理中（全完了で解除、URL更新スキップ用）
+let isPushing = false // Push処理中
+```
+
+- `isLoadingUI`: 優先リーフ取得完了で`false`に（ガラス効果解除）
+- `isPulling`: 全リーフ取得完了で`false`に（Pull/Pushボタン活性化）
+
+### 技術的な最適化
+
+- **生テキスト取得**: `Accept: application/vnd.github.raw`でBase64デコードを回避
+- **並列取得**: `CONTENT_FETCH_CONCURRENCY = 10`で10並列実行
+- **キャッシュバスター**: `?t=${Date.now()}`で常に最新データを取得
 
 ### Base64デコード
 
