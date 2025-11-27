@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import type { Note, Leaf, Breadcrumb, View, Metadata } from './lib/types'
   import * as nav from './lib/navigation'
@@ -18,11 +18,12 @@
     updateNotes,
     updateLeaves,
   } from './lib/stores'
-  import { clearAllData, loadSettings } from './lib/storage'
+  import { clearAllData, loadSettings, saveNotes, saveLeaves } from './lib/storage'
   import { applyTheme } from './lib/theme'
   import { loadAndApplyCustomFont } from './lib/font'
   import { loadAndApplyCustomBackgrounds } from './lib/background'
   import { executePush, executePull, checkIfStaleEdit } from './lib/sync'
+  import type { PullOptions, PullPriority } from './lib/sync'
   import { initI18n, _ } from './lib/i18n'
   import { parseSimpleNoteFile } from './lib/importers'
   import {
@@ -74,10 +75,10 @@
   let draggedLeaf: Leaf | null = null
   let dragOverNoteId: string | null = null // ドラッグオーバー中のノートID
   let dragOverLeafId: string | null = null // ドラッグオーバー中のリーフID
-  let pullRunning = false
+  let isLoadingUI = false // ガラス効果・操作不可（優先リーフ完了で解除）
   let isOperationsLocked = true
   let showSettings = false
-  let isPulling = false // Pull処理中はURL更新をスキップ
+  let isPulling = false // Pull処理中（全完了で解除、URL更新スキップ用）
   let i18nReady = false // i18n初期化完了フラグ
   let showWelcome = false // ウェルカムモーダル表示フラグ
   let isExportingZip = false
@@ -276,6 +277,77 @@
       isRestoringFromUrl = false
     }
   }
+
+  /**
+   * URLから優先情報を取得（Pull時の優先度ソート用）
+   * リーフパスとノートIDを返す
+   */
+  function getPriorityFromUrl(allNotes: Note[]): PullPriority {
+    const params = new URLSearchParams(window.location.search)
+    const leftPath = params.get('left')
+    const rightPath = params.get('right')
+
+    const leafPaths: string[] = []
+    const noteIds: string[] = []
+
+    const processPath = (path: string | null) => {
+      if (!path || path === '/') return
+
+      // :previewサフィックスを除去
+      const cleanPath = path.endsWith(':preview') ? path.slice(0, -8) : path
+
+      // パスを分割（">" で区切る）
+      const segments = cleanPath.split('>').map((s) => decodeURIComponent(s))
+      if (segments.length === 0) return
+
+      // ルートノートを探す
+      const rootNote = allNotes.find((n) => !n.parentId && n.name === segments[0])
+      if (!rootNote) return
+
+      if (segments.length === 1) {
+        // ルートノートのみ → そのノート配下を優先
+        noteIds.push(rootNote.id)
+        return
+      }
+
+      // サブノートを探す
+      const subNote = allNotes.find((n) => n.parentId === rootNote.id && n.name === segments[1])
+
+      if (subNote && segments.length === 2) {
+        // サブノートのみ → そのノート配下を優先
+        noteIds.push(subNote.id)
+        return
+      }
+
+      if (!subNote && segments.length === 2) {
+        // ルートノート配下のリーフ
+        const leafPath = `${segments[0]}/${segments[1]}.md`
+        leafPaths.push(leafPath)
+        noteIds.push(rootNote.id)
+        return
+      }
+
+      if (subNote && segments.length === 3) {
+        // サブノート配下のリーフ
+        const leafPath = `${segments[0]}/${segments[1]}/${segments[2]}.md`
+        leafPaths.push(leafPath)
+        noteIds.push(subNote.id)
+        return
+      }
+    }
+
+    processPath(leftPath)
+    processPath(rightPath)
+
+    // 重複を除去
+    return {
+      leafPaths: [...new Set(leafPaths)],
+      noteIds: [...new Set(noteIds)],
+    }
+  }
+
+  // 未取得リーフのID（ローディング表示用）
+  let loadingLeafIds = new Set<string>()
 
   // 左ペインの状態変更をURLに反映
   $: if (leftNote || leftLeaf || (!leftNote && !leftLeaf) || leftView) {
@@ -1228,9 +1300,19 @@
 
   // GitHub同期
   let isPushing = false
+
+  // 交通整理: Pull/Pushが実行可能かどうか
+  function canSync(): { canPull: boolean; canPush: boolean } {
+    // Pull中またはPush中は両方とも不可
+    if (isPulling || isPushing) {
+      return { canPull: false, canPush: false }
+    }
+    return { canPull: true, canPush: true }
+  }
+
   async function handleSaveToGitHub() {
-    // 実行中は何もしない（ダブルクリック防止）
-    if (isPushing) return
+    // 交通整理: Push不可なら何もしない
+    if (!canSync().canPush) return
 
     isPushing = true
     try {
@@ -1611,6 +1693,9 @@
   }
 
   async function handlePull(isInitial = false) {
+    // 交通整理: Pull不可なら何もしない（初回Pullは例外）
+    if (!isInitial && !canSync().canPull) return
+
     // 初回Pull以外で未保存の変更がある場合は確認
     if (!isInitial && get(isDirty)) {
       let message = $_('modal.unsavedChanges')
@@ -1626,7 +1711,7 @@
   }
 
   async function executePullInternal(isInitial: boolean) {
-    pullRunning = true
+    isLoadingUI = true
     isOperationsLocked = true
     isPulling = true // Pull処理中はURL更新をスキップ
 
@@ -1639,41 +1724,67 @@
     await clearAllData() // IndexedDB全削除
     notes.set([])
     leaves.set([])
+    loadingLeafIds = new Set()
     resetLeafStats()
     leftNote = null
     leftLeaf = null
     rightNote = null
     rightLeaf = null
 
-    const result = await executePull($settings, isInitial)
+    const options: PullOptions = {
+      // ノート構造確定時: ノートを表示可能に、優先情報を計算して返す
+      onStructure: (notesFromGitHub, metadataFromGitHub) => {
+        // ノートを先に反映（ナビゲーション可能に）
+        notes.set(notesFromGitHub)
+        metadata.set(metadataFromGitHub)
+
+        // URLから優先情報を計算して返す
+        return getPriorityFromUrl(notesFromGitHub)
+      },
+
+      // 各リーフ取得完了時: leavesストアに追加
+      onLeaf: (leaf) => {
+        leaves.update((current) => [...current, leaf])
+        loadingLeafIds.delete(leaf.id)
+        loadingLeafIds = loadingLeafIds // リアクティブ更新
+      },
+
+      // 第1優先リーフ取得完了時: UIロック解除、ガラス効果解除、URL復元
+      onPriorityComplete: () => {
+        isOperationsLocked = false
+        isLoadingUI = false // ガラス効果を解除（残りのリーフはバックグラウンドで取得継続）
+
+        // 初回Pull時のURL復元
+        if (isInitial) {
+          isRestoringFromUrl = true
+          restoreStateFromUrl(true)
+          isRestoringFromUrl = false
+        } else {
+          restoreStateFromUrl(false)
+        }
+      },
+    }
+
+    const result = await executePull($settings, options)
 
     if (result.success) {
-      // 初回Pull時は、データ更新前にisRestoringFromUrlをtrueにする
-      // これにより、データ更新によるリアクティブ宣言の発火を防ぐ
-      if (isInitial) {
-        isRestoringFromUrl = true
-      }
-
-      // GitHubから取得したデータでIndexedDBを再作成
-      updateNotes(result.notes)
-      updateLeaves(result.leaves)
-      rebuildLeafStats(result.leaves)
-      metadata.set(result.metadata)
-      isOperationsLocked = false
-
-      // Pull成功時はGitHubと同期したのでダーティフラグをクリア
-      isDirty.set(false)
+      // 全リーフ取得完了後の処理
+      // leavesストアはonLeafで逐次更新済みなので、最終的なソートのみ
+      const sortedLeaves = result.leaves.sort((a, b) => a.order - b.order)
+      leaves.set(sortedLeaves)
+      rebuildLeafStats(sortedLeaves)
 
       // stale編集検出用にpushCountを記録
       lastPulledPushCount.set(result.metadata.pushCount)
 
-      // Pull後はURLから状態を復元（初回Pullも含む）
-      if (isInitial) {
-        restoreStateFromUrl(true)
-        isRestoringFromUrl = false
-      } else {
-        restoreStateFromUrl(false)
-      }
+      // IndexedDBに保存（isDirtyをセットしないように直接保存）
+      saveNotes(result.notes).catch((err) => console.error('Failed to persist notes:', err))
+      saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
+
+      // Pull成功時はGitHubと同期したのでダーティフラグをクリア
+      // tick()で待機し、リアクティブ更新が完全に完了してからクリアする
+      await tick()
+      isDirty.set(false)
     } else {
       // 初回Pull失敗時は静かに処理（設定未完了は正常な状態）
       // 2回目以降のPull失敗はトーストで通知される
@@ -1681,7 +1792,7 @@
 
     // 結果を通知
     showPullToast(result.message, result.variant)
-    pullRunning = false
+    isLoadingUI = false
     isPulling = false // Pull処理完了
   }
 </script>
@@ -1709,7 +1820,7 @@
         goSettings()
       }}
       onPull={() => handlePull(false)}
-      pullDisabled={pullRunning || isPushing}
+      pullDisabled={!canSync().canPull}
     />
 
     <div class="content-wrapper" class:single-pane={!isDualPane}>
@@ -1790,7 +1901,7 @@
               vimMode={$settings.vimMode ?? false}
               linedMode={$settings.linedMode ?? false}
               pane="left"
-              disabled={isOperationsLocked || isPushing}
+              disabled={isOperationsLocked}
               onContentChange={updateLeafContent}
               onSave={handleSaveToGitHub}
               onClose={() => closeLeaf('left')}
@@ -1843,10 +1954,10 @@
           />
         {/if}
 
-        {#if isOperationsLocked && !showWelcome && !pullRunning}
+        {#if isOperationsLocked && !showWelcome && !isLoadingUI}
           <div class="config-required-overlay"></div>
         {/if}
-        {#if pullRunning || isPushing}
+        {#if isLoadingUI || isPushing}
           <Loading />
         {/if}
       </div>
@@ -1984,10 +2095,10 @@
           />
         {/if}
 
-        {#if isOperationsLocked && !showWelcome && !pullRunning}
+        {#if isOperationsLocked && !showWelcome && !isLoadingUI}
           <div class="config-required-overlay"></div>
         {/if}
-        {#if pullRunning || isPushing}
+        {#if isLoadingUI || isPushing}
           <Loading />
         {/if}
       </div>
@@ -2051,7 +2162,7 @@
             settings={$settings}
             onThemeChange={handleThemeChange}
             onSettingsChange={handleSettingsChange}
-            {pullRunning}
+            {isLoadingUI}
             onPull={handlePull}
             onExportZip={exportNotesAsZip}
             onImport={handleImportFromOtherApps}

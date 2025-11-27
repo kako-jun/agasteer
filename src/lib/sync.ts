@@ -1,5 +1,8 @@
 import type { Note, Leaf, Settings, Metadata } from './types'
 import { pushAllWithTreeAPI, pullFromGitHub, fetchRemotePushCount } from './github'
+import type { PullOptions } from './github'
+
+export type { PullOptions, PullPriority } from './github'
 
 /**
  * Push操作の結果
@@ -77,11 +80,11 @@ export async function executePush(
  * IndexedDBは単なるキャッシュであり、Pull成功時に全削除→全作成される
  *
  * @param settings - GitHub設定
- * @param isInitial - 初回Pullかどうか
+ * @param options - Pull時のオプション（優先度、コールバック）
  * @returns Pull結果
  */
-export async function executePull(settings: Settings, isInitial = false): Promise<PullResult> {
-  const result = await pullFromGitHub(settings)
+export async function executePull(settings: Settings, options?: PullOptions): Promise<PullResult> {
+  const result = await pullFromGitHub(settings, options)
 
   if (result.success) {
     return {

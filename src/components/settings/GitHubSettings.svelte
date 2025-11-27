@@ -4,7 +4,7 @@
 
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
-  export let pullRunning: boolean = false
+  export let isLoadingUI: boolean = false
   export let onPull: (isInitial?: boolean) => void
 
   type TextSettingKey = 'repoName' | 'token'
@@ -133,7 +133,7 @@
     </div>
   </div>
   <div class="test-actions">
-    <button type="button" class="test-button" on:click={() => onPull(false)} disabled={pullRunning}>
+    <button type="button" class="test-button" on:click={() => onPull(false)} disabled={isLoadingUI}>
       <svg class="test-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path
           d="M12 3v12m0 0-4-4m4 4 4-4M5 17h14"
@@ -144,7 +144,7 @@
           stroke-linejoin="round"
         />
       </svg>
-      {pullRunning ? $_('settings.github.pulling') : $_('settings.github.pullTest')}
+      {isLoadingUI ? $_('settings.github.pulling') : $_('settings.github.pullTest')}
     </button>
   </div>
 </div>

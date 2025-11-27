@@ -43,8 +43,30 @@ export interface PullResult {
   metadata: Metadata
 }
 
-// コンテンツ取得を並列化する際の上限
-const CONTENT_FETCH_CONCURRENCY = 6
+/**
+ * Pull時の優先情報
+ */
+export interface PullPriority {
+  /** 第1優先: URLで指定されたリーフのパス（notes/を除いた相対パス） */
+  leafPaths: string[]
+  /** 第2優先: URLで指定されたリーフと同じノートID */
+  noteIds: string[]
+}
+
+/**
+ * Pull時のオプション
+ */
+export interface PullOptions {
+  /** ノート構造確定時のコールバック（リーフ取得前に呼ばれる）。優先情報を返す */
+  onStructure?: (notes: Note[], metadata: Metadata) => PullPriority | void
+  /** 各リーフ取得完了時のコールバック */
+  onLeaf?: (leaf: Leaf) => void
+  /** 第1優先リーフ全取得完了時のコールバック */
+  onPriorityComplete?: () => void
+}
+
+// コンテンツ取得を並列化する際の上限（HTTP/2では同時接続数制限が緩和されている）
+const CONTENT_FETCH_CONCURRENCY = 10
 
 async function runWithConcurrency<T, R>(
   items: T[],
@@ -586,10 +608,17 @@ export async function pushAllWithTreeAPI(
 }
 
 /**
- * GitHubからの簡易Pull（接続確認＋notesディレクトリ参照）
- * データのマージはせず、アクセス可否だけを確認する
+ * GitHubからPull
+ *
+ * 段階ロード対応:
+ * 1. ノート構造とmetadataを取得 → onStructureコールバック
+ * 2. 優先度でソートしてリーフを並列取得 → 各リーフ取得時にonLeafコールバック
+ * 3. 第1優先リーフ取得完了 → onPriorityCompleteコールバック
  */
-export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
+export async function pullFromGitHub(
+  settings: Settings,
+  options?: PullOptions
+): Promise<PullResult> {
   const defaultMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
 
   const validation = validateGitHubSettings(settings)
@@ -640,10 +669,15 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
     const repoData = await repoRes.json()
     const defaultBranch = repoData.default_branch || 'main'
 
-    const treeRes = await fetch(
-      `https://api.github.com/repos/${settings.repoName}/git/trees/${defaultBranch}?recursive=1`,
-      { headers }
-    )
+    // tree取得とmetadata取得を並列実行
+    const [treeRes, metadataRes] = await Promise.all([
+      fetch(
+        `https://api.github.com/repos/${settings.repoName}/git/trees/${defaultBranch}?recursive=1`,
+        { headers }
+      ),
+      fetchGitHubContents('notes/metadata.json', settings.repoName, settings.token),
+    ])
+
     if (!treeRes.ok) {
       return {
         success: false,
@@ -657,21 +691,15 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
     const treeData = await treeRes.json()
     const entries: { path: string; type: string }[] = treeData.tree || []
 
-    // notes/metadata.jsonを取得
+    // metadata.jsonをパース
     let metadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     try {
-      const metadataRes = await fetchGitHubContents(
-        'notes/metadata.json',
-        settings.repoName,
-        settings.token
-      )
       if (metadataRes.ok) {
         const metadataData = await metadataRes.json()
         if (metadataData.content) {
           const base64 = metadataData.content.replace(/\n/g, '')
           const jsonText = decodeURIComponent(escape(atob(base64)))
           const parsed = JSON.parse(jsonText)
-          // 古いmetadata.jsonにはpushCountがない可能性があるので、デフォルト値を設定
           metadata = {
             version: parsed.version || 1,
             notes: parsed.notes || {},
@@ -765,11 +793,52 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
           badgeIcon: undefined,
           badgeColor: undefined,
         }
-      return { entry, title, noteId, leafMeta }
+      return {
+        entry,
+        title,
+        noteId,
+        leafMeta,
+        relativePath: leafPathCollapsed,
+      }
     })
 
+    // ノート構造確定 → onStructureコールバック（優先情報を返してもらう）
+    const sortedNotes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
+    const priority = options?.onStructure?.(sortedNotes, metadata)
+
+    // 優先度でソート（priorityがvoidの場合は空セット）
+    const priorityLeafPaths = new Set(priority && 'leafPaths' in priority ? priority.leafPaths : [])
+    const priorityNoteIds = new Set(priority && 'noteIds' in priority ? priority.noteIds : [])
+
+    const getPriority = (target: (typeof leafTargets)[0]): number => {
+      // 第1優先: URLで指定されたリーフ
+      if (priorityLeafPaths.has(target.relativePath)) return 0
+      // 第2優先: URLで指定されたリーフと同じノート配下
+      if (priorityNoteIds.has(target.noteId)) return 1
+      // その他
+      return 2
+    }
+
+    const sortedTargets = [...leafTargets].sort((a, b) => {
+      const priorityDiff = getPriority(a) - getPriority(b)
+      if (priorityDiff !== 0) return priorityDiff
+      return a.leafMeta.order - b.leafMeta.order
+    })
+
+    // 第1優先リーフの数をカウント
+    const priority1Count = sortedTargets.filter((t) => getPriority(t) === 0).length
+    let priority1Completed = 0
+    let priority1CallbackFired = false
+
+    // 第1優先リーフが0件なら、リーフ取得開始前にUIロック解除
+    if (priority1Count === 0) {
+      priority1CallbackFired = true
+      options?.onPriorityComplete?.()
+    }
+
+    // リーフを並列取得（コールバック付き）
     const leaves = await runWithConcurrency(
-      leafTargets,
+      sortedTargets,
       CONTENT_FETCH_CONCURRENCY,
       async (target) => {
         const contentRes = await fetchGitHubContents(
@@ -781,7 +850,7 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
         if (!contentRes.ok) return null
         const content = await contentRes.text()
 
-        return {
+        const leaf: Leaf = {
           id: target.leafMeta.id,
           title: target.title,
           noteId: target.noteId,
@@ -791,11 +860,24 @@ export async function pullFromGitHub(settings: Settings): Promise<PullResult> {
           badgeIcon: target.leafMeta.badgeIcon,
           badgeColor: target.leafMeta.badgeColor,
         }
+
+        // 各リーフ取得完了時のコールバック
+        options?.onLeaf?.(leaf)
+
+        // 第1優先リーフの完了チェック
+        if (getPriority(target) === 0) {
+          priority1Completed++
+          if (priority1Completed >= priority1Count && !priority1CallbackFired) {
+            priority1CallbackFired = true
+            options?.onPriorityComplete?.()
+          }
+        }
+
+        return leaf
       }
     )
 
-    // orderでソート（同一親ノート内、同一noteId内でソート）
-    const sortedNotes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
+    // orderでソート
     const sortedLeaves = leaves.sort((a, b) => a.order - b.order)
 
     return {

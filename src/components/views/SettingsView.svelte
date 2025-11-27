@@ -19,7 +19,7 @@
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
   export let onThemeChange: (theme: ThemeType) => void
-  export let pullRunning: boolean = false
+  export let isLoadingUI: boolean = false
   export let onPull: (isInitial?: boolean) => void
   export let onExportZip: () => void
   export let onImport: () => void
@@ -35,7 +35,7 @@
     <HelpLinks />
 
     <div class="form-section">
-      <GitHubSettings {settings} {onSettingsChange} {pullRunning} {onPull} />
+      <GitHubSettings {settings} {onSettingsChange} {isLoadingUI} {onPull} />
       <hr />
 
       <div class="form-row">
