@@ -4,7 +4,8 @@
  */
 
 import { writable, derived } from 'svelte/store'
-import type { Settings, Note, Leaf, Metadata } from './types'
+import type { Settings, Note, Leaf, Metadata, View } from './types'
+import type { Pane } from './navigation'
 import { defaultSettings, saveSettings, saveNotes, saveLeaves } from './storage'
 
 // 基本ストア
@@ -15,6 +16,21 @@ export const metadata = writable<Metadata>({ version: 1, notes: {}, leaves: {}, 
 export const isDirty = writable<boolean>(false)
 // Pull成功時のリモートpushCountを保持（stale編集検出用）
 export const lastPulledPushCount = writable<number>(0)
+
+// ペイン状態ストア
+export const leftNote = writable<Note | null>(null)
+export const rightNote = writable<Note | null>(null)
+export const leftLeaf = writable<Leaf | null>(null)
+export const rightLeaf = writable<Leaf | null>(null)
+export const leftView = writable<View>('home')
+export const rightView = writable<View>('home')
+
+// 同期状態ストア
+export const isPulling = writable<boolean>(false)
+export const isPushing = writable<boolean>(false)
+
+// フォーカス状態
+export const focusedPane = writable<Pane>('left')
 
 // 派生ストア
 export const rootNotes = derived(notes, ($notes) =>
