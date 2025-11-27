@@ -17,6 +17,14 @@
 </p>
 
 <p align="center">
+  <a href="https://agasteer.llll-ll.com"><strong>▶ 今すぐ試す → agasteer.llll-ll.com</strong></a>
+</p>
+
+<p align="center">
+  <sub>インストール不要・アカウント登録不要・ブラウザで開くだけ</sub>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square" alt="Version 1.0.0">
   <img src="https://img.shields.io/badge/Made%20with-Svelte-FF3E00?style=flat-square&logo=svelte" alt="Made with Svelte">
   <img src="https://img.shields.io/badge/Build-Vite-646CFF?style=flat-square&logo=vite" alt="Build with Vite">
@@ -26,7 +34,23 @@
 
 ---
 
-## 💭 設計思想 - なぜシンプルにこだわるのか
+## 設計思想 - なぜシンプルにこだわるのか
+
+### 今まではコンフリクトとの戦い
+
+作者は多くのノートアプリを使ってきました。そして、ほぼ全てのアプリで同じ問題に悩まされました：
+
+- オフラインで編集して、オンラインに戻ったら **コンフリクト**
+- ずっとオンラインなのに、別端末に切り替えたら **同期が遅くてコンフリクト**
+
+特にメモアプリは1行目を頻繁に編集します。なのに、既存アプリの多くはこの問題に対して大した工夫をしていません。
+
+Agasteerの答えはシンプルです：
+
+- **起動時に必ずPull** - 古いローカルデータで作業を始めない
+- **GitHubが唯一の真実** - 迷ったらPullすればいい
+
+完璧ではありません。でも、「なんか知らないうちにデータが消えた」という最悪の体験を、極限まで減らすことを目指しています。
 
 ### Markdownは「資産」になる
 
@@ -49,97 +73,30 @@ Agasteerは意図的に「薄い」アプリです：
 
 **便利さのために自由を売り渡さない。** それがAgasteerの設計思想です。
 
-### コンフリクトとの戦い
+### 軽量・高速・透明
 
-作者は多くのノートアプリを使ってきました。そして、ほぼ全てのアプリで同じ問題に悩まされました：
+Agasteerはとにかく軽く、速く動くことを目指しています。中間サーバーを持たず、ブラウザからGitHub APIに直接通信するだけ。余計なものは何もありません。
 
-- オフラインで編集して、オンラインに戻ったら **コンフリクト**
-- ずっとオンラインなのに、別端末に切り替えたら **同期が遅くてコンフリクト**
+そして、**このアプリはオープンソースです**。コードはすべてGitHubで公開されています。怪しい通信をしていないか、データをどこかに送っていないか、気になる方はぜひソースコードを確認してください。高速化のためのテクニックや設計上の工夫も、すべて見ることができます。
 
-特にメモアプリは1行目を頻繁に編集します。なのに、既存アプリの多くはこの問題に対して大した工夫をしていません。
-
-Agasteerの答えはシンプルです：
-
-- **起動時に必ずPull** - 古いローカルデータで作業を始めない
-- **GitHubが唯一の真実** - 迷ったらPullすればいい
-
-完璧ではありません。でも、「なんか知らないうちにデータが消えた」という最悪の体験を、極限まで減らすことを目指しています。
+> **透明性への招待**: [GitHubリポジトリ](https://github.com/kako-jun/agasteer)でコードを読んでみてください。Pull RequestやIssueも歓迎します。
 
 ---
 
-## 🏗️ アーキテクチャ - なぜシンプルで速いのか
+## 競合サービスとの比較
 
-Agasteerは「**The Simplest Markdown App**」を目指して設計されています。
-
-```mermaid
-flowchart TB
-    subgraph Browser["🌐 Browser (PWA)"]
-        UI["Svelte UI"]
-        Editor["CodeMirror Editor"]
-        IDB["IndexedDB<br/>(Local Cache)"]
-    end
-
-    API["GitHub REST API<br/>(Direct Connection)"]
-
-    subgraph Repo["📁 GitHub Repository<br/>(Single Source of Truth)"]
-        Notes["notes/<br/>├── Note1/<br/>│   ├── Leaf1.md<br/>│   └── Leaf2.md<br/>└── Note2/<br/>    └── Leaf3.md"]
-    end
-
-    UI --> API
-    Editor --> API
-    IDB -.-> UI
-    API --> Repo
-```
-
-### 🚀 高速化の工夫
-
-| 工夫               | 説明                                | 効果                      |
-| ------------------ | ----------------------------------- | ------------------------- |
-| **Git Tree API**   | 複数ファイルを1リクエストで一括Push | API呼び出し回数を大幅削減 |
-| **SHA最適化**      | 変更されたファイルのみ転送          | 通信量を最小化            |
-| **並列取得**       | 最大10ファイル同時にPull            | 待ち時間を短縮            |
-| **優先読み込み**   | URLで指定されたリーフを最優先で取得 | 体感速度を向上            |
-| **スケルトンUI**   | 読み込み中もレイアウト確定          | ガタつきのない表示        |
-| **テキストのまま** | Base64エンコード不要                | 処理オーバーヘッドなし    |
-
-### 💡 シンプルさの根拠
-
-```mermaid
-flowchart LR
-    subgraph Traditional["従来のノートアプリ"]
-        B1["Browser"] --> S["中間サーバー"] --> DB["データベース"]
-        DB -.-> Git["Git連携?"]
-    end
-```
-
-```mermaid
-flowchart LR
-    subgraph Agasteer["Agasteer"]
-        B2["Browser"] --> API2["GitHub API"] --> Repo2["Git Repository"]
-    end
-```
-
-- **中間サーバーなし**: 静的ホスティングのみで運用可能
-- **データベースなし**: GitHubリポジトリがそのままデータストア
-- **独自フォーマットなし**: 標準的なMarkdownファイル
-- **アカウント不要**: GitHub Personal Access Tokenのみ
-
----
-
-## 📊 競合サービスとの比較
-
-| サービス     | 価格      | オフライン | GitHub連携    | データ形式   | サーバー依存 | インストール |
-| ------------ | --------- | ---------- | ------------- | ------------ | ------------ | ------------ |
-| **Agasteer** | 無料      | ✅         | ✅ 直接       | Markdown     | なし         | 不要(PWA)    |
-| Notion       | 無料/有料 | ⚠️ 一部    | ❌            | 独自         | あり         | 不要/アプリ  |
-| Obsidian     | 無料/有料 | ✅         | ⚠️ プラグイン | Markdown     | なし/あり    | 必要         |
-| Logseq       | 無料      | ✅         | ⚠️ プラグイン | Markdown/Org | なし         | 必要         |
-| Evernote     | 無料/有料 | ⚠️ 有料    | ❌            | 独自         | あり         | 必要         |
-| OneNote      | 無料      | ✅         | ❌            | 独自         | あり         | 必要         |
-| Simplenote   | 無料      | ✅         | ❌            | プレーン     | あり         | 必要         |
-| Cosense      | 無料/有料 | ❌         | ❌            | 独自         | あり         | 不要         |
-| Bear         | 有料      | ✅         | ❌            | 独自         | なし/あり    | 必要(Apple)  |
-| Todoist      | 無料/有料 | ⚠️ 一部    | ❌            | 独自         | あり         | 不要/アプリ  |
+| サービス     | 価格      | オフライン | GitHub連携    | データ形式   | インストール |
+| ------------ | --------- | ---------- | ------------- | ------------ | ------------ |
+| **Agasteer** | 無料      | ❌         | ✅ 直接       | Markdown     | 不要(PWA)    |
+| Notion       | 無料/有料 | ⚠️ 一部    | ❌            | 独自         | 不要/アプリ  |
+| Obsidian     | 無料/有料 | ✅         | ⚠️ プラグイン | Markdown     | 必要         |
+| Logseq       | 無料      | ✅         | ⚠️ プラグイン | Markdown/Org | 必要         |
+| Evernote     | 無料/有料 | ⚠️ 有料    | ❌            | 独自         | 必要         |
+| OneNote      | 無料      | ✅         | ❌            | 独自         | 必要         |
+| Simplenote   | 無料      | ✅         | ❌            | プレーン     | 必要         |
+| Cosense      | 無料/有料 | ❌         | ❌            | 独自         | 不要         |
+| Bear         | 有料      | ✅         | ❌            | 独自         | 必要(Apple)  |
+| Todoist      | 無料/有料 | ⚠️ 一部    | ❌            | 独自         | 不要/アプリ  |
 
 ### Agasteerの優位性
 
@@ -152,7 +109,7 @@ flowchart LR
 
 ---
 
-## 💰 通信量と費用の目安
+## 通信量と費用の目安
 
 ### Pull/Push 1回あたりの通信量
 
@@ -171,13 +128,13 @@ flowchart LR
 | 通常利用（毎日）      | 〜100回/月    | **無料** |
 | ヘビー利用（1日数回） | 〜300回/月    | **無料** |
 
-> 💡 **GitHubは無料プランでも十分** - 月間通信量の上限はなく、APIレート制限（5,000回/時間）内であれば費用は発生しません。
+> **GitHubは無料プランでも十分** - 月間通信量の上限はなく、APIレート制限（5,000回/時間）内であれば費用は発生しません。
 
 ---
 
-## ✨ 特長
+## 特長
 
-### 🚀 完全ブラウザベース
+### 完全ブラウザベース
 
 サーバー不要、ブラウザだけで完結するMarkdownノートアプリです。
 
@@ -185,7 +142,7 @@ flowchart LR
 - オフラインでも快適に編集可能
 - 静的ホスティングで簡単に公開可能
 
-### 🔗 GitHub直接同期
+### GitHub直接同期
 
 Personal Access Tokenで直接GitHubリポジトリに保存できます。
 
@@ -193,7 +150,7 @@ Personal Access Tokenで直接GitHubリポジトリに保存できます。
 - SHA最適化で変更されたファイルのみ転送
 - 未保存変更の確認機能
 
-### ✏️ 高機能エディタ
+### 高機能エディタ
 
 CodeMirror 6による快適な編集環境を提供します。
 
@@ -202,7 +159,7 @@ CodeMirror 6による快適な編集環境を提供します。
 - リーフタイトルと#見出しの双方向同期
 - Vimモード対応（カスタムコマンド`:w` `:q` `:wq`、ペイン切り替え`<Space>`）
 
-### 📱 2ペイン表示
+### 2ペイン表示
 
 横長画面では左右2ペインで同時編集できます。
 
@@ -210,7 +167,7 @@ CodeMirror 6による快適な編集環境を提供します。
 - スマホ横向きにも対応
 - 左右独立したナビゲーション
 
-### 🎨 豊富なカスタマイズ
+### 豊富なカスタマイズ
 
 6種類のテーマとカスタマイズ機能を搭載しています。
 
@@ -221,19 +178,96 @@ CodeMirror 6による快適な編集環境を提供します。
 
 ---
 
-## 🚀 クイックスタート
+## アーキテクチャ - なぜシンプルで速いのか
 
-すぐに試せるデモサイトを用意しています：
+Agasteerは「**The Simplest Markdown App**」を目指して設計されています。
 
-**[https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)**
+```mermaid
+flowchart TB
+    subgraph Browser["Browser (PWA)"]
+        UI["Svelte UI"]
+        Editor["CodeMirror Editor"]
+        IDB["IndexedDB<br/>(Local Cache)"]
+    end
 
-ブラウザで開くだけで、すぐにノートの作成・編集が可能です。
+    API["GitHub REST API<br/>(Direct Connection)"]
 
-開発環境のセットアップについては、[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。
+    subgraph Repo["GitHub Repository (Single Source of Truth)"]
+        Notes["notes/*.md"]
+    end
+
+    UI --> API
+    Editor --> API
+    IDB -.-> UI
+    API --> Repo
+```
+
+### 高速化の工夫
+
+| 工夫               | 説明                                | 効果                      |
+| ------------------ | ----------------------------------- | ------------------------- |
+| **Git Tree API**   | 複数ファイルを1リクエストで一括Push | API呼び出し回数を大幅削減 |
+| **SHA最適化**      | 変更されたファイルのみ転送          | 通信量を最小化            |
+| **並列取得**       | 最大10ファイル同時にPull            | 待ち時間を短縮            |
+| **優先読み込み**   | URLで指定されたリーフを最優先で取得 | 体感速度を向上            |
+| **スケルトンUI**   | 読み込み中もレイアウト確定          | ガタつきのない表示        |
+| **テキストのまま** | Base64エンコード不要                | 処理オーバーヘッドなし    |
 
 ---
 
-## 📖 ドキュメント
+## セルフホスト
+
+Agasteerはオープンソースです。自分のサーバーでホストすることもできます。
+
+開発環境のセットアップや自分でビルドする方法については、[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。
+
+---
+
+## GitHub API レート制限について
+
+AgasteerはGitHub APIを直接使用するため、**レート制限**に注意が必要です。
+
+> これはAgasteer独自の制限ではなく、**GitHub APIの仕様**です。無料プランでも有料プランでも適用される制限であり、GitHub公式ドキュメントに記載されています。
+>
+> 参考: [GitHub REST API rate limits](https://docs.github.com/en/rest/rate-limit)
+
+### 制限の概要
+
+| 項目                   | 値                             |
+| ---------------------- | ------------------------------ |
+| 認証済みユーザーの上限 | **5,000リクエスト/時間**       |
+| Pull 1回あたりの消費   | 約 **1 + リーフ数** リクエスト |
+| Push 1回あたりの消費   | 約 **3〜5** リクエスト         |
+
+### 具体例
+
+- リーフ50個のノート → Pull 1回で約50リクエスト消費
+- リーフ100個のノート → Pull 1回で約100リクエスト消費
+- 1時間に50回Pullすると制限に達する可能性あり
+
+### 注意事項
+
+- **Pullボタンを連打しない** - 必要なときだけ押してください
+- **制限に達した場合** - 1時間待つと制限がリセットされます
+- **エラーが出たら** - しばらく待ってから再試行してください
+
+> 通常の使用（1日数回のPull/Push）では制限に達することはほとんどありません。
+
+---
+
+## コントリビューション
+
+Issue、Pull Requestを歓迎します！詳しくは[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。
+
+---
+
+## ライセンス
+
+このプロジェクトはMITライセンスの下で公開されています。
+
+---
+
+## ドキュメント
 
 ### ユーザー向けドキュメント
 
@@ -262,62 +296,6 @@ Agasteerの技術仕様と開発ガイドです。
 ### 共有リソース
 
 - [GitHub Personal Access Tokenの取得](./docs/shared/github-token.md)
-
----
-
-## ⚠️ GitHub API レート制限について
-
-AgasteerはGitHub APIを直接使用するため、**レート制限**に注意が必要です。
-
-> ⚠️ これはAgasteer独自の制限ではなく、**GitHub APIの仕様**です。無料プランでも有料プランでも適用される制限であり、GitHub公式ドキュメントに記載されています。
->
-> 参考: [GitHub REST API rate limits](https://docs.github.com/en/rest/rate-limit)
-
-### 制限の概要
-
-| 項目                   | 値                             |
-| ---------------------- | ------------------------------ |
-| 認証済みユーザーの上限 | **5,000リクエスト/時間**       |
-| Pull 1回あたりの消費   | 約 **1 + リーフ数** リクエスト |
-| Push 1回あたりの消費   | 約 **3〜5** リクエスト         |
-
-### 具体例
-
-- リーフ50個のノート → Pull 1回で約50リクエスト消費
-- リーフ100個のノート → Pull 1回で約100リクエスト消費
-- 1時間に50回Pullすると制限に達する可能性あり
-
-### 注意事項
-
-- **Pullボタンを連打しない** - 必要なときだけ押してください
-- **制限に達した場合** - 1時間待つと制限がリセットされます
-- **エラーが出たら** - しばらく待ってから再試行してください
-
-> 💡 通常の使用（1日数回のPull/Push）では制限に達することはほとんどありません。
-
----
-
-## 🤝 コントリビューション
-
-Issue、Pull Requestを歓迎します！詳しくは[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。
-
----
-
-## 📄 ライセンス
-
-このプロジェクトはMITライセンスの下で公開されています。
-
----
-
-## 🙏 謝辞
-
-- [Svelte](https://svelte.dev/) - リアクティブフレームワーク
-- [Vite](https://vitejs.dev/) - 高速ビルドツール
-- [CodeMirror](https://codemirror.net/) - 高機能エディタ
-- [GitHub API](https://docs.github.com/en/rest) - リポジトリ連携
-- [marked](https://marked.js.org/) - Markdownパーサー
-- [DOMPurify](https://github.com/cure53/DOMPurify) - HTMLサニタイザー
-- [svelte-i18n](https://github.com/kaisermann/svelte-i18n) - 国際化ライブラリ
 
 ---
 
