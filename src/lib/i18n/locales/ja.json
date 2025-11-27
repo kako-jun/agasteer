@@ -207,7 +207,7 @@
     "pushing": "Push中..."
   },
   "github": {
-    "rateLimited": "GitHubのAPI制限に達しました。{hours}時間{minutes}分後に再試行してください。",
+    "rateLimited": "GitHubのAPI制限に達しました。約{hours}時間{minutes}分後に再試行してください。",
     "rateLimitedNoTime": "GitHubのAPI制限に達しました。しばらく待ってから再試行してください。",
     "invalidToken": "トークンが無効です",
     "userFetchFailed": "ユーザー情報取得に失敗しました",

@@ -206,7 +206,7 @@
     "pushing": "Pushing..."
   },
   "github": {
-    "rateLimited": "GitHub API rate limit exceeded. Please retry in {hours}h {minutes}m.",
+    "rateLimited": "GitHub API rate limit exceeded. Please retry in ~{hours}h {minutes}m.",
     "rateLimitedNoTime": "GitHub API rate limit exceeded. Please wait and try again later.",
     "invalidToken": "Invalid token",
     "userFetchFailed": "Failed to fetch user info",

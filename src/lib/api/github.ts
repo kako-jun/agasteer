@@ -18,7 +18,16 @@ export interface RateLimitInfo {
  * レスポンスからレート制限情報を抽出
  */
 export function parseRateLimitResponse(response: Response): RateLimitInfo {
-  if (response.status !== 403) {
+  if (response.status !== 403 && response.status !== 429) {
+    return { isRateLimited: false }
+  }
+
+  // X-RateLimit-Remaining が 0 の場合はレートリミット確定
+  const remainingHeader = response.headers.get('X-RateLimit-Remaining')
+  const isRateLimited = remainingHeader === '0' || response.status === 429
+
+  if (!isRateLimited) {
+    // 403だがレートリミットではない（権限エラーなど）
     return { isRateLimited: false }
   }
 
@@ -34,8 +43,9 @@ export function parseRateLimitResponse(response: Response): RateLimitInfo {
     }
   }
 
-  // ヘッダーがない場合でも403はレート制限の可能性あり
-  return { isRateLimited: true }
+  // ヘッダーがない場合（Secondary rate limitなど）
+  // GitHubのドキュメントによると通常1分程度で解除される
+  return { isRateLimited: true, remainingSeconds: 60 }
 }
 
 /**
