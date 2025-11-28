@@ -589,6 +589,26 @@
     updateUrlFromState()
   }
 
+  function swapPanes() {
+    // 左右ペインの状態を入れ替える
+    const tempNote = $leftNote
+    const tempLeaf = $leftLeaf
+    const tempView = $leftView
+
+    $leftNote = $rightNote
+    $leftLeaf = $rightLeaf
+    $leftView = $rightView
+
+    $rightNote = tempNote
+    $rightLeaf = tempLeaf
+    $rightView = tempView
+
+    // 選択インデックスも入れ替え
+    const tempIndex = selectedIndexLeft
+    selectedIndexLeft = selectedIndexRight
+    selectedIndexRight = tempIndex
+  }
+
   // キーボードナビゲーション
   function handleGlobalKeyDown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
@@ -1413,6 +1433,8 @@
       onPull={() => handlePull(false)}
       pullDisabled={!canPull}
       onSearchClick={toggleSearch}
+      {isDualPane}
+      onSwapPanes={swapPanes}
     />
     <!-- 検索ドロップダウン（ヘッダー右上、検索ボタンの下） -->
     <SearchBar onResultClick={handleSearchResultClick} />

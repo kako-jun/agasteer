@@ -6,6 +6,7 @@
   import OctocatPullIcon from '../icons/OctocatPullIcon.svelte'
   import SettingsIcon from '../icons/SettingsIcon.svelte'
   import SearchIcon from '../icons/SearchIcon.svelte'
+  import SwapIcon from '../icons/SwapIcon.svelte'
 
   export let githubConfigured: boolean
   export let title: string = 'Agasteer'
@@ -14,6 +15,8 @@
   export let onPull: () => void
   export let pullDisabled: boolean = false
   export let onSearchClick: () => void
+  export let isDualPane: boolean = false
+  export let onSwapPanes: () => void = () => {}
 
   $: hasTitle = title.trim().length > 0
   $: showAppIcon = hasTitle && title.trim() === defaultSettings.toolName
@@ -49,6 +52,17 @@
       </IconButton>
     </div>
   </div>
+  {#if isDualPane}
+    <div class="swap-button">
+      <IconButton
+        onClick={onSwapPanes}
+        title={$_('header.swapPanes')}
+        ariaLabel={$_('header.swapPanes')}
+      >
+        <SwapIcon />
+      </IconButton>
+    </div>
+  {/if}
   <div class="header-right">
     <IconButton
       onClick={onSearchClick}
@@ -155,5 +169,23 @@
 
   .pull-button :global(.icon-button) {
     padding: 0.15rem;
+  }
+
+  .swap-button {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .swap-button :global(.icon-button) {
+    padding: 0.35rem;
+  }
+
+  .swap-button :global(svg) {
+    width: 20px;
+    height: 20px;
   }
 </style>

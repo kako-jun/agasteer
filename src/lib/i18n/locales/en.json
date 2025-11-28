@@ -8,7 +8,8 @@
   },
   "header": {
     "settings": "Open settings",
-    "pull": "Pull"
+    "pull": "Pull",
+    "swapPanes": "Swap Panes"
   },
   "search": {
     "placeholder": "Search...",
