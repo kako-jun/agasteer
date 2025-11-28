@@ -211,8 +211,15 @@ export function generatePriorityContent(items: PriorityItem[]): string {
 
 /**
  * 仮想Priorityリーフを生成する（ホーム直下なのでnoteIdは空）
+ * @param items 優先段落の配列
+ * @param badgeIcon バッジアイコン（metadataから復元）
+ * @param badgeColor バッジカラー（metadataから復元）
  */
-export function createPriorityLeaf(items: PriorityItem[]): Leaf {
+export function createPriorityLeaf(
+  items: PriorityItem[],
+  badgeIcon?: string,
+  badgeColor?: string
+): Leaf {
   return {
     id: PRIORITY_LEAF_ID,
     title: PRIORITY_LEAF_NAME,
@@ -220,6 +227,8 @@ export function createPriorityLeaf(items: PriorityItem[]): Leaf {
     content: generatePriorityContent(items),
     updatedAt: Date.now(),
     order: 0,
+    badgeIcon,
+    badgeColor,
   }
 }
 

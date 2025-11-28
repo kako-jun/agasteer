@@ -32,6 +32,7 @@ export interface PaneActions {
   updateLeafContent: (leafId: string, content: string) => void
   updateNoteBadge: (noteId: string, icon: string, color: string) => void
   updateLeafBadge: (leafId: string, icon: string, color: string) => void
+  updatePriorityBadge: (icon: string, color: string) => void
 
   // ドラッグ&ドロップ
   handleDragStartNote: (note: Note) => void

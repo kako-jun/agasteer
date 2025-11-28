@@ -40,13 +40,15 @@ export interface PullResult {
  * @param notes - ノート配列（パス構築に必要）
  * @param settings - GitHub設定
  * @param isOperationsLocked - 操作ロック状態
+ * @param localMetadata - ローカルのmetadata（仮想リーフのバッジ情報など）
  * @returns Push結果
  */
 export async function executePush(
   leaves: Leaf[],
   notes: Note[],
   settings: Settings,
-  isOperationsLocked: boolean
+  isOperationsLocked: boolean,
+  localMetadata?: Metadata
 ): Promise<PushResult> {
   // 操作ロック中はエラー
   if (isOperationsLocked) {
@@ -67,7 +69,7 @@ export async function executePush(
   }
 
   // Git Tree APIで一括Push
-  const result = await pushAllWithTreeAPI(leaves, notes, settings)
+  const result = await pushAllWithTreeAPI(leaves, notes, settings, localMetadata)
 
   return {
     success: result.success,

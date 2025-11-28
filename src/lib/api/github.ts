@@ -4,6 +4,7 @@
  */
 
 import type { Leaf, Note, Settings, Metadata } from '../types'
+import { PRIORITY_LEAF_ID } from '../utils'
 
 /**
  * レート制限エラー情報
@@ -215,10 +216,15 @@ function getNotePath(note: Note, allNotes: Note[]): string {
 
 function buildPath(leaf: Leaf, notes: Note[]): string {
   const note = notes.find((f) => f.id === leaf.noteId)
-  if (!note) return `notes/${leaf.title}.md`
+  if (!note) {
+    console.warn('[buildPath] Note not found for leaf:', leaf.title, 'noteId:', leaf.noteId)
+    return `notes/${leaf.title}.md`
+  }
 
   const folderPath = getFolderPath(note, notes)
-  return `notes/${folderPath}/${leaf.title}.md`
+  const path = `notes/${folderPath}/${leaf.title}.md`
+  console.log('[buildPath]', leaf.title, '→', path, '(noteId:', leaf.noteId, ')')
+  return path
 }
 
 /**
@@ -316,7 +322,8 @@ export async function saveToGitHub(
 export async function pushAllWithTreeAPI(
   leaves: Leaf[],
   notes: Note[],
-  settings: Settings
+  settings: Settings,
+  localMetadata?: Metadata
 ): Promise<SaveResult> {
   const decodeBase64ToString = (base64: string): string => {
     const clean = base64.replace(/\n/g, '')
@@ -535,6 +542,21 @@ export async function pushAllWithTreeAPI(
       if (leaf.badgeIcon !== undefined) meta.badgeIcon = leaf.badgeIcon
       if (leaf.badgeColor !== undefined) meta.badgeColor = leaf.badgeColor
       metadata.leaves[path] = meta as Metadata['leaves'][string]
+    }
+
+    // 仮想リーフ（Priority）のバッジ情報を保持
+    // 仮想リーフはGitにファイルとして保存されないが、バッジ情報はmetadataで永続化
+    // ローカルのmetadataストアを優先し、なければGitHubの既存metadataから復元
+    const priorityMeta =
+      localMetadata?.leaves?.[PRIORITY_LEAF_ID] || existingMetadata?.leaves?.[PRIORITY_LEAF_ID]
+    if (priorityMeta && (priorityMeta.badgeIcon || priorityMeta.badgeColor)) {
+      metadata.leaves[PRIORITY_LEAF_ID] = {
+        id: PRIORITY_LEAF_ID,
+        updatedAt: priorityMeta.updatedAt || Date.now(),
+        order: 0,
+        badgeIcon: priorityMeta.badgeIcon,
+        badgeColor: priorityMeta.badgeColor,
+      }
     }
 
     // notes/.gitkeep を追加（notesディレクトリが空でも削除されないように）
@@ -899,12 +921,14 @@ export async function pullFromGitHub(
     // コンテンツ取得用のターゲットを事前に作成（メタデータ取得はここで済ませる）
     const leafTargets = notePaths.map((entry, idx) => {
       const relativePath = entry.path.replace(/^notes\//, '')
-      const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
-      const fileName = parts.pop() || ''
+      const allParts = relativePath.split('/').filter(Boolean)
+      // ファイル名を先に分離してから、ノートパス部分だけをcollapseする
+      const fileName = allParts.pop() || ''
+      const noteParts = collapseToTwoLevels(allParts)
       const title = fileName.replace(/\.md$/i, '') || 'Untitled'
-      const noteId = ensureNotePath(parts)
+      const noteId = ensureNotePath(noteParts)
       const leafPathOriginal = entry.path.replace(/^notes\//, '')
-      const leafPathCollapsed = [...parts, fileName].join('/')
+      const leafPathCollapsed = [...noteParts, fileName].join('/')
       const leafMeta = metadata.leaves[leafPathCollapsed] ||
         metadata.leaves[leafPathOriginal] || {
           id: crypto.randomUUID(),

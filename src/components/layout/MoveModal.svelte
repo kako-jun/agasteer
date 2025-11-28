@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { _ } from 'svelte-i18n'
   import type { Note, Leaf } from '../../lib/types'
   import MoveIcon from '../icons/MoveIcon.svelte'
 
@@ -33,14 +34,16 @@
     if (!targetNote) return true
     if (note.id === targetNote.id) return false
     if (isDescendant(targetNote.id, note.id)) return false
+    // 選択できないものは表示しない
+    if (!canSelect(note).selectable) return false
     return true
   }
 
   function canSelect(dest: Note | null): { selectable: boolean; reason?: string } {
     if (isLeafMode()) {
-      if (!dest) return { selectable: false, reason: 'ホーム直下には置けません' }
+      if (!dest) return { selectable: false, reason: $_('move.cannotPlaceAtHome') }
       if (targetLeaf && targetLeaf.noteId === dest.id) {
-        return { selectable: false, reason: '同じノートです' }
+        return { selectable: false, reason: $_('move.sameNote') }
       }
       return { selectable: true }
     }
@@ -50,22 +53,21 @@
 
     // ホーム直下
     if (!dest) {
-      if (!targetNote.parentId) return { selectable: false, reason: '現在ホーム直下です' }
+      if (!targetNote.parentId) return { selectable: false, reason: $_('move.currentlyAtHome') }
       return { selectable: true }
     }
 
     // 自分自身は不可
-    if (dest.id === targetNote.id) return { selectable: false, reason: '自分自身は選べません' }
+    if (dest.id === targetNote.id) return { selectable: false }
 
     // 子孫ノートは不可
-    if (isDescendant(targetNote.id, dest.id)) {
-      return { selectable: false, reason: '子孫ノートには移動できません' }
-    }
+    if (isDescendant(targetNote.id, dest.id)) return { selectable: false }
 
-    // サブノートをさらに深くしない
-    if (targetNote.parentId && dest.parentId) {
-      return { selectable: false, reason: 'これ以上深い階層には入れられません' }
-    }
+    // サブノートをさらに深くしない（サブノート→サブノート）
+    if (targetNote.parentId && dest.parentId) return { selectable: false }
+
+    // ルートノートをサブノートに移動しない（ルート→サブノートは3階層になる）
+    if (!targetNote.parentId && dest.parentId) return { selectable: false }
 
     return { selectable: true }
   }
@@ -115,7 +117,7 @@
     on:keydown={handleOverlayKeydown}
     role="button"
     tabindex="-1"
-    aria-label="モーダルを閉じる"
+    aria-label={$_('move.cancel')}
   >
     <!-- イベント伝播停止はオーバーレイクリック時にモーダルが閉じないようにするため -->
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -129,15 +131,11 @@
     >
       <header>
         <div class="titles">
-          <h2 id="move-modal-title">移動先を選択</h2>
+          <h2 id="move-modal-title">{$_('move.title')}</h2>
         </div>
       </header>
 
       <div class="list" role="listbox" tabindex="-1">
-        {#if sortedRoots().length === 0}
-          <div class="empty">ノートがありません。先にノートを作成してください。</div>
-        {/if}
-
         <div class="tree">
           {#if !isLeafMode()}
             {#if canSelect(null).selectable}
@@ -149,14 +147,14 @@
               >
                 <span class="bullet" class:checked={selected === null}></span>
                 <span class="row-body">
-                  <span class="row-title">ホーム直下</span>
+                  <span class="row-title">{$_('move.home')}</span>
                 </span>
               </button>
             {:else}
               <button type="button" class="row disabled" disabled aria-disabled="true">
                 <span class="bullet"></span>
                 <span class="row-body">
-                  <span class="row-title muted">ホーム直下</span>
+                  <span class="row-title muted">{$_('move.home')}</span>
                   <small>{canSelect(null).reason}</small>
                 </span>
               </button>
@@ -208,10 +206,10 @@
       </div>
 
       <div class="actions">
-        <button class="ghost" on:click={close}>キャンセル</button>
+        <button class="ghost" on:click={close}>{$_('move.cancel')}</button>
         <button class="primary" disabled={selected === null && isLeafMode()} on:click={confirm}>
           <MoveIcon />
-          移動
+          {$_('move.confirm')}
         </button>
       </div>
     </section>
@@ -403,10 +401,5 @@
   .primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .empty {
-    padding: 1rem;
-    color: var(--text-muted);
   }
 </style>

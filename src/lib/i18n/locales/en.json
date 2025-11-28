@@ -228,6 +228,15 @@
     "pushOkWithCount": "Saved {count} leaves",
     "noChanges": "No changes (Push skipped)"
   },
+  "move": {
+    "title": "Select destination",
+    "home": "Home (root)",
+    "currentlyAtHome": "Currently at home",
+    "sameNote": "Same note",
+    "cannotPlaceAtHome": "Cannot place at home",
+    "cancel": "Cancel",
+    "confirm": "Move"
+  },
   "welcome": {
     "title": "Thank you for your interest in Agasteer!",
     "message1": "To save your notes, GitHub configuration is required.",

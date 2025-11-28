@@ -106,6 +106,7 @@
     isPriorityLeaf,
     isLeafSaveable,
     isNoteSaveable,
+    PRIORITY_LEAF_ID,
   } from './lib/utils'
 
   // ローカル状態
@@ -200,8 +201,13 @@
   $: isGitHubConfigured = $githubConfigured
   $: document.title = $settings.toolName
 
-  // Priorityリーフをリアクティブに生成
-  $: currentPriorityLeaf = createPriorityLeaf($priorityItems)
+  // Priorityリーフをリアクティブに生成（metadataからバッジ情報を復元）
+  $: priorityBadgeMeta = $metadata.leaves?.[PRIORITY_LEAF_ID]
+  $: currentPriorityLeaf = createPriorityLeaf(
+    $priorityItems,
+    priorityBadgeMeta?.badgeIcon,
+    priorityBadgeMeta?.badgeColor
+  )
 
   // Pull/Push中はボタンを無効化（リアクティブに追跡）
   $: canPull = !$isPulling && !$isPushing
@@ -939,6 +945,28 @@
     }
   }
 
+  // Priorityリーフのバッジ更新（metadataに直接保存）
+  function updatePriorityBadge(badgeIcon: string, badgeColor: string) {
+    metadata.update((m) => {
+      const newLeaves = { ...m.leaves }
+      if (badgeIcon || badgeColor) {
+        newLeaves[PRIORITY_LEAF_ID] = {
+          id: PRIORITY_LEAF_ID,
+          updatedAt: Date.now(),
+          order: 0,
+          badgeIcon: badgeIcon || undefined,
+          badgeColor: badgeColor || undefined,
+        }
+      } else {
+        // バッジをクリアした場合はエントリを削除
+        delete newLeaves[PRIORITY_LEAF_ID]
+      }
+      return { ...m, leaves: newLeaves }
+    })
+    // isDirtyを設定して保存が必要な状態にする
+    isDirty.set(true)
+  }
+
   // ドラッグ&ドロップ（リーフ）
   function handleDragStartLeaf(leaf: Leaf) {
     dragStore.startDragLeaf(leaf)
@@ -1070,7 +1098,13 @@
       // ホーム直下のリーフ・仮想ノートを除外してからPush
       const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
       const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
-      const result = await executePush(saveableLeaves, saveableNotes, $settings, isOperationsLocked)
+      const result = await executePush(
+        saveableLeaves,
+        saveableNotes,
+        $settings,
+        isOperationsLocked,
+        $metadata
+      )
 
       // 結果を通知（GitHub APIのメッセージキーを翻訳、変更件数を含める）
       const translatedMessage = translateGitHubMessage(
@@ -1273,6 +1307,7 @@
     updateLeafContent,
     updateNoteBadge,
     updateLeafBadge,
+    updatePriorityBadge,
 
     // ドラッグ&ドロップ
     handleDragStartNote,

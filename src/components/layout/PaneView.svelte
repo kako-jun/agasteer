@@ -100,7 +100,7 @@
       onUpdateNoteBadge={actions.updateNoteBadge}
       priorityLeaf={$state.currentPriorityLeaf}
       onSelectPriority={() => actions.openPriorityView(pane)}
-      onUpdatePriorityBadge={(icon, color) => {}}
+      onUpdatePriorityBadge={actions.updatePriorityBadge}
     />
   {:else if currentView === 'note' && currentNote}
     <NoteView
