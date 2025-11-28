@@ -224,6 +224,7 @@
     "connectionOk": "Connection OK (auth and repo access successful)",
     "pullOk": "Pull OK",
     "pushOk": "Push OK",
+    "pushOkWithCount": "Saved {count} leaves",
     "noChanges": "No changes (Push skipped)"
   },
   "welcome": {

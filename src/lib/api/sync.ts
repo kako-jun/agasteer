@@ -12,6 +12,7 @@ export interface PushResult {
   message: string
   variant: 'success' | 'error'
   rateLimitInfo?: RateLimitInfo
+  changedCount?: number
 }
 
 /**
@@ -73,6 +74,7 @@ export async function executePush(
     message: result.message,
     variant: result.success ? 'success' : 'error',
     rateLimitInfo: result.rateLimitInfo,
+    changedCount: result.changedCount,
   }
 }
 

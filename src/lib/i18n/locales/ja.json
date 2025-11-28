@@ -225,6 +225,7 @@
     "connectionOk": "接続OK（認証・リポジトリ参照に成功）",
     "pullOk": "Pull OK",
     "pushOk": "Push OK",
+    "pushOkWithCount": "{count}件のリーフを保存しました",
     "noChanges": "変更なし（Pushスキップ）"
   },
   "welcome": {

@@ -72,6 +72,7 @@ export interface SaveResult {
   success: boolean
   message: string
   rateLimitInfo?: RateLimitInfo
+  changedCount?: number
 }
 
 export interface TestResult {
@@ -691,6 +692,7 @@ export async function pushAllWithTreeAPI(
     return {
       success: true,
       message: 'github.pushOk',
+      changedCount: changedContentPaths.length,
     }
   } catch (error) {
     console.error('GitHub Tree API error:', error)
