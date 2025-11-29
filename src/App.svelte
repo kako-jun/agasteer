@@ -1542,6 +1542,14 @@
     }
   }
   async function handleCloseSettings() {
+    // リモートに変更がなければPullをスキップ
+    const isStale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
+    if (!isStale && !importOccurredInSettings) {
+      // リモートに変更なし、かつインポートもしていない場合はPull不要
+      importOccurredInSettings = false
+      return
+    }
+
     isClosingSettingsPull = true
     await handlePull(false)
     importOccurredInSettings = false
