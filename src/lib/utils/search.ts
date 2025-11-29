@@ -171,7 +171,7 @@ export function openSearch(): void {
 
 export function closeSearch(): void {
   isSearchOpen.set(false)
-  searchQuery.set('')
+  // 検索クエリはクリアしない（ユーザーが明示的にクリアするまで保持）
   selectedResultIndex.set(-1)
 }
 

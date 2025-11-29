@@ -24,6 +24,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault()
+      clearSearch() // クエリをクリア
       closeSearch()
       inputElement?.blur()
     } else if (e.key === 'ArrowDown') {
