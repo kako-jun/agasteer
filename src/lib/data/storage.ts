@@ -153,12 +153,18 @@ export async function loadLeaves(): Promise<Leaf[]> {
 }
 
 /**
- * リーフを保存
+ * リーフを保存（オフラインリーフは保護）
  */
-export async function saveLeaves(notes: Leaf[]): Promise<void> {
+export async function saveLeaves(newLeaves: Leaf[]): Promise<void> {
   try {
     const db = await openAppDB()
-    await replaceAllInStore<Leaf>(db, LEAVES_STORE, notes)
+    // オフラインリーフを保護: 先に取得
+    const offlineLeaf = await getItem<Leaf>(LEAVES_STORE, '__offline__')
+    await replaceAllInStore<Leaf>(db, LEAVES_STORE, newLeaves)
+    // オフラインリーフを復元（新しいリーフに含まれていなければ）
+    if (offlineLeaf && !newLeaves.some((l) => l.id === '__offline__')) {
+      await putItem(LEAVES_STORE, offlineLeaf)
+    }
   } catch (error) {
     console.error('Failed to save leaves to IndexedDB:', error)
   }
