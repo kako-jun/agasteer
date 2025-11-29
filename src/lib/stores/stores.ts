@@ -33,7 +33,7 @@ export const isPushing = writable<boolean>(false)
 // フォーカス状態
 export const focusedPane = writable<Pane>('left')
 
-// オフラインリーフ状態ストア（HMRでもリセットされない）
+// オフラインリーフ状態ストア
 export const offlineLeafStore = writable<{
   content: string
   badgeIcon: string

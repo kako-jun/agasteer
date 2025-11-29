@@ -435,17 +435,14 @@
       document.title = loadedSettings.toolName
 
       // オフラインリーフを読み込み（GitHub設定に関係なく常に利用可能）
-      // ストアが空の場合のみ読み込み（HMR時はストアにデータが残っている）
-      if (!$offlineLeafStore.content) {
-        const savedOfflineLeaf = await loadOfflineLeaf(OFFLINE_LEAF_ID)
-        if (savedOfflineLeaf) {
-          offlineLeafStore.set({
-            content: savedOfflineLeaf.content,
-            badgeIcon: savedOfflineLeaf.badgeIcon || '',
-            badgeColor: savedOfflineLeaf.badgeColor || '',
-            updatedAt: savedOfflineLeaf.updatedAt,
-          })
-        }
+      const savedOfflineLeaf = await loadOfflineLeaf(OFFLINE_LEAF_ID)
+      if (savedOfflineLeaf) {
+        offlineLeafStore.set({
+          content: savedOfflineLeaf.content,
+          badgeIcon: savedOfflineLeaf.badgeIcon || '',
+          badgeColor: savedOfflineLeaf.badgeColor || '',
+          updatedAt: savedOfflineLeaf.updatedAt,
+        })
       }
 
       // カスタムフォントがあれば適用
@@ -1670,6 +1667,56 @@
     isLoadingUI = false
     $isPulling = false // Pull処理完了
     pullProgressStore.reset() // Pull進捗リセット
+  }
+
+  // HMR用の一時保存キー
+  const HMR_OFFLINE_KEY = 'agasteer_hmr_offline'
+
+  // HMR時にオフラインリーフをlocalStorageに一時保存（同期的に完了するため）
+  function flushOfflineSaveSync() {
+    if (offlineSaveTimeoutId) {
+      clearTimeout(offlineSaveTimeoutId)
+      offlineSaveTimeoutId = null
+    }
+    const current = get(offlineLeafStore)
+    if (current.content || current.badgeIcon || current.badgeColor) {
+      // localStorageに同期的に保存（IndexedDBは非同期なのでHMRに間に合わない）
+      localStorage.setItem(HMR_OFFLINE_KEY, JSON.stringify(current))
+      console.log('[HMR] Saved offline leaf to localStorage:', current)
+    }
+  }
+
+  // HMR後にlocalStorageからオフラインリーフを復元
+  function restoreFromHmrStorage() {
+    const stored = localStorage.getItem(HMR_OFFLINE_KEY)
+    if (stored) {
+      try {
+        const data = JSON.parse(stored)
+        console.log('[HMR] Restoring offline leaf from localStorage:', data)
+        offlineLeafStore.set(data)
+        // IndexedDBにも保存
+        const leaf = createOfflineLeaf(data.content, data.badgeIcon, data.badgeColor)
+        leaf.updatedAt = data.updatedAt
+        saveOfflineLeaf(leaf)
+        // 復元完了後に一時データを削除
+        localStorage.removeItem(HMR_OFFLINE_KEY)
+      } catch (e) {
+        console.error('[HMR] Failed to restore offline leaf:', e)
+        localStorage.removeItem(HMR_OFFLINE_KEY)
+      }
+    }
+  }
+
+  // HMRハンドラー（開発時のみ）
+  if (import.meta.hot) {
+    // モジュール読み込み時にlocalStorageから復元を試みる
+    restoreFromHmrStorage()
+
+    import.meta.hot.dispose(() => {
+      console.log('[HMR] dispose called, saving to localStorage')
+      // HMR前にオフラインリーフをlocalStorageに同期保存
+      flushOfflineSaveSync()
+    })
   }
 </script>
 
