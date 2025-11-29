@@ -30,6 +30,8 @@
     leafStatsStore,
     dragStore,
     moveModalStore,
+    pullProgressStore,
+    pullProgressInfo,
   } from './lib/stores'
   import { clearAllData, loadSettings, saveNotes, saveLeaves } from './lib/data'
   import { applyTheme } from './lib/ui'
@@ -222,6 +224,7 @@
   const paneStateStore = writable<PaneState>({
     isOperationsLocked: true,
     canPush: false,
+    saveDisabledReason: '',
     selectedIndexLeft: 0,
     selectedIndexRight: 0,
     editingBreadcrumb: null,
@@ -238,10 +241,18 @@
     isLoadingUI: false,
   })
 
+  // Saveボタン無効理由を計算
+  $: saveDisabledReason = $pullProgressInfo
+    ? $_('home.leafFetched', {
+        values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
+      })
+    : ''
+
   // paneState をリアクティブに更新
   $: paneStateStore.set({
     isOperationsLocked,
     canPush,
+    saveDisabledReason,
     selectedIndexLeft,
     selectedIndexRight,
     editingBreadcrumb,
@@ -589,6 +600,12 @@
       if (editorView && editorView.scrollToLine) {
         editorView.scrollToLine(line)
       }
+    }
+  }
+
+  function handleDisabledSaveClick(reason: string) {
+    if (reason) {
+      showPushToast(reason)
     }
   }
 
@@ -1366,6 +1383,9 @@
 
     // Priorityリンククリック
     handlePriorityLinkClick,
+
+    // 無効なSaveボタンがクリックされたとき
+    handleDisabledSaveClick,
   }
 
   setContext('paneActions', paneActions)
@@ -1446,6 +1466,9 @@
         // 全リーフIDをローディング中として登録
         loadingLeafIds = new Set(leafSkeletons.map((s) => s.id))
 
+        // Pull進捗: 総リーフ数をセット
+        pullProgressStore.start(leafSkeletons.length)
+
         // URLから優先情報を計算して返す
         return nav.getPriorityFromUrl(notesFromGitHub)
       },
@@ -1456,6 +1479,8 @@
         leafStatsStore.addLeaf(leaf.id, leaf.content)
         loadingLeafIds.delete(leaf.id)
         loadingLeafIds = loadingLeafIds // リアクティブ更新
+        // Pull進捗: カウントアップ
+        pullProgressStore.increment()
       },
 
       // 第1優先リーフ取得完了時: UIロック解除、ガラス効果解除、URL復元
@@ -1504,6 +1529,7 @@
     showPullToast(translatedMessage, result.variant)
     isLoadingUI = false
     $isPulling = false // Pull処理完了
+    pullProgressStore.reset() // Pull進捗リセット
   }
 </script>
 
@@ -1531,6 +1557,7 @@
       }}
       onPull={() => handlePull(false)}
       pullDisabled={!canPull}
+      pullProgress={$pullProgressInfo}
       onSearchClick={toggleSearch}
       {isDualPane}
       onSwapPanes={swapPanes}

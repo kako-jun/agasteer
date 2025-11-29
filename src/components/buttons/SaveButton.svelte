@@ -6,20 +6,42 @@
   export let onSave: () => void
   export let isDirty: boolean
   export let disabled: boolean = false
+  /** 無効時の理由（クリックしたらトースト表示） */
+  export let disabledReason: string = ''
+  /** 無効時のクリックハンドラ */
+  export let onDisabledClick: ((reason: string) => void) | null = null
+
+  function handleClick() {
+    if (disabled && disabledReason && onDisabledClick) {
+      onDisabledClick(disabledReason)
+    } else if (!disabled) {
+      onSave()
+    }
+  }
 </script>
 
 <div class="save-button-wrapper">
-  <IconButton
-    onClick={onSave}
-    title={$_('common.save')}
-    ariaLabel={$_('common.save')}
-    variant="primary"
-    iconWidth={32}
-    iconHeight={20}
-    {disabled}
+  <!-- disabled時もクリックを検知するため、wrapperでクリックを受ける -->
+  <div
+    class="button-click-area"
+    class:disabled
+    on:click={handleClick}
+    on:keydown={(e) => e.key === 'Enter' && handleClick()}
+    role="button"
+    tabindex={disabled ? 0 : -1}
   >
-    <OctocatPushIcon />
-  </IconButton>
+    <IconButton
+      onClick={() => {}}
+      title={disabled && disabledReason ? disabledReason : $_('common.save')}
+      ariaLabel={$_('common.save')}
+      variant="primary"
+      iconWidth={32}
+      iconHeight={20}
+      {disabled}
+    >
+      <OctocatPushIcon />
+    </IconButton>
+  </div>
   {#if isDirty}
     <span class="notification-badge"></span>
   {/if}
@@ -28,6 +50,14 @@
 <style>
   .save-button-wrapper {
     position: relative;
+  }
+
+  .button-click-area {
+    display: contents;
+  }
+
+  .button-click-area.disabled {
+    cursor: not-allowed;
   }
 
   .notification-badge {

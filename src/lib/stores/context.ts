@@ -76,6 +76,9 @@ export interface PaneActions {
 
   // Priorityリンククリック（元リーフの該当行へジャンプ）
   handlePriorityLinkClick: (leafId: string, line: number, pane: Pane) => void
+
+  // 無効なSaveボタンがクリックされたとき
+  handleDisabledSaveClick: (reason: string) => void
 }
 
 /**
@@ -84,6 +87,8 @@ export interface PaneActions {
 export interface PaneState {
   isOperationsLocked: boolean
   canPush: boolean
+  /** Saveボタンが無効な理由（Pull中の進捗メッセージなど） */
+  saveDisabledReason: string
   selectedIndexLeft: number
   selectedIndexRight: number
   editingBreadcrumb: string | null

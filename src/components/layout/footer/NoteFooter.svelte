@@ -16,6 +16,8 @@
   export let isDirty: boolean
   export let canHaveSubNote: boolean
   export let saveDisabled: boolean = false
+  export let saveDisabledReason: string = ''
+  export let onDisabledSaveClick: ((reason: string) => void) | null = null
 </script>
 
 <Footer>
@@ -44,6 +46,12 @@
     </IconButton>
   </svelte:fragment>
   <svelte:fragment slot="right">
-    <SaveButton {onSave} {isDirty} disabled={saveDisabled} />
+    <SaveButton
+      {onSave}
+      {isDirty}
+      disabled={saveDisabled}
+      disabledReason={saveDisabledReason}
+      onDisabledClick={onDisabledSaveClick}
+    />
   </svelte:fragment>
 </Footer>

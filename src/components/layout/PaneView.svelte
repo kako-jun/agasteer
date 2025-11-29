@@ -172,6 +172,8 @@
     disabled={$state.isOperationsLocked}
     isDirty={$isDirty}
     saveDisabled={!$state.canPush}
+    saveDisabledReason={$state.saveDisabledReason}
+    onDisabledSaveClick={actions.handleDisabledSaveClick}
   />
 {:else if currentView === 'note' && currentNote}
   <NoteFooter
@@ -184,6 +186,8 @@
     isDirty={$isDirty}
     canHaveSubNote={!currentNote.parentId}
     saveDisabled={!$state.canPush}
+    saveDisabledReason={$state.saveDisabledReason}
+    onDisabledSaveClick={actions.handleDisabledSaveClick}
   />
 {:else if currentView === 'edit' && currentLeaf}
   <EditorFooter
@@ -195,6 +199,8 @@
     disabled={$state.isOperationsLocked}
     isDirty={$isDirty}
     saveDisabled={!$state.canPush}
+    saveDisabledReason={$state.saveDisabledReason}
+    onDisabledSaveClick={actions.handleDisabledSaveClick}
   />
 {:else if currentView === 'preview' && currentLeaf}
   <PreviewFooter
@@ -205,6 +211,8 @@
     disabled={$state.isOperationsLocked}
     isDirty={$isDirty}
     saveDisabled={!$state.canPush}
+    saveDisabledReason={$state.saveDisabledReason}
+    onDisabledSaveClick={actions.handleDisabledSaveClick}
   />
 {/if}
 

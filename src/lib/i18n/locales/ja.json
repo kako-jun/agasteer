@@ -38,6 +38,7 @@
   },
   "home": {
     "leafCount": "リーフ数",
+    "leafFetched": "{fetched} / {total} リーフ受信済み",
     "charCount": "文字数",
     "pushCount": "Push回数",
     "noNotes": "ノートがまだありません。\n左下のボタンから新規ノートを作成できます。"

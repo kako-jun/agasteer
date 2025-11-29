@@ -14,6 +14,8 @@
   export let disabled: boolean
   export let isDirty: boolean
   export let saveDisabled: boolean = false
+  export let saveDisabledReason: string = ''
+  export let onDisabledSaveClick: ((reason: string) => void) | null = null
 </script>
 
 <Footer>
@@ -41,6 +43,12 @@
       <FileEditIcon />
     </IconButton>
 
-    <SaveButton {onSave} {isDirty} disabled={saveDisabled} />
+    <SaveButton
+      {onSave}
+      {isDirty}
+      disabled={saveDisabled}
+      disabledReason={saveDisabledReason}
+      onDisabledClick={onDisabledSaveClick}
+    />
   </svelte:fragment>
 </Footer>
