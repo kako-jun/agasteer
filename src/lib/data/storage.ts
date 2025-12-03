@@ -14,6 +14,44 @@ import type {
 } from '../types'
 import { getLocaleFromNavigator } from 'svelte-i18n'
 
+/**
+ * ストレージエラークラス
+ * IndexedDBの操作に関するエラーを種類別に分類
+ */
+export class StorageError extends Error {
+  public readonly type: 'db_open' | 'db_blocked' | 'db_upgrade' | 'db_operation' | 'db_closed'
+
+  constructor(
+    type: StorageError['type'],
+    message: string,
+    public readonly originalError?: unknown
+  ) {
+    super(message)
+    this.name = 'StorageError'
+    this.type = type
+  }
+
+  /**
+   * ユーザー向けの分かりやすいメッセージを返す
+   */
+  getUserMessage(): string {
+    switch (this.type) {
+      case 'db_open':
+        return 'データベースを開けませんでした。ブラウザの再起動をお試しください。'
+      case 'db_blocked':
+        return 'データベースが他のタブで使用中です。他のタブを閉じてから再度お試しください。'
+      case 'db_upgrade':
+        return 'データベースの更新に失敗しました。ページを再読み込みしてください。'
+      case 'db_operation':
+        return 'データの保存/読み込みに失敗しました。'
+      case 'db_closed':
+        return 'データベース接続が切断されました。ページを再読み込みしてください。'
+      default:
+        return 'データベースエラーが発生しました。'
+    }
+  }
+}
+
 // 設定のみLocalStorage利用（キー簡素化）
 const SETTINGS_KEY = 'agasteer'
 const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dotsD', 'dotsF']
@@ -68,31 +106,168 @@ export function saveSettings(settings: Settings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
 }
 
+// DB接続監視用のコールバック
+let onDbClosedCallback: (() => void) | null = null
+
+/**
+ * DB接続が予期せず閉じられたときのコールバックを設定
+ */
+export function setOnDbClosed(callback: (() => void) | null): void {
+  onDbClosedCallback = callback
+}
+
 /**
  * IndexedDBを開く（note/leaves/fonts/backgrounds用）
+ * エラー時は最大3回リトライする
+ * マイグレーション処理を明示化し、既存データを保護する
+ * タイムアウト付きでハングを防止
  */
-async function openAppDB(): Promise<IDBDatabase> {
+async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
+  const MAX_RETRIES = 3
+  const RETRY_DELAY_MS = 100 // 100ms, 200ms, 300ms
+  const TIMEOUT_MS = 5000 // 5秒でタイムアウト
+
   return new Promise((resolve, reject) => {
+    let settled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      fn()
+    }
+
+    // タイムアウト処理
+    timeoutId = setTimeout(() => {
+      settle(() => {
+        console.error(`IndexedDB open timed out after ${TIMEOUT_MS}ms (attempt ${retryCount + 1})`)
+        if (retryCount < MAX_RETRIES) {
+          // リトライ
+          setTimeout(
+            async () => {
+              try {
+                const db = await openAppDB(retryCount + 1)
+                resolve(db)
+              } catch (retryError) {
+                reject(retryError)
+              }
+            },
+            RETRY_DELAY_MS * (retryCount + 1)
+          )
+        } else {
+          reject(
+            new StorageError(
+              'db_open',
+              `IndexedDB open timed out after ${MAX_RETRIES + 1} attempts`
+            )
+          )
+        }
+      })
+    }, TIMEOUT_MS)
+
     const request = indexedDB.open(DB_NAME, 3)
 
-    request.onupgradeneeded = () => {
+    // ブロック時（他のタブで古いバージョンが開いている場合）
+    request.onblocked = () => {
+      settle(() => {
+        console.warn('IndexedDB is blocked by another tab')
+        reject(new StorageError('db_blocked', 'Database is blocked by another tab'))
+      })
+    }
+
+    // マイグレーション処理（既存データを保護しながらストアを追加）
+    request.onupgradeneeded = (event) => {
       const db = request.result
-      if (!db.objectStoreNames.contains(LEAVES_STORE)) {
-        db.createObjectStore(LEAVES_STORE, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(NOTES_STORE)) {
-        db.createObjectStore(NOTES_STORE, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(FONTS_STORE)) {
-        db.createObjectStore(FONTS_STORE, { keyPath: 'name' })
-      }
-      if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
-        db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
+      const oldVersion = event.oldVersion
+
+      console.log(`IndexedDB upgrade: ${oldVersion} -> 3`)
+
+      try {
+        // バージョン0（新規）または1からのアップグレード
+        if (oldVersion < 1) {
+          // 初回作成
+          if (!db.objectStoreNames.contains(LEAVES_STORE)) {
+            db.createObjectStore(LEAVES_STORE, { keyPath: 'id' })
+          }
+          if (!db.objectStoreNames.contains(NOTES_STORE)) {
+            db.createObjectStore(NOTES_STORE, { keyPath: 'id' })
+          }
+        }
+
+        // バージョン2からのアップグレード（fontsストア追加）
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains(FONTS_STORE)) {
+            db.createObjectStore(FONTS_STORE, { keyPath: 'name' })
+          }
+        }
+
+        // バージョン3からのアップグレード（backgroundsストア追加）
+        if (oldVersion < 3) {
+          if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
+            db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
+          }
+        }
+      } catch (upgradeError) {
+        console.error('IndexedDB upgrade failed:', upgradeError)
+        settle(() => {
+          reject(new StorageError('db_upgrade', 'Database upgrade failed', upgradeError))
+        })
       }
     }
 
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      settle(() => {
+        const db = request.result
+
+        // DB接続監視: 予期しない切断を検知
+        db.onclose = () => {
+          console.warn('IndexedDB connection closed unexpectedly')
+          if (onDbClosedCallback) {
+            onDbClosedCallback()
+          }
+        }
+
+        // エラー監視
+        db.onerror = (event) => {
+          console.error('IndexedDB error:', event)
+        }
+
+        resolve(db)
+      })
+    }
+
+    request.onerror = () => {
+      settle(async () => {
+        const error = request.error
+        console.error(
+          `IndexedDB open failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`,
+          error
+        )
+
+        if (retryCount < MAX_RETRIES) {
+          // リトライ前に少し待機（エクスポネンシャルバックオフ）
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (retryCount + 1)))
+          try {
+            const db = await openAppDB(retryCount + 1)
+            resolve(db)
+          } catch (retryError) {
+            reject(retryError)
+          }
+        } else {
+          reject(
+            new StorageError(
+              'db_open',
+              `IndexedDB failed to open after ${MAX_RETRIES + 1} attempts`,
+              error
+            )
+          )
+        }
+      })
+    }
   })
 }
 
@@ -200,17 +375,47 @@ export async function saveNotes(notes: Note[]): Promise<void> {
 /**
  * 全データを削除（notes/leavesストアをクリア）
  * オフラインリーフは保持する
+ * 外部から渡されたオフラインリーフデータも復元可能
  */
-export async function clearAllData(): Promise<void> {
+export async function clearAllData(preservedOfflineLeaf?: Leaf | null): Promise<void> {
   try {
     const db = await openAppDB()
-    // オフラインリーフを保護: 先に取得してから全削除、再保存
-    const offlineLeaf = await getItem<Leaf>(LEAVES_STORE, '__offline__')
+
+    // オフラインリーフを保護: DBから取得（引数で渡された場合はそれを優先）
+    let offlineLeaf = preservedOfflineLeaf
+    if (!offlineLeaf) {
+      // 同じDBインスタンスを使って取得
+      const tx = db.transaction(LEAVES_STORE, 'readonly')
+      const store = tx.objectStore(LEAVES_STORE)
+      offlineLeaf = await new Promise<Leaf | null>((resolve) => {
+        const request = store.get('__offline__')
+        request.onsuccess = () => resolve((request.result as Leaf) || null)
+        request.onerror = () => {
+          console.warn('Failed to get offline leaf before clear:', request.error)
+          resolve(null)
+        }
+      })
+    }
+
+    // ノートとリーフを削除
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, [])
     await replaceAllInStore<Note>(db, NOTES_STORE, [])
-    // オフラインリーフを復元
+
+    // オフラインリーフを復元（同じDBインスタンスを使用）
     if (offlineLeaf) {
-      await putItem(LEAVES_STORE, offlineLeaf)
+      const restoreTx = db.transaction(LEAVES_STORE, 'readwrite')
+      const restoreStore = restoreTx.objectStore(LEAVES_STORE)
+      await new Promise<void>((resolve, reject) => {
+        const request = restoreStore.put(offlineLeaf)
+        request.onsuccess = () => {
+          console.log('Restored offline leaf after clearAllData')
+          resolve()
+        }
+        request.onerror = () => {
+          console.error('Failed to restore offline leaf:', request.error)
+          reject(request.error)
+        }
+      })
     }
   } catch (error) {
     console.error('Failed to clear data in IndexedDB:', error)
@@ -352,5 +557,67 @@ export async function loadOfflineLeaf(id: string): Promise<Leaf | null> {
   } catch (error) {
     console.error('Failed to load offline leaf from IndexedDB:', error)
     return null
+  }
+}
+
+/**
+ * Pull操作用のバックアップデータ型
+ */
+export interface IndexedDBBackup {
+  notes: Note[]
+  leaves: Leaf[]
+  timestamp: number
+}
+
+/**
+ * IndexedDBのデータをバックアップ（Pull操作前に使用）
+ * Pull失敗時にデータを復元するため
+ */
+export async function createBackup(): Promise<IndexedDBBackup> {
+  try {
+    const db = await openAppDB()
+    const [notes, leaves] = await Promise.all([
+      getAllFromStore<Note>(db, NOTES_STORE),
+      getAllFromStore<Leaf>(db, LEAVES_STORE),
+    ])
+    return {
+      notes: notes.map((note, index) =>
+        note.order === undefined ? { ...note, order: index } : note
+      ),
+      leaves,
+      timestamp: Date.now(),
+    }
+  } catch (error) {
+    console.error('Failed to create IndexedDB backup:', error)
+    // バックアップ作成失敗時は空のバックアップを返す
+    return { notes: [], leaves: [], timestamp: Date.now() }
+  }
+}
+
+/**
+ * バックアップからIndexedDBを復元（Pull失敗時に使用）
+ */
+export async function restoreFromBackup(backup: IndexedDBBackup): Promise<void> {
+  if (!backup.notes.length && !backup.leaves.length) {
+    console.log('Backup is empty, nothing to restore')
+    return
+  }
+
+  try {
+    console.log(
+      `Restoring from backup (${backup.notes.length} notes, ${backup.leaves.length} leaves)`
+    )
+    const db = await openAppDB()
+    // オフラインリーフを保護: 先に取得
+    const offlineLeaf = await getItem<Leaf>(LEAVES_STORE, '__offline__')
+    await replaceAllInStore<Note>(db, NOTES_STORE, backup.notes)
+    await replaceAllInStore<Leaf>(db, LEAVES_STORE, backup.leaves)
+    // オフラインリーフを復元（バックアップに含まれていなければ）
+    if (offlineLeaf && !backup.leaves.some((l) => l.id === '__offline__')) {
+      await putItem(LEAVES_STORE, offlineLeaf)
+    }
+  } catch (error) {
+    console.error('Failed to restore from IndexedDB backup:', error)
+    throw error
   }
 }

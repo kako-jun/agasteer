@@ -194,7 +194,9 @@
     "noLeaves": "保存するリーフがありません",
     "needInitialPullDownload": "初回Pullが完了するまでダウンロードできません",
     "imageDownloaded": "画像をダウンロードしました",
-    "imageDownloadFailed": "画像ダウンロードに失敗しました"
+    "imageDownloadFailed": "画像ダウンロードに失敗しました",
+    "longBackgroundWarning": "アプリが長時間バックグラウンドにあったため、再読み込みが必要です。未保存の変更を保存してからリロードしてください。",
+    "noRemoteChanges": "リモートに変更はありません"
   },
   "modal": {
     "staleEdit": "リモートに新しい変更があります。このまま保存すると上書きされます。続行しますか？",

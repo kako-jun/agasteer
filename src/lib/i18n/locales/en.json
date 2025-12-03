@@ -193,7 +193,9 @@
     "noLeaves": "No leaves to save",
     "needInitialPullDownload": "Cannot download until the initial pull completes",
     "imageDownloaded": "Image downloaded",
-    "imageDownloadFailed": "Failed to download image"
+    "imageDownloadFailed": "Failed to download image",
+    "longBackgroundWarning": "App was in background for too long. Please save unsaved changes and reload.",
+    "noRemoteChanges": "No remote changes"
   },
   "modal": {
     "staleEdit": "Remote has newer changes. Saving will overwrite them. Continue?",
