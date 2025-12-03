@@ -511,11 +511,43 @@
     }
     window.addEventListener('keydown', handleKeyDown)
 
+    // PWAバックグラウンド復帰時の処理
+    // 長時間バックグラウンドにいた場合は、Service Workerの状態やIndexedDBが不安定になる可能性があるためリロード
+    let lastVisibleTime = Date.now()
+    const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now()
+        const elapsed = now - lastVisibleTime
+        if (elapsed > BACKGROUND_THRESHOLD_MS) {
+          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s, reloading...`)
+          // 未保存の変更がある場合は確認
+          if (get(isDirty)) {
+            // 確認ダイアログを表示せずに、ユーザーに通知だけする
+            showPushToast(
+              $_('toast.longBackgroundWarning') ||
+                'アプリが長時間バックグラウンドにあったため、再読み込みが必要です',
+              'error'
+            )
+          } else {
+            // 未保存の変更がなければ自動リロード
+            window.location.reload()
+          }
+        }
+        lastVisibleTime = now
+      } else {
+        lastVisibleTime = Date.now()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       window.removeEventListener('popstate', handlePopState)
       window.removeEventListener('resize', updateDualPane)
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   })
 

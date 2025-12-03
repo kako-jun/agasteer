@@ -120,18 +120,63 @@ export function setOnDbClosed(callback: (() => void) | null): void {
  * IndexedDBを開く（note/leaves/fonts/backgrounds用）
  * エラー時は最大3回リトライする
  * マイグレーション処理を明示化し、既存データを保護する
+ * タイムアウト付きでハングを防止
  */
 async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
   const MAX_RETRIES = 3
   const RETRY_DELAY_MS = 100 // 100ms, 200ms, 300ms
+  const TIMEOUT_MS = 5000 // 5秒でタイムアウト
 
   return new Promise((resolve, reject) => {
+    let settled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      fn()
+    }
+
+    // タイムアウト処理
+    timeoutId = setTimeout(() => {
+      settle(() => {
+        console.error(`IndexedDB open timed out after ${TIMEOUT_MS}ms (attempt ${retryCount + 1})`)
+        if (retryCount < MAX_RETRIES) {
+          // リトライ
+          setTimeout(
+            async () => {
+              try {
+                const db = await openAppDB(retryCount + 1)
+                resolve(db)
+              } catch (retryError) {
+                reject(retryError)
+              }
+            },
+            RETRY_DELAY_MS * (retryCount + 1)
+          )
+        } else {
+          reject(
+            new StorageError(
+              'db_open',
+              `IndexedDB open timed out after ${MAX_RETRIES + 1} attempts`
+            )
+          )
+        }
+      })
+    }, TIMEOUT_MS)
+
     const request = indexedDB.open(DB_NAME, 3)
 
     // ブロック時（他のタブで古いバージョンが開いている場合）
     request.onblocked = () => {
-      console.warn('IndexedDB is blocked by another tab')
-      reject(new StorageError('db_blocked', 'Database is blocked by another tab'))
+      settle(() => {
+        console.warn('IndexedDB is blocked by another tab')
+        reject(new StorageError('db_blocked', 'Database is blocked by another tab'))
+      })
     }
 
     // マイグレーション処理（既存データを保護しながらストアを追加）
@@ -168,51 +213,60 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
         }
       } catch (upgradeError) {
         console.error('IndexedDB upgrade failed:', upgradeError)
-        reject(new StorageError('db_upgrade', 'Database upgrade failed', upgradeError))
+        settle(() => {
+          reject(new StorageError('db_upgrade', 'Database upgrade failed', upgradeError))
+        })
       }
     }
 
     request.onsuccess = () => {
-      const db = request.result
+      settle(() => {
+        const db = request.result
 
-      // DB接続監視: 予期しない切断を検知
-      db.onclose = () => {
-        console.warn('IndexedDB connection closed unexpectedly')
-        if (onDbClosedCallback) {
-          onDbClosedCallback()
+        // DB接続監視: 予期しない切断を検知
+        db.onclose = () => {
+          console.warn('IndexedDB connection closed unexpectedly')
+          if (onDbClosedCallback) {
+            onDbClosedCallback()
+          }
         }
-      }
 
-      // エラー監視
-      db.onerror = (event) => {
-        console.error('IndexedDB error:', event)
-      }
+        // エラー監視
+        db.onerror = (event) => {
+          console.error('IndexedDB error:', event)
+        }
 
-      resolve(db)
+        resolve(db)
+      })
     }
 
-    request.onerror = async () => {
-      const error = request.error
-      console.error(`IndexedDB open failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, error)
-
-      if (retryCount < MAX_RETRIES) {
-        // リトライ前に少し待機（エクスポネンシャルバックオフ）
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (retryCount + 1)))
-        try {
-          const db = await openAppDB(retryCount + 1)
-          resolve(db)
-        } catch (retryError) {
-          reject(retryError)
-        }
-      } else {
-        reject(
-          new StorageError(
-            'db_open',
-            `IndexedDB failed to open after ${MAX_RETRIES + 1} attempts`,
-            error
-          )
+    request.onerror = () => {
+      settle(async () => {
+        const error = request.error
+        console.error(
+          `IndexedDB open failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`,
+          error
         )
-      }
+
+        if (retryCount < MAX_RETRIES) {
+          // リトライ前に少し待機（エクスポネンシャルバックオフ）
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (retryCount + 1)))
+          try {
+            const db = await openAppDB(retryCount + 1)
+            resolve(db)
+          } catch (retryError) {
+            reject(retryError)
+          }
+        } else {
+          reject(
+            new StorageError(
+              'db_open',
+              `IndexedDB failed to open after ${MAX_RETRIES + 1} attempts`,
+              error
+            )
+          )
+        }
+      })
     }
   })
 }
