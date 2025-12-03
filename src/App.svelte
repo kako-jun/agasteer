@@ -41,6 +41,9 @@
     saveLeaves,
     saveOfflineLeaf,
     loadOfflineLeaf,
+    createBackup,
+    restoreFromBackup,
+    type IndexedDBBackup,
   } from './lib/data'
   import { applyTheme } from './lib/ui'
   import { loadAndApplyCustomFont } from './lib/ui'
@@ -1589,10 +1592,29 @@
     // Pull開始を通知
     showPullToast('Pullします')
 
+    // Pull失敗時のデータ保護: 既存データをバックアップ
+    const backup = await createBackup()
+    const hasBackupData = backup.notes.length > 0 || backup.leaves.length > 0
+    if (hasBackupData) {
+      console.log(
+        `Created backup before Pull (${backup.notes.length} notes, ${backup.leaves.length} leaves)`
+      )
+    }
+
+    // オフラインリーフをメモリに保持（IndexedDBが不安定でも保護）
+    const currentOfflineData = get(offlineLeafStore)
+    const offlineLeafToPreserve = createOfflineLeaf(
+      currentOfflineData.content,
+      currentOfflineData.badgeIcon,
+      currentOfflineData.badgeColor
+    )
+    offlineLeafToPreserve.updatedAt = currentOfflineData.updatedAt
+
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     // IndexedDBは単なるキャッシュであり、Pull成功時に全削除→全作成される
     // 前回終了時のIndexedDBデータは使用しない
-    await clearAllData() // IndexedDB全削除
+    // オフラインリーフはメモリから渡して確実に保護
+    await clearAllData(offlineLeafToPreserve) // IndexedDB全削除（オフラインリーフ保護）
     notes.set([])
     leaves.set([])
     loadingLeafIds = new Set()
@@ -1671,6 +1693,22 @@
       await tick()
       isDirty.set(false)
     } else {
+      // Pull失敗時: バックアップからデータを復元
+      if (hasBackupData) {
+        console.log('Pull failed, restoring from backup...')
+        try {
+          await restoreFromBackup(backup)
+          // ストアにもバックアップデータを復元
+          notes.set(backup.notes)
+          leaves.set(backup.leaves)
+          rebuildLeafStats(backup.leaves, backup.notes)
+          // URLから状態を復元
+          restoreStateFromUrl(false)
+          isFirstPriorityFetched = true // 操作可能にする
+        } catch (restoreError) {
+          console.error('Failed to restore from backup:', restoreError)
+        }
+      }
       // 初回Pull失敗時は静かに処理（設定未完了は正常な状態）
       // 2回目以降のPull失敗はトーストで通知される
     }
