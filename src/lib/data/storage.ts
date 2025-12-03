@@ -56,10 +56,12 @@ export class StorageError extends Error {
 const SETTINGS_KEY = 'agasteer'
 const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dotsD', 'dotsF']
 const DB_NAME = 'agasteer/db'
+const DB_VERSION = 4
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
 const FONTS_STORE = 'fonts'
 const BACKGROUNDS_STORE = 'backgrounds'
+const OFFLINE_STORE = 'offline'
 
 export const defaultSettings: Settings = {
   token: '',
@@ -169,7 +171,7 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
       })
     }, TIMEOUT_MS)
 
-    const request = indexedDB.open(DB_NAME, 3)
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
 
     // ブロック時（他のタブで古いバージョンが開いている場合）
     request.onblocked = () => {
@@ -184,7 +186,7 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
       const db = request.result
       const oldVersion = event.oldVersion
 
-      console.log(`IndexedDB upgrade: ${oldVersion} -> 3`)
+      console.log(`IndexedDB upgrade: ${oldVersion} -> ${DB_VERSION}`)
 
       try {
         // バージョン0（新規）または1からのアップグレード
@@ -209,6 +211,13 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
         if (oldVersion < 3) {
           if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
             db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
+          }
+        }
+
+        // バージョン4: offline store追加（leaves storeから完全分離）
+        if (oldVersion < 4) {
+          if (!db.objectStoreNames.contains(OFFLINE_STORE)) {
+            db.createObjectStore(OFFLINE_STORE, { keyPath: 'id' })
           }
         }
       } catch (upgradeError) {
@@ -328,18 +337,12 @@ export async function loadLeaves(): Promise<Leaf[]> {
 }
 
 /**
- * リーフを保存（オフラインリーフは保護）
+ * リーフを保存（オフラインリーフは別storeなので影響なし）
  */
 export async function saveLeaves(newLeaves: Leaf[]): Promise<void> {
   try {
     const db = await openAppDB()
-    // オフラインリーフを保護: 先に取得
-    const offlineLeaf = await getItem<Leaf>(LEAVES_STORE, '__offline__')
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, newLeaves)
-    // オフラインリーフを復元（新しいリーフに含まれていなければ）
-    if (offlineLeaf && !newLeaves.some((l) => l.id === '__offline__')) {
-      await putItem(LEAVES_STORE, offlineLeaf)
-    }
   } catch (error) {
     console.error('Failed to save leaves to IndexedDB:', error)
   }
@@ -374,49 +377,13 @@ export async function saveNotes(notes: Note[]): Promise<void> {
 
 /**
  * 全データを削除（notes/leavesストアをクリア）
- * オフラインリーフは保持する
- * 外部から渡されたオフラインリーフデータも復元可能
+ * オフラインリーフは別storeなので影響なし
  */
-export async function clearAllData(preservedOfflineLeaf?: Leaf | null): Promise<void> {
+export async function clearAllData(): Promise<void> {
   try {
     const db = await openAppDB()
-
-    // オフラインリーフを保護: DBから取得（引数で渡された場合はそれを優先）
-    let offlineLeaf = preservedOfflineLeaf
-    if (!offlineLeaf) {
-      // 同じDBインスタンスを使って取得
-      const tx = db.transaction(LEAVES_STORE, 'readonly')
-      const store = tx.objectStore(LEAVES_STORE)
-      offlineLeaf = await new Promise<Leaf | null>((resolve) => {
-        const request = store.get('__offline__')
-        request.onsuccess = () => resolve((request.result as Leaf) || null)
-        request.onerror = () => {
-          console.warn('Failed to get offline leaf before clear:', request.error)
-          resolve(null)
-        }
-      })
-    }
-
-    // ノートとリーフを削除
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, [])
     await replaceAllInStore<Note>(db, NOTES_STORE, [])
-
-    // オフラインリーフを復元（同じDBインスタンスを使用）
-    if (offlineLeaf) {
-      const restoreTx = db.transaction(LEAVES_STORE, 'readwrite')
-      const restoreStore = restoreTx.objectStore(LEAVES_STORE)
-      await new Promise<void>((resolve, reject) => {
-        const request = restoreStore.put(offlineLeaf)
-        request.onsuccess = () => {
-          console.log('Restored offline leaf after clearAllData')
-          resolve()
-        }
-        request.onerror = () => {
-          console.error('Failed to restore offline leaf:', request.error)
-          reject(request.error)
-        }
-      })
-    }
   } catch (error) {
     console.error('Failed to clear data in IndexedDB:', error)
   }
@@ -537,11 +504,11 @@ export async function deleteCustomBackground(name: string): Promise<void> {
 }
 
 /**
- * オフラインリーフを保存（単一アイテム保存、デバウンス用）
+ * オフラインリーフを保存（専用storeに保存、Pull/Pushの影響を受けない）
  */
 export async function saveOfflineLeaf(leaf: Leaf): Promise<void> {
   try {
-    await putItem(LEAVES_STORE, leaf)
+    await putItem(OFFLINE_STORE, leaf)
   } catch (error) {
     console.error('Failed to save offline leaf to IndexedDB:', error)
     throw error
@@ -549,11 +516,11 @@ export async function saveOfflineLeaf(leaf: Leaf): Promise<void> {
 }
 
 /**
- * オフラインリーフを読み込む
+ * オフラインリーフを読み込む（専用storeから読み込み）
  */
 export async function loadOfflineLeaf(id: string): Promise<Leaf | null> {
   try {
-    return await getItem<Leaf>(LEAVES_STORE, id)
+    return await getItem<Leaf>(OFFLINE_STORE, id)
   } catch (error) {
     console.error('Failed to load offline leaf from IndexedDB:', error)
     return null
@@ -596,6 +563,7 @@ export async function createBackup(): Promise<IndexedDBBackup> {
 
 /**
  * バックアップからIndexedDBを復元（Pull失敗時に使用）
+ * オフラインリーフは別storeなので影響なし
  */
 export async function restoreFromBackup(backup: IndexedDBBackup): Promise<void> {
   if (!backup.notes.length && !backup.leaves.length) {
@@ -608,14 +576,8 @@ export async function restoreFromBackup(backup: IndexedDBBackup): Promise<void> 
       `Restoring from backup (${backup.notes.length} notes, ${backup.leaves.length} leaves)`
     )
     const db = await openAppDB()
-    // オフラインリーフを保護: 先に取得
-    const offlineLeaf = await getItem<Leaf>(LEAVES_STORE, '__offline__')
     await replaceAllInStore<Note>(db, NOTES_STORE, backup.notes)
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, backup.leaves)
-    // オフラインリーフを復元（バックアップに含まれていなければ）
-    if (offlineLeaf && !backup.leaves.some((l) => l.id === '__offline__')) {
-      await putItem(LEAVES_STORE, offlineLeaf)
-    }
   } catch (error) {
     console.error('Failed to restore from IndexedDB backup:', error)
     throw error

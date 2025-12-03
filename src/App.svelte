@@ -1633,20 +1633,10 @@
       )
     }
 
-    // オフラインリーフをメモリに保持（IndexedDBが不安定でも保護）
-    const currentOfflineData = get(offlineLeafStore)
-    const offlineLeafToPreserve = createOfflineLeaf(
-      currentOfflineData.content,
-      currentOfflineData.badgeIcon,
-      currentOfflineData.badgeColor
-    )
-    offlineLeafToPreserve.updatedAt = currentOfflineData.updatedAt
-
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     // IndexedDBは単なるキャッシュであり、Pull成功時に全削除→全作成される
-    // 前回終了時のIndexedDBデータは使用しない
-    // オフラインリーフはメモリから渡して確実に保護
-    await clearAllData(offlineLeafToPreserve) // IndexedDB全削除（オフラインリーフ保護）
+    // オフラインリーフは専用storeに保存されているため影響なし
+    await clearAllData()
     notes.set([])
     leaves.set([])
     loadingLeafIds = new Set()
