@@ -566,7 +566,7 @@
 
   :global(.cm-scroller) {
     overflow: auto;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 14px;
     line-height: 1.6;
     margin: 0 !important;

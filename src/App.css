@@ -6,6 +6,8 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
+  --font-mono:
+    'Courier New', Menlo, Consolas, 'Noto Sans Mono CJK JP', 'Source Han Mono', monospace;
   /* core colors */
   --bg: #fdfdfc;
   --text: #1f2933;

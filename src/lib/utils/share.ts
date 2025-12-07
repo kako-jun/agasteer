@@ -90,7 +90,7 @@ async function convertMarkdownToImageBlob(markdown: string): Promise<Blob | null
       .share-preview-content h3 { font-size: 1.17em; margin: 0.83em 0; font-weight: bold; }
       .share-preview-content p { margin: 1em 0; }
       .share-preview-content a { color: #111111; text-decoration: none; }
-      .share-preview-content code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 0.9em; }
+      .share-preview-content code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-family: var(--font-mono); font-size: 0.9em; }
       .share-preview-content pre { background: #f5f5f5; padding: 1em; border-radius: 5px; overflow-x: auto; margin: 1em 0; }
       .share-preview-content pre code { background: none; padding: 0; }
       .share-preview-content blockquote { border-left: 4px solid #111111; padding-left: 1em; margin: 1em 0; color: #444444; }
