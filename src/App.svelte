@@ -46,7 +46,7 @@
     type IndexedDBBackup,
   } from './lib/data'
   import { applyTheme } from './lib/ui'
-  import { loadAndApplyCustomFont } from './lib/ui'
+  import { loadAndApplyCustomFont, loadAndApplySystemMonoFont } from './lib/ui'
   import { loadAndApplyCustomBackgrounds } from './lib/ui'
   import {
     executePush,
@@ -465,7 +465,13 @@
         })
       }
 
-      // カスタムフォントがあれば適用
+      // システム等幅Webフォントを読み込む（エディタ + codeブロック用）
+      // カスタムフォントより先に読み込む（カスタムフォントが優先される）
+      loadAndApplySystemMonoFont().catch((error) => {
+        console.error('Failed to load system mono font:', error)
+      })
+
+      // カスタムフォントがあれば適用（アプリ全体に適用、システム等幅フォントより優先）
       if (loadedSettings.hasCustomFont) {
         loadAndApplyCustomFont().catch((error) => {
           console.error('Failed to load custom font:', error)

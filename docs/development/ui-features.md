@@ -229,6 +229,145 @@ function removeCustomFont(): void {
 
 ---
 
+## システム等幅Webフォント
+
+### 概要
+
+エディタとcodeブロックに日本語CJK等幅フォント（BIZ UDGothic）を自動適用する機能。Linux環境など、ローカルに日本語等幅フォントがインストールされていない場合でも、美しい表示を実現します。
+
+### 設計思想
+
+| 機能                        | 適用範囲                                     | ユーザー操作     |
+| --------------------------- | -------------------------------------------- | ---------------- |
+| **システム等幅Webフォント** | エディタ + codeブロックのみ（`--font-mono`） | 自動（設定不要） |
+| **カスタムフォント**        | アプリ全体（body, input, etc.）              | 手動アップロード |
+
+カスタムフォントがアップロードされている場合は、カスタムフォントが優先されます。
+
+### 技術実装
+
+#### Google Fontsからのダウンロード
+
+```typescript
+const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=BIZ+UDGothic&display=swap'
+
+async function fetchSystemMonoFontFromGoogle(): Promise<SystemMonoFont> {
+  // 1. CSSからwoff2 URLを抽出
+  const woff2Url = await extractWoff2UrlFromGoogleFonts(GOOGLE_FONTS_CSS_URL)
+
+  // 2. woff2ファイルをダウンロード
+  const response = await fetch(woff2Url)
+  const arrayBuffer = await response.arrayBuffer()
+
+  return {
+    name: 'system-mono',
+    data: arrayBuffer,
+    type: 'font/woff2',
+    version: '1.0',
+  }
+}
+```
+
+#### IndexedDBへのキャッシュ
+
+```typescript
+interface SystemMonoFont extends CustomFont {
+  version: string // バージョン管理用
+}
+
+// 既存のfontsストアを再利用
+await saveCustomFont(font) // キー: 'system-mono'
+```
+
+#### CSS変数への動的適用
+
+```typescript
+function applySystemMonoFont(font: CustomFont): void {
+  const blob = new Blob([font.data], { type: font.type })
+  const url = URL.createObjectURL(blob)
+
+  const style = document.createElement('style')
+  style.textContent = `
+    @font-face {
+      font-family: 'SystemMonoFont';
+      src: url(${url}) format('woff2');
+    }
+
+    :root {
+      --font-mono: 'SystemMonoFont', 'Courier New', Menlo, Consolas, monospace;
+    }
+  `
+
+  document.head.appendChild(style)
+}
+```
+
+### 起動時の処理フロー
+
+```
+アプリ起動
+    ↓
+loadAndApplySystemMonoFont()
+    ↓
+IndexedDBに 'system-mono' キーで検索
+    ↓
+┌─ キャッシュあり & バージョン一致
+│      ↓
+│   IndexedDBから読み込んで適用
+│
+└─ キャッシュなし or バージョン不一致
+       ↓
+    Google Fontsからダウンロード
+       ↓
+    IndexedDBに保存
+       ↓
+    適用
+```
+
+### バージョン管理
+
+```typescript
+const SYSTEM_MONO_FONT_VERSION = '1.0'
+
+// キャッシュ確認時にバージョンをチェック
+if (cached && cached.version === SYSTEM_MONO_FONT_VERSION) {
+  // キャッシュを使用
+} else {
+  // 再ダウンロード
+}
+```
+
+フォントを変更する場合は `SYSTEM_MONO_FONT_VERSION` を上げるだけで、全ユーザーに新しいフォントが配信されます。
+
+### 優先順位
+
+エディタ部分のフォント適用優先順位：
+
+1. **カスタムフォント**（`!important`で全体に適用）
+2. **システム等幅Webフォント**（`--font-mono`に適用）
+3. **CSSフォールバック**（`'Courier New', Menlo, Consolas, monospace`）
+
+### 仕様
+
+| 項目           | 内容                                                      |
+| -------------- | --------------------------------------------------------- |
+| **フォント**   | BIZ UDGothic（Google Fonts）                              |
+| **サイズ**     | 約1.2MB（woff2圧縮）                                      |
+| **保存場所**   | IndexedDB `fonts` ストア（キー: `system-mono`）           |
+| **適用範囲**   | `--font-mono` CSS変数のみ                                 |
+| **PWA対応**    | バージョンアップ時も再ダウンロード不要（IndexedDBは永続） |
+| **オフライン** | キャッシュ済みなら動作可能                                |
+| **エラー時**   | CSSフォールバックが使用される                             |
+
+### メリット
+
+- **ユーザー設定不要**: 初回起動時に自動ダウンロード
+- **PWAフレンドリー**: Service Workerのキャッシュと異なり、IndexedDBは永続的
+- **帯域効率**: 一度ダウンロードすれば再取得不要
+- **Linux対応**: ローカルにCJKフォントがなくても美しい表示
+
+---
+
 ## カスタム背景画像機能
 
 ### 概要
