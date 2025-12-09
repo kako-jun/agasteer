@@ -15,7 +15,6 @@ export {
   NOTES_METADATA_PATH,
   ARCHIVE_PATH,
   ARCHIVE_METADATA_PATH,
-  LEGACY_NOTES_PATH,
   type RateLimitInfo,
   type SaveResult,
   type TestResult,

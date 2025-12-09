@@ -18,9 +18,6 @@ export const NOTES_METADATA_PATH = '.agasteer/notes/metadata.json'
 export const ARCHIVE_PATH = '.agasteer/archive'
 export const ARCHIVE_METADATA_PATH = '.agasteer/archive/metadata.json'
 
-/** 旧形式パス（移行用） */
-export const LEGACY_NOTES_PATH = 'notes'
-
 /**
  * ワールドに応じたベースパスを取得
  */
@@ -535,11 +532,8 @@ export async function pushAllWithTreeAPI(
           } else if (entry.path.startsWith(`${ARCHIVE_PATH}/`)) {
             // .agasteer/archive/以下のファイルのSHAを記録
             existingArchiveFiles.set(entry.path, entry.sha)
-          } else if (entry.path.startsWith(`${LEGACY_NOTES_PATH}/`)) {
-            // 旧形式(notes/)は移行のため削除される（保持しない）
-            // 何もしない - Tree再構築時に含まれないため削除される
           } else {
-            // .agasteer/以外かつ旧notes/以外のファイルを全て保持
+            // .agasteer/以外のファイルを全て保持
             preserveItems.push({
               path: entry.path,
               mode: entry.mode,
@@ -568,25 +562,16 @@ export async function pushAllWithTreeAPI(
     // .gitkeep用の空コンテンツのSHA（常に同じ）
     const emptyGitkeepSha = await calculateGitBlobSha('')
 
-    // 既存のmetadata.jsonからpushCountを取得（新形式→旧形式の順でフォールバック）
+    // 既存のmetadata.jsonからpushCountを取得
     let currentPushCount = 0
     let existingMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     let existingArchiveMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     try {
-      // まず新形式(.agasteer/notes/metadata.json)を試す
-      let metadataRes = await fetchGitHubContents(
+      const metadataRes = await fetchGitHubContents(
         NOTES_METADATA_PATH,
         settings.repoName,
         settings.token
       )
-      // 新形式がなければ旧形式(notes/metadata.json)にフォールバック
-      if (!metadataRes.ok) {
-        metadataRes = await fetchGitHubContents(
-          `${LEGACY_NOTES_PATH}/metadata.json`,
-          settings.repoName,
-          settings.token
-        )
-      }
       if (metadataRes.ok) {
         const metadataData = await metadataRes.json()
         if (metadataData.content) {
@@ -1048,18 +1033,14 @@ export async function pullFromGitHub(
     const treeData = await treeRes.json()
     const entries: { path: string; type: string }[] = treeData.tree || []
 
-    // 新形式(.agasteer/)と旧形式(notes/)の両方をチェック
-    const hasNewFormat = entries.some((e) => e.path.startsWith(`${NOTES_PATH}/`))
-    const hasLegacyFormat = entries.some((e) => e.path.startsWith(`${LEGACY_NOTES_PATH}/`))
-
-    // 使用するベースパスを決定（新形式優先）
-    const basePath = hasNewFormat ? NOTES_PATH : LEGACY_NOTES_PATH
-    const metadataPath = hasNewFormat ? NOTES_METADATA_PATH : `${LEGACY_NOTES_PATH}/metadata.json`
-
     // metadata.jsonを取得してパース
     let metadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     try {
-      const metadataRes = await fetchGitHubContents(metadataPath, settings.repoName, settings.token)
+      const metadataRes = await fetchGitHubContents(
+        NOTES_METADATA_PATH,
+        settings.repoName,
+        settings.token
+      )
       if (metadataRes.ok) {
         const metadataData = await metadataRes.json()
         if (metadataData.content) {
@@ -1075,7 +1056,7 @@ export async function pullFromGitHub(
         }
       }
     } catch (e) {
-      console.warn(`${metadataPath} not found or invalid, using defaults`)
+      console.warn(`${NOTES_METADATA_PATH} not found or invalid, using defaults`)
     }
 
     const noteMap = new Map<string, Note>()
@@ -1116,8 +1097,8 @@ export async function pullFromGitHub(
     }
 
     // ベースパスのプレフィックスを作成（末尾スラッシュ付き）
-    const basePathPrefix = `${basePath}/`
-    const basePathGitkeep = `${basePath}/.gitkeep`
+    const basePathPrefix = `${NOTES_PATH}/`
+    const basePathGitkeep = `${NOTES_PATH}/.gitkeep`
 
     // まず.gitkeepファイルから空ノートを復元
     const gitkeepPaths = entries.filter(
@@ -1130,7 +1111,7 @@ export async function pullFromGitHub(
 
     for (const entry of gitkeepPaths) {
       const relativePath = entry.path
-        .replace(new RegExp(`^${basePath}/`), '')
+        .replace(new RegExp(`^${NOTES_PATH}/`), '')
         .replace(/\/\.gitkeep$/, '')
       const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
       if (parts.length === 0) continue
@@ -1150,14 +1131,14 @@ export async function pullFromGitHub(
 
     // コンテンツ取得用のターゲットを事前に作成（メタデータ取得はここで済ませる）
     const leafTargets = notePaths.map((entry, idx) => {
-      const relativePath = entry.path.replace(new RegExp(`^${basePath}/`), '')
+      const relativePath = entry.path.replace(new RegExp(`^${NOTES_PATH}/`), '')
       const allParts = relativePath.split('/').filter(Boolean)
       // ファイル名を先に分離してから、ノートパス部分だけをcollapseする
       const fileName = allParts.pop() || ''
       const noteParts = collapseToTwoLevels(allParts)
       const title = fileName.replace(/\.md$/i, '') || 'Untitled'
       const noteId = ensureNotePath(noteParts)
-      const leafPathOriginal = entry.path.replace(new RegExp(`^${basePath}/`), '')
+      const leafPathOriginal = entry.path.replace(new RegExp(`^${NOTES_PATH}/`), '')
       const leafPathCollapsed = [...noteParts, fileName].join('/')
       const leafMeta = metadata.leaves[leafPathCollapsed] ||
         metadata.leaves[leafPathOriginal] || {
@@ -1295,20 +1276,11 @@ export async function fetchRemotePushCount(settings: Settings): Promise<number> 
   }
 
   try {
-    // まず新形式を試す
-    let metadataRes = await fetchGitHubContents(
+    const metadataRes = await fetchGitHubContents(
       NOTES_METADATA_PATH,
       settings.repoName,
       settings.token
     )
-    // 新形式がなければ旧形式にフォールバック
-    if (!metadataRes.ok) {
-      metadataRes = await fetchGitHubContents(
-        `${LEGACY_NOTES_PATH}/metadata.json`,
-        settings.repoName,
-        settings.token
-      )
-    }
     if (metadataRes.ok) {
       const metadataData = await metadataRes.json()
       if (metadataData.content) {

@@ -310,26 +310,20 @@ export interface AgasteerImportResult {
 
 /**
  * Agasteerエクスポートzipをパースする
- * 新形式（.agasteer/）と旧形式（notes/）の両方をサポート
  */
 export async function parseAgasteerZip(file: File): Promise<AgasteerImportResult | null> {
   try {
     const buffer = await file.arrayBuffer()
     const zip = await JSZip.loadAsync(buffer)
 
-    // 形式を判定
+    // 新形式のみサポート
     const hasNewFormat = zip.file('.agasteer/notes/metadata.json') !== null
-    const hasOldFormat = zip.file('notes/metadata.json') !== null
 
-    if (!hasNewFormat && !hasOldFormat) {
+    if (!hasNewFormat) {
       return null
     }
 
-    if (hasNewFormat) {
-      return parseNewAgasteerFormat(zip)
-    } else {
-      return parseOldAgasteerFormat(zip)
-    }
+    return parseAgasteerFormat(zip)
   } catch (e) {
     console.error('Failed to parse Agasteer zip:', e)
     return null
@@ -337,9 +331,9 @@ export async function parseAgasteerZip(file: File): Promise<AgasteerImportResult
 }
 
 /**
- * 新形式（.agasteer/notes/ と .agasteer/archive/）をパース
+ * .agasteer/notes/ と .agasteer/archive/ をパース
  */
-async function parseNewAgasteerFormat(zip: JSZip): Promise<AgasteerImportResult> {
+async function parseAgasteerFormat(zip: JSZip): Promise<AgasteerImportResult> {
   // Home（notes）の読み込み
   const { notes, leaves, metadata } = await parseWorldFromZip(zip, '.agasteer/notes')
 
@@ -363,22 +357,6 @@ async function parseNewAgasteerFormat(zip: JSZip): Promise<AgasteerImportResult>
     archiveNotes,
     archiveLeaves,
     archiveMetadata,
-  }
-}
-
-/**
- * 旧形式（notes/）をパース → 新形式として.agasteer/notes/に移行
- */
-async function parseOldAgasteerFormat(zip: JSZip): Promise<AgasteerImportResult> {
-  const { notes, leaves, metadata } = await parseWorldFromZip(zip, 'notes')
-
-  return {
-    notes,
-    leaves,
-    metadata,
-    archiveNotes: [],
-    archiveLeaves: [],
-    archiveMetadata: undefined,
   }
 }
 
@@ -507,9 +485,7 @@ export async function isAgasteerZip(file: File): Promise<boolean> {
   try {
     const buffer = await file.arrayBuffer()
     const zip = await JSZip.loadAsync(buffer)
-    return (
-      zip.file('.agasteer/notes/metadata.json') !== null || zip.file('notes/metadata.json') !== null
-    )
+    return zip.file('.agasteer/notes/metadata.json') !== null
   } catch {
     return false
   }
