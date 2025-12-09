@@ -204,6 +204,7 @@
     saveDisabled={!$state.canPush}
     saveDisabledReason={$state.saveDisabledReason}
     onDisabledSaveClick={actions.handleDisabledSaveClick}
+    currentWorld={$state.currentWorld}
   />
 {:else if currentView === 'note' && currentNote}
   <NoteFooter

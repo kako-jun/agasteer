@@ -1,5 +1,6 @@
 <script lang="ts">
   import { _ } from '../../../lib/i18n'
+  import type { WorldType } from '../../../lib/types'
   import Footer from '../Footer.svelte'
   import IconButton from '../../buttons/IconButton.svelte'
   import SaveButton from '../../buttons/SaveButton.svelte'
@@ -12,18 +13,23 @@
   export let saveDisabled: boolean = false
   export let saveDisabledReason: string = ''
   export let onDisabledSaveClick: ((reason: string) => void) | null = null
+  /** 現在のワールド */
+  export let currentWorld: WorldType = 'home'
 </script>
 
 <Footer>
   <svelte:fragment slot="left">
-    <IconButton
-      onClick={() => onCreateNote('')}
-      title={$_('footer.newNote')}
-      ariaLabel={$_('footer.newNote')}
-      {disabled}
-    >
-      <FolderPlusIcon />
-    </IconButton>
+    <!-- アーカイブ内では新規作成不可 -->
+    {#if currentWorld === 'home'}
+      <IconButton
+        onClick={() => onCreateNote('')}
+        title={$_('footer.newNote')}
+        ariaLabel={$_('footer.newNote')}
+        {disabled}
+      >
+        <FolderPlusIcon />
+      </IconButton>
+    {/if}
   </svelte:fragment>
   <svelte:fragment slot="right">
     <SaveButton

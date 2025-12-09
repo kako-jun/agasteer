@@ -817,37 +817,53 @@
     const note = pane === 'left' ? $leftNote : $rightNote
     if (!note) return
 
-    // 確認ダイアログ
-    showConfirm($_('modal.archiveNote') || 'Archive this note?', async () => {
-      await moveNoteToWorld(note, 'archive')
-    })
+    // 確認ダイアログ（左下に表示）
+    showConfirm(
+      $_('modal.archiveNote') || 'Archive this note?',
+      async () => {
+        await moveNoteToWorld(note, 'archive')
+      },
+      'bottom-left'
+    )
   }
 
   function archiveLeaf(pane: Pane) {
     const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
     if (!leaf) return
 
-    showConfirm($_('modal.archiveLeaf') || 'Archive this leaf?', async () => {
-      await moveLeafToWorld(leaf, 'archive')
-    })
+    showConfirm(
+      $_('modal.archiveLeaf') || 'Archive this leaf?',
+      async () => {
+        await moveLeafToWorld(leaf, 'archive')
+      },
+      'bottom-left'
+    )
   }
 
   function restoreNote(pane: Pane) {
     const note = pane === 'left' ? $leftNote : $rightNote
     if (!note) return
 
-    showConfirm($_('modal.restoreNote') || 'Restore this note to Home?', async () => {
-      await moveNoteToWorld(note, 'home')
-    })
+    showConfirm(
+      $_('modal.restoreNote') || 'Restore this note to Home?',
+      async () => {
+        await moveNoteToWorld(note, 'home')
+      },
+      'bottom-left'
+    )
   }
 
   function restoreLeaf(pane: Pane) {
     const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
     if (!leaf) return
 
-    showConfirm($_('modal.restoreLeaf') || 'Restore this leaf to Home?', async () => {
-      await moveLeafToWorld(leaf, 'home')
-    })
+    showConfirm(
+      $_('modal.restoreLeaf') || 'Restore this leaf to Home?',
+      async () => {
+        await moveLeafToWorld(leaf, 'home')
+      },
+      'bottom-left'
+    )
   }
 
   async function moveNoteToWorld(note: Note, targetWorld: WorldType) {
@@ -2239,7 +2255,7 @@
 
     <MoveModal
       show={moveModalOpen}
-      notes={$notes}
+      notes={$currentWorld === 'archive' ? $archiveNotes : $notes}
       targetNote={moveTargetNote}
       targetLeaf={moveTargetLeaf}
       pane={moveTargetPane}

@@ -65,25 +65,28 @@
       </IconButton>
     {/if}
 
-    {#if canHaveSubNote}
+    <!-- アーカイブ内では新規作成不可 -->
+    {#if currentWorld === 'home'}
+      {#if canHaveSubNote}
+        <IconButton
+          onClick={() => onCreateSubNote('')}
+          title={$_('footer.newNote')}
+          ariaLabel={$_('footer.newNote')}
+          {disabled}
+        >
+          <FolderPlusIcon />
+        </IconButton>
+      {/if}
+
       <IconButton
-        onClick={() => onCreateSubNote('')}
-        title={$_('footer.newNote')}
-        ariaLabel={$_('footer.newNote')}
+        onClick={() => onCreateLeaf('')}
+        title={$_('footer.newLeaf')}
+        ariaLabel={$_('footer.newLeaf')}
         {disabled}
       >
-        <FolderPlusIcon />
+        <FilePlusIcon />
       </IconButton>
     {/if}
-
-    <IconButton
-      onClick={() => onCreateLeaf('')}
-      title={$_('footer.newLeaf')}
-      ariaLabel={$_('footer.newLeaf')}
-      {disabled}
-    >
-      <FilePlusIcon />
-    </IconButton>
   </svelte:fragment>
   <svelte:fragment slot="right">
     <SaveButton
