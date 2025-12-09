@@ -12,7 +12,10 @@
     notes,
     leaves,
     rootNotes,
+    archiveNotes,
+    archiveLeaves,
     metadata,
+    archiveMetadata,
     isDirty,
     isPushing,
     leftNote,
@@ -66,12 +69,21 @@
   $: breadcrumbs = pane === 'left' ? $state.breadcrumbs : $state.breadcrumbsRight
   $: isActive = $focusedPane === pane
 
+  // currentWorldに応じてノート・リーフストアを切り替え
+  $: isArchiveWorld = $state.currentWorld === 'archive'
+  $: activeNotes = isArchiveWorld ? $archiveNotes : $notes
+  $: activeLeaves = isArchiveWorld ? $archiveLeaves : $leaves
+  $: activeRootNotes = isArchiveWorld
+    ? $archiveNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
+    : $rootNotes
+  $: activeMetadata = isArchiveWorld ? $archiveMetadata : $metadata
+
   // サブノート・リーフのフィルタリング
   $: subNotes = currentNote
-    ? $notes.filter((n) => n.parentId === currentNote.id).sort((a, b) => a.order - b.order)
+    ? activeNotes.filter((n) => n.parentId === currentNote.id).sort((a, b) => a.order - b.order)
     : []
   $: currentLeaves = currentNote
-    ? $leaves.filter((l) => l.noteId === currentNote.id).sort((a, b) => a.order - b.order)
+    ? activeLeaves.filter((l) => l.noteId === currentNote.id).sort((a, b) => a.order - b.order)
     : []
 
   // スクロールハンドラー
@@ -99,10 +111,10 @@
 <main class="main-pane">
   {#if currentView === 'home'}
     <HomeView
-      notes={$rootNotes}
-      allLeaves={$leaves}
-      isFirstPriorityFetched={$state.isFirstPriorityFetched}
-      isPullCompleted={$state.isPullCompleted}
+      notes={activeRootNotes}
+      allLeaves={activeLeaves}
+      isFirstPriorityFetched={isArchiveWorld || $state.isFirstPriorityFetched}
+      isPullCompleted={isArchiveWorld || $state.isPullCompleted}
       {selectedIndex}
       {isActive}
       vimMode={$settings.vimMode ?? false}
@@ -113,10 +125,10 @@
       onDrop={actions.handleDropNote}
       dragOverNoteId={$state.dragOverNoteId}
       onUpdateNoteBadge={actions.updateNoteBadge}
-      priorityLeaf={$state.currentPriorityLeaf}
+      priorityLeaf={isArchiveWorld ? null : $state.currentPriorityLeaf}
       onSelectPriority={() => actions.openPriorityView(pane)}
       onUpdatePriorityBadge={actions.updatePriorityBadge}
-      offlineLeaf={$state.currentOfflineLeaf}
+      offlineLeaf={isArchiveWorld ? null : $state.currentOfflineLeaf}
       onSelectOffline={() => actions.openOfflineView(pane)}
       onUpdateOfflineBadge={actions.updateOfflineBadge}
     />
@@ -124,10 +136,10 @@
     <NoteView
       {currentNote}
       {subNotes}
-      allNotes={$notes}
+      allNotes={activeNotes}
       leaves={currentLeaves}
-      allLeaves={$leaves}
-      isFirstPriorityFetched={$state.isFirstPriorityFetched}
+      allLeaves={activeLeaves}
+      isFirstPriorityFetched={isArchiveWorld || $state.isFirstPriorityFetched}
       {selectedIndex}
       {isActive}
       vimMode={$settings.vimMode ?? false}
@@ -179,7 +191,7 @@
   <StatsPanel
     leafCount={$state.totalLeafCount}
     leafCharCount={$state.totalLeafChars}
-    pushCount={$metadata.pushCount}
+    pushCount={activeMetadata.pushCount}
   />
 {/if}
 
