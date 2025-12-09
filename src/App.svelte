@@ -782,25 +782,28 @@
 
     // アーカイブに切り替える場合、未ロードならPull
     if (world === 'archive' && !$isArchiveLoaded) {
-      isArchiveLoading = true
-      try {
-        const result = await pullArchive($settings)
-        if (result.success) {
-          archiveNotes.set(result.notes)
-          archiveLeaves.set(result.leaves)
-          archiveMetadata.set(result.metadata)
-          isArchiveLoaded.set(true)
-        } else {
-          showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
-          return
+      // トークンが設定されている場合のみPullを試行
+      if ($settings.token && $settings.repoName) {
+        isArchiveLoading = true
+        try {
+          const result = await pullArchive($settings)
+          if (result.success) {
+            archiveNotes.set(result.notes)
+            archiveLeaves.set(result.leaves)
+            archiveMetadata.set(result.metadata)
+            isArchiveLoaded.set(true)
+          } else {
+            // Pull失敗してもアーカイブに切り替えは許可（空のアーカイブを表示）
+            showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
+          }
+        } catch (e) {
+          console.error('Archive pull failed:', e)
+          showPullToast($_('toast.pullFailed'), 'error')
+        } finally {
+          isArchiveLoading = false
         }
-      } catch (e) {
-        console.error('Archive pull failed:', e)
-        showPullToast($_('toast.pullFailed'), 'error')
-        return
-      } finally {
-        isArchiveLoading = false
       }
+      // トークンがなくてもアーカイブに切り替えは許可（空のアーカイブを表示）
     }
 
     // ワールドを切り替え

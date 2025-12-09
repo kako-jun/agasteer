@@ -31,16 +31,30 @@
   let inputElement: HTMLInputElement | null = null
   let openDropdownIndex: number | null = null
   let worldDropdownOpen = false
-  let justToggledWorld = false
+  let worldSeparatorButton: HTMLButtonElement | null = null
+  let menuPosition = { top: 0, left: 0 }
+
+  // ポータルアクション: 要素をbody直下に移動して親のoverflowの影響を回避
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node)
+    return {
+      destroy() {
+        node.remove()
+      },
+    }
+  }
 
   function toggleWorldDropdown(e: MouseEvent) {
     e.stopPropagation()
-    justToggledWorld = true
+    if (!worldDropdownOpen && worldSeparatorButton) {
+      // ボタンの位置を取得してメニューの位置を計算
+      const rect = worldSeparatorButton.getBoundingClientRect()
+      menuPosition = {
+        top: rect.bottom + 4,
+        left: rect.left,
+      }
+    }
     worldDropdownOpen = !worldDropdownOpen
-    // フラグをリセット（次のイベントループで）
-    setTimeout(() => {
-      justToggledWorld = false
-    }, 0)
   }
 
   function handleWorldSelect(world: WorldType) {
@@ -102,11 +116,15 @@
   }
 
   // ドロップダウン外クリックで閉じる
-  function handleWindowClick() {
+  function handleWindowClick(e: MouseEvent) {
     closeDropdown()
-    // トグル直後でなければ閉じる
-    if (!justToggledWorld) {
-      worldDropdownOpen = false
+    // ワールドセパレータドロップダウン外のクリックなら閉じる
+    if (worldDropdownOpen) {
+      const target = e.target as HTMLElement
+      // world-menu内またはworld-separatorをクリックした場合は閉じない
+      if (!target.closest('.world-menu') && !target.closest('.world-separator')) {
+        worldDropdownOpen = false
+      }
     }
   }
 
@@ -157,6 +175,55 @@
         {/if}
       {/if}
 
+      <!-- ワールド切り替えセパレータ（Homeの左、breadcrumb-itemの外に配置してoverflow: hiddenの影響を受けないようにする） -->
+      {#if index === 0 && onWorldChange}
+        <div class="world-separator-dropdown">
+          <button
+            bind:this={worldSeparatorButton}
+            class="world-separator clickable"
+            on:click={toggleWorldDropdown}
+            title={$_('breadcrumbs.goArchive')}
+            aria-label={$_('breadcrumbs.goArchive')}
+            aria-expanded={worldDropdownOpen}
+          >
+            ›
+          </button>
+          {#if worldDropdownOpen}
+            <div
+              class="world-menu"
+              role="menu"
+              tabindex="-1"
+              style="top: {menuPosition.top}px; left: {menuPosition.left}px;"
+              use:portal
+              on:click|stopPropagation
+              on:keydown|stopPropagation
+            >
+              <button
+                class="world-item"
+                class:current={currentWorld === 'home'}
+                on:click={() => handleWorldSelect('home')}
+              >
+                <span class="world-icon"><HomeIcon /></span>
+                {$_('breadcrumbs.worldHome')}
+              </button>
+              <button
+                class="world-item"
+                class:current={currentWorld === 'archive'}
+                class:loading={isArchiveLoading}
+                on:click={() => handleWorldSelect('archive')}
+                disabled={isArchiveLoading}
+              >
+                <span class="world-icon"><ArchiveIcon /></span>
+                {$_('breadcrumbs.worldArchive')}
+                {#if isArchiveLoading}
+                  <span class="loading-indicator">...</span>
+                {/if}
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <span class="breadcrumb-item">
         {#if editingId === crumb.id}
           <input
@@ -168,52 +235,8 @@
           />
         {:else}
           {#if index === 0}
-            <!-- Home/Archiveアイコン + ワールド切り替えセパレータ -->
+            <!-- Home/Archiveアイコン -->
             {#if onWorldChange}
-              <!-- ワールド切り替えセパレータ（Homeの左に配置） -->
-              <div class="world-separator-dropdown">
-                <button
-                  class="world-separator clickable"
-                  on:click={toggleWorldDropdown}
-                  title={$_('breadcrumbs.goArchive')}
-                  aria-label={$_('breadcrumbs.goArchive')}
-                  aria-expanded={worldDropdownOpen}
-                >
-                  ›
-                </button>
-                {#if worldDropdownOpen}
-                  <div
-                    class="world-menu"
-                    role="menu"
-                    tabindex="-1"
-                    on:click|stopPropagation
-                    on:keydown|stopPropagation
-                  >
-                    <button
-                      class="world-item"
-                      class:current={currentWorld === 'home'}
-                      on:click={() => handleWorldSelect('home')}
-                    >
-                      <span class="world-icon"><HomeIcon /></span>
-                      {$_('breadcrumbs.worldHome')}
-                    </button>
-                    <button
-                      class="world-item"
-                      class:current={currentWorld === 'archive'}
-                      class:loading={isArchiveLoading}
-                      on:click={() => handleWorldSelect('archive')}
-                      disabled={isArchiveLoading}
-                    >
-                      <span class="world-icon"><ArchiveIcon /></span>
-                      {$_('breadcrumbs.worldArchive')}
-                      {#if isArchiveLoading}
-                        <span class="loading-indicator">...</span>
-                      {/if}
-                    </button>
-                  </div>
-                {/if}
-              </div>
-              <!-- Home/Archiveアイコン -->
               <IconButton
                 onClick={crumb.action}
                 title={currentWorld === 'home'
@@ -450,20 +473,17 @@
     color: var(--accent);
   }
 
-  .world-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
+  :global(.world-menu) {
+    position: fixed;
     background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     min-width: 140px;
-    z-index: 200;
-    margin-top: 4px;
+    z-index: 210;
   }
 
-  .world-item {
+  :global(.world-item) {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -478,36 +498,36 @@
     transition: background 0.15s;
   }
 
-  .world-item:hover:not(:disabled) {
+  :global(.world-item:hover:not(:disabled)) {
     background: var(--surface-2);
   }
 
-  .world-item.current {
+  :global(.world-item.current) {
     background: var(--accent);
     color: white;
     font-weight: 500;
   }
 
-  .world-item.current:hover {
+  :global(.world-item.current:hover) {
     background: var(--accent);
   }
 
-  .world-item:disabled {
+  :global(.world-item:disabled) {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  .world-icon {
+  :global(.world-icon) {
     display: flex;
     align-items: center;
   }
 
-  .world-icon :global(svg) {
+  :global(.world-icon svg) {
     width: 16px;
     height: 16px;
   }
 
-  .loading-indicator {
+  :global(.loading-indicator) {
     margin-left: auto;
     animation: blink 1s infinite;
   }
