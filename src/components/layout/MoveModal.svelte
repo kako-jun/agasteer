@@ -1,6 +1,6 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n'
-  import type { Note, Leaf } from '../../lib/types'
+  import type { Note, Leaf, WorldType } from '../../lib/types'
   import type { Pane } from '../../lib/navigation'
   import MoveIcon from '../icons/MoveIcon.svelte'
 
@@ -9,8 +9,14 @@
   export let targetNote: Note | null = null
   export let targetLeaf: Leaf | null = null
   export let pane: Pane = 'left'
+  export let currentWorld: WorldType = 'home'
   export let onConfirm: (destNoteId: string | null) => void
   export let onClose: () => void
+
+  // アーカイブ内では「アーカイブ直下」、ホームでは「ホーム直下」
+  $: rootLabel = currentWorld === 'archive' ? $_('move.archive') : $_('move.home')
+  $: currentlyAtRootLabel =
+    currentWorld === 'archive' ? $_('move.currentlyAtArchive') : $_('move.currentlyAtHome')
 
   const sortedRoots = () => notes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
 
@@ -41,9 +47,13 @@
     return true
   }
 
+  // リーフはルート直下に置けない理由のラベル
+  $: cannotPlaceAtRootLabel =
+    currentWorld === 'archive' ? $_('move.cannotPlaceAtArchive') : $_('move.cannotPlaceAtHome')
+
   function canSelect(dest: Note | null): { selectable: boolean; reason?: string } {
     if (isLeafMode()) {
-      if (!dest) return { selectable: false, reason: $_('move.cannotPlaceAtHome') }
+      if (!dest) return { selectable: false, reason: cannotPlaceAtRootLabel }
       if (targetLeaf && targetLeaf.noteId === dest.id) {
         return { selectable: false, reason: $_('move.sameNote') }
       }
@@ -53,9 +63,9 @@
     // note mode
     if (!targetNote) return { selectable: false }
 
-    // ホーム直下
+    // ルート直下
     if (!dest) {
-      if (!targetNote.parentId) return { selectable: false, reason: $_('move.currentlyAtHome') }
+      if (!targetNote.parentId) return { selectable: false, reason: currentlyAtRootLabel }
       return { selectable: true }
     }
 
@@ -148,14 +158,14 @@
               >
                 <span class="bullet" class:checked={selected === null}></span>
                 <span class="row-body">
-                  <span class="row-title">{$_('move.home')}</span>
+                  <span class="row-title">{rootLabel}</span>
                 </span>
               </button>
             {:else}
               <button type="button" class="row disabled" disabled aria-disabled="true">
                 <span class="bullet"></span>
                 <span class="row-body">
-                  <span class="row-title muted">{$_('move.home')}</span>
+                  <span class="row-title muted">{rootLabel}</span>
                   <small>{canSelect(null).reason}</small>
                 </span>
               </button>

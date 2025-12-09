@@ -226,9 +226,12 @@
   "move": {
     "title": "移動先を選択",
     "home": "ホーム直下",
+    "archive": "アーカイブ直下",
     "currentlyAtHome": "現在ホーム直下です",
+    "currentlyAtArchive": "現在アーカイブ直下です",
     "sameNote": "同じノートです",
     "cannotPlaceAtHome": "ホーム直下には置けません",
+    "cannotPlaceAtArchive": "アーカイブ直下には置けません",
     "cancel": "キャンセル",
     "confirm": "移動"
   },

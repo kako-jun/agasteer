@@ -2259,6 +2259,7 @@
       targetNote={moveTargetNote}
       targetLeaf={moveTargetLeaf}
       pane={moveTargetPane}
+      currentWorld={$currentWorld}
       onConfirm={handleMoveConfirm}
       onClose={closeMoveModal}
     />

@@ -252,9 +252,12 @@
   "move": {
     "title": "Select destination",
     "home": "Home (root)",
+    "archive": "Archive (root)",
     "currentlyAtHome": "Currently at home",
+    "currentlyAtArchive": "Currently at archive",
     "sameNote": "Same note",
     "cannotPlaceAtHome": "Cannot place at home",
+    "cannotPlaceAtArchive": "Cannot place at archive",
     "cancel": "Cancel",
     "confirm": "Move"
   },
