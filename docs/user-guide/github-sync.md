@@ -9,8 +9,7 @@
 GitHub連携を使うには、以下の準備が必要です。
 
 1. **GitHubアカウント** - 持っていない場合は[GitHub](https://github.com/)で作成
-2. **Personal Access Token** - [トークンの取得方法はこちら](../shared/github-token.md)
-3. **GitHubリポジトリ** - ノートを保存するリポジトリを作成（Public/Private どちらでも可）
+2. **GitHubリポジトリとPersonal Access Token** - [セットアップガイドを参照](./ja/github-setup.md)
 
 ---
 
@@ -278,6 +277,6 @@ GitHub連携を理解したら、カスタマイズを学びましょう。
 
 **関連ドキュメント**:
 
-- [GitHub Personal Access Tokenの取得](../shared/github-token.md)
+- [GitHub連携セットアップガイド](./ja/github-setup.md)
 - [基本機能](./basic-features.md)
 - [よくある質問（FAQ）](./faq.md)

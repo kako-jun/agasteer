@@ -262,4 +262,4 @@ graph TB
 
 - [初期設定](./getting-started.md)
 - [GitHub連携](./github-sync.md)
-- [GitHub Personal Access Tokenの取得](../shared/github-token.md)
+- [GitHub連携セットアップガイド](./ja/github-setup.md)

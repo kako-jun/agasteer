@@ -64,9 +64,9 @@
 
 ## 🔑 関連ドキュメント
 
-### 共有リソース
+### セットアップガイド
 
-- **[GitHub Personal Access Tokenの取得](../shared/github-token.md)** - トークン取得の詳細な手順
+- **[GitHub連携セットアップガイド](./ja/github-setup.md)** - リポジトリ作成とトークン取得の手順
 
 ### 開発者向けドキュメント
 

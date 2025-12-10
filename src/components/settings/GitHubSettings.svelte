@@ -9,8 +9,7 @@
 
   type TextSettingKey = 'repoName' | 'token'
 
-  let showTokenHelp = false
-  let showRepoHelp = false
+  const SETUP_GUIDE_BASE = 'https://github.com/kako-jun/agasteer/blob/main/docs/user-guide'
 
   function handleTextInput(key: TextSettingKey, event: Event) {
     const value = (event.target as HTMLInputElement).value
@@ -18,20 +17,10 @@
     onSettingsChange({ [key]: value } as Partial<Settings>)
   }
 
-  function openTokenHelp() {
-    showTokenHelp = true
-  }
-
-  function closeTokenHelp() {
-    showTokenHelp = false
-  }
-
-  function openRepoHelp() {
-    showRepoHelp = true
-  }
-
-  function closeRepoHelp() {
-    showRepoHelp = false
+  function openSetupGuide() {
+    const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
+    const url = `${SETUP_GUIDE_BASE}/${lang}/github-setup.md`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 </script>
 
@@ -45,7 +34,7 @@
         >
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span class="help-icon" on:click={openRepoHelp} title="How to find repository name">
+        <span class="help-icon" on:click={openSetupGuide} title="How to setup GitHub">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="18"
@@ -105,7 +94,7 @@
         >
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span class="help-icon" on:click={openTokenHelp} title="How to get GitHub token">
+        <span class="help-icon" on:click={openSetupGuide} title="How to setup GitHub">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="18"
@@ -148,52 +137,6 @@
     </button>
   </div>
 </div>
-
-{#if showRepoHelp}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="modal-overlay" on:click={closeRepoHelp}>
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="modal-content" on:click={(e) => e.stopPropagation()}>
-      <div class="modal-header">
-        <h3>{$_('settings.github.repoHelp.title')}</h3>
-        <button class="close-button" on:click={closeRepoHelp}>×</button>
-      </div>
-      <div class="modal-body">
-        <img
-          src="/assets/github-repo-help.png"
-          alt="How to find repository name"
-          class="help-image"
-        />
-        <p class="help-description">{$_('settings.github.repoHelp.description')}</p>
-      </div>
-    </div>
-  </div>
-{/if}
-
-{#if showTokenHelp}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="modal-overlay" on:click={closeTokenHelp}>
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="modal-content" on:click={(e) => e.stopPropagation()}>
-      <div class="modal-header">
-        <h3>{$_('settings.github.tokenHelp.title')}</h3>
-        <button class="close-button" on:click={closeTokenHelp}>×</button>
-      </div>
-      <div class="modal-body">
-        <img
-          src="/assets/github-token-help.png"
-          alt="How to create GitHub Personal Access Token"
-          class="help-image"
-        />
-        <p class="help-description">{$_('settings.github.tokenHelp.description')}</p>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <style>
   .github-settings {
@@ -343,81 +286,6 @@
   .help-icon:hover {
     opacity: 1;
     transform: scale(1.1);
-  }
-
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 1rem;
-  }
-
-  .modal-content {
-    background: var(--bg);
-    border-radius: 12px;
-    max-width: 800px;
-    width: 100%;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  }
-
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .modal-header h3 {
-    margin: 0;
-    color: var(--text);
-  }
-
-  .close-button {
-    background: none;
-    border: none;
-    font-size: 2rem;
-    color: var(--text-muted);
-    cursor: pointer;
-    line-height: 1;
-    padding: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-  }
-
-  .close-button:hover {
-    color: var(--text);
-  }
-
-  .modal-body {
-    padding: 1.5rem;
-  }
-
-  .help-image {
-    width: 100%;
-    height: auto;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 1rem;
-  }
-
-  .help-description {
-    color: var(--text-muted);
-    line-height: 1.6;
-    margin: 0;
   }
 
   @media (max-width: 600px) {

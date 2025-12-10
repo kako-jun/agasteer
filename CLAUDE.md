@@ -107,7 +107,7 @@
 
 ### 共有リソース
 
-- **[GitHub Personal Access Tokenの取得](./docs/shared/github-token.md)** - トークン取得の詳細な手順
+- **[GitHub連携セットアップガイド](./docs/user-guide/ja/github-setup.md)** - リポジトリ作成とトークン取得の手順
 
 ---
 
