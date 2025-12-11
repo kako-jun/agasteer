@@ -572,3 +572,255 @@ if (result.variant === 'success') {
 - **警告のみ**: ブロックせず、ユーザーの判断で上書き可能
 - **ネットワークエラー時**: チェック失敗時はPushを続行（使い勝手優先）
 - **force: true**: Git Tree APIでの強制更新は維持（常に成功を優先）
+
+---
+
+## リーフごとのダーティ追跡
+
+### 概要
+
+リーフ単位で未保存の変更を追跡し、UIに赤丸で表示します。これにより、ユーザーはどのリーフが未保存なのかを一目で把握できます。
+
+### データ構造
+
+```typescript
+export interface Leaf {
+  id: UUID
+  title: string
+  noteId: UUID
+  content: string
+  updatedAt: number
+  order: number
+  badgeIcon?: string
+  badgeColor?: string
+  isDirty?: boolean // 未Pushの変更があるかどうか
+}
+```
+
+### ストア構成
+
+```typescript
+// リーフごとのisDirtyから全体のダーティ状態を派生
+export const hasAnyDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
+
+// ノート構造変更フラグ（作成/削除/名前変更など）
+export const isStructureDirty = writable<boolean>(false)
+
+// 全体のダーティ判定（リーフ変更 or 構造変更）
+export const hasAnyChanges = derived(
+  [hasAnyDirty, isStructureDirty],
+  ([$hasAnyDirty, $isStructureDirty]) => $hasAnyDirty || $isStructureDirty
+)
+```
+
+### ヘルパー関数
+
+```typescript
+// 特定のリーフをダーティに設定
+export function setLeafDirty(leafId: string, dirty: boolean = true): void {
+  leaves.update(($leaves) => $leaves.map((l) => (l.id === leafId ? { ...l, isDirty: dirty } : l)))
+}
+
+// 全リーフのダーティをクリア
+export function clearAllDirty(): void {
+  leaves.update(($leaves) => $leaves.map((l) => ({ ...l, isDirty: false })))
+}
+
+// 全変更をクリア（Push/Pull成功時に呼び出し）
+export function clearAllChanges(): void {
+  clearAllDirty()
+  isStructureDirty.set(false)
+}
+
+// 特定ノート配下のリーフがダーティかどうか
+export function isNoteDirty(noteId: string, $leaves: Leaf[]): boolean {
+  return $leaves.some((l) => l.noteId === noteId && l.isDirty)
+}
+```
+
+### UI表示
+
+#### リーフカードの赤丸
+
+```svelte
+<strong class="text-ellipsis">
+  {item.leaf.title}
+  {#if item.leaf.isDirty}
+    <span class="dirty-indicator" title={$_('leaf.unsaved')}></span>
+  {/if}
+</strong>
+```
+
+#### ノートカードの赤丸
+
+```svelte
+<NoteCard
+  note={subNote}
+  isDirty={allLeaves.some((l) => l.noteId === subNote.id && l.isDirty)}
+  ...
+/>
+```
+
+#### CSSスタイル
+
+```css
+.dirty-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+```
+
+### ダーティフラグの設定タイミング
+
+1. **エディタで編集時** (`MarkdownEditor.svelte`)
+
+   ```typescript
+   if (!isOfflineLeaf(leafId) && !isPriorityLeaf(leafId)) {
+     setLeafDirty(leafId)
+   }
+   ```
+
+2. **ノート構造変更時** (`stores.ts`)
+   - ノート/リーフの作成、削除、名前変更、移動
+   - `isStructureDirty.set(true)`
+
+### ダーティフラグのクリアタイミング
+
+1. **Push成功時**: `clearAllChanges()`
+2. **Pull成功時**: `clearAllChanges()`
+
+---
+
+## 自動Push機能
+
+### 概要
+
+編集後5分経過すると自動的にGitHubにPushします。これにより、PWA強制終了時のデータ損失リスクを軽減します。
+
+### 設定値
+
+```typescript
+const AUTO_PUSH_INTERVAL_MS = 5 * 60 * 1000 // 5分（Push間隔）
+const AUTO_PUSH_CHECK_INTERVAL_MS = 30 * 1000 // 30秒（チェック間隔）
+```
+
+### 実装
+
+```typescript
+const autoPushIntervalId = setInterval(async () => {
+  // バックグラウンドでは実行しない
+  if (document.visibilityState !== 'visible') return
+
+  // GitHub設定がなければスキップ
+  if (!$githubConfigured) return
+
+  // Push/Pull中はスキップ
+  if ($isPulling || $isPushing) return
+
+  // ダーティがなければスキップ
+  if (!get(hasAnyChanges)) return
+
+  // 前回Pushから5分経過していなければスキップ
+  const now = Date.now()
+  const lastPush = get(lastPushTime)
+  if (lastPush > 0 && now - lastPush < AUTO_PUSH_INTERVAL_MS) return
+
+  // 初回Pullが完了していなければスキップ
+  if (!isFirstPriorityFetched) return
+
+  // staleチェックを実行
+  const stale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
+  if (stale) {
+    // staleの場合はPullボタンに赤丸を表示してPushしない
+    isStale.set(true)
+    showPushToast($_('toast.staleAutoSave'), 'error')
+    return
+  }
+
+  // 自動Push実行
+  await handleSaveToGitHub()
+}, AUTO_PUSH_CHECK_INTERVAL_MS)
+```
+
+### 動作条件
+
+自動Pushが実行される条件:
+
+1. ブラウザタブがアクティブ（`visibilityState === 'visible'`）
+2. GitHub設定済み
+3. Push/Pull処理中でない
+4. ダーティな変更がある（`hasAnyChanges === true`）
+5. 前回Pushから5分以上経過
+6. 初回Pull完了済み
+7. staleでない（リモートに新しい変更がない）
+
+### stale検出時の動作
+
+リモートに新しい変更がある場合（他のデバイスでPushされた場合）:
+
+1. `isStale`ストアを`true`に設定
+2. Pullボタンに赤丸を表示
+3. トースト通知「他のデバイスで変更があります。先にPullしてください。」
+4. 自動Pushは実行しない
+
+### Pullボタンの赤丸
+
+```svelte
+<!-- Header.svelte -->
+<div class="pull-button-wrapper">
+  <div class="pull-button">
+    <IconButton onClick={onPull} ...>
+      <OctocatPullIcon />
+    </IconButton>
+  </div>
+  {#if isStale}
+    <span class="notification-badge" title={$_('header.staleRemote')}></span>
+  {/if}
+</div>
+```
+
+### 関連ストア
+
+```typescript
+// stale状態（リモートに新しい変更がある）
+export const isStale = writable<boolean>(false)
+
+// 最後にPush成功した時刻
+export const lastPushTime = writable<number>(0)
+```
+
+### 動作フロー
+
+```
+編集開始
+    ↓
+setLeafDirty(leafId) → hasAnyChanges = true
+    ↓
+30秒ごとにチェック
+    ↓
+5分経過 + ダーティあり + アクティブ
+    ↓
+staleチェック
+    ├─ staleでない → 自動Push実行 → lastPushTime更新 → clearAllChanges()
+    └─ stale → isStale = true → Pullボタンに赤丸 → 自動Pushスキップ
+```
+
+### Pull後のstale解除
+
+```typescript
+// Pull成功時
+clearAllChanges()
+isStale.set(false) // Pullしたのでstale状態を解除
+```
+
+### 設計思想
+
+- **5分間隔**: PWA強制終了（5分）より短い間隔で自動保存
+- **バックグラウンド非実行**: バッテリー消費を抑制
+- **staleチェック**: 他デバイスとの競合を防止
+- **ユーザー透過**: 自動で保存されるため意識不要
