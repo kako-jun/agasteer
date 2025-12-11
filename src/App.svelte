@@ -2074,16 +2074,8 @@
     // 交通整理: Pull不可なら何もしない（初回Pullは例外）
     if (!isInitial && !canSync($isPulling, $isPushing).canPull) return
 
-    // 初回Pull以外で、リモートに変更がなければスキップ
-    if (!isInitial) {
-      const isStale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
-      if (!isStale) {
-        showPullToast($_('toast.noRemoteChanges'), 'success')
-        return
-      }
-    }
-
     // 初回Pull以外で未保存の変更がある場合は確認
+    // （ローカル変更を破棄してリモートに合わせたい場合があるので、リモート変更チェックより先）
     if (!isInitial && get(hasAnyChanges)) {
       let message = $_('modal.unsavedChanges')
       if (isClosingSettingsPull && importOccurredInSettings) {
@@ -2092,6 +2084,16 @@
       }
       showConfirm(message, () => executePullInternal(isInitial))
       return
+    }
+
+    // 初回Pull以外で、リモートに変更がなければスキップ
+    // （未保存変更がない場合のみ適用）
+    if (!isInitial) {
+      const isStale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
+      if (!isStale) {
+        showPullToast($_('toast.noRemoteChanges'), 'success')
+        return
+      }
     }
 
     await executePullInternal(isInitial)
@@ -2181,7 +2183,19 @@
       isPullCompleted = true
 
       // leavesストアはonLeafで逐次更新済みなので、最終的なソートのみ
-      const sortedLeaves = result.leaves.sort((a, b) => a.order - b.order)
+      // ただし、Pull中にユーザーが編集したリーフのisDirtyとcontentは保持する
+      const currentLeaves = get(leaves)
+      const dirtyLeafMap = new Map(currentLeaves.filter((l) => l.isDirty).map((l) => [l.id, l]))
+      const sortedLeaves = result.leaves
+        .sort((a, b) => a.order - b.order)
+        .map((leaf) => {
+          const dirtyLeaf = dirtyLeafMap.get(leaf.id)
+          if (dirtyLeaf) {
+            // ユーザーが編集したリーフは、編集内容とダーティ状態を保持
+            return { ...leaf, content: dirtyLeaf.content, isDirty: true }
+          }
+          return leaf
+        })
       leaves.set(sortedLeaves)
       rebuildLeafStats(sortedLeaves, result.notes)
 
@@ -2193,9 +2207,11 @@
       saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
 
       // Pull成功時はGitHubと同期したのでダーティフラグをクリア
-      // tick()で待機し、リアクティブ更新が完全に完了してからクリアする
+      // ただし、Pull中にユーザーが編集した場合はクリアしない
       await tick()
-      clearAllChanges()
+      if (!get(hasAnyChanges)) {
+        clearAllChanges()
+      }
       isStale.set(false) // Pullしたのでstale状態を解除
     } else {
       // Pull失敗時: バックアップからデータを復元
