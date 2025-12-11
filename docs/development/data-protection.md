@@ -824,3 +824,95 @@ isStale.set(false) // Pullしたのでstale状態を解除
 - **バックグラウンド非実行**: バッテリー消費を抑制
 - **staleチェック**: 他デバイスとの競合を防止
 - **ユーザー透過**: 自動で保存されるため意識不要
+
+---
+
+## Pull中の編集保護
+
+### 概要
+
+Pull処理中（優先Pullでエディタが開けるようになった後）にユーザーが編集を行った場合、その編集内容とダーティ状態を保持します。
+
+### 問題
+
+Pull処理の最後で`leaves.set(sortedLeaves)`を呼ぶと、GitHubから取得したデータでストア全体が上書きされ、ユーザーがPull中に編集した内容（`content`と`isDirty`）が失われていました。
+
+### 解決策
+
+Pull完了時に、現在のダーティなリーフを保存し、GitHubのデータとマージします。
+
+```typescript
+// Pull完了時の処理
+const currentLeaves = get(leaves)
+const dirtyLeafMap = new Map(currentLeaves.filter((l) => l.isDirty).map((l) => [l.id, l]))
+const sortedLeaves = result.leaves
+  .sort((a, b) => a.order - b.order)
+  .map((leaf) => {
+    const dirtyLeaf = dirtyLeafMap.get(leaf.id)
+    if (dirtyLeaf) {
+      // ユーザーが編集したリーフは、編集内容とダーティ状態を保持
+      return { ...leaf, content: dirtyLeaf.content, isDirty: true }
+    }
+    return leaf
+  })
+leaves.set(sortedLeaves)
+```
+
+### ダーティフラグのクリア
+
+Pull完了後、ダーティな変更がない場合のみ`clearAllChanges()`を呼びます。
+
+```typescript
+await tick()
+if (!get(hasAnyChanges)) {
+  clearAllChanges()
+}
+```
+
+### handlePullのチェック順序
+
+ダーティ状態の確認は、リモート変更チェックより先に行います。これにより、ローカル変更を破棄してリモートに合わせたい場合でもPullが可能になります。
+
+```typescript
+async function handlePull(isInitial = false) {
+  // 1. 交通整理
+  if (!isInitial && !canSync().canPull) return
+
+  // 2. 未保存の変更がある場合は確認（リモート変更チェックより先）
+  if (!isInitial && get(hasAnyChanges)) {
+    showConfirm(message, () => executePullInternal(isInitial))
+    return
+  }
+
+  // 3. リモートに変更がなければスキップ（未保存変更がない場合のみ）
+  if (!isInitial) {
+    const isStale = await checkIfStaleEdit(...)
+    if (!isStale) {
+      showPullToast('リモートに変更がありません')
+      return
+    }
+  }
+
+  await executePullInternal(isInitial)
+}
+```
+
+### 動作フロー
+
+```
+Pull開始
+    ↓
+優先Pull完了 → エディタで開ける
+    ↓
+ユーザーが編集 → setLeafDirty(leafId) → isDirty = true
+    ↓
+残りのPull完了
+    ↓
+leaves.set()前にダーティリーフを保存
+    ↓
+GitHubデータとマージ（ダーティリーフは編集内容を保持）
+    ↓
+hasAnyChanges = true → clearAllChanges()をスキップ
+    ↓
+ダーティ状態が保持される
+```
