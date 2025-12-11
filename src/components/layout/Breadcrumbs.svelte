@@ -46,6 +46,8 @@
 
   function toggleWorldDropdown(e: MouseEvent) {
     e.stopPropagation()
+    // 他のドロップダウンを閉じる
+    openDropdownIndex = null
     if (!worldDropdownOpen && worldSeparatorButton) {
       // ボタンの位置を取得してメニューの位置を計算
       const rect = worldSeparatorButton.getBoundingClientRect()
@@ -93,6 +95,8 @@
   }
 
   function toggleDropdown(index: number) {
+    // ワールドドロップダウンを閉じる
+    worldDropdownOpen = false
     if (openDropdownIndex === index) {
       openDropdownIndex = null
     } else {
@@ -406,6 +410,11 @@
     background: var(--accent);
   }
 
+  .dropdown-item:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   .breadcrumb-item {
     display: flex;
     align-items: center;
@@ -463,29 +472,36 @@
     background: none;
     border: none;
     color: var(--text-muted);
-    padding: 0 0.25rem;
-    font-size: 1rem;
+    padding: 0.25rem;
+    font-size: 0.9rem;
     cursor: pointer;
-    transition: color 0.2s;
+    border-radius: 4px;
+    transition: background 0.2s;
   }
 
   .world-separator:hover {
+    background: var(--surface-2);
     color: var(--accent);
   }
 
+  /* world-menuをdropdown-menuと同じ見た目に */
   :global(.world-menu) {
     position: fixed;
     background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    min-width: 140px;
-    z-index: 210;
+    min-width: 150px;
+    max-width: 250px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
   }
 
   :global(.world-item) {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.5rem;
     width: 100%;
     padding: 0.5rem 0.75rem;
@@ -496,6 +512,17 @@
     color: var(--text);
     font-size: 0.85rem;
     transition: background 0.15s;
+  }
+
+  :global(.world-icon) {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  :global(.world-icon svg) {
+    width: 16px;
+    height: 16px;
   }
 
   :global(.world-item:hover:not(:disabled)) {
@@ -517,18 +544,8 @@
     cursor: not-allowed;
   }
 
-  :global(.world-icon) {
-    display: flex;
-    align-items: center;
-  }
-
-  :global(.world-icon svg) {
-    width: 16px;
-    height: 16px;
-  }
-
-  :global(.loading-indicator) {
-    margin-left: auto;
+  .loading-indicator {
+    margin-left: 0.5rem;
     animation: blink 1s infinite;
   }
 
