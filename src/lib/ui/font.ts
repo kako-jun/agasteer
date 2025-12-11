@@ -18,9 +18,10 @@ let currentFontStyleElement: HTMLStyleElement | null = null
 // システム等幅Webフォント（エディタ + codeのみ）
 const SYSTEM_MONO_FONT_FAMILY = 'SystemMonoFont'
 const SYSTEM_MONO_FONT_KEY = 'system-mono'
-const SYSTEM_MONO_FONT_VERSION = '1.0'
-// Google Fonts BIZ UDGothic (等幅)
-const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=BIZ+UDGothic&display=swap'
+const SYSTEM_MONO_FONT_VERSION = '1.1' // バージョンアップでキャッシュ更新
+// Google Fonts BIZ UDGothic（ttf単一ファイル）
+const GOOGLE_FONTS_TTF_URL =
+  'https://fonts.gstatic.com/s/bizudgothic/v12/daafSTouBF7RUjnbt8p3LuKttQ.ttf'
 let currentMonoFontStyleElement: HTMLStyleElement | null = null
 
 /**
@@ -75,6 +76,10 @@ export async function applyCustomFont(font: CustomFont): Promise<void> {
       src: url(${url}) format('truetype');
       font-weight: normal;
       font-style: normal;
+    }
+
+    :root {
+      --font-mono: '${CUSTOM_FONT_FAMILY}', 'Courier New', Menlo, Consolas, monospace;
     }
 
     body,
@@ -148,56 +153,6 @@ interface SystemMonoFont extends CustomFont {
 }
 
 /**
- * Google FontsのCSSからwoff2 URLを抽出
- */
-async function extractWoff2UrlFromGoogleFonts(cssUrl: string): Promise<string> {
-  const response = await fetch(cssUrl, {
-    headers: {
-      // woff2を取得するためにモダンブラウザのUser-Agentを指定
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Google Fonts CSS: ${response.status}`)
-  }
-
-  const css = await response.text()
-
-  // CSSからwoff2 URLを抽出（src: url(...) format('woff2')）
-  const match = css.match(/src:\s*url\(([^)]+)\)\s*format\(['"]woff2['"]\)/)
-  if (!match) {
-    throw new Error('Could not find woff2 URL in Google Fonts CSS')
-  }
-
-  return match[1]
-}
-
-/**
- * Google Fontsからフォントをダウンロード
- */
-async function fetchSystemMonoFontFromGoogle(): Promise<SystemMonoFont> {
-  // 1. CSSからwoff2 URLを取得
-  const woff2Url = await extractWoff2UrlFromGoogleFonts(GOOGLE_FONTS_CSS_URL)
-
-  // 2. woff2ファイルをダウンロード
-  const response = await fetch(woff2Url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch woff2 font: ${response.status}`)
-  }
-
-  const arrayBuffer = await response.arrayBuffer()
-
-  return {
-    name: SYSTEM_MONO_FONT_KEY,
-    data: arrayBuffer,
-    type: 'font/woff2',
-    version: SYSTEM_MONO_FONT_VERSION,
-  }
-}
-
-/**
  * システム等幅フォントをCSSに登録して適用（--font-monoのみ）
  */
 function applySystemMonoFont(font: CustomFont): void {
@@ -210,15 +165,12 @@ function applySystemMonoFont(font: CustomFont): void {
     currentMonoFontStyleElement.remove()
   }
 
-  // フォーマットを判定
-  const format = font.type === 'font/woff2' ? 'woff2' : 'truetype'
-
   // 新しいスタイル要素を作成（--font-monoのみを上書き）
   const style = document.createElement('style')
   style.textContent = `
     @font-face {
       font-family: '${SYSTEM_MONO_FONT_FAMILY}';
-      src: url(${url}) format('${format}');
+      src: url(${url}) format('truetype');
       font-weight: normal;
       font-style: normal;
     }
@@ -244,19 +196,31 @@ export async function loadAndApplySystemMonoFont(): Promise<boolean> {
     if (cached && cached.version === SYSTEM_MONO_FONT_VERSION) {
       // キャッシュがあり、バージョンが一致していれば使用
       applySystemMonoFont(cached)
+      console.log('System mono font loaded from IndexedDB cache')
       return true
     }
 
     // キャッシュがないかバージョンが古い場合はダウンロード
     console.log('Downloading system mono font from Google Fonts...')
-    const font = await fetchSystemMonoFontFromGoogle()
+    const response = await fetch(GOOGLE_FONTS_TTF_URL)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch font: ${response.status}`)
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const font: SystemMonoFont = {
+      name: SYSTEM_MONO_FONT_KEY,
+      data: arrayBuffer,
+      type: 'font/ttf',
+      version: SYSTEM_MONO_FONT_VERSION,
+    }
 
     // IndexedDBに保存
     await saveCustomFont(font)
 
     // 適用
     applySystemMonoFont(font)
-    console.log('System mono font applied successfully')
+    console.log('System mono font (BIZ UDGothic) downloaded and applied')
 
     return true
   } catch (error) {

@@ -171,6 +171,9 @@
         color: 'var(--text)',
         border: 'none',
       },
+      '.cm-scroller': {
+        fontFamily: 'var(--font-mono)',
+      },
       '.cm-content': {
         caretColor: 'var(--accent)',
       },
@@ -223,6 +226,9 @@
           backgroundColor: 'var(--bg)',
           color: 'var(--text)',
           border: 'none',
+        },
+        '.cm-scroller': {
+          fontFamily: 'var(--font-mono)',
         },
         '.cm-content': {
           caretColor: 'var(--accent)',
@@ -582,7 +588,6 @@
 
   :global(.cm-scroller) {
     overflow: auto;
-    font-family: var(--font-mono);
     font-size: 14px;
     line-height: 1.6;
     margin: 0 !important;
