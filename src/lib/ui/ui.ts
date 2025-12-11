@@ -21,6 +21,7 @@ export interface ModalState {
   message: string
   type: 'confirm' | 'alert' | 'prompt'
   callback: (() => void) | null
+  cancelCallback?: (() => void) | null
   promptCallback?: ((value: string) => void) | null
   placeholder?: string
   position: ModalPosition
@@ -79,14 +80,20 @@ export function showPullToast(message: string, variant: 'success' | 'error' | ''
 export function showConfirm(
   message: string,
   onConfirm: () => void,
+  positionOrOnCancel: ModalPosition | (() => void) = 'center',
   position: ModalPosition = 'center'
 ) {
+  // 第3引数がModalPositionか関数かで分岐
+  const onCancel = typeof positionOrOnCancel === 'function' ? positionOrOnCancel : undefined
+  const actualPosition = typeof positionOrOnCancel === 'string' ? positionOrOnCancel : position
+
   modalState.set({
     show: true,
     message,
     type: 'confirm',
     callback: onConfirm,
-    position,
+    cancelCallback: onCancel,
+    position: actualPosition,
   })
 }
 

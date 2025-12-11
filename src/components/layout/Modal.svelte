@@ -8,9 +8,17 @@
   export let type: ModalType
   export let position: ModalPosition = 'center'
   export let onConfirm: (() => void) | null
+  export let onCancel: (() => void) | null = null
   export let onPromptSubmit: ((value: string) => void) | null = null
   export let placeholder: string = ''
   export let onClose: () => void
+
+  function handleClose() {
+    if (onCancel) {
+      onCancel()
+    }
+    onClose()
+  }
 
   let inputValue = ''
   let inputElement: HTMLInputElement | null = null
@@ -47,7 +55,7 @@
         handlePromptSubmit()
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        onClose()
+        handleClose()
       }
     }
   }
@@ -60,7 +68,7 @@
     class="modal-overlay"
     class:bottom-left={position === 'bottom-left'}
     class:bottom-right={position === 'bottom-right'}
-    on:click={onClose}
+    on:click={handleClose}
     role="presentation"
   >
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -80,10 +88,10 @@
       {/if}
       <div class="modal-buttons">
         {#if type === 'confirm'}
-          <button class="secondary" on:click={onClose}>{$_('common.cancel')}</button>
+          <button class="secondary" on:click={handleClose}>{$_('common.cancel')}</button>
           <button class="primary" on:click={handleConfirm}>{$_('common.ok')}</button>
         {:else if type === 'prompt'}
-          <button class="secondary" on:click={onClose}>{$_('common.cancel')}</button>
+          <button class="secondary" on:click={handleClose}>{$_('common.cancel')}</button>
           <button class="primary" on:click={handlePromptSubmit} disabled={!inputValue.trim()}
             >{$_('common.ok')}</button
           >

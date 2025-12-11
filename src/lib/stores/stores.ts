@@ -35,7 +35,34 @@ export const isArchiveLoaded = writable<boolean>(false)
 // 現在のワールド
 // ============================================
 export const currentWorld = writable<WorldType>('home')
-export const isDirty = writable<boolean>(false)
+
+// isDirtyをLocalStorageに永続化するカスタムストア
+// PWA強制終了後も未保存状態を検出可能にする
+const IS_DIRTY_KEY = 'agasteer_isDirty'
+
+function createIsDirtyStore() {
+  // LocalStorageから初期値を読み込み
+  const stored = localStorage.getItem(IS_DIRTY_KEY)
+  const initial = stored === 'true'
+
+  const { subscribe, set: originalSet, update } = writable<boolean>(initial)
+
+  return {
+    subscribe,
+    set: (value: boolean) => {
+      originalSet(value)
+      // LocalStorageに永続化
+      if (value) {
+        localStorage.setItem(IS_DIRTY_KEY, 'true')
+      } else {
+        localStorage.removeItem(IS_DIRTY_KEY)
+      }
+    },
+    update,
+  }
+}
+
+export const isDirty = createIsDirtyStore()
 // Pull成功時のリモートpushCountを保持（stale編集検出用）
 export const lastPulledPushCount = writable<number>(0)
 

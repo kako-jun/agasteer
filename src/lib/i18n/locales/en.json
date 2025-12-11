@@ -206,6 +206,7 @@
   "modal": {
     "staleEdit": "Remote has newer changes. Saving will overwrite them. Continue?",
     "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
+    "unsavedChangesOnStartup": "Your previous edits were not saved to GitHub.\nPulling will lose them. Pull anyway?\n\nSelect 'Cancel' to keep local changes.",
     "deleteRootNote": "Delete this note? Its direct sub-notes and leaves will also be deleted.",
     "deleteSubNote": "Delete this sub-note? Its leaves will also be deleted.",
     "deleteLeaf": "Delete this leaf?",

@@ -42,6 +42,8 @@
   import {
     clearAllData,
     loadSettings,
+    loadNotes,
+    loadLeaves,
     saveNotes,
     saveLeaves,
     saveOfflineLeaf,
@@ -506,8 +508,34 @@
       // GitHub設定チェック
       const isConfigured = loadedSettings.token && loadedSettings.repoName
       if (isConfigured) {
-        // 設定済みの場合は通常通り初回Pullを実行
-        await handlePull(true)
+        // PWA強制終了等で未保存の変更が残っている場合は確認
+        if (get(isDirty)) {
+          showConfirm(
+            $_('modal.unsavedChangesOnStartup'),
+            // OK: Pullを実行（ローカルの変更は破棄）
+            async () => {
+              await handlePull(true)
+            },
+            // Cancel: Pullスキップ、IndexedDBから読み込んで操作可能に
+            async () => {
+              try {
+                const savedNotes = await loadNotes()
+                const savedLeaves = await loadLeaves()
+                notes.set(savedNotes)
+                leaves.set(savedLeaves)
+                isFirstPriorityFetched = true
+                restoreStateFromUrl(false)
+              } catch (error) {
+                console.error('Failed to load from IndexedDB:', error)
+                // 失敗した場合はPullを実行
+                await handlePull(true)
+              }
+            }
+          )
+        } else {
+          // 設定済みで未保存の変更がない場合は通常通り初回Pullを実行
+          await handlePull(true)
+        }
       } else {
         // 未設定の場合はウェルカムモーダルを表示
         showWelcome = true
@@ -2270,6 +2298,7 @@
       type={$modalState.type}
       position={$modalState.position}
       onConfirm={$modalState.callback}
+      onCancel={$modalState.cancelCallback}
       onPromptSubmit={$modalState.promptCallback}
       placeholder={$modalState.placeholder || ''}
       onClose={closeModal}
