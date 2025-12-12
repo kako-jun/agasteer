@@ -260,7 +260,7 @@
   />
 {/if}
 
-<!-- ガラス効果オーバーレイは廃止（オフラインリーフを使えるようにするため） -->
-{#if $state.isLoadingUI || $isPushing}
+<!-- ガラス効果オーバーレイ（オフラインリーフ表示中は除外 - GitHub同期と無関係なため） -->
+{#if ($state.isLoadingUI || $isPushing) && !(currentLeaf && isOfflineLeaf(currentLeaf.id))}
   <Loading />
 {/if}
