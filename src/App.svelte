@@ -2,7 +2,7 @@
   import './App.css'
   import { onMount, tick, setContext } from 'svelte'
   import { writable, get } from 'svelte/store'
-  import type { Note, Leaf, Breadcrumb, View, Metadata, WorldType } from './lib/types'
+  import type { Note, Leaf, Breadcrumb, View, Metadata, WorldType, SearchMatch } from './lib/types'
   import * as nav from './lib/navigation'
   import type { Pane } from './lib/navigation'
 
@@ -821,14 +821,23 @@
     syncNavState(state)
   }
 
-  async function handleSearchResultClick(leafId: string, line: number) {
-    const leaf = $leaves.find((l) => l.id === leafId)
-    if (leaf) {
-      selectLeaf(leaf, 'left')
-      // DOM更新を待ってから行ジャンプ
-      await tick()
-      if (leftEditorView && leftEditorView.scrollToLine) {
-        leftEditorView.scrollToLine(line)
+  async function handleSearchResultClick(result: SearchMatch) {
+    if (result.matchType === 'note') {
+      // ノートマッチ: ノートビューを開く
+      const note = $notes.find((n) => n.id === result.noteId)
+      if (note) {
+        selectNote(note, 'left')
+      }
+    } else {
+      // リーフタイトル/本文マッチ: リーフを開いて該当行にジャンプ
+      const leaf = $leaves.find((l) => l.id === result.leafId)
+      if (leaf) {
+        selectLeaf(leaf, 'left')
+        // DOM更新を待ってから行ジャンプ
+        await tick()
+        if (leftEditorView && leftEditorView.scrollToLine) {
+          leftEditorView.scrollToLine(result.line)
+        }
       }
     }
   }

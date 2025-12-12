@@ -15,7 +15,8 @@
   } from '../../lib/utils'
   import type { SearchMatch } from '../../lib/types'
 
-  export let onResultClick: (leafId: string, line: number) => void
+  // マッチタイプに応じたジャンプ処理
+  export let onResultClick: (result: SearchMatch) => void
 
   let inputElement: HTMLInputElement
   let containerElement: HTMLDivElement
@@ -40,7 +41,7 @@
         result = $searchResults[0]
       }
       if (result) {
-        onResultClick(result.leafId, result.line)
+        onResultClick(result)
         // 検索結果は閉じずに開いたままにする
       }
     }
@@ -57,7 +58,7 @@
   }
 
   function handleResultClick(result: SearchMatch) {
-    onResultClick(result.leafId, result.line)
+    onResultClick(result)
     // 検索結果は閉じずに開いたままにする
   }
 

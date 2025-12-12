@@ -98,14 +98,18 @@ export interface ModalState {
   placeholder?: string
 }
 
+// 検索マッチの種類（優先順: note > leafTitle > content）
+export type SearchMatchType = 'note' | 'leafTitle' | 'content'
+
 // 検索結果の型
 export interface SearchMatch {
-  leafId: UUID
-  leafTitle: string
+  matchType: SearchMatchType // マッチの種類
+  leafId: UUID // ノートマッチの場合は空文字列
+  leafTitle: string // ノートマッチの場合は空文字列
   noteName: string
   noteId: UUID
   path: string // ノート/サブノート/リーフのパス形式
-  line: number // マッチ行番号
+  line: number // マッチ行番号（ノートマッチの場合は0）
   snippet: string // マッチ箇所のスニペット（前後N文字含む）
   matchStart: number // スニペット内のマッチ開始位置
   matchEnd: number // スニペット内のマッチ終了位置

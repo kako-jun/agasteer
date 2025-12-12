@@ -1,15 +1,22 @@
 /**
  * 検索機能
- * 全リーフを横断検索するロジック・ストア・ハンドラー
+ * ノート名・リーフ名・本文を横断検索するロジック・ストア・ハンドラー
  */
 
 import { writable, derived, get } from 'svelte/store'
-import type { Leaf, Note, SearchMatch } from '../types'
+import type { Leaf, Note, SearchMatch, SearchMatchType } from '../types'
 import { leaves, notes } from '../stores'
 
 // ========== 定数 ==========
 const MAX_RESULTS = 50
 const SNIPPET_CONTEXT_CHARS = 30
+
+// マッチタイプの優先順位（数値が小さいほど優先）
+const MATCH_TYPE_PRIORITY: Record<SearchMatchType, number> = {
+  note: 0,
+  leafTitle: 1,
+  content: 2,
+}
 
 // ========== ストア ==========
 export const searchQuery = writable<string>('')
@@ -19,15 +26,28 @@ export const selectedResultIndex = writable<number>(-1)
 // 派生ストア: 検索結果（クエリ変更時に自動計算）
 export const searchResults = derived([searchQuery, leaves, notes], ([$query, $leaves, $notes]) => {
   if (!$query.trim()) return []
-  return searchLeaves($query, $leaves, $notes)
+  return searchAll($query, $leaves, $notes)
 })
 
 // ========== 検索ロジック ==========
 
 /**
- * ノート/サブノート/リーフのパスを構築
+ * ノートのパスを構築（親ノート/ノート）
  */
-function buildPath(note: Note | undefined, leaf: Leaf, noteMap: Map<string, Note>): string {
+function buildNotePath(note: Note, noteMap: Map<string, Note>): string {
+  if (note.parentId) {
+    const parentNote = noteMap.get(note.parentId)
+    if (parentNote) {
+      return `${parentNote.name}/${note.name}`
+    }
+  }
+  return note.name
+}
+
+/**
+ * リーフのパスを構築（ノート/サブノート/リーフ）
+ */
+function buildLeafPath(note: Note | undefined, leaf: Leaf, noteMap: Map<string, Note>): string {
   if (!note) return leaf.title
 
   // 親ノートがあればサブノート
@@ -42,16 +62,67 @@ function buildPath(note: Note | undefined, leaf: Leaf, noteMap: Map<string, Note
 }
 
 /**
- * リーフを検索してマッチ結果を返す
+ * ノート名・リーフ名・本文を検索してマッチ結果を返す
+ * 優先順位: ノート名 > リーフ名 > 本文
  */
-export function searchLeaves(query: string, allLeaves: Leaf[], allNotes: Note[]): SearchMatch[] {
+export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): SearchMatch[] {
   const normalizedQuery = query.toLowerCase().trim()
   if (!normalizedQuery) return []
 
   const noteMap = new Map(allNotes.map((n) => [n.id, n]))
   const results: SearchMatch[] = []
 
+  // 1. ノート名を検索
+  for (const note of allNotes) {
+    if (results.length >= MAX_RESULTS) break
+
+    const noteName = note.name.toLowerCase()
+    const matchIndex = noteName.indexOf(normalizedQuery)
+    if (matchIndex !== -1) {
+      const path = buildNotePath(note, noteMap)
+      results.push({
+        matchType: 'note',
+        leafId: '',
+        leafTitle: '',
+        noteName: note.name,
+        noteId: note.id,
+        path,
+        line: 0,
+        snippet: note.name,
+        matchStart: matchIndex,
+        matchEnd: matchIndex + normalizedQuery.length,
+      })
+    }
+  }
+
+  // 2. リーフ名を検索
   for (const leaf of allLeaves) {
+    if (results.length >= MAX_RESULTS) break
+
+    const leafTitle = leaf.title.toLowerCase()
+    const matchIndex = leafTitle.indexOf(normalizedQuery)
+    if (matchIndex !== -1) {
+      const note = noteMap.get(leaf.noteId)
+      const path = buildLeafPath(note, leaf, noteMap)
+      results.push({
+        matchType: 'leafTitle',
+        leafId: leaf.id,
+        leafTitle: leaf.title,
+        noteName: note?.name ?? '',
+        noteId: leaf.noteId,
+        path,
+        line: 1, // タイトルマッチは1行目へ
+        snippet: leaf.title,
+        matchStart: matchIndex,
+        matchEnd: matchIndex + normalizedQuery.length,
+      })
+    }
+  }
+
+  // 3. 本文を検索
+  for (const leaf of allLeaves) {
+    if (results.length >= MAX_RESULTS) break
+
     const content = leaf.content.toLowerCase()
     let searchIndex = 0
 
@@ -68,11 +139,12 @@ export function searchLeaves(query: string, allLeaves: Leaf[], allNotes: Note[])
       )
 
       results.push({
+        matchType: 'content',
         leafId: leaf.id,
         leafTitle: leaf.title,
         noteName: note?.name ?? '',
         noteId: leaf.noteId,
-        path: buildPath(note, leaf, noteMap),
+        path: buildLeafPath(note, leaf, noteMap),
         line: getLineNumber(leaf.content, matchIndex),
         snippet,
         matchStart,
@@ -82,11 +154,19 @@ export function searchLeaves(query: string, allLeaves: Leaf[], allNotes: Note[])
       // 同じリーフで複数マッチがある場合、次のマッチを探す
       searchIndex = matchIndex + normalizedQuery.length
     }
-
-    if (results.length >= MAX_RESULTS) break
   }
 
+  // 優先順位でソート（note > leafTitle > content）
+  results.sort((a, b) => MATCH_TYPE_PRIORITY[a.matchType] - MATCH_TYPE_PRIORITY[b.matchType])
+
   return results
+}
+
+/**
+ * リーフの本文を検索してマッチ結果を返す（後方互換性のため残す）
+ */
+export function searchLeaves(query: string, allLeaves: Leaf[], allNotes: Note[]): SearchMatch[] {
+  return searchAll(query, allLeaves, allNotes).filter((r) => r.matchType === 'content')
 }
 
 /**
