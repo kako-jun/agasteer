@@ -203,7 +203,6 @@
     "pushSuccess": "Pushしました",
     "pushFailed": "初回Pullが完了するまで保存できません",
     "noLeaves": "保存するリーフがありません",
-    "noGitHubSettings": "アーカイブにはGitHub設定が必要です",
     "needInitialPullDownload": "初回Pullが完了するまでダウンロードできません",
     "imageDownloaded": "画像をダウンロードしました",
     "imageDownloadFailed": "画像ダウンロードに失敗しました",

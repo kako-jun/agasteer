@@ -202,7 +202,6 @@
     "pushSuccess": "Pushed successfully",
     "pushFailed": "Cannot save until initial pull completes",
     "noLeaves": "No leaves to save",
-    "noGitHubSettings": "GitHub settings required for archive",
     "needInitialPullDownload": "Cannot download until the initial pull completes",
     "imageDownloaded": "Image downloaded",
     "imageDownloadFailed": "Failed to download image",

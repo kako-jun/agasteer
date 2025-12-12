@@ -983,8 +983,7 @@
           isArchiveLoading = false
         }
       } else {
-        // トークンがない場合はアーカイブ操作不可
-        showPullToast($_('toast.noGitHubSettings'), 'error')
+        // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
         return
       }
     }
@@ -992,20 +991,60 @@
     const sourceWorld = $currentWorld
     const sourceNotes = sourceWorld === 'home' ? $notes : $archiveNotes
     const sourceLeaves = sourceWorld === 'home' ? $leaves : $archiveLeaves
-    const targetNotes = targetWorld === 'home' ? $notes : $archiveNotes
-    const targetLeaves = targetWorld === 'home' ? $leaves : $archiveLeaves
 
-    // 同じ名前のノートがあるかチェック
-    const rootTargetNotes = targetNotes.filter((n) => !n.parentId)
-    if (rootTargetNotes.some((n) => n.name === note.name)) {
+    // ノートを見つける
+    const noteToMove = sourceNotes.find((n) => n.id === note.id)
+    if (!noteToMove) return
+
+    // ソースノートの親のパス（祖先ノートのリスト）を構築
+    const getParentPath = (n: Note): Note[] => {
+      const path: Note[] = []
+      let current: Note | undefined = n.parentId
+        ? sourceNotes.find((sn) => sn.id === n.parentId)
+        : undefined
+      while (current) {
+        path.unshift(current)
+        current = current.parentId
+          ? sourceNotes.find((sn) => sn.id === current!.parentId)
+          : undefined
+      }
+      return path
+    }
+    const parentPath = getParentPath(noteToMove)
+
+    // ターゲット側で同じ親構造を見つけるか作成する
+    let currentTargetNotes = targetWorld === 'home' ? [...$notes] : [...$archiveNotes]
+    let targetParentId: string | undefined
+
+    for (const pathNote of parentPath) {
+      const existing = currentTargetNotes.find(
+        (n) => n.name === pathNote.name && n.parentId === targetParentId
+      )
+      if (existing) {
+        targetParentId = existing.id
+      } else {
+        // 新しい親ノートを作成
+        const siblingsAtLevel = currentTargetNotes.filter((n) => n.parentId === targetParentId)
+        const maxOrder = Math.max(0, ...siblingsAtLevel.map((n) => n.order))
+        const newNote: Note = {
+          id: crypto.randomUUID(),
+          name: pathNote.name,
+          parentId: targetParentId,
+          order: maxOrder + 1,
+        }
+        currentTargetNotes = [...currentTargetNotes, newNote]
+        targetParentId = newNote.id
+      }
+    }
+
+    // 同じ階層で同じ名前のノートがあるかチェック
+    const siblingsInTarget = currentTargetNotes.filter((n) => n.parentId === targetParentId)
+    if (siblingsInTarget.some((n) => n.name === noteToMove.name)) {
       await showAlert($_('modal.duplicateNoteDestination'))
       return
     }
 
     // ノートとその子ノート、リーフを収集
-    const noteToMove = sourceNotes.find((n) => n.id === note.id)
-    if (!noteToMove) return
-
     const childNotes = sourceNotes.filter((n) => n.parentId === note.id)
     const notesToMove = [noteToMove, ...childNotes]
     const noteIds = new Set(notesToMove.map((n) => n.id))
@@ -1015,11 +1054,14 @@
     const newSourceNotes = sourceNotes.filter((n) => !noteIds.has(n.id))
     const newSourceLeaves = sourceLeaves.filter((l) => !noteIds.has(l.noteId))
 
-    // ターゲットに追加（ルートノートとして配置、orderを再計算）
-    const maxOrder = Math.max(0, ...rootTargetNotes.map((n) => n.order))
-    const movedNote: Note = { ...noteToMove, parentId: undefined, order: maxOrder + 1 }
+    // ターゲットに追加（階層を保持してparentIdを更新）
+    const targetSiblings = currentTargetNotes.filter((n) => n.parentId === targetParentId)
+    const maxOrder = Math.max(0, ...targetSiblings.map((n) => n.order))
+    const movedNote: Note = { ...noteToMove, parentId: targetParentId, order: maxOrder + 1 }
+    // 子ノートはparentIdを維持（移動するノートのIDは変わらないので）
     const movedChildNotes = childNotes.map((n) => ({ ...n }))
-    const newTargetNotes = [...targetNotes, movedNote, ...movedChildNotes]
+    const newTargetNotes = [...currentTargetNotes, movedNote, ...movedChildNotes]
+    const targetLeaves = targetWorld === 'home' ? $leaves : $archiveLeaves
     const newTargetLeaves = [...targetLeaves, ...leavesToMove]
 
     // ストアを更新
@@ -1103,8 +1145,7 @@
           isArchiveLoading = false
         }
       } else {
-        // トークンがない場合はアーカイブ操作不可
-        showPullToast($_('toast.noGitHubSettings'), 'error')
+        // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
         return
       }
     }
