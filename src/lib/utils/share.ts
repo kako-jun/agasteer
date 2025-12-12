@@ -17,7 +17,7 @@ export interface ShareHandlers {
  * URLをクリップボードにコピー
  */
 export function handleCopyUrl(pane: Pane, translate: (key: string) => string): void {
-  const url = window.location.href
+  const url = window.location.href.replace(/\/$/, '')
   navigator.clipboard
     .writeText(url)
     .then(() => {
