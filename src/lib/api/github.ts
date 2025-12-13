@@ -1050,8 +1050,10 @@ export async function pullFromGitHub(
         rateLimitInfo: treeRateLimit,
       }
     }
-    // 空のリポジトリ（コミットがない）の場合は404が返る → 空のデータで成功扱い
-    if (treeRes.status === 404) {
+    // 空のリポジトリ（コミットがない）の場合は404または409が返る → 空のデータで成功扱い
+    // 404: ブランチが存在しない
+    // 409: Conflict - Git Repository is empty（GitHub APIの仕様）
+    if (treeRes.status === 404 || treeRes.status === 409) {
       // コールバックを呼んでUIを正常状態に遷移させる
       // 1. onStructure: ノート構造を設定（空）
       options?.onStructure?.([], defaultMetadata, [])
@@ -1504,6 +1506,16 @@ export async function pullArchive(settings: Settings): Promise<ArchivePullResult
         leaves: [],
         metadata: defaultMetadata,
         rateLimitInfo: treeRateLimit,
+      }
+    }
+    // 空のリポジトリの場合は404または409が返る → 空のデータで成功扱い
+    if (treeRes.status === 404 || treeRes.status === 409) {
+      return {
+        success: true,
+        message: 'github.pullOk',
+        notes: [],
+        leaves: [],
+        metadata: defaultMetadata,
       }
     }
     if (!treeRes.ok) {
