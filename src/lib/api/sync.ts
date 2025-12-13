@@ -155,12 +155,17 @@ export async function executePull(settings: Settings, options?: PullOptions): Pr
  *
  * @param settings - GitHub設定
  * @param lastPulledPushCount - 最後にPullしたときのpushCount
- * @returns staleならtrue
+ * @returns staleならtrue、チェック不可（設定無効、ネットワークエラー等）の場合もtrue（Pullを進めてエラーを表示）
  */
 export async function checkIfStaleEdit(
   settings: Settings,
   lastPulledPushCount: number
 ): Promise<boolean> {
   const remotePushCount = await fetchRemotePushCount(settings)
+  // -1はチェック不可（設定無効、認証エラー、ネットワークエラー等）
+  // この場合はPullを進めて適切なエラーメッセージを表示
+  if (remotePushCount === -1) {
+    return true
+  }
   return remotePushCount > lastPulledPushCount
 }

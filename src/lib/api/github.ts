@@ -1307,12 +1307,13 @@ export async function pullFromGitHub(
 
 /**
  * リモートのpushCountを取得（stale編集検出用）
- * @returns pushCount（取得失敗時は0）
+ * @returns pushCount（チェック不可の場合は-1、空リポジトリは0）
  */
 export async function fetchRemotePushCount(settings: Settings): Promise<number> {
   const validation = validateGitHubSettings(settings)
   if (!validation.valid) {
-    return 0
+    // 設定が無効な場合は-1を返す（チェック不可）
+    return -1
   }
 
   try {
@@ -1330,10 +1331,19 @@ export async function fetchRemotePushCount(settings: Settings): Promise<number> 
         return parsed.pushCount || 0
       }
     }
+    // 404等の場合（空リポジトリ）は0を返す
+    if (metadataRes.status === 404) {
+      return 0
+    }
+    // 認証エラーや権限エラーは-1（チェック不可）
+    if (metadataRes.status === 401 || metadataRes.status === 403) {
+      return -1
+    }
     return 0
   } catch (e) {
     console.warn('Failed to fetch remote pushCount:', e)
-    return 0
+    // ネットワークエラー等は-1（チェック不可）
+    return -1
   }
 }
 
