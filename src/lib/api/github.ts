@@ -485,61 +485,76 @@ export async function pushAllWithTreeAPI(
     if (refRateLimit.isRateLimited) {
       return { success: false, message: 'github.rateLimited', rateLimitInfo: refRateLimit }
     }
-    if (!refRes.ok) {
-      return { success: false, message: 'github.branchFetchFailed' }
-    }
-    const refData = await refRes.json()
-    const currentCommitSha = refData.object.sha
 
-    // 3. 現在のコミットを取得してTreeのSHAを取得
-    const commitRes = await fetch(
-      `https://api.github.com/repos/${settings.repoName}/git/commits/${currentCommitSha}`,
-      { headers }
-    )
-    // レート制限チェック
-    const commitRateLimit = parseRateLimitResponse(commitRes)
-    if (commitRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: commitRateLimit }
-    }
-    if (!commitRes.ok) {
-      return { success: false, message: 'github.commitFetchFailed' }
-    }
-    const commitData = await commitRes.json()
-    const baseTreeSha = commitData.tree.sha
+    // 空のリポジトリかどうか（ブランチがまだない場合）
+    const isEmptyRepo = refRes.status === 404
+    let currentCommitSha: string | null = null
+    let baseTreeSha: string | null = null
 
-    // 4. 既存ツリーを取得
-    const existingTreeRes = await fetch(
-      `https://api.github.com/repos/${settings.repoName}/git/trees/${baseTreeSha}?recursive=1`,
-      { headers }
-    )
-    // レート制限チェック
-    const existingTreeRateLimit = parseRateLimitResponse(existingTreeRes)
-    if (existingTreeRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: existingTreeRateLimit }
+    if (!isEmptyRepo) {
+      if (!refRes.ok) {
+        return { success: false, message: 'github.branchFetchFailed' }
+      }
+      const refData = await refRes.json()
+      currentCommitSha = refData.object.sha
+
+      // 3. 現在のコミットを取得してTreeのSHAを取得
+      const commitRes = await fetch(
+        `https://api.github.com/repos/${settings.repoName}/git/commits/${currentCommitSha}`,
+        { headers }
+      )
+      // レート制限チェック
+      const commitRateLimit = parseRateLimitResponse(commitRes)
+      if (commitRateLimit.isRateLimited) {
+        return { success: false, message: 'github.rateLimited', rateLimitInfo: commitRateLimit }
+      }
+      if (!commitRes.ok) {
+        return { success: false, message: 'github.commitFetchFailed' }
+      }
+      const commitData = await commitRes.json()
+      baseTreeSha = commitData.tree.sha
     }
+
+    // 4. 既存ツリーを取得（空リポジトリの場合はスキップ）
     const preserveItems: Array<{ path: string; mode: string; type: string; sha: string }> = []
     const existingNotesFiles = new Map<string, string>() // path -> sha (for .agasteer/notes/)
     const existingArchiveFiles = new Map<string, string>() // path -> sha (for .agasteer/archive/)
-    if (existingTreeRes.ok) {
-      const existingTreeData = await existingTreeRes.json()
-      const entries: { path: string; mode: string; type: string; sha: string }[] =
-        existingTreeData.tree || []
-      for (const entry of entries) {
-        if (entry.type === 'blob') {
-          if (entry.path.startsWith(`${NOTES_PATH}/`)) {
-            // .agasteer/notes/以下のファイルのSHAを記録
-            existingNotesFiles.set(entry.path, entry.sha)
-          } else if (entry.path.startsWith(`${ARCHIVE_PATH}/`)) {
-            // .agasteer/archive/以下のファイルのSHAを記録
-            existingArchiveFiles.set(entry.path, entry.sha)
-          } else {
-            // .agasteer/以外のファイルを全て保持
-            preserveItems.push({
-              path: entry.path,
-              mode: entry.mode,
-              type: entry.type,
-              sha: entry.sha,
-            })
+
+    if (!isEmptyRepo && baseTreeSha) {
+      const existingTreeRes = await fetch(
+        `https://api.github.com/repos/${settings.repoName}/git/trees/${baseTreeSha}?recursive=1`,
+        { headers }
+      )
+      // レート制限チェック
+      const existingTreeRateLimit = parseRateLimitResponse(existingTreeRes)
+      if (existingTreeRateLimit.isRateLimited) {
+        return {
+          success: false,
+          message: 'github.rateLimited',
+          rateLimitInfo: existingTreeRateLimit,
+        }
+      }
+      if (existingTreeRes.ok) {
+        const existingTreeData = await existingTreeRes.json()
+        const entries: { path: string; mode: string; type: string; sha: string }[] =
+          existingTreeData.tree || []
+        for (const entry of entries) {
+          if (entry.type === 'blob') {
+            if (entry.path.startsWith(`${NOTES_PATH}/`)) {
+              // .agasteer/notes/以下のファイルのSHAを記録
+              existingNotesFiles.set(entry.path, entry.sha)
+            } else if (entry.path.startsWith(`${ARCHIVE_PATH}/`)) {
+              // .agasteer/archive/以下のファイルのSHAを記録
+              existingArchiveFiles.set(entry.path, entry.sha)
+            } else {
+              // .agasteer/以外のファイルを全て保持
+              preserveItems.push({
+                path: entry.path,
+                mode: entry.mode,
+                type: entry.type,
+                sha: entry.sha,
+              })
+            }
           }
         }
       }
@@ -860,6 +875,7 @@ export async function pushAllWithTreeAPI(
     const newTreeSha = newTreeData.sha
 
     // 7. 新しいコミットを作成
+    // 空リポジトリの場合はparentsを空配列にする（初回コミット）
     const newCommitRes = await fetch(
       `https://api.github.com/repos/${settings.repoName}/git/commits`,
       {
@@ -868,7 +884,7 @@ export async function pushAllWithTreeAPI(
         body: JSON.stringify({
           message: 'Agasteer pushed notes',
           tree: newTreeSha,
-          parents: [currentCommitSha],
+          parents: isEmptyRepo ? [] : [currentCommitSha],
           committer: {
             name: 'agasteer',
             email: 'agasteer@users.noreply.github.com',
@@ -891,19 +907,33 @@ export async function pushAllWithTreeAPI(
     const newCommitData = await newCommitRes.json()
     const newCommitSha = newCommitData.sha
 
-    // 8. ブランチのリファレンスを更新（強制更新）
-    // 注: 他のデバイスとの同時編集は想定していないため、force: trueで上書き
-    const updateRefRes = await fetch(
-      `https://api.github.com/repos/${settings.repoName}/git/refs/heads/${branch}`,
-      {
-        method: 'PATCH',
+    // 8. ブランチのリファレンスを更新または作成
+    // 空リポジトリの場合はPOSTで新規作成、既存の場合はPATCHで更新
+    let updateRefRes: Response
+    if (isEmptyRepo) {
+      // 新規ブランチを作成
+      updateRefRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/refs`, {
+        method: 'POST',
         headers,
         body: JSON.stringify({
+          ref: `refs/heads/${branch}`,
           sha: newCommitSha,
-          force: true, // 強制更新（他デバイスとの同時編集は非対応）
         }),
-      }
-    )
+      })
+    } else {
+      // 既存ブランチを更新（強制更新）
+      updateRefRes = await fetch(
+        `https://api.github.com/repos/${settings.repoName}/git/refs/heads/${branch}`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            sha: newCommitSha,
+            force: true, // 強制更新（他デバイスとの同時編集は非対応）
+          }),
+        }
+      )
+    }
     // レート制限チェック
     const updateRefRateLimit = parseRateLimitResponse(updateRefRes)
     if (updateRefRateLimit.isRateLimited) {
@@ -1018,6 +1048,16 @@ export async function pullFromGitHub(
         leaves: [],
         metadata: defaultMetadata,
         rateLimitInfo: treeRateLimit,
+      }
+    }
+    // 空のリポジトリ（コミットがない）の場合は404が返る → 空のデータで成功扱い
+    if (treeRes.status === 404) {
+      return {
+        success: true,
+        message: 'github.pullOk',
+        notes: [],
+        leaves: [],
+        metadata: defaultMetadata,
       }
     }
     if (!treeRes.ok) {
