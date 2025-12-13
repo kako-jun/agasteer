@@ -8,78 +8,65 @@
 
 ### 基本設計
 
-- **[アーキテクチャ](./architecture.md)**
-  - アーキテクチャ概要と設計哲学
-  - 技術スタック（Svelte, TypeScript, Vite, CodeMirror）
-  - プロジェクト構造とファイル構成
-  - コードアーキテクチャとレイヤー構造
+| ファイル                             | 内容                                              |
+| ------------------------------------ | ------------------------------------------------- |
+| [architecture.md](./architecture.md) | アーキテクチャ概要、技術スタック、レイヤー構造    |
+| [data-model.md](./data-model.md)     | TypeScript型定義、状態管理、CRUD操作パターン      |
+| [storage.md](./storage.md)           | LocalStorage、IndexedDB、GitHub連携、テーマ       |
+| [features.md](./features.md)         | エディタ（CodeMirror）、Vimモード、ナビゲーション |
+| [content-sync.md](./content-sync.md) | リーフタイトルと#見出しの双方向同期               |
 
-- **[データモデルと状態管理](./data-model.md)**
-  - TypeScript型定義（Settings, Folder, Note, View）
-  - データの一意性とリレーション
-  - 状態管理とデータフロー
-  - CRUD操作のパターン
+### UI機能 ([ui/](./ui/))
 
-### 機能実装
+| ファイル                                  | 内容                                           |
+| ----------------------------------------- | ---------------------------------------------- |
+| [layout.md](./ui/layout.md)               | 2ペイン表示、レスポンシブ対応                  |
+| [editor.md](./ui/editor.md)               | 罫線エディタモード                             |
+| [customization.md](./ui/customization.md) | カスタムフォント、背景画像                     |
+| [i18n.md](./ui/i18n.md)                   | 国際化（日本語・英語）                         |
+| [badges.md](./ui/badges.md)               | バッジ機能（アイコン＋色）                     |
+| [welcome-tour.md](./ui/welcome-tour.md)   | ウェルカムポップアップ、オンボーディングツアー |
+| [misc.md](./ui/misc.md)                   | アプリアイコン、その他のUI改善                 |
+| [share.md](./ui/share.md)                 | シェア機能（URL/Markdown/画像）                |
+| [pwa.md](./ui/pwa.md)                     | PWA対応                                        |
+| [links.md](./ui/links.md)                 | タイトルリンク化、GitHub設定ヘルプ             |
 
-- **[基本機能の実装](./features.md)**
-  - エディタ管理（CodeMirror統合）
-  - パンくずナビゲーション
-  - モーダルシステム
-  - ノート階層制限
+### プレビュー機能 ([preview/](./preview/))
 
-- **[UI/UX機能](./ui-features.md)**
-  - 2ペイン表示（アスペクト比判定、レスポンシブ対応）
-  - カスタムフォント機能（クライアントサイド保存、リロード不要）
-  - カスタム背景画像機能（左右ペイン別々に設定可能）
-  - 国際化（i18n）対応（日本語・英語、自動検出、手動切替）
-  - シェア機能（URLコピー、Markdownコピー）
-  - PWA対応（アイコン、スタンドアロンモード）
-  - タイトルリンク化（別タブで開く）
-  - GitHub設定ヘルプ（?アイコンでモーダル表示）
+| ファイル                                     | 内容                                         |
+| -------------------------------------------- | -------------------------------------------- |
+| [markdown.md](./preview/markdown.md)         | マークダウンプレビュー（marked + DOMPurify） |
+| [scroll-sync.md](./preview/scroll-sync.md)   | 編集/プレビュー間のスクロール同期            |
+| [image-export.md](./preview/image-export.md) | 画像ダウンロード・シェア（html2canvas）      |
 
-- **[コンテンツ同期機能](./content-sync.md)**
-  - リーフのタイトルと#見出しの双方向同期
+### GitHub同期・データ保護 ([sync/](./sync/))
 
-- **[プレビュー機能](./preview-features.md)**
-  - マークダウンプレビュー（marked + DOMPurify）
-  - 編集/プレビュー間のスクロール同期
-  - プレビュー画像ダウンロード（html2canvas、全体キャプチャ）
-  - プレビュー画像シェア（Clipboard API、Web Share API）
+| ファイル                                        | 内容                                           |
+| ----------------------------------------------- | ---------------------------------------------- |
+| [github-api.md](./sync/github-api.md)           | GitHub API統合（認証、ファイル操作、Tree API） |
+| [push-pull.md](./sync/push-pull.md)             | Push/Pull処理フロー、回数カウント              |
+| [dirty-tracking.md](./sync/dirty-tracking.md)   | 未保存変更の追跡、自動Push                     |
+| [stale-detection.md](./sync/stale-detection.md) | Stale編集警告（同時編集対応）                  |
 
-- **[データ保護機能](./data-protection.md)**
-  - Push回数カウント
-  - 未保存変更の確認
+### 特殊リーフ ([special/](./special/))
 
-- **[GitHub API統合](./github-integration.md)**
-  - 認証とファイルパス構築
-  - 既存ファイルのSHA取得
-  - ファイル保存とBase64エンコーディング
-
-- **[データ永続化とストレージ](./storage.md)**
-  - LocalStorage（設定情報）
-  - IndexedDB（ノート・リーフ・カスタムフォントデータ）
-  - GitHub（リモートリポジトリ）
-  - テーマシステム
+| ファイル                             | 内容                                   |
+| ------------------------------------ | -------------------------------------- |
+| [priority.md](./special/priority.md) | Priorityリーフ（[1]〜[5]マーカー集約） |
+| [offline.md](./special/offline.md)   | Offlineリーフ（ローカル専用）          |
 
 ### 開発・運用
 
-- **[実装されたリファクタリング](./refactoring.md)**
-  - コンポーネント分割の経緯
-  - 状態管理の改善（Svelteストア導入）
-  - ビジネスロジックの分離
-  - モジュール分離の完了（sync.ts, ui.ts, Toast.svelte）
+| ファイル                             | 内容                                           |
+| ------------------------------------ | ---------------------------------------------- |
+| [development.md](./development.md)   | 開発ワークフロー、パフォーマンス、セキュリティ |
+| [future-plans.md](./future-plans.md) | 拡張計画、既知の課題                           |
 
-- **[開発ガイド](./development.md)**
-  - 開発ワークフロー
-  - パフォーマンス最適化
-  - セキュリティ考慮事項
-  - トラブルシューティング
+### 履歴 ([history/](./history/))
 
-- **[拡張計画と既知の課題](./future-plans.md)**
-  - 短期・中期・長期的な拡張計画
-  - 既知の課題（メタデータの永続化問題）
-  - 次の実装計画
+| ファイル                                   | 内容                             |
+| ------------------------------------------ | -------------------------------- |
+| [refactoring.md](./history/refactoring.md) | リファクタリング履歴（参考資料） |
 
 ---
 
@@ -88,60 +75,23 @@
 ### 開発コマンド
 
 ```bash
-# 開発サーバー起動
-npm run dev
-
-# 型チェック（ウォッチモード）
-npm run check -- --watch
-
-# フォーマットチェック
-npm run format:check
-
-# リント（フォーマット + 型チェック）
-npm run lint
-
-# 本番ビルド
-npm run build
-
-# ビルド結果確認
-npm run preview
+npm run dev          # 開発サーバー
+npm run check        # 型チェック
+npm run lint         # フォーマット + 型チェック
+npm run build        # 本番ビルド
 ```
-
-### プロジェクト統計
-
-- **総行数**: 約8,400行（コメント・空行含む）
-- **ソースファイル数**: 59個（.svelte + .ts）
-- **コンポーネント数**: 45個（30個の一般コンポーネント + 14個のアイコン + 1個のIconButton）
-- **libモジュール数**: 14個
-- **ドキュメント数**: 20個以上（CLAUDE.md + README.md + CONTRIBUTING.md + docs/下）
 
 ### 主要技術
 
-| 技術                       | バージョン | 役割                                |
-| -------------------------- | ---------- | ----------------------------------- |
-| **Svelte**                 | 4.2.19     | リアクティブUIフレームワーク        |
-| **TypeScript**             | 5.7.2      | 型安全性の提供                      |
-| **Vite**                   | 5.4.10     | ビルドツール & 開発サーバー         |
-| **CodeMirror**             | 6.0.1      | 高機能エディタ                      |
-| **@replit/codemirror-vim** | latest     | Vimキーバインディング               |
-| **marked**                 | 17+        | マークダウン→HTML変換（プレビュー） |
-| **DOMPurify**              | 3+         | XSSサニタイゼーション               |
-| **svelte-i18n**            | 4+         | 国際化（i18n）対応                  |
+| 技術       | バージョン | 役割                   |
+| ---------- | ---------- | ---------------------- |
+| Svelte     | 4.2.19     | UIフレームワーク       |
+| TypeScript | 5.7.2      | 型安全性               |
+| Vite       | 5.4.10     | ビルドツール           |
+| CodeMirror | 6.0.1      | エディタ               |
+| marked     | 17+        | Markdown変換           |
+| driver.js  | latest     | オンボーディングツアー |
 
 ---
 
-## 🎯 コントリビューション
-
-Issue、Pull Requestを歓迎します！詳しくは[CONTRIBUTING.md](../../CONTRIBUTING.md)をご覧ください。
-
----
-
-## 📞 サポート
-
-- **リポジトリ**: [agasteer](https://github.com/kako-jun/agasteer)
-- **デモサイト**: [https://agasteer.llll-ll.com](https://agasteer.llll-ll.com)
-- **デプロイ**: Cloudflare Pages（自動デプロイ）
-
----
-
-**Last Updated**: 2025-11-24
+**Last Updated**: 2025-12-13

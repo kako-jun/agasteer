@@ -23,87 +23,45 @@
 
 #### 基本設計
 
-- **[アーキテクチャ](./docs/development/architecture.md)**
-  - アーキテクチャ概要と設計哲学
-  - 技術スタック（Svelte, TypeScript, Vite, CodeMirror）
-  - プロジェクト構造とファイル構成
-  - コードアーキテクチャとレイヤー構造
+- [アーキテクチャ](./docs/development/architecture.md) - 設計哲学、技術スタック
+- [データモデル](./docs/development/data-model.md) - 型定義、状態管理
+- [ストレージ](./docs/development/storage.md) - LocalStorage、IndexedDB
+- [基本機能](./docs/development/features.md) - エディタ、Vim、ナビゲーション
 
-- **[データモデルと状態管理](./docs/development/data-model.md)**
-  - TypeScript型定義（Settings, Folder, Note, View）
-  - データの一意性とリレーション
-  - 状態管理とデータフロー
-  - CRUD操作のパターン
+#### UI機能 ([ui/](./docs/development/ui/))
 
-#### 機能実装
+- [layout.md](./docs/development/ui/layout.md) - 2ペイン表示
+- [editor.md](./docs/development/ui/editor.md) - 罫線エディタ
+- [customization.md](./docs/development/ui/customization.md) - フォント、背景
+- [i18n.md](./docs/development/ui/i18n.md) - 国際化
+- [badges.md](./docs/development/ui/badges.md) - バッジ機能
+- [welcome-tour.md](./docs/development/ui/welcome-tour.md) - ウェルカム、ツアー
+- [pwa.md](./docs/development/ui/pwa.md) - PWA対応
+- [share.md](./docs/development/ui/share.md) - シェア機能
 
-- **[基本機能の実装](./docs/development/features.md)**
-  - エディタ管理（CodeMirror統合）
-  - Ctrl+S / Cmd+S でPush
-  - Vimモード（カスタムコマンド、2ペイン対応）
-  - パンくずナビゲーション
-  - モーダルシステム
-  - ノート階層制限
+#### プレビュー機能 ([preview/](./docs/development/preview/))
 
-- **[UI/UX機能](./docs/development/ui-features.md)**
-  - 2ペイン表示（アスペクト比判定、レスポンシブ対応）
-  - 罫線エディタモード（ノート風罫線、行番号表示）
-  - カスタムフォント機能（クライアントサイド保存、リロード不要）
-  - システム等幅Webフォント（BIZ UDGothic、IndexedDBキャッシュ）
-  - カスタム背景画像機能（左右ペイン別々に設定可能）
-  - 国際化（i18n）対応（日本語・英語、自動検出、手動切替）
-  - バッジ機能（ノート/リーフにアイコン+色を設定）
-  - ウェルカムポップアップ（モバイル対応、言語自動検出）
-  - アプリアイコン（テーマカラー対応）
-  - 統計パネル（リーフ数、文字数、Push回数）
-  - シェア機能（URLコピー、Markdownコピー）
-  - PWA対応（アイコン、スタンドアロンモード、ヘッダーPullボタン）
-  - タイトルリンク化（別タブで開く）
-  - GitHub設定ヘルプ（?アイコンでモーダル表示）
-  - Priorityリーフ（優先段落の集約、仮想リーフ、統計除外）
+- [markdown.md](./docs/development/preview/markdown.md) - マークダウン変換
+- [scroll-sync.md](./docs/development/preview/scroll-sync.md) - スクロール同期
+- [image-export.md](./docs/development/preview/image-export.md) - 画像出力
 
-- **[コンテンツ同期機能](./docs/development/content-sync.md)**
-  - リーフのタイトルと#見出しの双方向同期
+#### GitHub同期 ([sync/](./docs/development/sync/))
 
-- **[プレビュー機能](./docs/development/preview-features.md)**
-  - マークダウンプレビュー（marked + DOMPurify）
-  - 編集/プレビュー間のスクロール同期
-  - プレビュー画像ダウンロード（html2canvas、全体キャプチャ）
-  - プレビュー画像シェア（Clipboard API、Web Share API）
+- [github-api.md](./docs/development/sync/github-api.md) - API統合
+- [push-pull.md](./docs/development/sync/push-pull.md) - Push/Pull処理
+- [dirty-tracking.md](./docs/development/sync/dirty-tracking.md) - 変更追跡
+- [stale-detection.md](./docs/development/sync/stale-detection.md) - Stale警告
 
-- **[データ保護機能](./docs/development/data-protection.md)**
-  - Push回数カウント
-  - 未保存変更の確認
+#### 特殊リーフ ([special/](./docs/development/special/))
 
-- **[GitHub API統合](./docs/development/github-integration.md)**
-  - 認証とファイルパス構築
-  - 既存ファイルのSHA取得
-  - ファイル保存とBase64エンコーディング
-
-- **[データ永続化とストレージ](./docs/development/storage.md)**
-  - LocalStorage（設定情報）
-  - IndexedDB（ノート・リーフ・カスタムフォントデータ）
-  - GitHub（リモートリポジトリ）
-  - テーマシステム
+- [priority.md](./docs/development/special/priority.md) - Priorityリーフ
+- [offline.md](./docs/development/special/offline.md) - Offlineリーフ
 
 #### 開発・運用
 
-- **[実装されたリファクタリング](./docs/development/refactoring.md)**
-  - コンポーネント分割の経緯
-  - 状態管理の改善（Svelteストア導入）
-  - ビジネスロジックの分離
-  - モジュール分離の完了（sync.ts, ui.ts, Toast.svelte）
-
-- **[開発ガイド](./docs/development/development.md)**
-  - 開発ワークフロー
-  - パフォーマンス最適化
-  - セキュリティ考慮事項
-  - トラブルシューティング
-
-- **[拡張計画と既知の課題](./docs/development/future-plans.md)**
-  - 短期・中期・長期的な拡張計画
-  - 既知の課題（メタデータの永続化問題）
-  - 次の実装計画
+- [development.md](./docs/development/development.md) - 開発ガイド
+- [future-plans.md](./docs/development/future-plans.md) - 拡張計画
+- [history/refactoring.md](./docs/development/history/refactoring.md) - リファクタリング履歴
 
 ### 共有リソース
 
