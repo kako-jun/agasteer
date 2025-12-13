@@ -277,7 +277,7 @@
 
   // Pull/Push中はボタンを無効化（リアクティブに追跡）
   $: canPull = !$isPulling && !$isPushing
-  $: canPush = !$isPulling && !$isPushing
+  $: canPush = !$isPulling && !$isPushing && isFirstPriorityFetched
 
   // ========================================
   // Context API によるペイン間の状態共有

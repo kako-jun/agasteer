@@ -1336,9 +1336,10 @@ export async function fetchRemotePushCount(settings: Settings): Promise<number> 
         return parsed.pushCount || 0
       }
     }
-    // 404等の場合（空リポジトリ）は0を返す
+    // 404の場合（空リポジトリ、metadata.jsonなし）は-1を返す
+    // → stale扱いでPull実行 → UI初期化
     if (metadataRes.status === 404) {
-      return 0
+      return -1
     }
     // 認証エラーや権限エラーは-1（チェック不可）
     if (metadataRes.status === 401 || metadataRes.status === 403) {
