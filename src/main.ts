@@ -5,25 +5,82 @@ import { registerSW } from 'virtual:pwa-register'
 // PWA更新チェック完了を待つためのPromise
 // App.svelteのonMountで初回Pullより先にこのPromiseをawaitする
 export const waitForSwCheck: Promise<void> = new Promise((resolve) => {
+  let resolved = false
+  const safeResolve = () => {
+    if (!resolved) {
+      resolved = true
+      resolve()
+    }
+  }
+
   const updateSW = registerSW({
     immediate: true,
     onRegistered(swRegistration) {
-      // SW登録完了 → 更新チェック
-      swRegistration?.update()
-      // 更新がなければここで完了
-      resolve()
+      if (swRegistration) {
+        // SW登録完了 → 更新チェック開始
+        // update()はPromiseを返すので、完了を待ってから少し待機
+        // この間にonNeedRefreshが呼ばれれば、リロードされる
+        swRegistration
+          .update()
+          .then(() => {
+            // 更新チェック完了後、onNeedRefreshが呼ばれる猶予を与える
+            setTimeout(safeResolve, 500)
+          })
+          .catch((error) => {
+            // オフライン時やネットワークエラー時も続行
+            console.log('SW update check skipped:', error?.message || 'offline')
+            safeResolve()
+          })
+      } else {
+        // SW未対応環境
+        safeResolve()
+      }
     },
     onNeedRefresh() {
-      // 新しいSWが検知された場合、即座にリロード
-      // リロード後は新しいコードで初回Pullが走る
+      // 新しいSWが検知された場合、メッセージを表示してからリロード
       console.log('New version available, reloading...')
-      updateSW(true) // true = immediate reload
+
+      // 画面中央にオーバーレイを表示
+      const overlay = document.createElement('div')
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+      `
+
+      const message = document.createElement('div')
+      message.style.cssText = `
+        color: white;
+        font-size: 1.2rem;
+        text-align: center;
+        padding: 2rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+      `
+      message.textContent = '🔄 新しいバージョンがあります。再起動します...'
+
+      overlay.appendChild(message)
+      document.body.appendChild(overlay)
+
+      // 1.5秒後にリロード
+      setTimeout(() => {
+        updateSW(true) // true = immediate reload
+      }, 1500)
       // resolveは呼ばない（リロードするので不要）
     },
   })
 
   // タイムアウト: SWがサポートされていない環境や登録に時間がかかる場合
-  setTimeout(resolve, 500)
+  // 2秒以内に更新チェックが完了しなければ続行
+  setTimeout(safeResolve, 2000)
 })
 
 const app = new App({
