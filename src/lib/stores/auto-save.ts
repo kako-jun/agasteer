@@ -3,8 +3,8 @@
  * ユーザー操作を検知し、無操作が一定時間続いたら自動保存を実行
  */
 
-import { get, writable } from 'svelte/store'
-import { leaves, notes, offlineLeafStore, lastPushTime, hasAnyChanges } from './stores'
+import { get, writable, type Readable } from 'svelte/store'
+import { leaves, notes, offlineLeafStore } from './stores'
 import { saveLeaves, saveNotes, saveOfflineLeaf } from '../data/storage'
 import { createOfflineLeaf } from '../utils/offline'
 
@@ -32,17 +32,29 @@ let activityTimerId: ReturnType<typeof setTimeout> | null = null
 // 初期化済みフラグ
 let initialized = false
 
-// 進捗更新用のストア参照
+// 進捗更新用のストア参照（遅延初期化で循環参照を回避）
 let lastPushTimeValue = 0
 let hasChangesValue = false
+let lastPushTimeStore: Readable<number> | null = null
+let hasAnyChangesStore: Readable<boolean> | null = null
 
-// stores.tsから値を購読
-lastPushTime.subscribe((value) => {
-  lastPushTimeValue = value
-})
-hasAnyChanges.subscribe((value) => {
-  hasChangesValue = value
-})
+/**
+ * 進捗追跡を初期化（stores.tsからの参照を遅延設定）
+ */
+export function initAutoPushProgress(
+  lastPushTime: Readable<number>,
+  hasAnyChanges: Readable<boolean>
+): void {
+  lastPushTimeStore = lastPushTime
+  hasAnyChangesStore = hasAnyChanges
+
+  lastPushTime.subscribe((value) => {
+    lastPushTimeValue = value
+  })
+  hasAnyChanges.subscribe((value) => {
+    hasChangesValue = value
+  })
+}
 
 // 自動Pushトリガー用ストア（5分経過時にtrueになる）
 export const shouldAutoPush = writable<boolean>(false)

@@ -111,6 +111,10 @@ export const isStale = writable<boolean>(false)
 // 最後にPush成功した時刻
 export const lastPushTime = writable<number>(0)
 
+// 自動Push進捗を初期化（循環参照回避のため遅延初期化）
+import { initAutoPushProgress } from './auto-save'
+initAutoPushProgress(lastPushTime, hasAnyChanges)
+
 // ペイン状態ストア
 export const leftNote = writable<Note | null>(null)
 export const rightNote = writable<Note | null>(null)
