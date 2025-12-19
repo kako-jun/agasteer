@@ -33,8 +33,8 @@ let activityTimerId: ReturnType<typeof setTimeout> | null = null
 let initialized = false
 
 // 進捗更新用のストア参照（遅延初期化で循環参照を回避）
-let lastPushTimeValue = 0
 let hasChangesValue = false
+let dirtyStartTime = 0 // ダーティになった時刻
 let lastPushTimeStore: Readable<number> | null = null
 let hasAnyChangesStore: Readable<boolean> | null = null
 
@@ -48,10 +48,15 @@ export function initAutoPushProgress(
   lastPushTimeStore = lastPushTime
   hasAnyChangesStore = hasAnyChanges
 
-  lastPushTime.subscribe((value) => {
-    lastPushTimeValue = value
-  })
   hasAnyChanges.subscribe((value) => {
+    // false → true になった瞬間に開始時刻を記録
+    if (value && !hasChangesValue) {
+      dirtyStartTime = Date.now()
+    }
+    // true → false になった瞬間にリセット
+    if (!value && hasChangesValue) {
+      dirtyStartTime = 0
+    }
     hasChangesValue = value
   })
 }
@@ -62,12 +67,12 @@ export const shouldAutoPush = writable<boolean>(false)
 // 進捗自動更新タイマー（1秒ごとに進捗計算と自動Push判定）
 const PROGRESS_UPDATE_INTERVAL = 1000 // 1秒ごと
 const progressUpdateIntervalId = setInterval(() => {
-  if (!hasChangesValue || lastPushTimeValue === 0) {
+  if (!hasChangesValue || dirtyStartTime === 0) {
     autoPushProgress.set(0)
     shouldAutoPush.set(false)
     return
   }
-  const elapsed = Date.now() - lastPushTimeValue
+  const elapsed = Date.now() - dirtyStartTime
   const progress = Math.min(elapsed / AUTO_PUSH_INTERVAL_MS, 1)
   autoPushProgress.set(progress)
 
