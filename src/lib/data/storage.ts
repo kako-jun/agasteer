@@ -52,9 +52,59 @@ export class StorageError extends Error {
   }
 }
 
-// 設定のみLocalStorage利用（キー簡素化）
-const SETTINGS_KEY = 'agasteer'
+// LocalStorage（単一キーに統合）
+const STORAGE_KEY = 'agasteer'
 const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dotsD', 'dotsF']
+
+/**
+ * アプリ状態（settings以外の永続化データ）
+ */
+export interface AppState {
+  isDirty: boolean
+  tourShown: boolean
+}
+
+const defaultState: AppState = {
+  isDirty: false,
+  tourShown: false,
+}
+
+/**
+ * LocalStorage全体の構造
+ */
+interface StorageData {
+  settings: Settings
+  state: AppState
+}
+
+/**
+ * LocalStorage全体を読み込む
+ */
+function loadStorageData(): StorageData {
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored) {
+    try {
+      return JSON.parse(stored) as StorageData
+    } catch {
+      // パース失敗時はデフォルト値
+    }
+  }
+
+  const browserLocale = getLocaleFromNavigator()
+  const detectedLocale: Locale = browserLocale?.startsWith('ja') ? 'ja' : 'en'
+
+  return {
+    settings: { ...defaultSettings, locale: detectedLocale },
+    state: { ...defaultState },
+  }
+}
+
+/**
+ * LocalStorage全体を保存
+ */
+function saveStorageData(data: StorageData): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+}
 const DB_NAME = 'agasteer/db'
 const DB_VERSION = 4
 const LEAVES_STORE = 'leaves'
@@ -74,38 +124,76 @@ export const defaultSettings: Settings = {
 }
 
 /**
+ * テーマ名の正規化（旧テーマ名の互換性対応）
+ */
+function normalizeTheme(theme: string): ThemeType {
+  if (theme === 'dots' || theme === 'dots1') return 'dotsD'
+  if (theme === 'dots2') return 'dotsF'
+  if (!THEME_OPTIONS.includes(theme as ThemeType)) return defaultSettings.theme
+  return theme as ThemeType
+}
+
+/**
  * 設定を読み込む
  */
 export function loadSettings(): Settings {
-  const stored = localStorage.getItem(SETTINGS_KEY)
-  if (stored) {
-    const storedSettings = JSON.parse(stored) as Partial<Settings>
-    const merged = { ...defaultSettings, ...storedSettings }
-    const storedTheme = merged.theme as string
-    if (storedTheme === 'dots') {
-      merged.theme = 'dotsD'
-    }
-    if (storedTheme === 'dots1') {
-      merged.theme = 'dotsD'
-    }
-    if (storedTheme === 'dots2') {
-      merged.theme = 'dotsF'
-    }
-    if (!THEME_OPTIONS.includes(merged.theme as ThemeType)) {
-      merged.theme = defaultSettings.theme
-    }
-    return merged
-  }
-  const browserLocale = getLocaleFromNavigator()
-  const detectedLocale: Locale = browserLocale?.startsWith('ja') ? 'ja' : 'en'
-  return { ...defaultSettings, locale: detectedLocale }
+  const data = loadStorageData()
+  const settings = { ...defaultSettings, ...data.settings }
+  settings.theme = normalizeTheme(settings.theme)
+  return settings
 }
 
 /**
  * 設定を保存
  */
 export function saveSettings(settings: Settings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+  const data = loadStorageData()
+  data.settings = settings
+  saveStorageData(data)
+}
+
+/**
+ * アプリ状態を読み込む
+ */
+export function loadAppState(): AppState {
+  return loadStorageData().state
+}
+
+/**
+ * アプリ状態の一部を更新
+ */
+export function updateAppState(partial: Partial<AppState>): void {
+  const data = loadStorageData()
+  data.state = { ...data.state, ...partial }
+  saveStorageData(data)
+}
+
+/**
+ * ダーティフラグを取得（起動時チェック用）
+ */
+export function getPersistedDirtyFlag(): boolean {
+  return loadStorageData().state.isDirty
+}
+
+/**
+ * ダーティフラグを設定
+ */
+export function setPersistedDirtyFlag(isDirty: boolean): void {
+  updateAppState({ isDirty })
+}
+
+/**
+ * ツアー表示済みフラグを取得
+ */
+export function isTourShown(): boolean {
+  return loadStorageData().state.tourShown
+}
+
+/**
+ * ツアー表示済みフラグを設定
+ */
+export function setTourShown(shown: boolean): void {
+  updateAppState({ tourShown: shown })
 }
 
 // DB接続監視用のコールバック

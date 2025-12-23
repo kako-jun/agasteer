@@ -2,17 +2,14 @@ import { driver, type DriveStep, type Driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { get } from 'svelte/store'
 import { _ } from './i18n'
-
-const TOUR_SHOWN_KEY = 'agasteer_tour_shown'
+import { isTourShown as isTourShownFromStorage, setTourShown } from './data/storage'
 
 /** ツアーが既に表示済みかどうか */
-export function isTourShown(): boolean {
-  return localStorage.getItem(TOUR_SHOWN_KEY) === 'true'
-}
+export const isTourShown = isTourShownFromStorage
 
 /** ツアーを表示済みとしてマーク */
 export function markTourShown(): void {
-  localStorage.setItem(TOUR_SHOWN_KEY, 'true')
+  setTourShown(true)
 }
 
 /** ツアーのステップを取得（i18n対応） */
@@ -124,5 +121,5 @@ export function startTour(): void {
 
 /** ツアーを強制的にリセット（デバッグ用） */
 export function resetTour(): void {
-  localStorage.removeItem(TOUR_SHOWN_KEY)
+  setTourShown(false)
 }

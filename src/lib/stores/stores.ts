@@ -7,7 +7,12 @@ import { writable, derived } from 'svelte/store'
 import type { Settings, Note, Leaf, Metadata, View, WorldType } from '../types'
 import type { Pane } from '../navigation'
 // 循環参照回避: data/index.tsではなく、直接storageからインポート
-import { defaultSettings, saveSettings } from '../data/storage'
+import {
+  defaultSettings,
+  saveSettings,
+  setPersistedDirtyFlag,
+  getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
+} from '../data/storage'
 import { scheduleLeavesSave, scheduleNotesSave } from './auto-save'
 
 // ============================================
@@ -40,7 +45,6 @@ export const currentWorld = writable<WorldType>('home')
 // ============================================
 // ダーティフラグ管理（リーフごと + 全体）
 // ============================================
-const IS_DIRTY_KEY = 'agasteer_isDirty'
 
 // リーフごとのisDirtyから全体のダーティ状態を派生
 export const hasAnyDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
@@ -48,20 +52,15 @@ export const hasAnyDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.is
 // LocalStorage永続化（hasAnyDirtyの変更を監視）
 // 注意: このsubscribeはモジュール読み込み時に実行される
 hasAnyDirty.subscribe((value) => {
-  if (value) {
-    localStorage.setItem(IS_DIRTY_KEY, 'true')
-  } else {
-    localStorage.removeItem(IS_DIRTY_KEY)
-  }
+  setPersistedDirtyFlag(value)
 })
 
 // 後方互換性のためのエイリアス（読み取り専用）
 export const isDirty = hasAnyDirty
 
 // 起動時のLocalStorageチェック用（PWA強制終了対策）
-export function getPersistedDirtyFlag(): boolean {
-  return localStorage.getItem(IS_DIRTY_KEY) === 'true'
-}
+// storage.tsからre-export
+export const getPersistedDirtyFlag = getPersistedDirtyFlagFromStorage
 
 // 特定のリーフをダーティに設定
 export function setLeafDirty(leafId: string, dirty: boolean = true): void {
@@ -92,7 +91,7 @@ isStructureDirty.subscribe((value) => {
   // hasAnyDirtyと合わせて管理（どちらかがtrueならLocalStorageに保存）
   // hasAnyDirtyのsubscribeで既に管理しているので、ここでは構造変更時のみ追加
   if (value) {
-    localStorage.setItem(IS_DIRTY_KEY, 'true')
+    setPersistedDirtyFlag(true)
   }
 })
 
