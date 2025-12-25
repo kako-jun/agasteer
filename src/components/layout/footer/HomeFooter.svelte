@@ -74,50 +74,35 @@
   .guide-tooltip {
     position: absolute;
     bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
     margin-bottom: 8px;
-    padding: 8px 12px;
-    background: var(--text-color, #333);
-    color: var(--bg-color, #fff);
-    border-radius: 6px;
+    padding: 6px 10px;
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 4px;
     font-size: 13px;
     white-space: nowrap;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    animation: fadeIn 0.3s ease;
+    gap: 6px;
   }
 
   .guide-tooltip::after {
     content: '';
     position: absolute;
     top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    border: 6px solid transparent;
-    border-top-color: var(--text-color, #333);
+    left: 12px;
+    border: 5px solid transparent;
+    border-top-color: var(--accent);
   }
 
   .guide-close {
-    opacity: 0.7;
-    font-size: 16px;
+    opacity: 0.8;
+    font-size: 14px;
   }
 
   .guide-close:hover {
     opacity: 1;
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
   }
 </style>
