@@ -182,12 +182,19 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000
 // 進捗ストア（0〜1）
 export const staleCheckProgress = writable<number>(0)
 
+// チェック実行条件
+function canPerformCheck(): boolean {
+  if (!get(githubConfigured)) return false // GitHub未設定
+  if (document.visibilityState !== 'visible') return false // タブ非アクティブ
+  if (get(isPulling) || get(isPushing)) return false // Pull/Push中
+  if (get(lastStaleCheckTime) === 0) return false // 初回Pull前
+  return true
+}
+
 // 定期チェッカー開始
 export function startStaleChecker(): void {
-  // 5分ごとにチェック
-  intervalId = setInterval(checkIfNeeded, CHECK_INTERVAL_MS)
-  // 1秒ごとに進捗更新
-  progressIntervalId = setInterval(updateProgress, 1000)
+  // 1秒ごとに進捗更新＆チェック判定（統合タイマー）
+  progressIntervalId = setInterval(updateProgressAndCheck, 1000)
 }
 ```
 
@@ -202,7 +209,20 @@ export function startStaleChecker(): void {
 
 1ドット（1px）あたりの時間 = 5分 ÷ ヘッダー高さ（約48px）≈ 6.25秒
 
-staleチェック実行時にバーは0にリセットされる。
+**バーの表示条件:**
+
+- GitHub設定済み
+- タブがアクティブ
+- Pull/Push中でない
+- 初回Pull完了済み
+
+条件を満たさない場合、バーは表示されない（progress = 0）。
+
+**チェック実行とリセット:**
+
+- 進捗が100%（5分経過）に達するとチェックを実行
+- チェック実行で`lastStaleCheckTime`が更新され、バーは0にリセット
+- 再び0から伸び始める
 
 #### stale検出時の動作
 
