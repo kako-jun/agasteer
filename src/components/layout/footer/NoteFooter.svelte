@@ -135,17 +135,18 @@
     position: absolute;
     bottom: 100%;
     left: 0;
-    margin-bottom: 8px;
-    padding: 6px 10px;
-    background: var(--accent);
+    margin-bottom: 20px;
+    padding: 8px 12px;
+    background-color: var(--accent);
     color: var(--bg);
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 13px;
     white-space: nowrap;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 
   .guide-tooltip::after {
