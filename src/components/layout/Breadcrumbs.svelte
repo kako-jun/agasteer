@@ -7,6 +7,7 @@
   import EditIcon from '../icons/EditIcon.svelte'
   import ArchiveIcon from '../icons/ArchiveIcon.svelte'
   import { isOfflineLeaf, isPriorityLeaf } from '../../lib/utils'
+  import { portal } from '../../lib/actions'
 
   export let breadcrumbs: Breadcrumb[]
   export let editingId: string | null = null
@@ -33,16 +34,6 @@
   let worldDropdownOpen = false
   let worldSeparatorButton: HTMLButtonElement | null = null
   let menuPosition = { top: 0, left: 0 }
-
-  // ポータルアクション: 要素をbody直下に移動して親のoverflowの影響を回避
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return {
-      destroy() {
-        node.remove()
-      },
-    }
-  }
 
   function toggleWorldDropdown(e: MouseEvent) {
     e.stopPropagation()

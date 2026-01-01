@@ -4,7 +4,7 @@
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
   import type { LeafSkeleton } from '../../lib/api'
-  import { swipe } from '../../lib/ui'
+  import { swipe } from '../../lib/actions'
   import NoteCard from '../cards/NoteCard.svelte'
   import BadgeButton from '../badges/BadgeButton.svelte'
 

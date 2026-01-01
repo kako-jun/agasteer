@@ -174,6 +174,10 @@ agasteer/
 │   │       ├── PreviewView.svelte       # プレビュー画面
 │   │       └── SettingsView.svelte      # 設定画面
 │   ├── lib/
+│   │   ├── actions/
+│   │   │   ├── index.ts                 # アクションエクスポート
+│   │   │   ├── portal.ts                # ポータルアクション
+│   │   │   └── swipe.ts                 # スワイプアクション
 │   │   ├── i18n/
 │   │   │   ├── index.ts                 # 国際化初期化
 │   │   │   └── locales/
@@ -304,9 +308,11 @@ agasteer/
 - `routing.ts`: URLルーティング（パスベース、プレビュー対応）
 - `ui.ts`: トースト状態管理
 - `font.ts`: カスタムフォント管理（IndexedDB保存、動的@font-face登録）
-- `background.ts`: カスタム背景画像管理（IndexedDB保存、CSS ::before適用）
-- `breadcrumbs.ts`: パンくずリスト生成（H1タイトル抽出、タイトル更新）
-- `drag-drop.ts`: ドラッグ&ドロップヘルパー（汎用型対応）
+
+**Svelteアクション（actions/）:**
+
+- `swipe.ts`: スワイプナビゲーション（use:swipeディレクティブ）
+- `portal.ts`: ポータル（use:portalディレクティブ、要素をbody直下に移動）
 
 **国際化:**
 
