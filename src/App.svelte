@@ -1832,11 +1832,11 @@
     // 交通整理: Push不可なら何もしない
     if (!canSync($isPulling, $isPushing).canPush) return
 
-    // 保留中の自動保存を即座に実行してからPush
-    await flushPendingSaves()
-
+    // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
     $isPushing = true
     try {
+      // 保留中の自動保存を即座に実行してからPush
+      await flushPendingSaves()
       // Stale編集かどうかチェック（共通関数で時刻も更新）
       const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
 
