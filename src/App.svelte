@@ -53,9 +53,9 @@
     flushPendingSaves,
     shouldAutoPush,
     resetAutoPushTimer,
-    lastStaleCheckTime,
     startStaleChecker,
     stopStaleChecker,
+    executeStaleCheck,
   } from './lib/stores'
   import {
     clearAllData,
@@ -77,7 +77,6 @@
     executePush,
     executePull,
     pullArchive,
-    checkStaleStatus,
     testGitHubConnection,
     translateGitHubMessage,
     canSync,
@@ -665,9 +664,8 @@
 
       console.log('Auto-push triggered')
 
-      // Staleチェックを実行
-      const staleResult = await checkStaleStatus($settings, get(lastPulledPushCount))
-      lastStaleCheckTime.set(Date.now())
+      // Staleチェックを実行（共通関数で時刻も更新）
+      const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
 
       switch (staleResult.status) {
         case 'stale':
@@ -1839,9 +1837,8 @@
 
     $isPushing = true
     try {
-      // Stale編集かどうかチェック
-      const staleResult = await checkStaleStatus($settings, get(lastPulledPushCount))
-      lastStaleCheckTime.set(Date.now())
+      // Stale編集かどうかチェック（共通関数で時刻も更新）
+      const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
 
       switch (staleResult.status) {
         case 'stale':
@@ -2295,9 +2292,8 @@
     // ロック取得（Staleチェック中に別のPullが開始されるのを防止）
     $isPulling = true
 
-    // Staleチェック: リモートに変更があるか確認
-    const staleResult = await checkStaleStatus($settings, get(lastPulledPushCount))
-    lastStaleCheckTime.set(Date.now())
+    // Staleチェック: リモートに変更があるか確認（共通関数で時刻も更新）
+    const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
 
     switch (staleResult.status) {
       case 'up_to_date':

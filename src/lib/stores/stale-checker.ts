@@ -11,6 +11,8 @@
  */
 
 import { get, writable } from 'svelte/store'
+import type { Settings } from '../types'
+import type { StaleCheckResult } from '../api/sync'
 import {
   settings,
   isPulling,
@@ -20,7 +22,21 @@ import {
   lastPulledPushCount,
   githubConfigured,
 } from './stores'
-import { checkStaleStatus } from '../api/sync'
+import { checkStaleStatus as checkStaleStatusRaw } from '../api/sync'
+
+/**
+ * staleチェックを実行し、時刻を更新する共通関数
+ * 全ての呼び元（定期チェック、Pull/Push前）でこの関数を使用する
+ */
+export async function executeStaleCheck(
+  settingsValue: Settings,
+  lastPulledCount: number
+): Promise<StaleCheckResult> {
+  const result = await checkStaleStatusRaw(settingsValue, lastPulledCount)
+  // チェック時刻を更新（成功・失敗に関わらず）
+  lastStaleCheckTime.set(Date.now())
+  return result
+}
 
 /** チェック間隔（ミリ秒） */
 const CHECK_INTERVAL_MS = 5 * 60 * 1000 // 5分
@@ -71,18 +87,15 @@ async function checkIfNeeded(): Promise<void> {
     return
   }
 
-  // サイレントにstaleチェック
+  // サイレントにstaleチェック（共通関数を使用）
   try {
-    const result = await checkStaleStatus(get(settings), get(lastPulledPushCount))
-    // チェック時刻を更新（成功・失敗に関わらず）
-    lastStaleCheckTime.set(Date.now())
+    const result = await executeStaleCheck(get(settings), get(lastPulledPushCount))
     if (result.status === 'stale') {
       isStale.set(true)
     }
     // up_to_date や check_failed の場合は何もしない（エラー通知もしない）
   } catch {
-    // ネットワークエラー等でも時刻は更新（リトライ抑制）
-    lastStaleCheckTime.set(Date.now())
+    // ネットワークエラー等は無視（executeStaleCheck内で時刻は更新済み）
   }
 }
 
