@@ -1,7 +1,7 @@
 <script lang="ts">
   import { _ } from '../../../lib/i18n'
   import type { WorldType } from '../../../lib/types'
-  import { notes, lastPulledPushCount } from '../../../lib/stores/stores'
+  import { notes } from '../../../lib/stores/stores'
   import { isTourShown, dismissTour } from '../../../lib/tour'
   import Footer from '../Footer.svelte'
   import IconButton from '../../buttons/IconButton.svelte'
@@ -18,8 +18,8 @@
   /** 現在のワールド */
   export let currentWorld: WorldType = 'home'
 
-  // ノートが0個かつガイド未表示かつ初回Pull完了後なら吹き出しを表示
-  $: showGuide = $notes.length === 0 && !isTourShown() && $lastPulledPushCount > 0
+  // ノートが0個かつガイド未表示かつボタンが有効（=初回Pull完了）なら吹き出しを表示
+  $: showGuide = $notes.length === 0 && !isTourShown() && !pushDisabled
 
   function handleCreateNote() {
     dismissTour()
