@@ -10,8 +10,6 @@
     "settings": "Open settings",
     "pull": "Pull",
     "swapPanes": "Swap Panes",
-    "copyLeftToRight": "Copy left to right",
-    "copyRightToLeft": "Copy right to left",
     "staleRemote": "Remote has newer changes"
   },
   "search": {

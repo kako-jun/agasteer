@@ -10,8 +10,6 @@
     "settings": "設定を開く",
     "pull": "Pullする",
     "swapPanes": "君の名は",
-    "copyLeftToRight": "左を右にコピー",
-    "copyRightToLeft": "右を左にコピー",
     "staleRemote": "リモートに新しい変更があります"
   },
   "search": {

@@ -7,6 +7,8 @@
   import SettingsIcon from '../icons/SettingsIcon.svelte'
   import SearchIcon from '../icons/SearchIcon.svelte'
   import SwapIcon from '../icons/SwapIcon.svelte'
+  import ArrowRightIcon from '../icons/ArrowRightIcon.svelte'
+  import ArrowLeftIcon from '../icons/ArrowLeftIcon.svelte'
   import StaleCheckIndicator from './header/StaleCheckIndicator.svelte'
 
   export let githubConfigured: boolean
@@ -90,13 +92,13 @@
       {#if showPaneMenu}
         <div class="pane-menu">
           <button on:click={() => handleMenuAction(onCopyLeftToRight)}>
-            {$_('header.copyLeftToRight')}
+            <ArrowRightIcon />
           </button>
           <button on:click={() => handleMenuAction(onSwapPanes)}>
-            {$_('header.swapPanes')}
+            <SwapIcon />
           </button>
           <button on:click={() => handleMenuAction(onCopyRightToLeft)}>
-            {$_('header.copyRightToLeft')}
+            <ArrowLeftIcon />
           </button>
         </div>
       {/if}
@@ -229,22 +231,20 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    overflow: hidden;
-    z-index: 100;
-    min-width: max-content;
+    z-index: 1000;
+    display: flex;
+    gap: 0;
   }
 
   .pane-menu button {
-    display: block;
-    width: 100%;
-    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
     background: none;
     border: none;
     color: var(--text);
-    font-size: 0.875rem;
-    text-align: left;
     cursor: pointer;
-    white-space: nowrap;
   }
 
   .pane-menu button:hover {
@@ -252,7 +252,20 @@
     color: var(--bg);
   }
 
+  .pane-menu button:first-child {
+    border-radius: 7px 0 0 7px;
+  }
+
+  .pane-menu button:last-child {
+    border-radius: 0 7px 7px 0;
+  }
+
   .pane-menu button:not(:last-child) {
-    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .pane-menu button :global(svg) {
+    width: 20px;
+    height: 20px;
   }
 </style>

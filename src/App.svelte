@@ -1137,7 +1137,7 @@
       }
     }
 
-    // 移動したノートを開いていた両ペインをホームに遷移
+    // 移動したノートを開いていた両ペインを親ノートに遷移（削除と同じ挙動）
     const checkPane = (paneToCheck: Pane) => {
       const currentNote = paneToCheck === 'left' ? $leftNote : $rightNote
       const currentLeaf = paneToCheck === 'left' ? $leftLeaf : $rightLeaf
@@ -1146,7 +1146,12 @@
         noteIds.has(currentNote?.id ?? '') ||
         (currentLeaf && noteIds.has(currentLeaf.noteId))
       ) {
-        goHome(paneToCheck)
+        const parentNote = note.parentId ? newSourceNotes.find((n) => n.id === note.parentId) : null
+        if (parentNote) {
+          selectNote(parentNote, paneToCheck)
+        } else {
+          goHome(paneToCheck)
+        }
       }
     }
     checkPane('left')
@@ -1288,11 +1293,11 @@
       leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
     }
 
-    // 移動したリーフを開いていた両ペインをホームに遷移
+    // 移動したリーフを開いていた両ペインを親ノートに遷移（削除と同じ挙動）
     const checkPane = (paneToCheck: Pane) => {
       const currentLeaf = paneToCheck === 'left' ? $leftLeaf : $rightLeaf
       if (currentLeaf?.id === leaf.id) {
-        goHome(paneToCheck)
+        selectNote(sourceNote, paneToCheck)
       }
     }
     checkPane('left')
@@ -2581,6 +2586,7 @@
       githubConfigured={isGitHubConfigured}
       title={$settings.toolName}
       onTitleClick={() => {
+        currentWorld.set('home')
         goHome('left')
         goHome('right')
       }}
