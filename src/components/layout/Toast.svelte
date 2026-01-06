@@ -54,6 +54,10 @@
     text-align: center;
     white-space: nowrap;
     text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
   }
 
   .toast.success {

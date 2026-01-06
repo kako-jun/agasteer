@@ -29,9 +29,13 @@
   }
 
   .dot {
-    font-size: 2rem;
+    font-size: 2.5rem;
     color: var(--accent);
     animation: pulse 1.5s ease-in-out infinite;
+    text-shadow:
+      0 0 4px rgba(0, 0, 0, 0.5),
+      0 0 8px rgba(0, 0, 0, 0.3);
+    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.3);
   }
 
   .dot-1 {
