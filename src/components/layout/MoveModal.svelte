@@ -134,13 +134,14 @@
   >
     <!-- イベント伝播停止はオーバーレイクリック時にモーダルが閉じないようにするため -->
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-    <section
+    <div
       class="move-modal"
       on:click|stopPropagation
       on:keydown|stopPropagation
       role="dialog"
       aria-modal="true"
       aria-labelledby="move-modal-title"
+      tabindex="-1"
     >
       <div class="modal-header">
         <h2 id="move-modal-title">{$_('move.title')}</h2>
@@ -223,7 +224,7 @@
           {$_('move.confirm')}
         </button>
       </div>
-    </section>
+    </div>
   </div>
 {/if}
 

@@ -11,9 +11,7 @@
 </script>
 
 <div class="help-links">
-  <!-- svelte-ignore a11y-click-events-have-key-keys -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="help-link" on:click={openUserGuide}>
+  <button type="button" class="help-link" on:click={openUserGuide}>
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="18"
@@ -29,7 +27,7 @@
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
     </svg>
     <span>{$_('settings.help.text')}</span>
-  </div>
+  </button>
   <a
     href="https://www.youtube.com/watch?v=example"
     target="_blank"

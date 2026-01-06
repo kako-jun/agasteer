@@ -6,7 +6,7 @@
 </script>
 
 {#if $autoPushProgress > 0}
-  <div class="indicator" style="height: {height}px" />
+  <div class="indicator" style="height: {height}px"></div>
 {/if}
 
 <style>

@@ -7,7 +7,7 @@
 
 <div class="wrapper">
   {#if $staleCheckProgress > 0}
-    <div class="indicator" style="height: {height}px" />
+    <div class="indicator" style="height: {height}px"></div>
   {/if}
 </div>
 

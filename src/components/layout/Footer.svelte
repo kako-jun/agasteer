@@ -4,7 +4,7 @@
 
 <div class="footer-fixed">
   <slot name="left" />
-  <div class="spacer" />
+  <div class="spacer"></div>
   <slot name="right" />
   <AutoSaveIndicator />
 </div>

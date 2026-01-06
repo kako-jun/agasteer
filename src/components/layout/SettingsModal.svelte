@@ -62,6 +62,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
+      tabindex="-1"
       on:pointerdown={handleContentPointerDown}
       on:pointerup={handleContentPointerUp}
       on:click={handleContentClick}

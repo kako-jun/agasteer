@@ -76,7 +76,13 @@
     role="presentation"
   >
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-    <div class="modal-content" on:click|stopPropagation role="dialog" aria-modal="true">
+    <div
+      class="modal-content"
+      on:click|stopPropagation
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
       {#each message.split('\n') as line}
         <p>{line}</p>
       {/each}
