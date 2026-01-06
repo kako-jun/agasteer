@@ -17,6 +17,10 @@
     if (onCancel) {
       onCancel()
     }
+    // alertタイプは閉じ方に関わらずcallbackを実行
+    if (type === 'alert' && onConfirm) {
+      onConfirm()
+    }
     onClose()
   }
 
@@ -96,7 +100,7 @@
             >{$_('common.ok')}</button
           >
         {:else}
-          <button class="primary" on:click={onClose}>{$_('common.ok')}</button>
+          <button class="primary" on:click={handleConfirm}>{$_('common.ok')}</button>
         {/if}
       </div>
     </div>

@@ -654,15 +654,15 @@
         const now = Date.now()
         const elapsed = now - lastVisibleTime
         if (elapsed > BACKGROUND_THRESHOLD_MS) {
-          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s, reloading...`)
-          // 未保存の変更がある場合は確認
-          if (get(isDirty)) {
-            // 確認ダイアログを表示せずに、ユーザーに通知だけする
-            showPushToast($_('toast.longBackgroundWarning'), 'error')
-          } else {
-            // 未保存の変更がなければ自動リロード
-            window.location.reload()
-          }
+          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
+          // モーダルを表示し、閉じたら状態確認を実行
+          showAlert($_('modal.longBackground'), 'center', async () => {
+            // staleチェックを実行
+            const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
+            if (staleResult.status === 'stale') {
+              isStale.set(true)
+            }
+          })
         }
         lastVisibleTime = now
 
@@ -719,15 +719,20 @@
 
       switch (staleResult.status) {
         case 'stale':
-          // リモートに新しい変更あり → Pullボタンに赤丸を表示してPushしない
+          // リモートに新しい変更あり → 確認ダイアログを表示
           isStale.set(true)
-          showPushToast($_('toast.staleAutoSave'), 'error')
           console.log(
-            `Auto-push blocked: remote(${staleResult.remotePushCount}) > local(${staleResult.localPushCount})`
+            `Auto-push stale: remote(${staleResult.remotePushCount}) > local(${staleResult.localPushCount})`
           )
-          // タイマーをリセット（リトライループ防止）
-          resetAutoPushTimer()
-          return
+          // ユーザーに確認（手動Pushと同じモーダル）
+          const confirmed = await confirmAsync($_('modal.staleEdit'))
+          if (!confirmed) {
+            // キャンセル → タイマーリセットして終了
+            resetAutoPushTimer()
+            return
+          }
+          // OK → 強制Pushを続行（breakしてswitch抜ける）
+          break
 
         case 'check_failed':
           // チェック失敗（ネットワークエラー等）→ 静かにスキップ

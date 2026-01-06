@@ -119,13 +119,18 @@ export function confirmAsync(
 
 /**
  * アラートダイアログを表示
+ * @param onClose 閉じた時に実行するコールバック（オプション）
  */
-export function showAlert(message: string, position: ModalPosition = 'center') {
+export function showAlert(
+  message: string,
+  position: ModalPosition = 'center',
+  onClose?: () => void
+) {
   modalState.set({
     show: true,
     message,
     type: 'alert',
-    callback: null,
+    callback: onClose || null,
     position,
   })
 }
