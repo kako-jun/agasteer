@@ -14,8 +14,7 @@
     rootNotes,
     githubConfigured,
     metadata,
-    hasAnyChanges,
-    hasAnyDirty,
+    isDirty,
     isStructureDirty,
     setLeafDirty,
     clearAllChanges,
@@ -584,7 +583,7 @@
         pushExitGuard()
 
         // 未保存の変更がある場合は確認ダイアログを表示
-        if (get(hasAnyChanges)) {
+        if (get(isDirty)) {
           showConfirm($_('modal.exitApp'), () => {
             // ユーザーが終了を選択：ガードを削除してもう一度戻る
             history.go(-2) // ガード + 1つ前のエントリを削除
@@ -601,7 +600,7 @@
     // ページ離脱時の確認（未保存の変更がある場合）
     // ブラウザ標準のダイアログを使用
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (get(hasAnyChanges)) {
+      if (get(isDirty)) {
         e.preventDefault()
         e.returnValue = '' // Chrome requires returnValue to be set
       }
@@ -626,7 +625,7 @@
         if (elapsed > BACKGROUND_THRESHOLD_MS) {
           console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s, reloading...`)
           // 未保存の変更がある場合は確認
-          if (get(hasAnyChanges)) {
+          if (get(isDirty)) {
             // 確認ダイアログを表示せずに、ユーザーに通知だけする
             showPushToast(
               $_('toast.longBackgroundWarning') ||
@@ -852,9 +851,20 @@
   }
 
   function selectLeaf(leaf: Leaf, pane: Pane) {
-    const state = getNavState()
-    nav.selectLeaf(state, getNavDeps(), leaf, pane)
-    syncNavState(state)
+    // 現在のワールドに応じたノートからリーフの親ノートを検索
+    const activeNotes = $currentWorld === 'archive' ? $archiveNotes : $notes
+    const note = activeNotes.find((n) => n.id === leaf.noteId)
+    if (note) {
+      if (pane === 'left') {
+        $leftNote = note
+        $leftLeaf = leaf
+        $leftView = 'edit'
+      } else {
+        $rightNote = note
+        $rightLeaf = leaf
+        $rightView = 'edit'
+      }
+    }
   }
 
   async function handleSearchResultClick(result: SearchMatch) {
@@ -2344,7 +2354,7 @@
     $isPulling = true
     try {
       // 未保存の変更がある場合は確認（PWA強制終了後の再起動も考慮）
-      if (get(hasAnyChanges) || getPersistedDirtyFlag()) {
+      if (get(isDirty) || getPersistedDirtyFlag()) {
         const message = isInitialStartup
           ? $_('modal.unsavedChangesOnStartup')
           : $_('modal.unsavedChanges')
@@ -2487,7 +2497,7 @@
         // Pull成功時はGitHubと同期したのでダーティフラグをクリア
         // ただし、Pull中にユーザーが編集した場合はクリアしない
         await tick()
-        if (!get(hasAnyChanges)) {
+        if (!get(isDirty)) {
           clearAllChanges()
         }
         isStale.set(false) // Pullしたのでstale状態を解除

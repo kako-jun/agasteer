@@ -160,7 +160,7 @@ async function handlePull(isInitialStartup = false, onCancel?: () => void) {
   if (!canSync($isPulling, $isPushing).canPull) return
 
   // 未保存の変更がある場合は確認
-  if (get(hasAnyChanges) || getPersistedDirtyFlag()) {
+  if (get(isDirty) || getPersistedDirtyFlag()) {
     const message = isInitialStartup
       ? $_('modal.unsavedChangesOnStartup')
       : $_('modal.unsavedChanges')
@@ -309,16 +309,16 @@ export interface Leaf {
 ### ストア構成
 
 ```typescript
-// リーフごとのisDirtyから全体のダーティ状態を派生
-export const hasAnyDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
+// リーフごとのisDirtyから派生
+const hasAnyLeafDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
 
 // ノート構造変更フラグ（作成/削除/名前変更など）
 export const isStructureDirty = writable<boolean>(false)
 
 // 全体のダーティ判定（リーフ変更 or 構造変更）
-export const hasAnyChanges = derived(
-  [hasAnyDirty, isStructureDirty],
-  ([$hasAnyDirty, $isStructureDirty]) => $hasAnyDirty || $isStructureDirty
+export const isDirty = derived(
+  [hasAnyLeafDirty, isStructureDirty],
+  ([$hasAnyLeafDirty, $isStructureDirty]) => $hasAnyLeafDirty || $isStructureDirty
 )
 ```
 
@@ -432,7 +432,7 @@ const autoPushIntervalId = setInterval(async () => {
   if ($isPulling || $isPushing) return
 
   // ダーティがなければスキップ
-  if (!get(hasAnyChanges)) return
+  if (!get(isDirty)) return
 
   // 前回Pushから5分経過していなければスキップ
   const now = Date.now()
@@ -463,7 +463,7 @@ const autoPushIntervalId = setInterval(async () => {
 1. ブラウザタブがアクティブ（`visibilityState === 'visible'`）
 2. GitHub設定済み
 3. Push/Pull処理中でない
-4. ダーティな変更がある（`hasAnyChanges === true`）
+4. ダーティな変更がある（`isDirty === true`）
 5. 前回Pushから5分以上経過
 6. 初回Pull完了済み
 7. staleでない（リモートに新しい変更がない）
@@ -508,7 +508,7 @@ export const lastPushTime = writable<number>(0)
 ```
 編集開始
     ↓
-setLeafDirty(leafId) → hasAnyChanges = true
+setLeafDirty(leafId) → isDirty = true
     ↓
 30秒ごとにチェック
     ↓

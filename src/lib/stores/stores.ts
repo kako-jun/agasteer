@@ -46,17 +46,23 @@ export const currentWorld = writable<WorldType>('home')
 // ダーティフラグ管理（リーフごと + 全体）
 // ============================================
 
-// リーフごとのisDirtyから全体のダーティ状態を派生
-export const hasAnyDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
+// リーフごとのisDirtyから派生
+const hasAnyLeafDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
 
-// LocalStorage永続化（hasAnyDirtyの変更を監視）
+// ノート構造変更フラグ（作成/削除/名前変更など、リーフ以外の変更）
+export const isStructureDirty = writable<boolean>(false)
+
+// 全体のダーティ判定（リーフ変更 or 構造変更）
+export const isDirty = derived(
+  [hasAnyLeafDirty, isStructureDirty],
+  ([$hasAnyLeafDirty, $isStructureDirty]) => $hasAnyLeafDirty || $isStructureDirty
+)
+
+// LocalStorage永続化
 // 注意: このsubscribeはモジュール読み込み時に実行される
-hasAnyDirty.subscribe((value) => {
+isDirty.subscribe((value) => {
   setPersistedDirtyFlag(value)
 })
-
-// 後方互換性のためのエイリアス（読み取り専用）
-export const isDirty = hasAnyDirty
 
 // 起動時のLocalStorageチェック用（PWA強制終了対策）
 // storage.tsからre-export
@@ -76,24 +82,6 @@ export function clearAllDirty(): void {
 export function isNoteDirty(noteId: string, $leaves: Leaf[]): boolean {
   return $leaves.some((l) => l.noteId === noteId && l.isDirty)
 }
-
-// ノート構造変更フラグ（作成/削除/名前変更など、リーフ以外の変更）
-export const isStructureDirty = writable<boolean>(false)
-
-// 全体のダーティ判定（リーフ変更 or 構造変更）
-export const hasAnyChanges = derived(
-  [hasAnyDirty, isStructureDirty],
-  ([$hasAnyDirty, $isStructureDirty]) => $hasAnyDirty || $isStructureDirty
-)
-
-// 構造変更フラグもLocalStorageに永続化
-isStructureDirty.subscribe((value) => {
-  // hasAnyDirtyと合わせて管理（どちらかがtrueならLocalStorageに保存）
-  // hasAnyDirtyのsubscribeで既に管理しているので、ここでは構造変更時のみ追加
-  if (value) {
-    setPersistedDirtyFlag(true)
-  }
-})
 
 // 全変更をクリア
 export function clearAllChanges(): void {
@@ -115,7 +103,7 @@ export const lastStaleCheckTime = writable<number>(0)
 
 // 自動Push進捗を初期化（循環参照回避のため遅延初期化）
 import { initAutoPushProgress } from './auto-save'
-initAutoPushProgress(hasAnyChanges)
+initAutoPushProgress(isDirty)
 
 // ペイン状態ストア
 export const leftNote = writable<Note | null>(null)

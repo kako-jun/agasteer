@@ -140,7 +140,7 @@ async function pullFromGitHub(isInitialStartup = false, onCancel?: () => void | 
   $isPulling = true
   try {
     // 3. ダーティチェック（ロックを保持したまま await）
-    if (get(hasAnyChanges) || getPersistedDirtyFlag()) {
+    if (get(isDirty) || getPersistedDirtyFlag()) {
       const confirmed = await confirmAsync(message)
       if (!confirmed) {
         await onCancel?.()
@@ -253,7 +253,7 @@ leaves.set(sortedLeaves)
 
 // Pull完了後、ダーティな変更がない場合のみクリア
 await tick()
-if (!get(hasAnyChanges)) {
+if (!get(isDirty)) {
   clearAllChanges()
 }
 ```

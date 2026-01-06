@@ -43,8 +43,8 @@ export const shouldAutoPush = writable<boolean>(false)
 /**
  * 進捗追跡を初期化（stores.tsからの参照を遅延設定）
  */
-export function initAutoPushProgress(hasAnyChanges: Readable<boolean>): void {
-  hasAnyChanges.subscribe((value) => {
+export function initAutoPushProgress(isDirty: Readable<boolean>): void {
+  isDirty.subscribe((value) => {
     // false → true になった瞬間に開始時刻を記録
     if (value && !hasChangesValue) {
       dirtyStartTime = Date.now()

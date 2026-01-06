@@ -9,6 +9,7 @@
   "header": {
     "settings": "設定を開く",
     "pull": "Pullする",
+    "push": "Pushする",
     "swapPanes": "君の名は",
     "staleRemote": "リモートに新しい変更があります"
   },
@@ -80,8 +81,8 @@
     "preview": "プレビュー",
     "edit": "編集",
     "move": "移動",
-    "archive": "アーカイブに移動",
-    "restore": "Homeに復元"
+    "archive": "アーカイブ",
+    "restore": "リストア"
   },
   "settings": {
     "title": "設定",
@@ -215,7 +216,7 @@
     "moved": "移動しました",
     "deleted": "削除しました",
     "archived": "アーカイブしました",
-    "restored": "復元しました",
+    "restored": "リストアしました",
     "noteCreated": "ノートを作成しました",
     "leafCreated": "リーフを作成しました"
   },
@@ -236,8 +237,8 @@
     "exitApp": "未保存の変更があります。続行しますか？",
     "archiveNote": "このノートをアーカイブに移動しますか？",
     "archiveLeaf": "このリーフをアーカイブに移動しますか？",
-    "restoreNote": "このノートをHomeに復元しますか？",
-    "restoreLeaf": "このリーフをHomeに復元しますか？"
+    "restoreNote": "このノートをホームの同じ階層にリストアしますか？",
+    "restoreLeaf": "このリーフをホームの同じ階層にリストアしますか？"
   },
   "move": {
     "title": "移動先を選択",

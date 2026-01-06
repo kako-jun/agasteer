@@ -9,6 +9,7 @@
   "header": {
     "settings": "Open settings",
     "pull": "Pull",
+    "push": "Push",
     "swapPanes": "Swap Panes",
     "staleRemote": "Remote has newer changes"
   },
@@ -80,8 +81,8 @@
     "preview": "Preview",
     "edit": "Edit",
     "move": "Move",
-    "archive": "Move to Archive",
-    "restore": "Restore to Home"
+    "archive": "Archive",
+    "restore": "Restore"
   },
   "settings": {
     "title": "Settings",
@@ -235,8 +236,8 @@
     "exitApp": "You have unsaved changes. Continue?",
     "archiveNote": "Move this note to Archive?",
     "archiveLeaf": "Move this leaf to Archive?",
-    "restoreNote": "Restore this note to Home?",
-    "restoreLeaf": "Restore this leaf to Home?"
+    "restoreNote": "Restore this note to same path in Home?",
+    "restoreLeaf": "Restore this leaf to same path in Home?"
   },
   "loading": {
     "pulling": "Pulling...",
