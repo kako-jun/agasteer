@@ -1728,6 +1728,39 @@
 
   function deleteLeaf(leafId: string, pane: Pane) {
     const otherLeaf = pane === 'left' ? $rightLeaf : $leftLeaf
+
+    // アーカイブ内の場合は専用処理
+    if ($currentWorld === 'archive') {
+      const allLeaves = $archiveLeaves
+      const allNotes = $archiveNotes
+      const targetLeaf = allLeaves.find((l) => l.id === leafId)
+      if (!targetLeaf) return
+
+      const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+      showConfirm(
+        $_('modal.deleteLeaf'),
+        () => {
+          archiveLeaves.set(allLeaves.filter((l) => l.id !== leafId))
+          isStructureDirty.set(true)
+
+          const note = allNotes.find((n) => n.id === targetLeaf.noteId)
+          if (note) selectNote(note, pane)
+          else goHome(pane)
+
+          if (otherLeaf?.id === leafId) {
+            const otherPane = pane === 'left' ? 'right' : 'left'
+            if (note) selectNote(note, otherPane)
+            else goHome(otherPane)
+          }
+
+          showPushToast($_('toast.deleted'), 'success')
+        },
+        position
+      )
+      return
+    }
+
+    // Home内の場合は既存処理
     deleteLeafLib({
       leafId,
       pane,
@@ -1864,6 +1897,54 @@
   }
 
   function moveLeafTo(destNoteId: string | null, targetLeaf: Leaf) {
+    // アーカイブ内の場合は専用処理
+    if ($currentWorld === 'archive') {
+      if (!destNoteId || targetLeaf.noteId === destNoteId) {
+        closeMoveModal()
+        return
+      }
+
+      const allLeaves = $archiveLeaves
+      const allNotes = $archiveNotes
+      const destinationNote = allNotes.find((n) => n.id === destNoteId)
+      if (!destinationNote) {
+        closeMoveModal()
+        return
+      }
+
+      const hasDuplicate = allLeaves.some(
+        (l) => l.noteId === destNoteId && l.title.trim() === targetLeaf.title.trim()
+      )
+      if (hasDuplicate) {
+        showAlert($_('modal.duplicateLeafDestination'))
+        closeMoveModal()
+        return
+      }
+
+      const remaining = allLeaves.filter((l) => l.id !== targetLeaf.id)
+      const movedLeaf: Leaf = {
+        ...targetLeaf,
+        noteId: destNoteId,
+        order: remaining.filter((l) => l.noteId === destNoteId).length,
+        updatedAt: Date.now(),
+      }
+      archiveLeaves.set([...remaining, movedLeaf])
+      isStructureDirty.set(true)
+
+      if ($leftLeaf?.id === targetLeaf.id) {
+        $leftLeaf = movedLeaf
+        $leftNote = destinationNote
+      }
+      if ($rightLeaf?.id === targetLeaf.id) {
+        $rightLeaf = movedLeaf
+        $rightNote = destinationNote
+      }
+      showPushToast($_('toast.moved'), 'success')
+      closeMoveModal()
+      return
+    }
+
+    // Home内の場合は既存処理
     const result = moveLeafToLib(targetLeaf, destNoteId, $_)
     if (result.success && result.movedLeaf && result.destNote) {
       if ($leftLeaf?.id === targetLeaf.id) {
@@ -2133,12 +2214,15 @@
       return
     }
 
+    // 現在のワールドに応じたリーフリストを使用
+    const allLeaves = $currentWorld === 'archive' ? $archiveLeaves : $leaves
+
     // 選択テキストがあればそれをダウンロード
     const editorView = pane === 'left' ? leftEditorView : rightEditorView
     if (editorView && editorView.getSelectedText) {
       const selectedText = editorView.getSelectedText()
       if (selectedText) {
-        const targetLeaf = $leaves.find((l) => l.id === leafId)
+        const targetLeaf = allLeaves.find((l) => l.id === leafId)
         if (!targetLeaf) return
         const blob = new Blob([selectedText], { type: 'text/markdown' })
         const url = URL.createObjectURL(blob)
@@ -2154,7 +2238,17 @@
     }
 
     // 選択なしの場合は全文ダウンロード
-    downloadLeafAsMarkdownLib(leafId, !isFirstPriorityFetched, $_)
+    const targetLeaf = allLeaves.find((l) => l.id === leafId)
+    if (!targetLeaf) return
+    const blob = new Blob([targetLeaf.content], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${targetLeaf.title}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   // プレビューを画像としてダウンロード
@@ -2164,7 +2258,8 @@
       return
     }
 
-    const allLeaves = $leaves
+    // 現在のワールドに応じたリーフリストを使用
+    const allLeaves = $currentWorld === 'archive' ? $archiveLeaves : $leaves
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 

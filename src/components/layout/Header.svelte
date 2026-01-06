@@ -240,6 +240,7 @@
     z-index: 1000;
     display: flex;
     gap: 0;
+    overflow: hidden;
   }
 
   .pane-menu button {
@@ -256,18 +257,6 @@
   .pane-menu button:hover {
     background: var(--accent);
     color: var(--bg);
-  }
-
-  .pane-menu button:first-child {
-    border-radius: 7px 0 0 7px;
-  }
-
-  .pane-menu button:last-child {
-    border-radius: 0 7px 7px 0;
-  }
-
-  .pane-menu button:not(:last-child) {
-    border-right: 1px solid var(--border);
   }
 
   .pane-menu button :global(svg) {
