@@ -8,37 +8,7 @@ GitHubにPushされていない変更がある状態で、データを失う可�
 
 #### isDirtyストア
 
-GitHubにPushされていない変更があるかどうかを追跡する`isDirty`ストア（`stores.ts`）。
-
-```typescript
-// isDirtyをLocalStorageに永続化するカスタムストア
-// PWA強制終了後も未保存状態を検出可能にする
-const IS_DIRTY_KEY = 'agasteer_isDirty'
-
-function createIsDirtyStore() {
-  // LocalStorageから初期値を読み込み
-  const stored = localStorage.getItem(IS_DIRTY_KEY)
-  const initial = stored === 'true'
-
-  const { subscribe, set: originalSet, update } = writable<boolean>(initial)
-
-  return {
-    subscribe,
-    set: (value: boolean) => {
-      originalSet(value)
-      // LocalStorageに永続化
-      if (value) {
-        localStorage.setItem(IS_DIRTY_KEY, 'true')
-      } else {
-        localStorage.removeItem(IS_DIRTY_KEY)
-      }
-    },
-    update,
-  }
-}
-
-export const isDirty = createIsDirtyStore()
-```
+GitHubにPushされていない変更があるかどうかを追跡するストア。LocalStorageに永続化することで、PWA強制終了後も未保存状態を検出できます。
 
 **LocalStorage永続化の目的:**
 
@@ -46,39 +16,9 @@ PWAがOSによってバックグラウンドで強制終了された場合、`be
 
 #### ダーティフラグが立つタイミング
 
-1. **エディタで編集時** (`MarkdownEditor.svelte`)
-
-   ```typescript
-   EditorView.updateListener.of((update) => {
-     if (update.docChanged) {
-       const newContent = update.state.doc.toString()
-       onChange(newContent)
-       // エディタで変更があったらダーティフラグを立てる
-       isDirty.set(true)
-     }
-   })
-   ```
-
-2. **ノート操作時** (`stores.ts`)
-
-   ```typescript
-   export function updateNotes(newNotes: Note[]): void {
-     notes.set(newNotes)
-     saveNotes(newNotes).catch((err) => console.error('Failed to persist notes:', err))
-     // ノートの変更があったらダーティフラグを立てる
-     isDirty.set(true)
-   }
-   ```
-
-3. **リーフ操作時** (`stores.ts`)
-   ```typescript
-   export function updateLeaves(newLeaves: Leaf[]): void {
-     leaves.set(newLeaves)
-     saveLeaves(newLeaves).catch((err) => console.error('Failed to persist leaves:', err))
-     // リーフの変更があったらダーティフラグを立てる
-     isDirty.set(true)
-   }
-   ```
+1. **エディタで編集時**: `update.docChanged`検出時
+2. **ノート操作時**: `updateNotes()`関数内で自動設定
+3. **リーフ操作時**: `updateLeaves()`関数内で自動設定
 
 **対象操作:**
 
@@ -87,25 +27,8 @@ PWAがOSによってバックグラウンドで強制終了された場合、`be
 
 #### ダーティフラグがクリアされるタイミング
 
-1. **Push成功時** (`App.svelte`)
-
-   ```typescript
-   const result = await executePush($leaves, $notes, $settings, isOperationsLocked)
-
-   if (result.variant === 'success') {
-     isDirty.set(false) // Push成功時にダーティフラグをクリア
-   }
-   ```
-
-2. **Pull成功時** (`App.svelte`)
-   ```typescript
-   if (result.success) {
-     updateNotes(result.notes)
-     updateLeaves(result.leaves)
-     metadata.set(result.metadata)
-     isDirty.set(false) // Pull成功時はGitHubと同期したのでクリア
-   }
-   ```
+1. **Push成功時**: GitHubへの保存が完了
+2. **Pull成功時**: GitHubと同期が完了
 
 ### 確認ダイアログの表示
 
@@ -113,39 +36,14 @@ PWAがOSによってバックグラウンドで強制終了された場合、`be
 
 アプリ起動時は「自動的にPullボタンを押す」のと同じです。handlePull内でダーティチェック、staleチェックが行われます。
 
-```typescript
-// onMount内
-if (isConfigured) {
-  // 初回Pull実行（handlePull内でdirtyチェック、staleチェックを行う）
-  // キャンセル時はIndexedDBから読み込んで操作可能にする
-  await handlePull(true, async () => {
-    try {
-      const savedNotes = await loadNotes()
-      const savedLeaves = await loadLeaves()
-      notes.set(savedNotes)
-      leaves.set(savedLeaves)
-      isFirstPriorityFetched = true
-      restoreStateFromUrl(false)
-    } catch (error) {
-      console.error('Failed to load from IndexedDB:', error)
-      await handlePull(true)
-    }
-  })
-}
-```
-
-handlePull関数のシグネチャ:
-
-```typescript
-async function handlePull(isInitialStartup = false, onCancel?: () => void)
-```
+**handlePull関数のパラメータ:**
 
 - **isInitialStartup**: trueの場合、確認ダイアログのメッセージが起動時用に変わる
 - **onCancel**: 確認ダイアログでキャンセルした時に呼ばれるコールバック
 
 **起動時のキャンセル動作:**
 
-- `isFirstPriorityFetched = true` を設定して操作ロックを解除
+- 操作ロックを解除
 - IndexedDBからノート・リーフを読み込んでストアに設定
 - URLから状態を復元
 - これにより、PWA強制終了後でもローカルの変更を保持して継続編集が可能
@@ -154,55 +52,25 @@ async function handlePull(isInitialStartup = false, onCancel?: () => void)
 
 Pullボタンと初回Pullは同じhandlePull関数を使用します。ダーティチェックとstaleチェックを行い、必要に応じて確認ダイアログを表示します。
 
-```typescript
-async function handlePull(isInitialStartup = false, onCancel?: () => void) {
-  // 交通整理: Pull/Push中は不可
-  if (!canSync($isPulling, $isPushing).canPull) return
+**処理フロー:**
 
-  // 未保存の変更がある場合は確認
-  if (get(isDirty) || getPersistedDirtyFlag()) {
-    const message = isInitialStartup
-      ? $_('modal.unsavedChangesOnStartup')
-      : $_('modal.unsavedChanges')
-    showConfirm(message, () => executePullInternal(isInitialStartup), onCancel)
-    return
-  }
+1. 交通整理: Pull/Push中は不可
+2. 未保存の変更がある場合は確認ダイアログ
+3. staleチェック（変更がなければ「変更なし」通知）
+4. Pull実行
 
-  // staleチェック（比較対象は常にある：初期値0 vs リモート）
-  const isStale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
-  if (!isStale) {
-    showPullToast($_('github.noRemoteChanges'), 'success')
-    return
-  }
-
-  await executePullInternal(isInitialStartup)
-}
-```
+**確認ダイアログ:**
 
 - **ダイアログタイプ**: Modal.svelteベースの既存モーダル
 - **メッセージ（通常）**: 「未保存の変更があります。Pullすると上書きされます。続行しますか？」
 - **メッセージ（起動時）**: 「前回の編集内容がGitHubに保存されていません。Pullすると失われます。Pullしますか？」
-- **OK**: Pullを実行
-- **キャンセル**: onCancelコールバックがあれば実行、なければ何もしない
 
 #### 3. ページ離脱時（ブラウザ標準ダイアログ）
 
-タブを閉じる、リロード、外部サイトへの移動時に確認ダイアログを表示。
-
-```typescript
-const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-  if (get(isDirty)) {
-    e.preventDefault()
-    e.returnValue = '' // Chrome requires returnValue to be set
-  }
-}
-window.addEventListener('beforeunload', handleBeforeUnload)
-```
+タブを閉じる、リロード、外部サイトへの移動時に`beforeunload`イベントで確認ダイアログを表示。
 
 - **ダイアログタイプ**: ブラウザ標準の確認ダイアログ
 - **メッセージ**: ブラウザが自動生成（「変更が保存されていない可能性があります」など）
-- **OK**: ページを離脱
-- **キャンセル**: ページに留まる
 
 ### 視覚的なフィードバック
 
@@ -210,36 +78,12 @@ window.addEventListener('beforeunload', handleBeforeUnload)
 
 未保存の変更がある場合、保存ボタンに赤い丸印（notification badge）を表示。
 
-```svelte
-<button type="button" class="primary save-button" on:click={handleSaveToGitHub}>
-  <svg><!-- 保存アイコン --></svg>
-  {#if $isDirty}
-    <span class="notification-badge"></span>
-  {/if}
-</button>
-```
-
-```css
-.save-button {
-  position: relative;
-}
-
-.notification-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
-  border-radius: 50%;
-}
-```
-
-- **表示位置**: 保存ボタンの右上
-- **サイズ**: 8x8px
-- **色**: #ef4444（赤色）
-- **形状**: 円形
-- **デザイン**: 設定ボタンのnotification badgeと同じスタイル
+| 項目     | 値               |
+| -------- | ---------------- |
+| 表示位置 | 保存ボタンの右上 |
+| サイズ   | 8x8px            |
+| 色       | #ef4444（赤色）  |
+| 形状     | 円形             |
 
 ### アプリ内ナビゲーションは制限されない
 
@@ -292,116 +136,123 @@ onMount: LocalStorageからisDirty=trueを検出
 
 ### データ構造
 
-```typescript
-export interface Leaf {
-  id: UUID
-  title: string
-  noteId: UUID
-  content: string
-  updatedAt: number
-  order: number
-  badgeIcon?: string
-  badgeColor?: string
-  isDirty?: boolean // 未Pushの変更があるかどうか
-}
-```
+Leaf型に`isDirty`フィールド（boolean、オプション）を追加。未Pushの変更があるかどうかを示します。
 
 ### ストア構成
 
-```typescript
-// リーフごとのisDirtyから派生
-const hasAnyLeafDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
-
-// ノート構造変更フラグ（作成/削除/名前変更など）
-export const isStructureDirty = writable<boolean>(false)
-
-// 全体のダーティ判定（リーフ変更 or 構造変更）
-export const isDirty = derived(
-  [hasAnyLeafDirty, isStructureDirty],
-  ([$hasAnyLeafDirty, $isStructureDirty]) => $hasAnyLeafDirty || $isStructureDirty
-)
-```
+| ストア           | 説明                                       |
+| ---------------- | ------------------------------------------ |
+| hasAnyLeafDirty  | いずれかのリーフがダーティかどうか（派生） |
+| isStructureDirty | ノート構造が変更されたかどうか             |
+| isDirty          | 全体のダーティ判定（リーフ or 構造）       |
+| dirtyNoteIds     | 構造変更があったノートIDのSet              |
 
 ### ヘルパー関数
 
-```typescript
-// 特定のリーフをダーティに設定
-export function setLeafDirty(leafId: string, dirty: boolean = true): void {
-  leaves.update(($leaves) => $leaves.map((l) => (l.id === leafId ? { ...l, isDirty: dirty } : l)))
-}
-
-// 全リーフのダーティをクリア
-export function clearAllDirty(): void {
-  leaves.update(($leaves) => $leaves.map((l) => ({ ...l, isDirty: false })))
-}
-
-// 全変更をクリア（Push/Pull成功時に呼び出し）
-export function clearAllChanges(): void {
-  clearAllDirty()
-  isStructureDirty.set(false)
-}
-
-// 特定ノート配下のリーフがダーティかどうか
-export function isNoteDirty(noteId: string, $leaves: Leaf[]): boolean {
-  return $leaves.some((l) => l.noteId === noteId && l.isDirty)
-}
-```
+| 関数名                | 説明                                        |
+| --------------------- | ------------------------------------------- |
+| setLeafDirty          | 特定のリーフをダーティに設定                |
+| clearAllDirty         | 全リーフのダーティをクリア                  |
+| clearAllChanges       | 全変更をクリア（Push/Pull成功時に呼び出し） |
+| isNoteDirty           | 特定ノート配下のリーフがダーティかどうか    |
+| setLastPushedSnapshot | Push/Pull成功時にスナップショットを保存     |
 
 ### UI表示
 
-#### リーフカードの赤丸
-
-```svelte
-<strong class="text-ellipsis">
-  {item.leaf.title}
-  {#if item.leaf.isDirty}
-    <span class="dirty-indicator" title={$_('leaf.unsaved')}></span>
-  {/if}
-</strong>
-```
-
-#### ノートカードの赤丸
-
-```svelte
-<NoteCard
-  note={subNote}
-  isDirty={allLeaves.some((l) => l.noteId === subNote.id && l.isDirty)}
-  ...
-/>
-```
-
-#### CSSスタイル
-
-```css
-.dirty-indicator {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
-  border-radius: 50%;
-  margin-left: 4px;
-  vertical-align: middle;
-}
-```
+- **リーフカードの赤丸**: リーフタイトルの横に表示（`leaf.isDirty`）
+- **ノートカードの赤丸**: 配下にダーティなリーフがある、または構造変更がある場合に表示
 
 ### ダーティフラグの設定タイミング
 
-1. **エディタで編集時** (`MarkdownEditor.svelte`)
-
-   ```typescript
-   if (!isOfflineLeaf(leafId) && !isPriorityLeaf(leafId)) {
-     setLeafDirty(leafId)
-   }
-   ```
-
-2. **ノート構造変更時** (`stores.ts`)
-   - ノート/リーフの作成、削除、名前変更、移動
-   - `isStructureDirty.set(true)`
+1. **エディタで編集時**: オフラインリーフ・Priorityリーフ以外（`leaf.isDirty = true`）
+2. **ノート構造変更時**: 自動検出（下記「スナップショットベースの差分検出」参照）
 
 ### ダーティフラグのクリアタイミング
 
-1. **Push成功時**: `clearAllChanges()`
-2. **Pull成功時**: `clearAllChanges()`
+1. **Push成功時**: `setLastPushedSnapshot()` + `clearAllChanges()`
+2. **Pull成功時**: `setLastPushedSnapshot()` + `clearAllChanges()`
+
+---
+
+## スナップショットベースの差分検出
+
+### 概要
+
+ノートやリーフの構造的な変更（作成、削除、移動、名前変更など）を検出するために、最後にPush/Pullした状態のスナップショットと現在の状態を比較します。これにより、どのノートに変更があるかを自動的に特定し、UIに赤丸を表示できます。
+
+### 設計思想
+
+以前は構造変更のたびに手動で`addDirtyNoteId()`を呼び出していましたが、この方式には以下の問題がありました：
+
+- **抜け漏れのリスク**: 21箇所以上に分散した呼び出しで、新機能追加時に漏れる可能性
+- **保守性の低下**: 変更箇所が多く、コードレビューが困難
+- **一貫性の欠如**: 場所によって呼び出し忘れがあると、UIの表示が不正確に
+
+スナップショットベースの差分検出により、これらの問題を解決しました：
+
+- **一元化**: 差分検出ロジックは`stores.ts`に集約
+- **自動化**: ストア更新時（`updateNotes`、`updateLeaves`等）に自動実行
+- **確実性**: 手動呼び出し不要のため、抜け漏れなし
+
+### スナップショット変数
+
+stores.tsにモジュールレベルの変数として、Home用とArchive用それぞれのノート・リーフの最終Push/Pull状態を保持します。
+
+### 差分検出のタイミング
+
+差分検出は以下の関数内で自動的に実行されます：
+
+| 関数名              | トリガー              |
+| ------------------- | --------------------- |
+| updateNotes         | Homeのノート更新時    |
+| updateLeaves        | Homeのリーフ更新時    |
+| updateArchiveNotes  | Archiveのノート更新時 |
+| updateArchiveLeaves | Archiveのリーフ更新時 |
+
+### 検出される変更の種類
+
+#### ノートの変更
+
+| 変更タイプ | 検出方法                           | ダーティになるノート |
+| ---------- | ---------------------------------- | -------------------- |
+| 追加       | 現在にあり、スナップショットにない | 親ノート             |
+| 削除       | スナップショットにあり、現在にない | 親ノート             |
+| 名前変更   | `name`の比較                       | 親ノート             |
+| 順序変更   | `order`の比較                      | 親ノート             |
+| 移動       | `parentId`の比較                   | 元の親 + 新しい親    |
+
+#### リーフの変更
+
+| 変更タイプ   | 検出方法                           | ダーティになるノート |
+| ------------ | ---------------------------------- | -------------------- |
+| 追加         | 現在にあり、スナップショットにない | 親ノート             |
+| 削除         | スナップショットにあり、現在にない | 親ノート             |
+| タイトル変更 | `title`の比較                      | 親ノート             |
+| 順序変更     | `order`の比較                      | 親ノート             |
+| 移動         | `noteId`の比較                     | 元の親 + 新しい親    |
+
+**注**: リーフのコンテンツ変更は`leaf.isDirty`フラグで個別に管理されるため、差分検出の対象外です（高頻度の変更による負荷を避けるため）。
+
+### スナップショット更新のタイミング
+
+スナップショットは以下のタイミングで更新されます：
+
+1. **Push成功時**: 現在の状態が「最新の同期済み状態」になる
+2. **Pull成功時（Home）**: GitHubから取得した状態が「最新の同期済み状態」になる
+3. **Pull成功時（Archive）**: アーカイブデータが「最新の同期済み状態」になる
+
+### UIへの反映
+
+ノートカードの赤丸表示は以下の2条件のいずれかで表示されます：
+
+- 配下のリーフにコンテンツ変更がある（`leaf.isDirty`）
+- 構造的な変更がある（`dirtyNoteIds`に含まれる）
+
+### パフォーマンス考慮
+
+- **検出タイミング**: ストア更新時のみ（定期的なポーリングではない）
+- **スコープ**: Home/Archiveそれぞれで独立して検出し、結果を統合
+- **ディープコピー**: スナップショット保存時にJSON.parse/stringifyで参照を切る
 
 ---
 
@@ -413,48 +264,10 @@ export function isNoteDirty(noteId: string, $leaves: Leaf[]): boolean {
 
 ### 設定値
 
-```typescript
-const AUTO_PUSH_INTERVAL_MS = 5 * 60 * 1000 // 5分（Push間隔）
-const AUTO_PUSH_CHECK_INTERVAL_MS = 30 * 1000 // 30秒（チェック間隔）
-```
-
-### 実装
-
-```typescript
-const autoPushIntervalId = setInterval(async () => {
-  // バックグラウンドでは実行しない
-  if (document.visibilityState !== 'visible') return
-
-  // GitHub設定がなければスキップ
-  if (!$githubConfigured) return
-
-  // Push/Pull中はスキップ
-  if ($isPulling || $isPushing) return
-
-  // ダーティがなければスキップ
-  if (!get(isDirty)) return
-
-  // 前回Pushから5分経過していなければスキップ
-  const now = Date.now()
-  const lastPush = get(lastPushTime)
-  if (lastPush > 0 && now - lastPush < AUTO_PUSH_INTERVAL_MS) return
-
-  // 初回Pullが完了していなければスキップ
-  if (!isFirstPriorityFetched) return
-
-  // staleチェックを実行
-  const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
-  if (staleResult.status === 'stale') {
-    // staleの場合は確認ダイアログを表示（手動Pushと同じ）
-    isStale.set(true)
-    const confirmed = await confirmAsync($_('modal.staleEdit'))
-    if (!confirmed) return
-  }
-
-  // 自動Push実行
-  await handleSaveToGitHub()
-}, AUTO_PUSH_CHECK_INTERVAL_MS)
-```
+| 定数                        | 値   | 説明         |
+| --------------------------- | ---- | ------------ |
+| AUTO_PUSH_INTERVAL_MS       | 5分  | Push間隔     |
+| AUTO_PUSH_CHECK_INTERVAL_MS | 30秒 | チェック間隔 |
 
 ### 動作条件
 
@@ -479,53 +292,27 @@ const autoPushIntervalId = setInterval(async () => {
 
 ### Pullボタンの赤丸
 
-```svelte
-<!-- Header.svelte -->
-<div class="pull-button-wrapper">
-  <div class="pull-button">
-    <IconButton onClick={onPull} ...>
-      <OctocatPullIcon />
-    </IconButton>
-  </div>
-  {#if isStale}
-    <span class="notification-badge" title={$_('header.staleRemote')}></span>
-  {/if}
-</div>
-```
+stale状態の場合、Pullボタンに赤い丸印を表示してユーザーに通知します。
 
 ### 関連ストア
 
-```typescript
-// stale状態（リモートに新しい変更がある）
-export const isStale = writable<boolean>(false)
-
-// 最後にPush成功した時刻
-export const lastPushTime = writable<number>(0)
-```
+| ストア       | 説明                               |
+| ------------ | ---------------------------------- |
+| isStale      | リモートに新しい変更があるかどうか |
+| lastPushTime | 最後にPush成功した時刻             |
 
 ### 動作フロー
 
-```
-編集開始
-    ↓
-setLeafDirty(leafId) → isDirty = true
-    ↓
-30秒ごとにチェック
-    ↓
-5分経過 + ダーティあり + アクティブ
-    ↓
-staleチェック
-    ├─ staleでない → 自動Push実行 → lastPushTime更新 → clearAllChanges()
-    └─ stale → isStale = true → Pullボタンに赤丸 → 自動Pushスキップ
-```
+1. 編集開始 → `setLeafDirty(leafId)` → `isDirty = true`
+2. 30秒ごとにチェック
+3. 5分経過 + ダーティあり + アクティブ
+4. staleチェック
+   - staleでない → 自動Push実行 → `lastPushTime`更新 → `clearAllChanges()`
+   - stale → `isStale = true` → Pullボタンに赤丸 → 自動Pushスキップ
 
 ### Pull後のstale解除
 
-```typescript
-// Pull成功時
-clearAllChanges()
-isStale.set(false) // Pullしたのでstale状態を解除
-```
+Pull成功時に`clearAllChanges()`と`isStale.set(false)`を実行してstale状態を解除します。
 
 ### 設計思想
 

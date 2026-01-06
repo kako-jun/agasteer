@@ -4,7 +4,7 @@
 import { get } from 'svelte/store'
 import type { Note, Leaf } from '../types'
 import type { Pane } from '../navigation'
-import { notes, leaves, updateNotes, updateLeaves, addDirtyNoteId } from '../stores'
+import { notes, leaves, updateNotes, updateLeaves } from '../stores'
 import { showAlert, showConfirm, showPushToast } from '../ui'
 // 循環参照回避: utils/index.tsではなく、直接utils.tsからインポート
 import { generateUniqueName, normalizeBadgeValue } from '../utils/utils'
@@ -68,11 +68,6 @@ export function createNote(options: CreateNoteOptions): Note | null {
 
   updateNotes([...allNotes, newNote])
 
-  // 親ノートをダーティとしてマーク（赤丸表示用）
-  if (parentId) {
-    addDirtyNoteId(parentId)
-  }
-
   return newNote
 }
 
@@ -111,11 +106,6 @@ export function deleteNote(options: DeleteNoteOptions): void {
 
     const parentId = targetNote.parentId
     const parentNote = parentId ? remainingNotes.find((f) => f.id === parentId) : null
-
-    // 親ノートをダーティとしてマーク（赤丸表示用）
-    if (parentId) {
-      addDirtyNoteId(parentId)
-    }
 
     // ナビゲーション処理
     onNavigate(pane, parentNote || null)
@@ -219,10 +209,6 @@ export function moveNoteTo(
   updated = normalizeNoteOrders(updated, nextParent)
 
   updateNotes(updated)
-
-  // 元の親ノートと移動先の親ノートをダーティとしてマーク（赤丸表示用）
-  if (currentParent) addDirtyNoteId(currentParent)
-  if (nextParent) addDirtyNoteId(nextParent)
 
   const updatedNote = updated.find((n) => n.id === note.id) || note
   return { success: true, updatedNote }

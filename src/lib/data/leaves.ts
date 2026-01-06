@@ -4,7 +4,7 @@
 import { get } from 'svelte/store'
 import type { Note, Leaf } from '../types'
 import type { Pane } from '../navigation'
-import { notes, leaves, updateLeaves, addDirtyNoteId } from '../stores'
+import { notes, leaves, updateLeaves } from '../stores'
 import { showAlert, showConfirm, showPushToast } from '../ui'
 // 循環参照回避: utils/index.tsではなく、直接utils.tsからインポート
 import { generateUniqueName, normalizeBadgeValue } from '../utils/utils'
@@ -70,9 +70,6 @@ export function createLeaf(options: CreateLeafOptions): Leaf | null {
 
   updateLeaves([...allLeaves, newLeaf])
 
-  // 親ノートをダーティとしてマーク（赤丸表示用）
-  addDirtyNoteId(targetNote.id)
-
   return newLeaf
 }
 
@@ -105,9 +102,6 @@ export function deleteLeaf(options: DeleteLeafOptions): void {
     translate('modal.deleteLeaf'),
     () => {
       updateLeaves(allLeaves.filter((n) => n.id !== leafId))
-
-      // 親ノートをダーティとしてマーク（赤丸表示用）
-      addDirtyNoteId(targetLeaf.noteId)
 
       // 統計更新
       onUpdateStats(leafId, targetLeaf.content)
@@ -254,10 +248,6 @@ export function moveLeafTo(
   updatedLeaves = [...updatedLeaves, movedLeaf]
 
   updateLeaves(updatedLeaves)
-
-  // 元のノートと移動先のノートをダーティとしてマーク（赤丸表示用）
-  addDirtyNoteId(leaf.noteId)
-  addDirtyNoteId(destNoteId)
 
   return { success: true, movedLeaf, destNote: destinationNote }
 }
