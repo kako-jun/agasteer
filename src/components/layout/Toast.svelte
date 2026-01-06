@@ -44,7 +44,7 @@
   .toast {
     background: var(--surface-1);
     color: var(--text);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
     border-radius: 8px;
     padding: 0.5rem 0.75rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -56,12 +56,17 @@
   }
 
   .toast.success {
-    border-color: var(--accent);
-    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 20%, var(--surface-1) 80%);
   }
 
   .toast.error {
-    border-color: var(--error);
-    color: var(--error);
+    background: color-mix(in srgb, var(--error) 20%, var(--surface-1) 80%);
+  }
+
+  /* ダークテーマ: 白い枠 */
+  :global([data-theme='dotsD']) .toast,
+  :global([data-theme='dotsF']) .toast,
+  :global([data-theme='greenboard']) .toast {
+    border-color: #ffffff;
   }
 </style>
