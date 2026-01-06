@@ -4,7 +4,20 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "ok": "OK",
-    "home": "Home"
+    "home": "Home",
+    "note": "Note",
+    "leaf": "Leaf",
+    "close": "Close",
+    "closeSettings": "Close settings",
+    "needInitialPull": "Operations are locked until the initial Pull completes. Please Pull from settings."
+  },
+  "storage": {
+    "dbOpen": "Could not open database. Please restart your browser.",
+    "dbBlocked": "Database is in use by another tab. Please close other tabs and try again.",
+    "dbUpgrade": "Database upgrade failed. Please reload the page.",
+    "dbOperation": "Failed to save/load data.",
+    "dbClosed": "Database connection was closed. Please reload the page.",
+    "dbError": "A database error occurred."
   },
   "header": {
     "settings": "Open settings",
@@ -201,6 +214,7 @@
     }
   },
   "toast": {
+    "pullStart": "Pulling...",
     "pullSuccess": "Pulled successfully",
     "pullFailed": "Pull failed",
     "pushSuccess": "Pushed successfully",
@@ -244,6 +258,8 @@
     "pushing": "Pushing..."
   },
   "github": {
+    "tokenNotSet": "Token not set",
+    "invalidRepoName": "Invalid repository name (owner/repo)",
     "rateLimited": "LIMIT BREAK! Please retry in ~{minutes} min",
     "rateLimitedNoTime": "LIMIT BREAK! Please wait and try again later",
     "invalidToken": "Invalid token",

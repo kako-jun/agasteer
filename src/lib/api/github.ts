@@ -184,13 +184,14 @@ async function runWithConcurrency<T, R>(
 }
 /**
  * GitHub設定を検証
+ * @returns valid: true または valid: false と i18nキー
  */
-function validateGitHubSettings(settings: Settings): { valid: boolean; error?: string } {
+function validateGitHubSettings(settings: Settings): { valid: boolean; errorKey?: string } {
   if (!settings.token) {
-    return { valid: false, error: 'トークンが未設定です' }
+    return { valid: false, errorKey: 'github.tokenNotSet' }
   }
   if (!settings.repoName || !settings.repoName.includes('/')) {
-    return { valid: false, error: 'リポジトリ名が不正です（owner/repo）' }
+    return { valid: false, errorKey: 'github.invalidRepoName' }
   }
   return { valid: true }
 }
@@ -291,7 +292,7 @@ export async function saveToGitHub(
   if (!validation.valid) {
     return {
       success: false,
-      message: `❌ ${validation.error}`,
+      message: validation.errorKey || 'github.networkError',
     }
   }
 
@@ -328,19 +329,18 @@ export async function saveToGitHub(
     if (response.ok) {
       return {
         success: true,
-        message: '✅ GitHubに保存しました',
+        message: 'github.pushOk',
       }
     } else {
-      const error = await response.json()
       return {
         success: false,
-        message: `❌ 同期エラー: ${error.message}`,
+        message: 'github.networkError',
       }
     }
-  } catch (error) {
+  } catch {
     return {
       success: false,
-      message: '❌ ネットワークエラー',
+      message: 'github.networkError',
     }
   }
 }
@@ -454,7 +454,7 @@ export async function pushAllWithTreeAPI(
   if (!validation.valid) {
     return {
       success: false,
-      message: `❌ ${validation.error}`,
+      message: validation.errorKey || 'github.networkError',
     }
   }
 
@@ -979,7 +979,7 @@ export async function pullFromGitHub(
   if (!validation.valid) {
     return {
       success: false,
-      message: `❌ ${validation.error}`,
+      message: validation.errorKey || 'github.networkError',
       notes: [],
       leaves: [],
       metadata: defaultMetadata,
@@ -1384,7 +1384,7 @@ export async function fetchRemotePushCount(settings: Settings): Promise<FetchPus
 export async function testGitHubConnection(settings: Settings): Promise<TestResult> {
   const validation = validateGitHubSettings(settings)
   if (!validation.valid) {
-    return { success: false, message: `❌ ${validation.error}` }
+    return { success: false, message: validation.errorKey || 'github.networkError' }
   }
 
   const headers = {
@@ -1467,7 +1467,7 @@ export async function pullArchive(settings: Settings): Promise<ArchivePullResult
   if (!validation.valid) {
     return {
       success: false,
-      message: `❌ ${validation.error}`,
+      message: validation.errorKey || 'github.networkError',
       notes: [],
       leaves: [],
       metadata: defaultMetadata,

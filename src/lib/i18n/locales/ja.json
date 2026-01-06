@@ -4,7 +4,20 @@
     "cancel": "キャンセル",
     "delete": "削除",
     "ok": "OK",
-    "home": "ホーム"
+    "home": "ホーム",
+    "note": "ノート",
+    "leaf": "リーフ",
+    "close": "閉じる",
+    "closeSettings": "設定を閉じる",
+    "needInitialPull": "初回Pullが完了するまで操作できません。設定からPullしてください。"
+  },
+  "storage": {
+    "dbOpen": "データベースを開けませんでした。ブラウザの再起動をお試しください。",
+    "dbBlocked": "データベースが他のタブで使用中です。他のタブを閉じてから再度お試しください。",
+    "dbUpgrade": "データベースの更新に失敗しました。ページを再読み込みしてください。",
+    "dbOperation": "データの保存/読み込みに失敗しました。",
+    "dbClosed": "データベース接続が切断されました。ページを再読み込みしてください。",
+    "dbError": "データベースエラーが発生しました。"
   },
   "header": {
     "settings": "設定を開く",
@@ -202,6 +215,7 @@
     }
   },
   "toast": {
+    "pullStart": "Pullします",
     "pullSuccess": "Pullしました",
     "pullFailed": "Pullに失敗しました",
     "pushSuccess": "Pushしました",
@@ -257,6 +271,8 @@
     "pushing": "Push中..."
   },
   "github": {
+    "tokenNotSet": "トークンが未設定です",
+    "invalidRepoName": "リポジトリ名が不正です（owner/repo）",
     "rateLimited": "LIMIT BREAK! 約{minutes}分後に再試行してください",
     "rateLimitedNoTime": "LIMIT BREAK! しばらく待ってから再試行してください",
     "invalidToken": "トークンが無効です",

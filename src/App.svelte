@@ -658,11 +658,7 @@
           // 未保存の変更がある場合は確認
           if (get(isDirty)) {
             // 確認ダイアログを表示せずに、ユーザーに通知だけする
-            showPushToast(
-              $_('toast.longBackgroundWarning') ||
-                'アプリが長時間バックグラウンドにあったため、再読み込みが必要です',
-              'error'
-            )
+            showPushToast($_('toast.longBackgroundWarning'), 'error')
           } else {
             // 未保存の変更がなければ自動リロード
             window.location.reload()
@@ -1817,6 +1813,7 @@
             targetNote,
             pane,
             isOperationsLocked: !isFirstPriorityFetched,
+            translate: $_,
             title: inputTitle,
           })
           if (newLeaf) {
@@ -1833,6 +1830,7 @@
         targetNote,
         pane,
         isOperationsLocked: !isFirstPriorityFetched,
+        translate: $_,
         title,
       })
       if (newLeaf) {
@@ -2479,7 +2477,7 @@
   // プレビューを画像としてダウンロード
   async function downloadLeafAsImage(leafId: string, pane: Pane) {
     if (!isFirstPriorityFetched) {
-      showPushToast('初回Pullが完了するまでダウンロードできません', 'error')
+      showPushToast($_('toast.needInitialPullDownload'), 'error')
       return
     }
 
@@ -2712,7 +2710,7 @@
       isPullCompleted = false
 
       // Pull開始を通知
-      showPullToast('Pullします')
+      showPullToast($_('toast.pullStart'))
 
       // Pull失敗時のデータ保護: 既存データをバックアップ
       const backup = await createBackup()

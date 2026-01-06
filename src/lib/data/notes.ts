@@ -57,7 +57,7 @@ export function createNote(options: CreateNoteOptions): Note | null {
     return null
   }
 
-  const uniqueName = name || generateUniqueName('ノート', existingNames)
+  const uniqueName = name || generateUniqueName(translate('common.note'), existingNames)
 
   const newNote: Note = {
     id: crypto.randomUUID(),
@@ -77,7 +77,7 @@ export function deleteNote(options: DeleteNoteOptions): void {
   const { targetNote, pane, isOperationsLocked, translate, onNavigate, rebuildLeafStats } = options
 
   if (isOperationsLocked) {
-    showAlert('初回Pullが完了するまで操作できません。設定からPullしてください。')
+    showAlert(translate('common.needInitialPull'))
     return
   }
 

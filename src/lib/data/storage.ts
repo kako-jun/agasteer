@@ -32,22 +32,22 @@ export class StorageError extends Error {
   }
 
   /**
-   * ユーザー向けの分かりやすいメッセージを返す
+   * ユーザー向けメッセージのi18nキーを返す
    */
-  getUserMessage(): string {
+  getMessageKey(): string {
     switch (this.type) {
       case 'db_open':
-        return 'データベースを開けませんでした。ブラウザの再起動をお試しください。'
+        return 'storage.dbOpen'
       case 'db_blocked':
-        return 'データベースが他のタブで使用中です。他のタブを閉じてから再度お試しください。'
+        return 'storage.dbBlocked'
       case 'db_upgrade':
-        return 'データベースの更新に失敗しました。ページを再読み込みしてください。'
+        return 'storage.dbUpgrade'
       case 'db_operation':
-        return 'データの保存/読み込みに失敗しました。'
+        return 'storage.dbOperation'
       case 'db_closed':
-        return 'データベース接続が切断されました。ページを再読み込みしてください。'
+        return 'storage.dbClosed'
       default:
-        return 'データベースエラーが発生しました。'
+        return 'storage.dbError'
     }
   }
 }

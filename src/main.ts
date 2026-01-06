@@ -65,7 +65,10 @@ export const waitForSwCheck: Promise<void> = new Promise((resolve) => {
         border-radius: 12px;
         backdrop-filter: blur(10px);
       `
-      message.textContent = '🔄 新しいバージョンがあります。再起動します...'
+      const isJapanese = navigator.language.startsWith('ja')
+      message.textContent = isJapanese
+        ? '🔄 新しいバージョンがあります。再起動します...'
+        : '🔄 New version available. Restarting...'
 
       overlay.appendChild(message)
       document.body.appendChild(overlay)

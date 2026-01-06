@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { _ } from '../../lib/i18n'
   import type { Settings } from '../../lib/types'
   import SettingsView from '../views/SettingsView.svelte'
 
@@ -51,7 +52,7 @@
     tabindex="0"
     on:click={handleOverlayClick}
     on:keydown={handleOverlayKeydown}
-    aria-label="設定を閉じる"
+    aria-label={$_('common.closeSettings')}
   >
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -65,7 +66,7 @@
       on:pointerup={handleContentPointerUp}
       on:click={handleContentClick}
     >
-      <button class="settings-close-button" on:click={onClose} aria-label="閉じる">
+      <button class="settings-close-button" on:click={onClose} aria-label={$_('common.close')}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"
