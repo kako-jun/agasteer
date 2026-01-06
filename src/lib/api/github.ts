@@ -860,12 +860,48 @@ export async function pushAllWithTreeAPI(
       }
     }
 
-    // 6. 新しいTreeを作成（base_treeなし、全ファイルを明示的に指定）
+    // 6. 新しいTreeを作成
+    // 空のリポジトリの場合、contentを直接指定するとエラーになる場合があるため、
+    // 先にBlobを作成してSHAを使用する
+    let finalTreeItems = treeItems
+    if (isEmptyRepo) {
+      // 空リポジトリ: contentを持つアイテムは先にBlobを作成
+      finalTreeItems = []
+      for (const item of treeItems) {
+        if (item.content !== undefined) {
+          // Blobを作成
+          const blobRes = await fetch(
+            `https://api.github.com/repos/${settings.repoName}/git/blobs`,
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                content: item.content,
+                encoding: 'utf-8',
+              }),
+            }
+          )
+          if (!blobRes.ok) {
+            return { success: false, message: 'github.treeCreateFailed' }
+          }
+          const blobData = await blobRes.json()
+          finalTreeItems.push({
+            path: item.path,
+            mode: item.mode,
+            type: item.type,
+            sha: blobData.sha,
+          })
+        } else {
+          finalTreeItems.push(item)
+        }
+      }
+    }
+
     const newTreeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        tree: treeItems,
+        tree: finalTreeItems,
       }),
     })
     // レート制限チェック
