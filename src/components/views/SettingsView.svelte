@@ -15,6 +15,7 @@
   import ImportSection from '../settings/ImportSection.svelte'
   import AboutSection from '../settings/AboutSection.svelte'
   import VersionDisplay from '../settings/VersionDisplay.svelte'
+  import VisitorCounter from '../settings/VisitorCounter.svelte'
 
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
@@ -62,6 +63,7 @@
     <AboutSection />
   </div>
 
+  <VisitorCounter />
   <VersionDisplay />
 </section>
 
