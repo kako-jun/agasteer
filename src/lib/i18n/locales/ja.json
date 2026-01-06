@@ -70,7 +70,7 @@
     "itemCount": "{count}件",
     "empty": "優先段落がありません。\n段落の先頭に「[1] 」や末尾に「 [2]」のようにスペース付きでマーカーを付けると、ここに表示されます。",
     "readOnly": "このビューは読み取り専用です",
-    "fromLeaf": "📄 {path}"
+    "fromLeaf": "{path}"
   },
   "note": {
     "updated": "更新",
