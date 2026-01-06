@@ -489,7 +489,9 @@ export async function pushAllWithTreeAPI(
     }
 
     // 空のリポジトリかどうか（ブランチがまだない場合）
-    const isEmptyRepo = refRes.status === 404
+    // 404: ブランチが存在しない
+    // 409: Conflict - Git Repository is empty（GitHub APIの仕様）
+    const isEmptyRepo = refRes.status === 404 || refRes.status === 409
     let currentCommitSha: string | null = null
     let baseTreeSha: string | null = null
 
