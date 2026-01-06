@@ -835,6 +835,7 @@ export async function pushAllWithTreeAPI(
           type: 'blob',
           content: leaf.content,
         })
+        changedLeafPaths.push(path)
       }
 
       // アーカイブのmetadata.json
