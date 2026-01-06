@@ -491,11 +491,31 @@ export async function pushAllWithTreeAPI(
     // 空のリポジトリかどうか（ブランチがまだない場合）
     // 404: ブランチが存在しない
     // 409: Conflict - Git Repository is empty（GitHub APIの仕様）
-    const isEmptyRepo = refRes.status === 404 || refRes.status === 409
+    const wasEmptyRepo = refRes.status === 404 || refRes.status === 409
     let currentCommitSha: string | null = null
     let baseTreeSha: string | null = null
 
-    if (!isEmptyRepo) {
+    // 空のリポジトリの場合、Contents APIで最初のファイルを作成
+    // Git Data API（Blob/Tree/Commit）は空リポジトリでは動作しないため
+    if (wasEmptyRepo) {
+      const initRes = await fetch(
+        `https://api.github.com/repos/${settings.repoName}/contents/.gitkeep`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            message: 'Initialize repository',
+            content: '', // 空ファイル（Base64）
+          }),
+        }
+      )
+      if (!initRes.ok) {
+        return { success: false, message: 'github.treeCreateFailed' }
+      }
+      const initData = await initRes.json()
+      currentCommitSha = initData.commit.sha
+      baseTreeSha = initData.commit.tree.sha
+    } else {
       if (!refRes.ok) {
         return { success: false, message: 'github.branchFetchFailed' }
       }
@@ -524,7 +544,7 @@ export async function pushAllWithTreeAPI(
     const existingNotesFiles = new Map<string, string>() // path -> sha (for .agasteer/notes/)
     const existingArchiveFiles = new Map<string, string>() // path -> sha (for .agasteer/archive/)
 
-    if (!isEmptyRepo && baseTreeSha) {
+    if (baseTreeSha) {
       const existingTreeRes = await fetch(
         `https://api.github.com/repos/${settings.repoName}/git/trees/${baseTreeSha}?recursive=1`,
         { headers }
@@ -860,48 +880,12 @@ export async function pushAllWithTreeAPI(
       }
     }
 
-    // 6. 新しいTreeを作成
-    // 空のリポジトリの場合、contentを直接指定するとエラーになる場合があるため、
-    // 先にBlobを作成してSHAを使用する
-    let finalTreeItems = treeItems
-    if (isEmptyRepo) {
-      // 空リポジトリ: contentを持つアイテムは先にBlobを作成
-      finalTreeItems = []
-      for (const item of treeItems) {
-        if (item.content !== undefined) {
-          // Blobを作成
-          const blobRes = await fetch(
-            `https://api.github.com/repos/${settings.repoName}/git/blobs`,
-            {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                content: item.content,
-                encoding: 'utf-8',
-              }),
-            }
-          )
-          if (!blobRes.ok) {
-            return { success: false, message: 'github.treeCreateFailed' }
-          }
-          const blobData = await blobRes.json()
-          finalTreeItems.push({
-            path: item.path,
-            mode: item.mode,
-            type: item.type,
-            sha: blobData.sha,
-          })
-        } else {
-          finalTreeItems.push(item)
-        }
-      }
-    }
-
+    // 6. 新しいTreeを作成（base_treeなし、全ファイルを明示的に指定）
     const newTreeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        tree: finalTreeItems,
+        tree: treeItems,
       }),
     })
     // レート制限チェック
@@ -925,7 +909,7 @@ export async function pushAllWithTreeAPI(
         body: JSON.stringify({
           message: 'Agasteer pushed notes',
           tree: newTreeSha,
-          parents: isEmptyRepo ? [] : [currentCommitSha],
+          parents: currentCommitSha ? [currentCommitSha] : [],
           committer: {
             name: 'agasteer',
             email: 'agasteer@users.noreply.github.com',
@@ -948,33 +932,19 @@ export async function pushAllWithTreeAPI(
     const newCommitData = await newCommitRes.json()
     const newCommitSha = newCommitData.sha
 
-    // 8. ブランチのリファレンスを更新または作成
-    // 空リポジトリの場合はPOSTで新規作成、既存の場合はPATCHで更新
-    let updateRefRes: Response
-    if (isEmptyRepo) {
-      // 新規ブランチを作成
-      updateRefRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/refs`, {
-        method: 'POST',
+    // 8. ブランチのリファレンスを更新（強制更新）
+    // Contents APIで初期化した場合もブランチは既に存在するのでPATCHで更新
+    const updateRefRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/refs/heads/${branch}`,
+      {
+        method: 'PATCH',
         headers,
         body: JSON.stringify({
-          ref: `refs/heads/${branch}`,
           sha: newCommitSha,
+          force: true, // 強制更新（他デバイスとの同時編集は非対応）
         }),
-      })
-    } else {
-      // 既存ブランチを更新（強制更新）
-      updateRefRes = await fetch(
-        `https://api.github.com/repos/${settings.repoName}/git/refs/heads/${branch}`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({
-            sha: newCommitSha,
-            force: true, // 強制更新（他デバイスとの同時編集は非対応）
-          }),
-        }
-      )
-    }
+      }
+    )
     // レート制限チェック
     const updateRefRateLimit = parseRateLimitResponse(updateRefRes)
     if (updateRefRateLimit.isRateLimited) {
