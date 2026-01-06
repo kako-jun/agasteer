@@ -443,12 +443,12 @@ const autoPushIntervalId = setInterval(async () => {
   if (!isFirstPriorityFetched) return
 
   // staleチェックを実行
-  const stale = await checkIfStaleEdit($settings, get(lastPulledPushCount))
-  if (stale) {
-    // staleの場合はPullボタンに赤丸を表示してPushしない
+  const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
+  if (staleResult.status === 'stale') {
+    // staleの場合は確認ダイアログを表示（手動Pushと同じ）
     isStale.set(true)
-    showPushToast($_('toast.staleAutoSave'), 'error')
-    return
+    const confirmed = await confirmAsync($_('modal.staleEdit'))
+    if (!confirmed) return
   }
 
   // 自動Push実行
