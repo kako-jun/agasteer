@@ -2712,9 +2712,15 @@
 
       switch (staleResult.status) {
         case 'up_to_date':
-          // リモートに変更なし → Pullスキップ
-          showPullToast($_('github.noRemoteChanges'), 'success')
-          return
+          // リモートに変更なし
+          // ただし初回Pull（isPullCompleted=false）の場合はPullを続行してUI状態を正常化
+          // 例: 空のリポジトリを新規に設定した場合
+          if (isPullCompleted) {
+            showPullToast($_('github.noRemoteChanges'), 'success')
+            return
+          }
+          // 初回は続行
+          break
 
         case 'stale':
           // リモートに変更あり → Pull実行
