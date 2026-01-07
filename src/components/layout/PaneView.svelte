@@ -194,7 +194,7 @@
   <StatsPanel
     leafCount={$state.totalLeafCount}
     leafCharCount={$state.totalLeafChars}
-    pushCount={activeMetadata.pushCount}
+    pushCount={$state.lastPulledPushCount}
   />
 {/if}
 

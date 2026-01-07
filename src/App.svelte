@@ -82,6 +82,7 @@
     testGitHubConnection,
     translateGitHubMessage,
     canSync,
+    fetchRemotePushCount,
   } from './lib/api'
   import type {
     PullOptions,
@@ -334,6 +335,7 @@
     leafSkeletonMap: new Map(),
     totalLeafCount: 0,
     totalLeafChars: 0,
+    lastPulledPushCount: 0,
     currentPriorityLeaf: null,
     currentOfflineLeaf: null,
     breadcrumbs: [],
@@ -366,6 +368,7 @@
     leafSkeletonMap,
     totalLeafCount,
     totalLeafChars,
+    lastPulledPushCount: $lastPulledPushCount,
     currentPriorityLeaf,
     currentOfflineLeaf,
     breadcrumbs,
@@ -2301,12 +2304,12 @@
         setLastPushedSnapshot(get(notes), get(leaves), get(archiveNotes), get(archiveLeaves))
         clearAllChanges()
         lastPushTime.set(Date.now()) // 自動Push用に最終Push時刻を記録
-        // 実際にPushが行われた場合のみpushCountを+1（noChangesでスキップ時は更新しない）
-        // changedLeafCount > 0 または metadataOnlyChanged の場合にPushが実際に行われた
-        const actuallyPushed =
-          (result.changedLeafCount && result.changedLeafCount > 0) || result.metadataOnlyChanged
-        if (actuallyPushed) {
-          lastPulledPushCount.update((n) => n + 1)
+        // Push成功後にリモートから最新のpushCountを取得して更新
+        if (result.message === 'github.pushOk') {
+          const remoteResult = await fetchRemotePushCount($settings)
+          if (remoteResult.status === 'success') {
+            lastPulledPushCount.set(remoteResult.pushCount)
+          }
         }
       }
     } finally {

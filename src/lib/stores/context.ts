@@ -114,6 +114,7 @@ export interface PaneState {
   leafSkeletonMap: Map<string, any>
   totalLeafCount: number
   totalLeafChars: number
+  lastPulledPushCount: number
   currentPriorityLeaf: Leaf | null
   currentOfflineLeaf: Leaf | null
   breadcrumbs: Breadcrumb[]
