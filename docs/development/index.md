@@ -25,7 +25,7 @@
 | [customization.md](./ui/customization.md) | カスタムフォント、背景画像                     |
 | [i18n.md](./ui/i18n.md)                   | 国際化（日本語・英語）                         |
 | [badges.md](./ui/badges.md)               | バッジ機能（アイコン＋色）                     |
-| [welcome-tour.md](./ui/welcome-tour.md)   | ウェルカムポップアップ、オンボーディングツアー |
+| [welcome-tour.md](./ui/welcome-tour.md)   | ウェルカムポップアップ、初回ガイド（吹き出し） |
 | [misc.md](./ui/misc.md)                   | アプリアイコン、その他のUI改善                 |
 | [share.md](./ui/share.md)                 | シェア機能（URL/Markdown/画像）                |
 | [pwa.md](./ui/pwa.md)                     | PWA対応                                        |
@@ -83,14 +83,13 @@ npm run build        # 本番ビルド
 
 ### 主要技術
 
-| 技術       | バージョン | 役割                   |
-| ---------- | ---------- | ---------------------- |
-| Svelte     | 4.2.19     | UIフレームワーク       |
-| TypeScript | 5.7.2      | 型安全性               |
-| Vite       | 5.4.10     | ビルドツール           |
-| CodeMirror | 6.0.1      | エディタ               |
-| marked     | 17+        | Markdown変換           |
-| driver.js  | latest     | オンボーディングツアー |
+| 技術       | バージョン | 役割             |
+| ---------- | ---------- | ---------------- |
+| Svelte     | 4.2.19     | UIフレームワーク |
+| TypeScript | 5.7.2      | 型安全性         |
+| Vite       | 5.4.10     | ビルドツール     |
+| CodeMirror | 6.0.1      | エディタ         |
+| marked     | 17+        | Markdown変換     |
 
 ---
 

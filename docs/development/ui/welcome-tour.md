@@ -20,69 +20,58 @@
 
 ---
 
----
+## 初回ガイド（吹き出し）
 
-## オンボーディングツアー（2025-12）
+初めての操作時に、ボタンの近くに吹き出しでヒントを表示するシンプルなガイド機能。
 
-初回ユーザー向けのインタラクティブな使い方ガイド。
+### 表示タイミング
 
-### 使用ライブラリ
+| 条件                       | 吹き出しの内容                           | 表示位置         |
+| -------------------------- | ---------------------------------------- | ---------------- |
+| ノートが0個のとき          | 「ここをクリックしてノートを作成」       | ノート追加ボタン |
+| リーフが0個のとき          | 「ここをクリックしてリーフを作成」       | リーフ追加ボタン |
+| 初めてダーティになったとき | 「GitHubに保存してデータを残しましょう」 | 保存ボタン       |
 
-**driver.js** を採用:
+### 消える条件
 
-- MITライセンス（商用無料）
-- 軽量（~5KB）
-- 依存なし
-- Svelte/vanilla JS対応
+- 該当のボタンをクリック
+- 吹き出し自体をクリック（×ボタン）
 
-### ツアーステップ
+一度消すと、LocalStorageにフラグが保存され、二度と表示されません。
 
-| #   | ステップ    | 要素ID              | 説明                                                     |
-| --- | ----------- | ------------------- | -------------------------------------------------------- |
-| 1   | Welcome     | なし（中央表示）    | Agasteerへようこそ！基本的な使い方を説明します。         |
-| 2   | Create Note | `#tour-create-note` | ノートを作る。ノートはリーフをまとめるフォルダ。         |
-| 3   | Create Leaf | `#tour-create-leaf` | リーフを作る。リーフは実際にメモを書くページ。           |
-| 4   | Push        | `#tour-save`        | GitHubに保存。Ctrl+S / Cmd+S でもPush可能。              |
-| 5   | Pull        | `#tour-pull`        | 起動時に自動Pull。別デバイスからの変更を取り込む。       |
-| 6   | Settings    | `#tour-settings`    | テーマ・フォントのカスタマイズ、マニュアルリンク。       |
-| 7   | Offline     | なし（中央表示）    | Offlineリーフはオフライン用、GitHub同期なし。            |
-| 8   | Priority    | なし（中央表示）    | Priorityリーフは[1]〜[5]マーカー自動収集、読み取り専用。 |
-| 9   | Finish      | なし（中央表示）    | 準備完了！困ったら設定画面のマニュアルリンクへ。         |
+### 状態管理
 
-### トリガー条件
-
-- **表示タイミング**: 初回Pull成功後（500ms遅延）
-- **再表示防止**: LocalStorage (`agasteer.state.tourShown`) で管理
-- **スキップ可能**: ×ボタンまたはオーバーレイクリックで閉じる
+| フラグ           | 用途                              |
+| ---------------- | --------------------------------- |
+| `tourShown`      | ノート/リーフ作成ガイドの表示済み |
+| `saveGuideShown` | 保存ガイドの表示済み              |
 
 ### ファイル構成
 
-| ファイル                 | 説明                     |
-| ------------------------ | ------------------------ |
-| `src/lib/tour.ts`        | ツアーロジック           |
-| `src/App.css`            | ポップオーバーのスタイル |
-| `src/lib/i18n/locales/*` | 翻訳（tour.\*）          |
+| ファイル                                         | 説明             |
+| ------------------------------------------------ | ---------------- |
+| `src/lib/tour.ts`                                | ガイドロジック   |
+| `src/lib/data/storage.ts`                        | フラグの永続化   |
+| `src/components/buttons/PushButton.svelte`       | 保存ガイドの表示 |
+| `src/components/layout/footer/HomeFooter.svelte` | ノート作成ガイド |
+| `src/components/layout/footer/NoteFooter.svelte` | リーフ作成ガイド |
 
-### 要素ID配置
+### スタイル
 
-| コンポーネント    | ID                | 説明             |
-| ----------------- | ----------------- | ---------------- |
-| Header.svelte     | #tour-pull        | Pullボタン       |
-| Header.svelte     | #tour-settings    | 設定ボタン       |
-| HomeFooter.svelte | #tour-create-note | ノート作成ボタン |
-| HomeFooter.svelte | #tour-save        | Pushボタン       |
-| NoteFooter.svelte | #tour-create-leaf | リーフ作成ボタン |
+各コンポーネントに`.guide-tooltip`クラスで吹き出しスタイルを定義。
 
-### カスタムCSS
+- 左端のボタン: `left: 0;` で左寄せ、矢印も `left: 12px;`
+- 右端のボタン: `right: 0;` で右寄せ、矢印も `right: 12px;`
 
-App.cssでdriver.jsのデフォルトスタイルを上書きし、テーマのCSS変数に追従させています。
+これにより、画面端で吹き出しが見切れるのを防止。
 
 ### デバッグ
 
-開発者コンソールで以下を実行してリロードするとツアーをリセットできます:
+開発者コンソールで以下を実行してリロードするとガイドをリセットできます:
 
 ```js
 const data = JSON.parse(localStorage.getItem('agasteer'))
 data.state.tourShown = false
+data.state.saveGuideShown = false
 localStorage.setItem('agasteer', JSON.stringify(data))
 ```
