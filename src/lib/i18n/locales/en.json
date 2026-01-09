@@ -21,6 +21,7 @@
   },
   "header": {
     "settings": "Open settings",
+    "help": "How to use",
     "pull": "Pull",
     "push": "Push",
     "swapPanes": "Swap Panes",
@@ -100,9 +101,6 @@
   "settings": {
     "title": "Settings",
     "qrCodeDescription": "QR Code for Mobile",
-    "help": {
-      "text": "How to Use"
-    },
     "github": {
       "title": "GitHub Integration",
       "repoName": "Repository (owner/repo)",

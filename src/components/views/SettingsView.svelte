@@ -2,7 +2,6 @@
   import { _ } from '../../lib/i18n'
   import type { Settings, ThemeType } from '../../lib/types'
   import QRCodeSection from '../settings/QRCodeSection.svelte'
-  import HelpLinks from '../settings/HelpLinks.svelte'
   import GitHubSettings from '../settings/GitHubSettings.svelte'
   import LanguageSelector from '../settings/LanguageSelector.svelte'
   import ThemeSelector from '../settings/ThemeSelector.svelte'
@@ -33,7 +32,6 @@
     <h2>{$_('settings.title')}</h2>
 
     <QRCodeSection />
-    <HelpLinks />
 
     <div class="form-section">
       <GitHubSettings {settings} {onSettingsChange} {isTesting} {onTestConnection} />

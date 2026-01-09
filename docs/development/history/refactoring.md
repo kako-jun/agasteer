@@ -825,15 +825,15 @@ Version 6.2では、SettingsView.svelteを完全にセクションごとのコ�
 
 #### 1. 7個の新規コンポーネントの作成
 
-| コンポーネント   | 説明                               | props                      |
-| ---------------- | ---------------------------------- | -------------------------- |
-| QRCodeSection    | QRコード画像と説明                 | なし                       |
-| HelpLinks        | READMEと動画へのヘルプリンク       | なし                       |
-| LanguageSelector | 言語選択ドロップダウン             | settings, onSettingsChange |
-| ToolNameInput    | ツール名入力フィールド             | settings, onSettingsChange |
-| VimModeToggle    | Vimモードのチェックボックス        | settings, onSettingsChange |
-| AboutSection     | アプリ情報、作者、スポンサーリンク | なし                       |
-| VersionDisplay   | バージョン番号表示（ビルド日付）   | なし                       |
+| コンポーネント   | 説明                               | props                           |
+| ---------------- | ---------------------------------- | ------------------------------- |
+| QRCodeSection    | QRコード画像と説明                 | なし                            |
+| ~~HelpLinks~~    | ~~READMEと動画へのヘルプリンク~~   | ~~なし~~（※後にヘッダーへ移動） |
+| LanguageSelector | 言語選択ドロップダウン             | settings, onSettingsChange      |
+| ToolNameInput    | ツール名入力フィールド             | settings, onSettingsChange      |
+| VimModeToggle    | Vimモードのチェックボックス        | settings, onSettingsChange      |
+| AboutSection     | アプリ情報、作者、スポンサーリンク | なし                            |
+| VersionDisplay   | バージョン番号表示（ビルド日付）   | なし                            |
 
 #### 2. SettingsView.svelteのリファクタリング
 
@@ -841,11 +841,11 @@ Version 6.2では、SettingsView.svelteを完全にセクションごとのコ�
 
 **修正後:** 約100行（各セクションをコンポーネントとしてインポートして配置するだけ）
 
-設定画面の構造:
+設定画面の構造（当時）:
 
 ```
 <QRCodeSection />
-<HelpLinks />
+<!-- HelpLinks は後にヘッダーへ移動 -->
 <GitHubSettings />
 <LanguageSelector />
 <ThemeSelector />
@@ -881,9 +881,9 @@ Version 6.2では、SettingsView.svelteを完全にセクションごとのコ�
 **構造の改善:**
 
 ```
-<!-- 設定画面の構造が一目瞭然 -->
+<!-- 設定画面の構造が一目瞭然（当時） -->
 <QRCodeSection />           <!-- QRコード表示 -->
-<HelpLinks />               <!-- ヘルプリンク -->
+<!-- HelpLinks は後にヘッダーへ移動 -->
 <GitHubSettings ... />      <!-- GitHub設定 -->
 <LanguageSelector ... />    <!-- 言語選択 -->
 <ThemeSelector ... />       <!-- テーマ選択 -->

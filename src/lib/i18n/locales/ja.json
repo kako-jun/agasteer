@@ -21,6 +21,7 @@
   },
   "header": {
     "settings": "設定を開く",
+    "help": "使い方を見る",
     "pull": "Pullする",
     "push": "Pushする",
     "swapPanes": "君の名は",
@@ -100,9 +101,6 @@
   "settings": {
     "title": "設定",
     "qrCodeDescription": "スマホ用QRコード",
-    "help": {
-      "text": "使い方"
-    },
     "github": {
       "title": "GitHub連携",
       "repoName": "リポジトリ名（owner/repo）",

@@ -91,7 +91,7 @@
     RateLimitInfo,
     StaleCheckResult,
   } from './lib/api'
-  import { initI18n, _ } from './lib/i18n'
+  import { initI18n, _, locale } from './lib/i18n'
   import { processImportFile, isAgasteerZip, parseAgasteerZip } from './lib/data'
   import {
     pushToastState,
@@ -213,6 +213,14 @@
     if (isPWAStandalone) {
       history.pushState({ [PWA_EXIT_GUARD_KEY]: true }, '', location.href)
     }
+  }
+
+  // ユーザーガイドを開く
+  const USER_GUIDE_BASE = 'https://github.com/kako-jun/agasteer/blob/main/docs/user-guide'
+  function openUserGuide() {
+    const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
+    const url = `${USER_GUIDE_BASE}/${lang}/index.md`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   // キーボードナビゲーション用の状態
@@ -2995,6 +3003,7 @@
         }
       }}
       onSearchClick={toggleSearch}
+      onHelpClick={openUserGuide}
       {isDualPane}
       isOperationsLocked={!isFirstPriorityFetched}
       onSwapPanes={swapPanes}

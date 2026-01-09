@@ -5,6 +5,7 @@
   import IconButton from '../buttons/IconButton.svelte'
   import PullButton from '../buttons/PullButton.svelte'
   import SettingsIcon from '../icons/SettingsIcon.svelte'
+  import HelpIcon from '../icons/HelpIcon.svelte'
   import SearchIcon from '../icons/SearchIcon.svelte'
   import SwapIcon from '../icons/SwapIcon.svelte'
   import ArrowRightIcon from '../icons/ArrowRightIcon.svelte'
@@ -22,6 +23,7 @@
   export let pullProgress: { percent: number; fetched: number; total: number } | null = null
   export let onPullProgressClick: () => void = () => {}
   export let onSearchClick: () => void
+  export let onHelpClick: () => void
   export let isDualPane: boolean = false
   export let isOperationsLocked: boolean = false
   export let onSwapPanes: () => void = () => {}
@@ -121,6 +123,9 @@
       ariaLabel={$_('search.placeholder')}
     >
       <SearchIcon />
+    </IconButton>
+    <IconButton onClick={onHelpClick} title={$_('header.help')} ariaLabel={$_('header.help')}>
+      <HelpIcon />
     </IconButton>
     <div class="settings-button-wrapper" id="tour-settings">
       <IconButton

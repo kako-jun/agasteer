@@ -141,7 +141,6 @@ agasteer/
 │   │   │       └── PreviewFooter.svelte # プレビュー画面フッター
 │   │   ├── settings/
 │   │   │   ├── QRCodeSection.svelte         # QRコード表示
-│   │   │   ├── HelpLinks.svelte             # ヘルプリンク
 │   │   │   ├── GitHubSettings.svelte        # GitHub設定
 │   │   │   ├── LanguageSelector.svelte      # 言語選択
 │   │   │   ├── ThemeSelector.svelte         # テーマ選択
@@ -273,7 +272,6 @@ agasteer/
 **設定コンポーネント:**
 
 - `QRCodeSection.svelte`: QRコード表示（デモサイトへのリンク）
-- `HelpLinks.svelte`: ヘルプリンク（README、動画）
 - `GitHubSettings.svelte`: GitHub連携設定（Token、リポジトリ名、ユーザー名、メール）
 - `LanguageSelector.svelte`: 言語選択ドロップダウン（日本語・英語）
 - `ThemeSelector.svelte`: テーマ選択（yomi, campus, greenboard, whiteboard, dotsD, dotsF）
