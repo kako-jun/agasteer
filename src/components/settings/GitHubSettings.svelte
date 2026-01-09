@@ -28,7 +28,7 @@
     const anchor =
       lang === 'ja'
         ? '#2-personal-access-token%E3%82%92%E5%8F%96%E5%BE%97%E3%81%99%E3%82%8B'
-        : '#2-get-a-personal-access-token'
+        : '#2-obtain-a-personal-access-token'
     const url = `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
     window.open(url, '_blank', 'noopener,noreferrer')
   }
