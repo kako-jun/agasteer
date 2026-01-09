@@ -29,13 +29,6 @@
   <img src="./docs/assets/demo.gif" alt="Agasteer Demo" width="600">
 </p>
 
-<!-- TODO: YouTube intro video (2-3 min, from setup to basic usage) -->
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=XXXXXXXXXX">
-    <img src="https://img.youtube.com/vi/XXXXXXXXXX/maxresdefault.jpg" alt="Agasteer Introduction" width="480">
-  </a>
-</p>
-
 <p align="center">
   <img src="https://img.shields.io/badge/Made%20with-Svelte-FF3E00?style=flat-square&logo=svelte" alt="Made with Svelte">
   <img src="https://img.shields.io/badge/Build-Vite-646CFF?style=flat-square&logo=vite" alt="Build with Vite">
