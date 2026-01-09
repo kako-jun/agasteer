@@ -176,7 +176,7 @@
       "description": "Export all notes as a ZIP equivalent to git clone.",
       "gitPolicy": ".git history is not included. After extracting, run git init if you need a repo.",
       "infoFileFooter": "Archive includes notes/ and metadata.json for this app.",
-      "exportZip": "Export as ZIP",
+      "exportZip": "Export",
       "exporting": "Exporting...",
       "exportSuccess": "ZIP exported",
       "exportFailed": "Failed to export ZIP",

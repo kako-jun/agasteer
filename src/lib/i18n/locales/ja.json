@@ -180,7 +180,7 @@
       "description": "git clone 相当の内容を ZIP でエクスポートします。",
       "gitPolicy": "履歴（.git）は含んでいません。必要なら解凍後に git init してください。",
       "infoFileFooter": "アーカイブには notes/ と metadata.json が入っています。",
-      "exportZip": "ZIPエクスポート",
+      "exportZip": "エクスポート",
       "exporting": "エクスポート中...",
       "exportSuccess": "ZIPをエクスポートしました",
       "exportFailed": "ZIP エクスポートに失敗しました",
