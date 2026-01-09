@@ -7,7 +7,7 @@
 ## Appearance
 
 - **[Themes](./customize/theme.md)** - Choose from 6 themes
-- **[Ruled-Line Mode](./customize/lined-mode.md)** - Display ruled lines like a paper notebook
+- **[Lined Mode](./customize/lined-mode.md)** - Display lines like a paper notebook
 - **[Custom Fonts](./customize/font.md)** - Upload your favorite fonts
 - **[Custom Background Images](./customize/background.md)** - Set backgrounds for left/right panes separately
 
