@@ -17,7 +17,7 @@
   let backgroundRightUploading = false
 
   const DEFAULT_OPACITY = 0.1
-  const MIN_OPACITY = 0.05
+  const MIN_OPACITY = 0.1
   const MAX_OPACITY = 0.5
   const OPACITY_STEP = 0.05
 
@@ -131,6 +131,23 @@
         <div class="background-preview background-preview-left">
           <span class="preview-label">{$_('settings.extras.background.preview')}</span>
         </div>
+        <label class="opacity-control">
+          <span class="opacity-label">
+            {$_('settings.extras.background.opacity')}
+            <span class="opacity-value"
+              >{Math.round((settings.backgroundOpacityLeft ?? DEFAULT_OPACITY) * 100)}%</span
+            >
+          </span>
+          <input
+            type="range"
+            class="opacity-slider"
+            min={MIN_OPACITY}
+            max={MAX_OPACITY}
+            step={OPACITY_STEP}
+            value={settings.backgroundOpacityLeft ?? DEFAULT_OPACITY}
+            on:input={(e) => handleOpacityChange('left', parseFloat(e.currentTarget.value))}
+          />
+        </label>
       {/if}
       <div class="background-controls">
         <input
@@ -172,25 +189,6 @@
           </button>
         {/if}
       </div>
-      {#if settings.hasCustomBackgroundLeft}
-        <label class="opacity-control">
-          <span class="opacity-label">
-            {$_('settings.extras.background.opacity')}
-            <span class="opacity-value"
-              >{Math.round((settings.backgroundOpacityLeft ?? DEFAULT_OPACITY) * 100)}%</span
-            >
-          </span>
-          <input
-            type="range"
-            class="opacity-slider"
-            min={MIN_OPACITY}
-            max={MAX_OPACITY}
-            step={OPACITY_STEP}
-            value={settings.backgroundOpacityLeft ?? DEFAULT_OPACITY}
-            on:input={(e) => handleOpacityChange('left', parseFloat(e.currentTarget.value))}
-          />
-        </label>
-      {/if}
     </div>
 
     <!-- Right Pane -->
@@ -200,6 +198,23 @@
         <div class="background-preview background-preview-right">
           <span class="preview-label">{$_('settings.extras.background.preview')}</span>
         </div>
+        <label class="opacity-control">
+          <span class="opacity-label">
+            {$_('settings.extras.background.opacity')}
+            <span class="opacity-value"
+              >{Math.round((settings.backgroundOpacityRight ?? DEFAULT_OPACITY) * 100)}%</span
+            >
+          </span>
+          <input
+            type="range"
+            class="opacity-slider"
+            min={MIN_OPACITY}
+            max={MAX_OPACITY}
+            step={OPACITY_STEP}
+            value={settings.backgroundOpacityRight ?? DEFAULT_OPACITY}
+            on:input={(e) => handleOpacityChange('right', parseFloat(e.currentTarget.value))}
+          />
+        </label>
       {/if}
       <div class="background-controls">
         <input
@@ -241,25 +256,6 @@
           </button>
         {/if}
       </div>
-      {#if settings.hasCustomBackgroundRight}
-        <label class="opacity-control">
-          <span class="opacity-label">
-            {$_('settings.extras.background.opacity')}
-            <span class="opacity-value"
-              >{Math.round((settings.backgroundOpacityRight ?? DEFAULT_OPACITY) * 100)}%</span
-            >
-          </span>
-          <input
-            type="range"
-            class="opacity-slider"
-            min={MIN_OPACITY}
-            max={MAX_OPACITY}
-            step={OPACITY_STEP}
-            value={settings.backgroundOpacityRight ?? DEFAULT_OPACITY}
-            on:input={(e) => handleOpacityChange('right', parseFloat(e.currentTarget.value))}
-          />
-        </label>
-      {/if}
     </div>
   </div>
 </div>
