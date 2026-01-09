@@ -93,4 +93,4 @@ npm run build        # 本番ビルド
 
 ---
 
-**Last Updated**: 2025-12-13
+**Last Updated**: 2026-01-09
