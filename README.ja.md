@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <sub>🔊 <b>Agasteer</b> [æɡəstíːr] — アガスティーア</sub>
+  <sub><b>Agasteer</b> [æɡəstíːr] — アガスティーア</sub>
 </p>
 
 <p align="center">

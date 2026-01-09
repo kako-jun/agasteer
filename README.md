@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <sub>🔊 <b>Agasteer</b> [æɡəstíːr]</sub>
+  <sub><b>Agasteer</b> [æɡəstíːr]</sub>
 </p>
 
 <p align="center">
@@ -112,7 +112,7 @@ Start your simple, transparent note-taking experience with Agasteer.
 The only hassle is getting your token the first time.
 If you've been thinking "I should make a GitHub account someday," this is your chance.
 
-In the AI era, everyone - kids, adults, everyone - will find GitHub useful.
+In the AI era, having a GitHub account opens up many possibilities.
 
 → [Quick Start](./docs/user-guide/ja/quick-start.md)
 
@@ -142,4 +142,4 @@ This project is released under the MIT License.
 
 ---
 
-Born from three consecutive conflicts in ○bsi○ian © kako-jun
+© kako-jun
