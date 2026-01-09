@@ -184,18 +184,38 @@ agasteer/
 │   ├── App.svelte                       # ルートコンポーネント
 │   └── main.ts                          # エントリーポイント
 ├── docs/                                # 詳細ドキュメント
-│   ├── architecture.md                  # このファイル
-│   ├── content-sync.md                  # コンテンツ同期機能
-│   ├── data-model.md                    # データモデルと状態管理
-│   ├── data-protection.md               # データ保護機能
-│   ├── development.md                   # 開発ガイド
-│   ├── features.md                      # 基本機能の実装
-│   ├── future-plans.md                  # 拡張計画と既知の課題
-│   ├── github-integration.md            # GitHub API統合
-│   ├── preview-features.md              # プレビュー機能
-│   ├── refactoring.md                   # 実装されたリファクタリング
-│   ├── storage.md                       # データ永続化とストレージ
-│   └── ui-features.md                   # UI/UX機能
+│   └── development/                     # 開発者向けドキュメント
+│       ├── index.md                     # 開発ドキュメント目次
+│       ├── architecture.md              # このファイル
+│       ├── content-sync.md              # コンテンツ同期機能
+│       ├── data-model.md                # データモデルと状態管理
+│       ├── development.md               # 開発ガイド
+│       ├── features.md                  # 基本機能の実装
+│       ├── future-plans.md              # 拡張計画と既知の課題
+│       ├── storage.md                   # データ永続化とストレージ
+│       ├── sync/                        # GitHub同期・データ保護
+│       │   ├── github-api.md            # GitHub API統合
+│       │   ├── push-pull.md             # Push/Pull処理
+│       │   ├── dirty-tracking.md        # 未保存変更の追跡
+│       │   └── stale-detection.md       # Stale編集警告
+│       ├── preview/                     # プレビュー機能
+│       │   ├── markdown.md              # マークダウンプレビュー
+│       │   ├── scroll-sync.md           # スクロール同期
+│       │   └── image-export.md          # 画像出力
+│       ├── ui/                          # UI/UX機能
+│       │   ├── layout.md                # 2ペイン表示
+│       │   ├── editor.md                # 罫線エディタ
+│       │   ├── customization.md         # フォント、背景
+│       │   ├── i18n.md                  # 国際化
+│       │   ├── badges.md                # バッジ機能
+│       │   ├── welcome-tour.md          # 初回ガイド
+│       │   ├── pwa.md                   # PWA対応
+│       │   └── share.md                 # シェア機能
+│       ├── special/                     # 特殊リーフ
+│       │   ├── priority.md              # Priorityリーフ
+│       │   └── offline.md               # Offlineリーフ
+│       └── history/                     # 履歴
+│           └── refactoring.md           # リファクタリング履歴
 ├── dist/                                # ビルド出力（.gitignore）
 ├── .gitignore
 ├── .prettierrc                          # Prettier設定
@@ -502,4 +522,4 @@ Agasteerは、Svelteのリアクティブシステムとコンポーネントベ
 - 初回表示速度87.8%削減（ホーム画面）
 - 2回目以降ほぼ瞬時に起動
 
-詳細な実装については、各ドキュメント（data-model.md, features.md, ui-features.md, development.md等）を参照してください。
+詳細な実装については、各ドキュメント（data-model.md, features.md, ui/, sync/, development.md等）を参照してください。

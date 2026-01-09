@@ -183,7 +183,8 @@ graph TB
 
 ## 関連ドキュメント
 
-- [UI/UX機能](./ui-features.md) - 2ペイン表示
+- [UI/UX機能](./ui/) - 2ペイン表示、カスタマイズ
 - [コンテンツ同期機能](./content-sync.md) - リーフのタイトルと#見出しの同期
-- [プレビュー機能](./preview-features.md) - マークダウンプレビュー、スクロール同期
-- [データ保護機能](./data-protection.md) - Push回数カウント、未保存変更の確認
+- [プレビュー機能](./preview/) - マークダウンプレビュー、スクロール同期
+- [データ保護機能](./sync/dirty-tracking.md) - 未保存変更の追跡
+- [Stale検出](./sync/stale-detection.md) - 同時編集対応
