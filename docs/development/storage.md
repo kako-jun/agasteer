@@ -160,7 +160,7 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 - **同時保存数**: 左右それぞれ1つ（固定キー `'custom-left'`, `'custom-right'` で上書き保存）
 - **保存タイミング**: 背景画像選択時
-- **削除タイミング**: 「デフォルトに戻す」ボタン押下時
+- **削除タイミング**: 「クリア」ボタン押下時
 - **設定フラグ**: LocalStorageに以下を保存
   - `Settings.hasCustomBackgroundLeft` (boolean) - 左ペインの背景画像適用状態
   - `Settings.hasCustomBackgroundRight` (boolean) - 右ペインの背景画像適用状態
