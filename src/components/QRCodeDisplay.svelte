@@ -45,7 +45,7 @@
     try {
       // モジュール数に応じてQRコードサイズを決定
       // マージンを含めた総モジュール数で計算し、各モジュールが整数ピクセルになるようにする
-      const margin = 2
+      const margin = 1
       const moduleCount = getModuleCount(byteLength)
       const totalModules = moduleCount + margin * 2
       // 最低3ピクセル/モジュール、または最低300pxになるようなピクセル数
@@ -190,10 +190,8 @@
 
   :global(.qr-modal) {
     background: white;
-    border-radius: 4px;
-    padding: 0.25rem;
-    max-width: 98vw;
-    max-height: 98vh;
+    border-radius: 0;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -201,13 +199,14 @@
 
   :global(.qr-image) {
     /* 正方形を維持するため、幅と高さの小さい方に合わせる */
-    max-width: min(97vw, 97vh);
-    max-height: min(97vw, 97vh);
+    max-width: min(100vw, 100vh);
+    max-height: min(100vw, 100vh);
     /* 自然なサイズで表示（拡大しない） */
     width: auto;
     height: auto;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+    display: block;
   }
 
   :global(.qr-loading) {
