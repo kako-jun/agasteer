@@ -159,9 +159,9 @@ export function updateLeafContent(options: UpdateLeafContentOptions): {
     }
   }
 
-  // グローバルストアを更新
+  // グローバルストアを更新（isDirtyはスナップショット比較で自動検出）
   const updatedLeaves = allLeaves.map((n) =>
-    n.id === leafId ? { ...n, content, title: newTitle, updatedAt: Date.now(), isDirty: true } : n
+    n.id === leafId ? { ...n, content, title: newTitle, updatedAt: Date.now() } : n
   )
   updateLeaves(updatedLeaves)
 

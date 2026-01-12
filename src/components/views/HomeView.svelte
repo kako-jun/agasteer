@@ -2,7 +2,7 @@
   import { afterUpdate } from 'svelte'
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
-  import { dirtyNoteIds } from '../../lib/stores'
+  import { dirtyNoteIds, dirtyLeafIds } from '../../lib/stores'
   import NoteCard from '../cards/NoteCard.svelte'
   import BadgeButton from '../badges/BadgeButton.svelte'
 
@@ -185,7 +185,7 @@
           {note}
           dragOver={dragOverNoteId === note.id}
           isSelected={isActive && index + specialLeafCount === selectedIndex}
-          isDirty={allLeaves.some((l) => l.noteId === note.id && l.isDirty) ||
+          isDirty={allLeaves.some((l) => l.noteId === note.id && $dirtyLeafIds.has(l.id)) ||
             $dirtyNoteIds.has(note.id)}
           onSelect={() => onSelectNote(note)}
           onDragStart={() => onDragStart(note)}

@@ -46,9 +46,6 @@ export const currentWorld = writable<WorldType>('home')
 // ダーティフラグ管理（リーフごと + 全体）
 // ============================================
 
-// リーフごとのisDirtyから派生
-const hasAnyLeafDirty = derived(leaves, ($leaves) => $leaves.some((l) => l.isDirty))
-
 // ノート構造変更フラグ（作成/削除/名前変更など、リーフ以外の変更）
 export const isStructureDirty = writable<boolean>(false)
 
@@ -88,17 +85,27 @@ function detectDirtyIds(
   const currentLeafMap = new Map(currentLeaves.map((l) => [l.id, l]))
   const lastLeafMap = new Map(lastLeaves.map((l) => [l.id, l]))
 
-  // ノートの追加: 親ノートがdirty（ルートノートの場合はホームがdirtyだが、ノートIDはない）
+  // ノートの追加: 親ノートがdirty、ルートノートの場合はそのノート自体がdirty
   for (const note of currentNotes) {
     if (!lastNoteMap.has(note.id)) {
-      if (note.parentId) dirtyNoteIds.add(note.parentId)
+      if (note.parentId) {
+        dirtyNoteIds.add(note.parentId)
+      } else {
+        // ルートノートの追加: ノート自体をdirtyとしてマーク
+        dirtyNoteIds.add(note.id)
+      }
     }
   }
 
-  // ノートの削除: 親ノートがdirty
+  // ノートの削除: 親ノートがdirty、ルートノートの場合は検出のため削除されたノートIDを追加
   for (const note of lastNotes) {
     if (!currentNoteMap.has(note.id)) {
-      if (note.parentId) dirtyNoteIds.add(note.parentId)
+      if (note.parentId) {
+        dirtyNoteIds.add(note.parentId)
+      } else {
+        // ルートノートの削除: 削除されたノートIDをdirtyとしてマーク（存在しないが変更検出用）
+        dirtyNoteIds.add(note.id)
+      }
     }
   }
 
@@ -108,12 +115,21 @@ function detectDirtyIds(
     if (lastNote) {
       if (note.name !== lastNote.name || note.order !== lastNote.order) {
         // 属性変更: そのノート自体（と親）がdirty
-        if (note.parentId) dirtyNoteIds.add(note.parentId)
+        if (note.parentId) {
+          dirtyNoteIds.add(note.parentId)
+        } else {
+          // ルートノートの属性変更: ノート自体をdirtyとしてマーク
+          dirtyNoteIds.add(note.id)
+        }
       }
       if (note.parentId !== lastNote.parentId) {
         // 移動: 元の親と新しい親がdirty
         if (lastNote.parentId) dirtyNoteIds.add(lastNote.parentId)
         if (note.parentId) dirtyNoteIds.add(note.parentId)
+        // ルートに移動またはルートから移動の場合、ノート自体をdirtyとしてマーク
+        if (!lastNote.parentId || !note.parentId) {
+          dirtyNoteIds.add(note.id)
+        }
       }
     }
   }
@@ -133,7 +149,7 @@ function detectDirtyIds(
     }
   }
 
-  // リーフの変更: noteId, title, orderの変更（contentはleaf.isDirtyで管理）
+  // リーフの変更: noteId, title, order, contentの変更
   for (const leaf of currentLeaves) {
     const lastLeaf = lastLeafMap.get(leaf.id)
     if (lastLeaf) {
@@ -146,6 +162,10 @@ function detectDirtyIds(
         // 移動: 元の親ノートと新しい親ノートがdirty、リーフ自体もdirty
         dirtyNoteIds.add(lastLeaf.noteId)
         dirtyNoteIds.add(leaf.noteId)
+        dirtyLeafIds.add(leaf.id)
+      }
+      // コンテンツ変更: リーフ自体がdirty（スナップショット比較）
+      if (leaf.content !== lastLeaf.content) {
         dirtyLeafIds.add(leaf.id)
       }
     }
@@ -204,10 +224,13 @@ function updateArchiveDirtyIds(currentNotes: Note[], currentLeaves: Leaf[]): voi
   dirtyLeafIds.set(combinedLeaves)
 }
 
-// 全体のダーティ判定（リーフ変更 or 構造変更）
+// 全体のダーティ判定（リーフ変更 or ノート構造変更 or 手動フラグ）
+// スナップショット比較で検出されるため、元に戻せばダーティが消える
+// isStructureDirtyはPWA復元やアーカイブ移動など、スナップショット比較で検出できない場合のフォールバック
 export const isDirty = derived(
-  [hasAnyLeafDirty, isStructureDirty],
-  ([$hasAnyLeafDirty, $isStructureDirty]) => $hasAnyLeafDirty || $isStructureDirty
+  [dirtyLeafIds, dirtyNoteIds, isStructureDirty],
+  ([$dirtyLeafIds, $dirtyNoteIds, $isStructureDirty]) =>
+    $dirtyLeafIds.size > 0 || $dirtyNoteIds.size > 0 || $isStructureDirty
 )
 
 // LocalStorage永続化
@@ -220,19 +243,17 @@ isDirty.subscribe((value) => {
 // storage.tsからre-export
 export const getPersistedDirtyFlag = getPersistedDirtyFlagFromStorage
 
-// 特定のリーフをダーティに設定
-export function setLeafDirty(leafId: string, dirty: boolean = true): void {
-  leaves.update(($leaves) => $leaves.map((l) => (l.id === leafId ? { ...l, isDirty: dirty } : l)))
-}
-
-// 全リーフのダーティをクリア
-export function clearAllDirty(): void {
-  leaves.update(($leaves) => $leaves.map((l) => ({ ...l, isDirty: false })))
-}
-
 // 特定ノート配下のリーフがダーティかどうか（構造変更も含む）
-export function isNoteDirty(noteId: string, $leaves: Leaf[], $dirtyNoteIds: Set<string>): boolean {
-  return $leaves.some((l) => l.noteId === noteId && l.isDirty) || $dirtyNoteIds.has(noteId)
+export function isNoteDirty(
+  noteId: string,
+  $leaves: Leaf[],
+  $dirtyNoteIds: Set<string>,
+  $dirtyLeafIds: Set<string>
+): boolean {
+  // 配下のリーフがコンテンツ変更でダーティ、またはノート自体が構造変更でダーティ
+  return (
+    $leaves.some((l) => l.noteId === noteId && $dirtyLeafIds.has(l.id)) || $dirtyNoteIds.has(noteId)
+  )
 }
 
 /**
@@ -261,7 +282,6 @@ export function setLastPushedSnapshot(
 
 // 全変更をクリア
 export function clearAllChanges(): void {
-  clearAllDirty()
   isStructureDirty.set(false)
   dirtyNoteIds.set(new Set())
   dirtyLeafIds.set(new Set())
@@ -331,9 +351,7 @@ export function updateNotes(newNotes: Note[]): void {
   notes.set(newNotes)
   // 無操作1秒後にIndexedDBへ保存をスケジュール
   scheduleNotesSave()
-  // ノート構造の変更があったらダーティフラグを立てる
-  isStructureDirty.set(true)
-  // 差分検出でdirtyNoteIdsを更新
+  // 差分検出でdirtyNoteIdsを更新（ルートノートの変更も検出される）
   updateHomeDirtyIds(newNotes, get(leaves))
 }
 
@@ -341,10 +359,8 @@ export function updateLeaves(newLeaves: Leaf[]): void {
   leaves.set(newLeaves)
   // 無操作1秒後にIndexedDBへ保存をスケジュール
   scheduleLeavesSave()
-  // 注: リーフのisDirtyは各リーフに設定されているのでここでは何もしない
-  // リーフの追加/削除は構造変更としてマーク
-  isStructureDirty.set(true)
-  // 差分検出でdirtyNoteIdsを更新
+  // 差分検出でdirtyNoteIds/dirtyLeafIdsを更新（コンテンツ変更も含む）
+  // リーフは必ずnoteIdを持つので、追加/削除/変更はdetectDirtyIdsで検出される
   updateHomeDirtyIds(get(notes), newLeaves)
 }
 
@@ -355,16 +371,14 @@ export function updateLeaves(newLeaves: Leaf[]): void {
 export function updateArchiveNotes(newNotes: Note[]): void {
   archiveNotes.set(newNotes)
   // TODO: アーカイブ用のIndexedDB永続化を実装
-  isStructureDirty.set(true)
-  // 差分検出でdirtyNoteIdsを更新
+  // 差分検出でdirtyNoteIdsを更新（ルートノートの変更も検出される）
   updateArchiveDirtyIds(newNotes, get(archiveLeaves))
 }
 
 export function updateArchiveLeaves(newLeaves: Leaf[]): void {
   archiveLeaves.set(newLeaves)
   // TODO: アーカイブ用のIndexedDB永続化を実装
-  isStructureDirty.set(true)
-  // 差分検出でdirtyNoteIdsを更新
+  // 差分検出でdirtyNoteIds/dirtyLeafIdsを更新
   updateArchiveDirtyIds(get(archiveNotes), newLeaves)
 }
 

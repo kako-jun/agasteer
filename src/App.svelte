@@ -16,10 +16,8 @@
     metadata,
     isDirty,
     isStructureDirty,
-    setLeafDirty,
     clearAllChanges,
     getPersistedDirtyFlag,
-    isNoteDirty,
     lastPulledPushCount,
     isStale,
     lastPushTime,
@@ -1638,7 +1636,7 @@
 
       const updatedLeaves = currentLeaves.map((n) =>
         n.id === actualId
-          ? { ...n, title: trimmed, content: updatedContent, updatedAt: Date.now(), isDirty: true }
+          ? { ...n, title: trimmed, content: updatedContent, updatedAt: Date.now() }
           : n
       )
       setCurrentLeaves(updatedLeaves)
@@ -1987,7 +1985,6 @@
         title: newTitle,
         content,
         updatedAt: Date.now(),
-        isDirty: true,
       }
       updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
 
@@ -2852,16 +2849,17 @@
         isPullCompleted = true
 
         // leavesストアはonLeafで逐次更新済みなので、最終的なソートのみ
-        // ただし、Pull中にユーザーが編集したリーフのisDirtyとcontentは保持する
+        // ただし、Pull中にユーザーが編集したリーフのcontentは保持する
         const currentLeaves = get(leaves)
-        const dirtyLeafMap = new Map(currentLeaves.filter((l) => l.isDirty).map((l) => [l.id, l]))
+        const currentLeafMap = new Map(currentLeaves.map((l) => [l.id, l]))
         const sortedLeaves = result.leaves
           .sort((a, b) => a.order - b.order)
           .map((leaf) => {
-            const dirtyLeaf = dirtyLeafMap.get(leaf.id)
-            if (dirtyLeaf) {
-              // ユーザーが編集したリーフは、編集内容とダーティ状態を保持
-              return { ...leaf, content: dirtyLeaf.content, isDirty: true }
+            const currentLeaf = currentLeafMap.get(leaf.id)
+            // ユーザーがPull中に編集した場合、編集内容を保持
+            // （リモートのコンテンツと現在のコンテンツが異なる場合）
+            if (currentLeaf && currentLeaf.content !== leaf.content) {
+              return { ...leaf, content: currentLeaf.content }
             }
             return leaf
           })
@@ -2875,7 +2873,7 @@
         // アーカイブはまだPull完了していない可能性があるので、その時点の状態を使用
         setLastPushedSnapshot(result.notes, sortedLeaves, get(archiveNotes), get(archiveLeaves))
 
-        // IndexedDBに保存（isDirtyをセットしないように直接保存）
+        // IndexedDBに保存
         saveNotes(result.notes).catch((err) => console.error('Failed to persist notes:', err))
         saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
 

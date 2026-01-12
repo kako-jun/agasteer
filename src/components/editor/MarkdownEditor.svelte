@@ -2,15 +2,12 @@
   import { onMount, onDestroy } from 'svelte'
   import type { ThemeType } from '../../lib/types'
   import type { Pane } from '../../lib/navigation'
-  import { setLeafDirty } from '../../lib/stores'
-  import { isOfflineLeaf, isPriorityLeaf } from '../../lib/utils'
 
   export let content: string
   export let theme: ThemeType
   export let vimMode: boolean = false
   export let linedMode: boolean = false
   export let pane: Pane
-  export let leafId: string = ''
   export let onChange: (newContent: string) => void
   export let onPush: (() => void) | null = null
   export let onClose: (() => void) | null = null
@@ -337,10 +334,7 @@
         if (update.docChanged) {
           const newContent = update.state.doc.toString()
           onChange(newContent)
-          // オフラインリーフとプライオリティリーフはGitHub同期しないのでダーティにしない
-          if (!isOfflineLeaf(leafId) && !isPriorityLeaf(leafId)) {
-            setLeafDirty(leafId)
-          }
+          // ダーティ判定はスナップショット比較で自動検出されるため、ここでは何もしない
         }
       }),
       EditorView.domEventHandlers({
