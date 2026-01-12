@@ -924,13 +924,23 @@
       }
     } else {
       // リーフタイトル/本文マッチ: リーフを開いて該当行にジャンプ
-      const leaf = currentLeaves.find((l) => l.id === result.leafId)
-      if (leaf) {
-        selectLeaf(leaf, 'left')
+      // オフラインリーフは特別処理（currentLeavesに含まれないため）
+      if (isOfflineLeaf(result.leafId)) {
+        openOfflineView('left')
         // DOM更新を待ってから行ジャンプ
         await tick()
         if (leftEditorView && leftEditorView.scrollToLine) {
           leftEditorView.scrollToLine(result.line)
+        }
+      } else {
+        const leaf = currentLeaves.find((l) => l.id === result.leafId)
+        if (leaf) {
+          selectLeaf(leaf, 'left')
+          // DOM更新を待ってから行ジャンプ
+          await tick()
+          if (leftEditorView && leftEditorView.scrollToLine) {
+            leftEditorView.scrollToLine(result.line)
+          }
         }
       }
     }
