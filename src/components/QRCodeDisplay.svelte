@@ -207,10 +207,10 @@
   :global(.qr-modal) {
     position: relative;
     background: white;
-    border-radius: 8px;
-    padding: 2rem;
-    max-width: 90vw;
-    max-height: 90vh;
+    border-radius: 4px;
+    padding: 0.25rem;
+    max-width: 98vw;
+    max-height: 98vh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -218,24 +218,25 @@
 
   :global(.qr-close-button) {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    background: none;
+    top: -0.5rem;
+    right: -0.5rem;
+    background: rgba(0, 0, 0, 0.7);
     border: none;
-    color: #666;
+    color: white;
     cursor: pointer;
-    padding: 0.5rem;
+    padding: 0.25rem;
     border-radius: 50%;
     transition: background 0.15s;
+    z-index: 1;
   }
 
   :global(.qr-close-button:hover) {
-    background: rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.9);
   }
 
   :global(.qr-image) {
-    max-width: 80vw;
-    max-height: 80vh;
+    max-width: 97vw;
+    max-height: 97vh;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
