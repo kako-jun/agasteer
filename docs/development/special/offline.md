@@ -47,6 +47,18 @@
 
 Pull中はガラス効果オーバーレイが表示されるが、Offlineリーフは除外される。`isOfflineLeaf(currentLeaf.id)`でチェック。
 
+## 検索機能
+
+検索機能はオフラインリーフも対象に含む。
+
+- **リーフ名検索**: 「Offline」で検索するとヒット
+- **本文検索**: オフラインリーフの本文も検索対象
+- **パス表示**: noteIdが空のため、パスは「Offline」のみ（ノート名なし）
+
+### 実装
+
+`searchResults`派生ストアで`offlineLeafStore`を監視し、`createOfflineLeaf()`でLeaf形式に変換して検索対象に追加。
+
 ## ファイル構成
 
 | ファイル                   | 内容                             |

@@ -5,7 +5,8 @@
 
 import { writable, derived, get } from 'svelte/store'
 import type { Leaf, Note, SearchMatch, SearchMatchType } from '../types'
-import { leaves, notes } from '../stores'
+import { leaves, notes, offlineLeafStore } from '../stores'
+import { createOfflineLeaf } from './offline'
 
 // ========== 定数 ==========
 const MAX_RESULTS = 50
@@ -24,10 +25,24 @@ export const isSearchOpen = writable<boolean>(false)
 export const selectedResultIndex = writable<number>(-1)
 
 // 派生ストア: 検索結果（クエリ変更時に自動計算）
-export const searchResults = derived([searchQuery, leaves, notes], ([$query, $leaves, $notes]) => {
-  if (!$query.trim()) return []
-  return searchAll($query, $leaves, $notes)
-})
+export const searchResults = derived(
+  [searchQuery, leaves, notes, offlineLeafStore],
+  ([$query, $leaves, $notes, $offlineLeaf]) => {
+    if (!$query.trim()) return []
+
+    // オフラインリーフをLeaf形式に変換して追加
+    const offlineLeaf = createOfflineLeaf(
+      $offlineLeaf.content,
+      $offlineLeaf.badgeIcon,
+      $offlineLeaf.badgeColor
+    )
+
+    // 通常のリーフ + オフラインリーフ
+    const allLeaves = [...$leaves, offlineLeaf]
+
+    return searchAll($query, allLeaves, $notes)
+  }
+)
 
 // ========== 検索ロジック ==========
 
