@@ -30,15 +30,6 @@ Tap "**Copy Markdown**" in the share menu.
 
 ---
 
-## Share as Image
-
-Tap "**Share Image**" in the share menu (Web Share API supported devices only).
-
-- Send directly to LINE, Twitter, etc.
-- If text is selected, only the selection is converted to image
-
----
-
 ## QR Code
 
 Tap "**Show Markdown as QR Code**" in the share menu to display a large QR code in a separate window.
@@ -61,3 +52,12 @@ Tap "**Show Markdown as QR Code**" in the share menu to display a large QR code 
 - Button is hidden if too long
 
 > **Tip**: To transfer just part of a long text, select that portion before opening the share menu.
+
+---
+
+## Share as Image
+
+Tap "**Share Image**" in the share menu (Web Share API supported devices only).
+
+- Send directly to LINE, Twitter, etc.
+- If text is selected, only the selection is converted to image
