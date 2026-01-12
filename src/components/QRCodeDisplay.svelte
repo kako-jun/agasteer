@@ -44,13 +44,17 @@
 
     try {
       // モジュール数に応じてQRコードサイズを決定
-      // 各モジュールが最低3ピクセルになるようにする
+      // マージンを含めた総モジュール数で計算し、各モジュールが整数ピクセルになるようにする
+      const margin = 2
       const moduleCount = getModuleCount(byteLength)
-      const qrSize = Math.max(300, moduleCount * 3)
+      const totalModules = moduleCount + margin * 2
+      // 最低3ピクセル/モジュール、または最低300pxになるようなピクセル数
+      const pixelsPerModule = Math.max(3, Math.ceil(300 / totalModules))
+      const qrSize = totalModules * pixelsPerModule
 
       qrDataUrl = await QRCode.toDataURL(content, {
         errorCorrectionLevel: 'L',
-        margin: 2,
+        margin: margin,
         width: qrSize,
         color: {
           dark: '#000000',
@@ -196,8 +200,12 @@
   }
 
   :global(.qr-image) {
-    max-width: 97vw;
-    max-height: 97vh;
+    /* 正方形を維持するため、幅と高さの小さい方に合わせる */
+    max-width: min(97vw, 97vh);
+    max-height: min(97vw, 97vh);
+    /* 自然なサイズで表示（拡大しない） */
+    width: auto;
+    height: auto;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
