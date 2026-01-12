@@ -75,7 +75,12 @@ export const waitForSwCheck: Promise<void> = new Promise((resolve) => {
 
       // 1.5秒後にリロード
       setTimeout(() => {
-        updateSW(true) // true = immediate reload
+        // updateSW(true)でskipWaitingを発火させてからリロード
+        updateSW(true)
+        // 少し待ってからリロード（SWの切り替えを待つ）
+        setTimeout(() => {
+          window.location.reload()
+        }, 100)
       }, 1500)
       // resolveは呼ばない（リロードするので不要）
     },
