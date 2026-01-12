@@ -113,6 +113,8 @@ If the settings are correct, your notes will sync with GitHub.
 
 Tokens cannot be displayed again. Generate a new token.
 
+> **Tip**: Click the copy button next to the token input field in Agasteer's settings screen to copy the saved token to clipboard. This is useful when setting up another device.
+
 ---
 
 ## Related Documentation

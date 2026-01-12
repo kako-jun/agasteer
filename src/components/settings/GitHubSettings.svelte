@@ -32,6 +32,21 @@
     const url = `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
     window.open(url, '_blank', 'noopener,noreferrer')
   }
+
+  let tokenCopied = false
+
+  async function copyToken() {
+    if (!settings.token) return
+    try {
+      await navigator.clipboard.writeText(settings.token)
+      tokenCopied = true
+      setTimeout(() => {
+        tokenCopied = false
+      }, 2000)
+    } catch {
+      // Clipboard API failed, ignore
+    }
+  }
 </script>
 
 <div class="github-settings">
@@ -126,13 +141,55 @@
           </svg>
         </span>
       </div>
-      <input
-        id="github-token"
-        type="password"
-        bind:value={settings.token}
-        on:input={(e) => handleTextInput('token', e)}
-        placeholder={$_('settings.github.tokenPlaceholder')}
-      />
+      <div class="input-with-button">
+        <input
+          id="github-token"
+          type="password"
+          bind:value={settings.token}
+          on:input={(e) => handleTextInput('token', e)}
+          placeholder={$_('settings.github.tokenPlaceholder')}
+        />
+        {#if settings.token}
+          <button
+            type="button"
+            class="copy-button"
+            class:copied={tokenCopied}
+            on:click={copyToken}
+            title={tokenCopied ? 'Copied!' : 'Copy token'}
+          >
+            {#if tokenCopied}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            {:else}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            {/if}
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
   <div class="video-guide-hint">
@@ -249,6 +306,32 @@
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+  }
+
+  .copy-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .copy-button:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .copy-button.copied {
+    background: #27ae60;
+    color: white;
+    border-color: #27ae60;
   }
 
   input[type='text'],
