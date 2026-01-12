@@ -41,21 +41,23 @@ Tap "**Share Image**" in the share menu (Web Share API supported devices only).
 
 ## QR Code
 
-A QR code of the leaf content is displayed in the share menu.
+Tap "**Show Markdown as QR Code**" in the share menu to display a large QR code in a separate window.
 
-- If text is selected, only the selection is encoded in QR
+- If text is selected, it changes to "**Show Selection as QR Code**"
 - If nothing is selected, the entire leaf is encoded
 
 ### How to Use
 
 1. (If needed) Select the part you want to transfer
 2. Open share menu
-3. Scan the QR code with your phone's camera
-4. Retrieve as text
+3. Tap "Show Markdown as QR Code"
+4. Scan the displayed QR code with your phone's camera
+5. Retrieve as text
+6. Click backdrop or press Esc to close
 
 ### Limitations
 
 - Maximum approximately 980 characters (Japanese)
-- Hidden if too long
+- Button is hidden if too long
 
 > **Tip**: To transfer just part of a long text, select that portion before opening the share menu.
