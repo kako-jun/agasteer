@@ -12,6 +12,7 @@
 <style>
   .footer-fixed {
     position: relative;
+    z-index: 300;
     background: rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
