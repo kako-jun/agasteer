@@ -71,8 +71,20 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+    if (showModal && event.key === 'Escape') {
       closeModal()
+    }
+  }
+
+  // ポータルアクション: 要素をbody直下に移動（transformを持つ親の影響を回避）
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node)
+    return {
+      destroy() {
+        if (node.parentNode) {
+          node.parentNode.removeChild(node)
+        }
+      },
     }
   }
 </script>
@@ -105,9 +117,9 @@
 {#if showModal}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="qr-modal-backdrop" on:click={handleBackdropClick}>
+  <div class="qr-modal-backdrop" use:portal on:click={handleBackdropClick}>
     <div class="qr-modal">
-      <button class="close-button" on:click={closeModal} aria-label="Close">
+      <button class="qr-close-button" on:click={closeModal} aria-label="Close">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"
@@ -168,7 +180,8 @@
     text-align: left;
   }
 
-  .qr-modal-backdrop {
+  /* ポータルでbody直下に移動されるため:global()が必要 */
+  :global(.qr-modal-backdrop) {
     position: fixed;
     top: 0;
     left: 0;
@@ -178,11 +191,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    animation: fadeIn 0.2s ease-out;
+    z-index: 10000;
+    animation: qr-fadeIn 0.2s ease-out;
   }
 
-  @keyframes fadeIn {
+  @keyframes qr-fadeIn {
     from {
       opacity: 0;
     }
@@ -191,7 +204,7 @@
     }
   }
 
-  .qr-modal {
+  :global(.qr-modal) {
     position: relative;
     background: white;
     border-radius: 8px;
@@ -203,7 +216,7 @@
     justify-content: center;
   }
 
-  .close-button {
+  :global(.qr-close-button) {
     position: absolute;
     top: 0.5rem;
     right: 0.5rem;
@@ -216,18 +229,18 @@
     transition: background 0.15s;
   }
 
-  .close-button:hover {
+  :global(.qr-close-button:hover) {
     background: rgba(0, 0, 0, 0.1);
   }
 
-  .qr-image {
+  :global(.qr-image) {
     max-width: 80vw;
     max-height: 80vh;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
 
-  .qr-loading {
+  :global(.qr-loading) {
     padding: 2rem;
     color: #666;
   }
