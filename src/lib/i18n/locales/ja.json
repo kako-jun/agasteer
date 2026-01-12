@@ -57,7 +57,9 @@
     "imageCopied": "画像をコピーしました",
     "selectionImageCopied": "選択範囲を画像としてコピーしました",
     "imageCopyFailed": "画像のコピーに失敗しました",
-    "shareFailed": "共有に失敗しました"
+    "shareFailed": "共有に失敗しました",
+    "showMarkdownQRCode": "MarkdownをQRコードで表示",
+    "showSelectionQRCode": "選択範囲をQRコードで表示"
   },
   "home": {
     "leafCount": "リーフ数",

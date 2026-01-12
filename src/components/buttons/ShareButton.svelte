@@ -112,6 +112,7 @@
 
       {#if getMarkdownContent}
         <QRCodeDisplay
+          hasSelection={currentHasSelection}
           getContent={() => {
             if (currentHasSelection && getSelectedText) {
               const selected = getSelectedText()

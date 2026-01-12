@@ -57,7 +57,9 @@
     "imageCopied": "Image copied",
     "selectionImageCopied": "Selection copied as image",
     "imageCopyFailed": "Failed to copy image",
-    "shareFailed": "Failed to share"
+    "shareFailed": "Failed to share",
+    "showMarkdownQRCode": "Show Markdown as QR Code",
+    "showSelectionQRCode": "Show Selection as QR Code"
   },
   "home": {
     "leafCount": "Leaves",
