@@ -63,11 +63,4 @@
     border-color: var(--accent);
     color: var(--text);
   }
-
-  .note {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
 </style>

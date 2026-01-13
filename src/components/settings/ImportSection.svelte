@@ -71,11 +71,4 @@
   .secondary:hover:not(:disabled) {
     border-color: var(--accent);
   }
-
-  .note {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
 </style>
