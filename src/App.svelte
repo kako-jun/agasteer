@@ -1028,15 +1028,26 @@
   }
 
   async function handleSearchResultClick(result: SearchMatch) {
+    // アーカイブからの検索結果の場合、ワールドを切り替える
+    const targetNotes = result.world === 'archive' ? $archiveNotes : $notes
+    const targetLeaves = result.world === 'archive' ? $archiveLeaves : $leaves
+
+    // ワールドを適切に設定
+    if (result.world === 'archive') {
+      $leftWorld = 'archive'
+    } else {
+      $leftWorld = 'home'
+    }
+
     if (result.matchType === 'note') {
       // ノートマッチ: ノートビューを開く
-      const note = currentNotes.find((n) => n.id === result.noteId)
+      const note = targetNotes.find((n) => n.id === result.noteId)
       if (note) {
         selectNote(note, 'left')
       }
     } else {
       // リーフタイトル/本文マッチ: リーフを開いて該当行にジャンプ
-      // オフラインリーフは特別処理（currentLeavesに含まれないため）
+      // オフラインリーフは特別処理（targetLeavesに含まれないため）
       if (isOfflineLeaf(result.leafId)) {
         openOfflineView('left')
         // DOM更新を待ってから行ジャンプ
@@ -1045,7 +1056,7 @@
           leftEditorView.scrollToLine(result.line)
         }
       } else {
-        const leaf = currentLeaves.find((l) => l.id === result.leafId)
+        const leaf = targetLeaves.find((l) => l.id === result.leafId)
         if (leaf) {
           selectLeaf(leaf, 'left')
           // DOM更新を待ってから行ジャンプ

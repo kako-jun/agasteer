@@ -4,9 +4,17 @@
  */
 
 import { writable, derived, get } from 'svelte/store'
-import type { Leaf, Note, SearchMatch, SearchMatchType } from '../types'
-import { leaves, notes, offlineLeafStore } from '../stores'
+import type { Leaf, Note, SearchMatch, SearchMatchType, WorldType } from '../types'
+import {
+  leaves,
+  notes,
+  offlineLeafStore,
+  archiveLeaves,
+  archiveNotes,
+  isArchiveLoaded,
+} from '../stores'
 import { createOfflineLeaf } from './offline'
+import { _ } from '../i18n'
 
 // ========== 定数 ==========
 const MAX_RESULTS = 50
@@ -26,8 +34,17 @@ export const selectedResultIndex = writable<number>(-1)
 
 // 派生ストア: 検索結果（クエリ変更時に自動計算）
 export const searchResults = derived(
-  [searchQuery, leaves, notes, offlineLeafStore],
-  ([$query, $leaves, $notes, $offlineLeaf]) => {
+  [searchQuery, leaves, notes, offlineLeafStore, archiveLeaves, archiveNotes, isArchiveLoaded, _],
+  ([
+    $query,
+    $leaves,
+    $notes,
+    $offlineLeaf,
+    $archiveLeaves,
+    $archiveNotes,
+    $isArchiveLoaded,
+    $t,
+  ]) => {
     if (!$query.trim()) return []
 
     // オフラインリーフをLeaf形式に変換して追加
@@ -38,9 +55,30 @@ export const searchResults = derived(
     )
 
     // 通常のリーフ + オフラインリーフ
-    const allLeaves = [...$leaves, offlineLeaf]
+    const allHomeLeaves = [...$leaves, offlineLeaf]
 
-    return searchAll($query, allLeaves, $notes)
+    // アーカイブのパスプレフィックス（翻訳済み）
+    const archivePrefix = $t('search.archivePrefix') + '/'
+
+    // Home検索
+    const homeResults = searchAll($query, allHomeLeaves, $notes, 'home', '')
+
+    // アーカイブがロード済みの場合のみ、アーカイブも検索
+    if ($isArchiveLoaded) {
+      const archiveResults = searchAll(
+        $query,
+        $archiveLeaves,
+        $archiveNotes,
+        'archive',
+        archivePrefix
+      )
+      // 結合後に優先順位でソートし、MAX_RESULTSで制限
+      const combined = [...homeResults, ...archiveResults]
+      combined.sort((a, b) => MATCH_TYPE_PRIORITY[a.matchType] - MATCH_TYPE_PRIORITY[b.matchType])
+      return combined.slice(0, MAX_RESULTS)
+    }
+
+    return homeResults
   }
 )
 
@@ -80,7 +118,13 @@ function buildLeafPath(note: Note | undefined, leaf: Leaf, noteMap: Map<string, 
  * ノート名・リーフ名・本文を検索してマッチ結果を返す
  * 優先順位: ノート名 > リーフ名 > 本文
  */
-export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): SearchMatch[] {
+export function searchAll(
+  query: string,
+  allLeaves: Leaf[],
+  allNotes: Note[],
+  world: WorldType = 'home',
+  pathPrefix: string = ''
+): SearchMatch[] {
   const normalizedQuery = query.toLowerCase().trim()
   if (!normalizedQuery) return []
 
@@ -94,7 +138,7 @@ export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): S
     const noteName = note.name.toLowerCase()
     const matchIndex = noteName.indexOf(normalizedQuery)
     if (matchIndex !== -1) {
-      const path = buildNotePath(note, noteMap)
+      const path = pathPrefix + buildNotePath(note, noteMap)
       results.push({
         matchType: 'note',
         leafId: '',
@@ -106,6 +150,7 @@ export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): S
         snippet: note.name,
         matchStart: matchIndex,
         matchEnd: matchIndex + normalizedQuery.length,
+        world,
       })
     }
   }
@@ -118,7 +163,7 @@ export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): S
     const matchIndex = leafTitle.indexOf(normalizedQuery)
     if (matchIndex !== -1) {
       const note = noteMap.get(leaf.noteId)
-      const path = buildLeafPath(note, leaf, noteMap)
+      const path = pathPrefix + buildLeafPath(note, leaf, noteMap)
       results.push({
         matchType: 'leafTitle',
         leafId: leaf.id,
@@ -130,6 +175,7 @@ export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): S
         snippet: leaf.title,
         matchStart: matchIndex,
         matchEnd: matchIndex + normalizedQuery.length,
+        world,
       })
     }
   }
@@ -159,11 +205,12 @@ export function searchAll(query: string, allLeaves: Leaf[], allNotes: Note[]): S
         leafTitle: leaf.title,
         noteName: note?.name ?? '',
         noteId: leaf.noteId,
-        path: buildLeafPath(note, leaf, noteMap),
+        path: pathPrefix + buildLeafPath(note, leaf, noteMap),
         line: getLineNumber(leaf.content, matchIndex),
         snippet,
         matchStart,
         matchEnd,
+        world,
       })
 
       // 同じリーフで複数マッチがある場合、次のマッチを探す

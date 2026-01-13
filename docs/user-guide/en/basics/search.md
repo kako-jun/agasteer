@@ -23,5 +23,6 @@ Use the search box on the home screen to search across note names, leaf names, a
 
 - Regular notes and leaves (Home world)
 - **Offline leaf** (local-only memo) is also included in search
+- **Notes and leaves in Archive** (only when Archive is loaded)
 
-> **Note**: Currently, notes and leaves in the Archive are not included in search. Archive search support is planned for a future version.
+> **Tip**: To search within the Archive, you need to load it from GitHub first. Search results from the Archive are displayed with an "Archive/" prefix.

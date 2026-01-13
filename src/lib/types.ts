@@ -140,4 +140,5 @@ export interface SearchMatch {
   snippet: string // マッチ箇所のスニペット（前後N文字含む）
   matchStart: number // スニペット内のマッチ開始位置
   matchEnd: number // スニペット内のマッチ終了位置
+  world: WorldType // 検索結果のワールド（home/archive）
 }

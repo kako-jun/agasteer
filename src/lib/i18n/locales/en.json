@@ -31,7 +31,8 @@
     "placeholder": "Search...",
     "noResults": "No results",
     "clear": "Clear",
-    "close": "Close"
+    "close": "Close",
+    "archivePrefix": "Archive"
   },
   "breadcrumbs": {
     "goHome": "Go to home",

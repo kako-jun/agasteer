@@ -31,7 +31,8 @@
     "placeholder": "検索...",
     "noResults": "該当なし",
     "clear": "クリア",
-    "close": "閉じる"
+    "close": "閉じる",
+    "archivePrefix": "アーカイブ"
   },
   "breadcrumbs": {
     "goHome": "ホームへ移動",
