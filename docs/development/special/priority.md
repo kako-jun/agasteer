@@ -118,16 +118,17 @@ _— TODO @ 個人メモ_
 
 `src/lib/priority.ts`に以下の関数・ストアを配置：
 
-| 名前                    | 説明                     |
-| ----------------------- | ------------------------ |
-| extractPriority         | マーカー検出             |
-| removePriorityMarker    | マーカー除去             |
-| extractPriorityItems    | リーフから優先段落を抽出 |
-| priorityItems           | derived store            |
-| generatePriorityContent | Markdown生成             |
-| createPriorityLeaf      | 仮想リーフ生成           |
-| isPriorityLeaf          | リーフID判定             |
-| isLeafSaveable          | 保存対象判定（リーフ）   |
-| isNoteSaveable          | 保存対象判定（ノート）   |
+| 名前                      | 説明                                |
+| ------------------------- | ----------------------------------- |
+| extractPriority           | マーカー検出                        |
+| removePriorityMarker      | マーカー除去                        |
+| extractPriorityItems      | リーフから優先段落を抽出            |
+| priorityItems             | derived store                       |
+| generatePriorityContent   | Markdown生成（プレビュー用）        |
+| generatePriorityPlainText | プレーンテキスト生成（QR/シェア用） |
+| createPriorityLeaf        | 仮想リーフ生成                      |
+| isPriorityLeaf            | リーフID判定                        |
+| isLeafSaveable            | 保存対象判定（リーフ）              |
+| isNoteSaveable            | 保存対象判定（ノート）              |
 
 ---

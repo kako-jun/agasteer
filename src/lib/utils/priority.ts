@@ -274,6 +274,28 @@ export function generatePriorityContent(items: PriorityItem[]): string {
 }
 
 /**
+ * 仮想PriorityリーフのQRコード/シェア用プレーンテキストを生成
+ * マークダウン装飾とリンクを除去した見やすいテキスト形式
+ */
+export function generatePriorityPlainText(items: PriorityItem[]): string {
+  if (items.length === 0) {
+    return `${PRIORITY_LEAF_NAME}\n\nNo priority items found.\nAdd markers like "[1] " at the start or " [2]" at the end of paragraphs.`
+  }
+
+  const lines: string[] = [PRIORITY_LEAF_NAME, '']
+
+  for (const item of items) {
+    // 優先度バッジ + 内容
+    lines.push(`[${item.priority}] ${item.content}`)
+    // 出典（リンクなし）
+    lines.push(`— ${item.path}`)
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
+/**
  * 仮想Priorityリーフを生成する（ホーム直下なのでnoteIdは空）
  * @param items 優先段落の配列
  * @param badgeIcon バッジアイコン（metadataから復元）

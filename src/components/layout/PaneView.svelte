@@ -4,7 +4,12 @@
   import type { Pane } from '../../lib/navigation'
   import type { PaneActions, PaneState, PANE_ACTIONS_KEY, PANE_STATE_KEY } from '../../lib/stores'
   import type { Note, Leaf, View } from '../../lib/types'
-  import { isPriorityLeaf, isOfflineLeaf } from '../../lib/utils'
+  import {
+    isPriorityLeaf,
+    isOfflineLeaf,
+    generatePriorityPlainText,
+    priorityItems,
+  } from '../../lib/utils'
 
   // ストア
   import {
@@ -103,7 +108,12 @@
   isPreview={currentView === 'preview'}
   getHasSelection={() => actions.getHasSelection(pane)}
   getSelectedText={() => actions.getSelectedText(pane)}
-  getMarkdownContent={currentLeaf ? () => currentLeaf.content : null}
+  getMarkdownContent={currentLeaf
+    ? () =>
+        isPriorityLeaf(currentLeaf.id)
+          ? generatePriorityPlainText($priorityItems)
+          : currentLeaf.content
+    : null}
   onSelectSibling={(id, type) => actions.selectSiblingFromBreadcrumb(id, type, pane)}
   currentWorld={$state.currentWorld}
   onWorldChange={actions.handleWorldChange}
