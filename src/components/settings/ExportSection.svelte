@@ -14,8 +14,6 @@
       {exporting ? $_('settings.importExport.exporting') : $_('settings.importExport.exportZip')}
     </button>
   </div>
-
-  <p class="note">{$_('settings.importExport.gitPolicy')}</p>
 </div>
 
 <style>

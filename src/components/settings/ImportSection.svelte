@@ -18,8 +18,6 @@
       <span class="supported">{supportedLabel}</span>
     {/if}
   </div>
-
-  <p class="note">{$_('settings.importExport.importNote')}</p>
 </div>
 
 <style>
