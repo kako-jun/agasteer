@@ -74,8 +74,9 @@
   $: breadcrumbs = pane === 'left' ? $state.breadcrumbs : $state.breadcrumbsRight
   $: isActive = $focusedPane === pane
 
-  // currentWorldに応じてノート・リーフストアを切り替え
-  $: isArchiveWorld = $state.currentWorld === 'archive'
+  // ペインのワールドに応じてノート・リーフストアを切り替え
+  $: paneWorld = pane === 'left' ? $state.leftWorld : $state.rightWorld
+  $: isArchiveWorld = paneWorld === 'archive'
   $: activeNotes = isArchiveWorld ? $archiveNotes : $notes
   $: activeLeaves = isArchiveWorld ? $archiveLeaves : $leaves
   $: activeRootNotes = isArchiveWorld
@@ -115,8 +116,8 @@
           : currentLeaf.content
     : null}
   onSelectSibling={(id, type) => actions.selectSiblingFromBreadcrumb(id, type, pane)}
-  currentWorld={$state.currentWorld}
-  onWorldChange={actions.handleWorldChange}
+  currentWorld={paneWorld}
+  onWorldChange={(world) => actions.handleWorldChange(world, pane)}
   isArchiveLoading={$state.isArchiveLoading}
 />
 
@@ -136,7 +137,8 @@
       onDragOver={actions.handleDragOverNote}
       onDrop={actions.handleDropNote}
       dragOverNoteId={$state.dragOverNoteId}
-      onUpdateNoteBadge={actions.updateNoteBadge}
+      onUpdateNoteBadge={(noteId, icon, color) =>
+        actions.updateNoteBadge(noteId, icon, color, pane)}
       priorityLeaf={isArchiveWorld ? null : $state.currentPriorityLeaf}
       onSelectPriority={() => actions.openPriorityView(pane)}
       onUpdatePriorityBadge={actions.updatePriorityBadge}
@@ -168,8 +170,10 @@
       onDropLeaf={actions.handleDropLeaf}
       dragOverNoteId={$state.dragOverNoteId}
       dragOverLeafId={$state.dragOverLeafId}
-      onUpdateNoteBadge={actions.updateNoteBadge}
-      onUpdateLeafBadge={actions.updateLeafBadge}
+      onUpdateNoteBadge={(noteId, icon, color) =>
+        actions.updateNoteBadge(noteId, icon, color, pane)}
+      onUpdateLeafBadge={(leafId, icon, color) =>
+        actions.updateLeafBadge(leafId, icon, color, pane)}
       leafSkeletonMap={$state.leafSkeletonMap}
       onSwipeLeft={() => actions.goToNextSibling(pane)}
       onSwipeRight={() => actions.goToPrevSibling(pane)}
@@ -183,7 +187,7 @@
       vimMode={$settings.vimMode ?? false}
       linedMode={$settings.linedMode ?? false}
       {pane}
-      onContentChange={actions.updateLeafContent}
+      onContentChange={(content, leafId) => actions.updateLeafContent(content, leafId, pane)}
       onPush={actions.handlePushToGitHub}
       onClose={() => actions.closeLeaf(pane)}
       onSwitchPane={() => actions.switchPane(pane)}
@@ -218,7 +222,7 @@
     pushDisabled={!$state.canPush}
     pushDisabledReason={$state.pushDisabledReason}
     onDisabledPushClick={actions.handleDisabledPushClick}
-    currentWorld={$state.currentWorld}
+    currentWorld={paneWorld}
   />
 {:else if currentView === 'note' && currentNote}
   <NoteFooter
@@ -233,7 +237,7 @@
     pushDisabled={!$state.canPush}
     pushDisabledReason={$state.pushDisabledReason}
     onDisabledPushClick={actions.handleDisabledPushClick}
-    currentWorld={$state.currentWorld}
+    currentWorld={paneWorld}
     onArchive={() => actions.archiveNote(pane)}
     onRestore={() => actions.restoreNote(pane)}
     noteId={currentNote.id}
@@ -252,7 +256,7 @@
     onDisabledPushClick={actions.handleDisabledPushClick}
     hideDeleteMove={isOfflineLeaf(currentLeaf.id)}
     getHasSelection={() => actions.getHasSelection(pane)}
-    currentWorld={$state.currentWorld}
+    currentWorld={paneWorld}
     onArchive={() => actions.archiveLeaf(pane)}
     onRestore={() => actions.restoreLeaf(pane)}
   />
@@ -269,7 +273,7 @@
     onDisabledPushClick={actions.handleDisabledPushClick}
     hideEditButton={isPriorityLeaf(currentLeaf.id)}
     hideMoveButton={isPriorityLeaf(currentLeaf.id) || isOfflineLeaf(currentLeaf.id)}
-    currentWorld={$state.currentWorld}
+    currentWorld={paneWorld}
     onArchive={() => actions.archiveLeaf(pane)}
     onRestore={() => actions.restoreLeaf(pane)}
   />

@@ -15,7 +15,8 @@ AgasteerのUI/UX関連機能の実装詳細。
 | [misc.md](./misc.md)                   | アプリアイコン、その他のUI改善                 | ~260 |
 | [share.md](./share.md)                 | シェア機能（URL/Markdown/画像）                | ~85  |
 | [pwa.md](./pwa.md)                     | PWA対応                                        | ~175 |
-| [links.md](./links.md)                 | タイトルリンク化、GitHub設定ヘルプ             | ~185 |
+| [links.md](./links.md)                 | タイトルリンク化、GitHub設定ヘルプ             | ~90  |
+| [routing.md](./routing.md)             | URLルーティング、ワールド切り替え              | ~130 |
 
 ## 関連ドキュメント
 

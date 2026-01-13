@@ -38,9 +38,10 @@ export const archiveMetadata = writable<Metadata>({
 export const isArchiveLoaded = writable<boolean>(false)
 
 // ============================================
-// 現在のワールド
+// 現在のワールド（ペインごとに管理）
 // ============================================
-export const currentWorld = writable<WorldType>('home')
+export const leftWorld = writable<WorldType>('home')
+export const rightWorld = writable<WorldType>('home')
 
 // ============================================
 // ダーティフラグ管理（リーフごと + 全体）

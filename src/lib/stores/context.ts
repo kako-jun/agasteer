@@ -29,9 +29,9 @@ export interface PaneActions {
   deleteNote: (pane: Pane) => void
   createLeaf: (pane: Pane, title?: string) => void
   deleteLeaf: (leafId: string, pane: Pane) => void
-  updateLeafContent: (content: string, leafId: string) => void
-  updateNoteBadge: (noteId: string, icon: string, color: string) => void
-  updateLeafBadge: (leafId: string, icon: string, color: string) => void
+  updateLeafContent: (content: string, leafId: string, pane: Pane) => void
+  updateNoteBadge: (noteId: string, icon: string, color: string, pane: Pane) => void
+  updateLeafBadge: (leafId: string, icon: string, color: string, pane: Pane) => void
   updatePriorityBadge: (icon: string, color: string) => void
   updateOfflineBadge: (icon: string, color: string) => void
   updateOfflineContent: (content: string) => void
@@ -87,7 +87,7 @@ export interface PaneActions {
   handleDisabledPushClick: (reason: string) => void
 
   // ワールド切り替え・アーカイブ
-  handleWorldChange: (world: WorldType) => void
+  handleWorldChange: (world: WorldType, pane: Pane) => void
   archiveNote: (pane: Pane) => void
   archiveLeaf: (pane: Pane) => void
   restoreNote: (pane: Pane) => void
@@ -122,8 +122,10 @@ export interface PaneState {
   breadcrumbsRight: Breadcrumb[]
   showWelcome: boolean
   isLoadingUI: boolean
-  /** 現在のワールド（home/archive） */
-  currentWorld: WorldType
+  /** 左ペインのワールド（home/archive） */
+  leftWorld: WorldType
+  /** 右ペインのワールド（home/archive） */
+  rightWorld: WorldType
   /** アーカイブがロード中か */
   isArchiveLoading: boolean
 }

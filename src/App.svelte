@@ -45,7 +45,8 @@
     updateArchiveNotes,
     updateArchiveLeaves,
     isArchiveLoaded,
-    currentWorld,
+    leftWorld,
+    rightWorld,
     initActivityDetection,
     setupBeforeUnloadSave,
     scheduleOfflineSave,
@@ -105,7 +106,7 @@
     showPrompt,
     closeModal,
   } from './lib/ui'
-  import { resolvePath, buildPath } from './lib/navigation'
+  import { resolvePath, buildPath, extractWorldPrefix } from './lib/navigation'
   import { buildNotesZip, downloadLeafAsMarkdown as downloadLeafAsMarkdownLib } from './lib/utils'
   import { getBreadcrumbs as buildBreadcrumbs, extractH1Title, updateH1Title } from './lib/ui'
   import { reorderItems } from './lib/navigation'
@@ -194,6 +195,7 @@
   $: moveTargetLeaf = $moveModalStore.targetLeaf
   $: moveTargetNote = $moveModalStore.targetNote
   $: moveTargetPane = $moveModalStore.targetPane
+  $: moveTargetWorld = moveTargetPane === 'left' ? $leftWorld : $rightWorld
 
   // 左右ペイン用の状態
   let isDualPane = false // 画面幅で切り替え
@@ -259,26 +261,31 @@
     handlePaneScroll('right', scrollTop, scrollHeight)
   }
 
-  // リアクティブ宣言
+  // リアクティブ宣言（ワールドに応じたデータを使用）
+  $: leftBreadcrumbNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
+  $: leftBreadcrumbLeaves = $leftWorld === 'archive' ? $archiveLeaves : $leaves
+  $: rightBreadcrumbNotes = $rightWorld === 'archive' ? $archiveNotes : $notes
+  $: rightBreadcrumbLeaves = $rightWorld === 'archive' ? $archiveLeaves : $leaves
+
   $: breadcrumbs = buildBreadcrumbs(
     $leftView,
     $leftNote,
     $leftLeaf,
-    $notes,
+    leftBreadcrumbNotes,
     'left',
     goHome,
     selectNote,
-    $leaves
+    leftBreadcrumbLeaves
   )
   $: breadcrumbsRight = buildBreadcrumbs(
     $rightView,
     $rightNote,
     $rightLeaf,
-    $notes,
+    rightBreadcrumbNotes,
     'right',
     goHome,
     selectNote,
-    $leaves
+    rightBreadcrumbLeaves
   )
   $: isGitHubConfigured = $githubConfigured
   $: document.title = $settings.toolName
@@ -302,13 +309,34 @@
   $: canPull = !$isPulling && !$isPushing
   $: canPush = !$isPulling && !$isPushing && isFirstPriorityFetched
 
-  // 現在のワールド（home/archive）に応じたノート・リーフ
-  $: currentNotes = $currentWorld === 'archive' ? $archiveNotes : $notes
-  $: currentLeaves = $currentWorld === 'archive' ? $archiveLeaves : $leaves
+  // ペインごとのワールドに応じたノート・リーフを取得するヘルパー
+  function getNotesForWorld(world: WorldType): Note[] {
+    return world === 'archive' ? get(archiveNotes) : get(notes)
+  }
+
+  function getLeavesForWorld(world: WorldType): Leaf[] {
+    return world === 'archive' ? get(archiveLeaves) : get(leaves)
+  }
+
+  function getWorldForPane(pane: Pane): WorldType {
+    return pane === 'left' ? get(leftWorld) : get(rightWorld)
+  }
+
+  function getNotesForPane(pane: Pane): Note[] {
+    return getNotesForWorld(getWorldForPane(pane))
+  }
+
+  function getLeavesForPane(pane: Pane): Leaf[] {
+    return getLeavesForWorld(getWorldForPane(pane))
+  }
+
+  // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
+  $: currentNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
+  $: currentLeaves = $leftWorld === 'archive' ? $archiveLeaves : $leaves
 
   // 現在のワールドに応じたノート・リーフ更新ヘルパー
   function setCurrentNotes(newNotes: Note[]): void {
-    if ($currentWorld === 'archive') {
+    if ($leftWorld === 'archive') {
       updateArchiveNotes(newNotes)
     } else {
       updateNotes(newNotes)
@@ -316,7 +344,24 @@
   }
 
   function setCurrentLeaves(newLeaves: Leaf[]): void {
-    if ($currentWorld === 'archive') {
+    if ($leftWorld === 'archive') {
+      updateArchiveLeaves(newLeaves)
+    } else {
+      updateLeaves(newLeaves)
+    }
+  }
+
+  // ペインのワールドに応じたノート・リーフ更新ヘルパー
+  function setNotesForWorld(world: WorldType, newNotes: Note[]): void {
+    if (world === 'archive') {
+      updateArchiveNotes(newNotes)
+    } else {
+      updateNotes(newNotes)
+    }
+  }
+
+  function setLeavesForWorld(world: WorldType, newLeaves: Leaf[]): void {
+    if (world === 'archive') {
       updateArchiveLeaves(newLeaves)
     } else {
       updateLeaves(newLeaves)
@@ -349,7 +394,8 @@
     breadcrumbsRight: [],
     showWelcome: false,
     isLoadingUI: false,
-    currentWorld: 'home',
+    leftWorld: 'home',
+    rightWorld: 'home',
     isArchiveLoading: false,
   })
 
@@ -382,7 +428,8 @@
     breadcrumbsRight,
     showWelcome,
     isLoadingUI,
-    currentWorld: $currentWorld,
+    leftWorld: $leftWorld,
+    rightWorld: $rightWorld,
     isArchiveLoading,
   })
 
@@ -400,19 +447,26 @@
 
     const params = new URLSearchParams()
 
-    // 左ペイン（常に設定）
-    const leftPath = buildPath($leftNote, $leftLeaf, $notes, $leftView)
+    // 左ペインのノートデータ（ワールドに応じて切り替え）
+    const leftNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
+    // 右ペインのノートデータ
+    const rightNotes = $rightWorld === 'archive' ? $archiveNotes : $notes
+
+    // 左ペイン（常に設定、ワールド情報を含む）
+    const leftPath = buildPath($leftNote, $leftLeaf, leftNotes, $leftView, $leftWorld)
     params.set('left', leftPath)
 
     // 右ペイン（2ペイン表示時は独立した状態、1ペイン時は左と同じ）
-    const rightPath = isDualPane ? buildPath($rightNote, $rightLeaf, $notes, $rightView) : leftPath
+    const rightPath = isDualPane
+      ? buildPath($rightNote, $rightLeaf, rightNotes, $rightView, $rightWorld)
+      : leftPath
     params.set('right', rightPath)
 
     const newUrl = `?${params.toString()}`
     window.history.pushState({}, '', newUrl)
   }
 
-  function restoreStateFromUrl(alreadyRestoring = false) {
+  async function restoreStateFromUrl(alreadyRestoring = false) {
     const params = new URLSearchParams(window.location.search)
     let leftPath = params.get('left')
     let rightPath = params.get('right')
@@ -430,6 +484,7 @@
             $leftNote = note
             $leftLeaf = leaf
             $leftView = 'edit'
+            leftWorld.set('home')
           }
         }
       } else if (noteId) {
@@ -438,11 +493,13 @@
           $leftNote = note
           $leftLeaf = null
           $leftView = 'note'
+          leftWorld.set('home')
         }
       } else {
         $leftNote = null
         $leftLeaf = null
         $leftView = 'home'
+        leftWorld.set('home')
       }
       return
     }
@@ -456,7 +513,36 @@
       leftPath = '/'
     }
 
-    const leftResolution = resolvePath(leftPath, $notes, $leaves)
+    // ワールドを判定
+    const leftWorldInfo = extractWorldPrefix(leftPath)
+    const rightWorldInfo = rightPath ? extractWorldPrefix(rightPath) : { world: 'home' as const }
+
+    // アーカイブが必要だが未ロードの場合、先にPullする
+    const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
+    if (needsArchive && !$isArchiveLoaded && $settings.token && $settings.repoName) {
+      isArchiveLoading = true
+      try {
+        const result = await pullArchive($settings)
+        if (result.success) {
+          archiveNotes.set(result.notes)
+          archiveLeaves.set(result.leaves)
+          archiveMetadata.set(result.metadata)
+          isArchiveLoaded.set(true)
+          setLastPushedSnapshot(get(notes), get(leaves), result.notes, result.leaves)
+        }
+      } catch (e) {
+        console.error('Archive pull failed during URL restore:', e)
+      } finally {
+        isArchiveLoading = false
+      }
+    }
+
+    // 左ペインのデータ（アーカイブのPull後のデータを使用）
+    const leftNotesData = leftWorldInfo.world === 'archive' ? $archiveNotes : $notes
+    const leftLeavesData = leftWorldInfo.world === 'archive' ? $archiveLeaves : $leaves
+
+    const leftResolution = resolvePath(leftPath, leftNotesData, leftLeavesData)
+    leftWorld.set(leftResolution.world)
 
     if (leftResolution.type === 'home') {
       $leftNote = null
@@ -474,7 +560,12 @@
 
     // 右ペインの復元（2ペイン表示時のみ）
     if (rightPath && isDualPane) {
-      const rightResolution = resolvePath(rightPath, $notes, $leaves)
+      // 右ペインのデータ（アーカイブのPull後のデータを使用）
+      const rightNotesData = rightWorldInfo.world === 'archive' ? $archiveNotes : $notes
+      const rightLeavesData = rightWorldInfo.world === 'archive' ? $archiveLeaves : $leaves
+
+      const rightResolution = resolvePath(rightPath, rightNotesData, rightLeavesData)
+      rightWorld.set(rightResolution.world)
 
       if (rightResolution.type === 'home') {
         $rightNote = null
@@ -494,6 +585,7 @@
       $rightNote = $leftNote
       $rightLeaf = $leftLeaf
       $rightView = $leftView
+      rightWorld.set($leftWorld)
     }
 
     if (!alreadyRestoring) {
@@ -508,7 +600,15 @@
   let leafSkeletonMap = new Map<string, LeafSkeleton>()
 
   // ペインの状態変更をURLに反映
-  $: ($leftNote, $leftLeaf, $leftView, $rightNote, $rightLeaf, $rightView, updateUrlFromState())
+  $: ($leftNote,
+    $leftLeaf,
+    $leftView,
+    $leftWorld,
+    $rightNote,
+    $rightLeaf,
+    $rightView,
+    $rightWorld,
+    updateUrlFromState())
 
   // 初期化
   onMount(() => {
@@ -899,8 +999,9 @@
   }
 
   function selectLeaf(leaf: Leaf, pane: Pane) {
-    // 現在のワールドに応じたノートからリーフの親ノートを検索
-    const note = currentNotes.find((n) => n.id === leaf.noteId)
+    // ペインのワールドに応じたノートからリーフの親ノートを検索
+    const paneNotes = getNotesForPane(pane)
+    const note = paneNotes.find((n) => n.id === leaf.noteId)
     if (note) {
       if (pane === 'left') {
         $leftNote = note
@@ -971,8 +1072,9 @@
   // ワールド切り替え・アーカイブ/リストア
   // ========================================
 
-  async function handleWorldChange(world: WorldType) {
-    if (world === $currentWorld) return
+  async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
+    const currentPaneWorld = pane === 'left' ? $leftWorld : $rightWorld
+    if (world === currentPaneWorld) return
 
     // アーカイブに切り替える場合、未ロードならPull
     if (world === 'archive' && !$isArchiveLoaded) {
@@ -1002,10 +1104,14 @@
       // トークンがなくてもアーカイブに切り替えは許可（空のアーカイブを表示）
     }
 
-    // ワールドを切り替え
-    currentWorld.set(world)
+    // ワールドを切り替え（ペインごとに独立）
+    if (pane === 'left') {
+      leftWorld.set(world)
+    } else {
+      rightWorld.set(world)
+    }
     // ホームに戻る
-    goHome('left')
+    goHome(pane)
     refreshBreadcrumbs()
   }
 
@@ -1019,7 +1125,7 @@
       'bottom-left'
     )
     if (confirmed) {
-      await moveNoteToWorld(note, 'archive')
+      await moveNoteToWorld(note, 'archive', pane)
     }
   }
 
@@ -1032,7 +1138,7 @@
       'bottom-left'
     )
     if (confirmed) {
-      await moveLeafToWorld(leaf, 'archive')
+      await moveLeafToWorld(leaf, 'archive', pane)
     }
   }
 
@@ -1045,7 +1151,7 @@
       'bottom-left'
     )
     if (confirmed) {
-      await moveNoteToWorld(note, 'home')
+      await moveNoteToWorld(note, 'home', pane)
     }
   }
 
@@ -1058,11 +1164,11 @@
       'bottom-left'
     )
     if (confirmed) {
-      await moveLeafToWorld(leaf, 'home')
+      await moveLeafToWorld(leaf, 'home', pane)
     }
   }
 
-  async function moveNoteToWorld(note: Note, targetWorld: WorldType) {
+  async function moveNoteToWorld(note: Note, targetWorld: WorldType, pane: Pane) {
     // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
     // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
     let freshArchiveNotes: Note[] | null = null
@@ -1102,7 +1208,7 @@
       }
     }
 
-    const sourceWorld = $currentWorld
+    const sourceWorld = pane === 'left' ? $leftWorld : $rightWorld
     const sourceNotes = sourceWorld === 'home' ? $notes : (freshArchiveNotes ?? $archiveNotes)
     const sourceLeaves = sourceWorld === 'home' ? $leaves : (freshArchiveLeaves ?? $archiveLeaves)
 
@@ -1305,7 +1411,7 @@
     showPushToast($_(toastKey), 'success')
   }
 
-  async function moveLeafToWorld(leaf: Leaf, targetWorld: WorldType) {
+  async function moveLeafToWorld(leaf: Leaf, targetWorld: WorldType, pane: Pane) {
     // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
     // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
     let freshArchiveNotes: Note[] | null = null
@@ -1345,7 +1451,7 @@
       }
     }
 
-    const sourceWorld = $currentWorld
+    const sourceWorld = pane === 'left' ? $leftWorld : $rightWorld
     const sourceNotes = sourceWorld === 'home' ? $notes : (freshArchiveNotes ?? $archiveNotes)
     const sourceLeaves = sourceWorld === 'home' ? $leaves : (freshArchiveLeaves ?? $archiveLeaves)
     const targetNotes = targetWorld === 'home' ? $notes : (freshArchiveNotes ?? $archiveNotes)
@@ -1626,25 +1732,31 @@
   }
 
   function refreshBreadcrumbs() {
+    // ワールドに応じたデータを使用
+    const leftNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
+    const leftLeaves = $leftWorld === 'archive' ? $archiveLeaves : $leaves
+    const rightNotes = $rightWorld === 'archive' ? $archiveNotes : $notes
+    const rightLeaves = $rightWorld === 'archive' ? $archiveLeaves : $leaves
+
     breadcrumbs = buildBreadcrumbs(
       $leftView,
       $leftNote,
       $leftLeaf,
-      $notes,
+      leftNotes,
       'left',
       goHome,
       selectNote,
-      $leaves
+      leftLeaves
     )
     breadcrumbsRight = buildBreadcrumbs(
       $rightView,
       $rightNote,
       $rightLeaf,
-      $notes,
+      rightNotes,
       'right',
       goHome,
       selectNote,
-      $leaves
+      rightLeaves
     )
   }
 
@@ -1793,8 +1905,9 @@
     const targetNote = pane === 'left' ? $leftNote : $rightNote
     if (!targetNote) return
 
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       const allNotes = $archiveNotes
       const allLeaves = $archiveLeaves
 
@@ -1877,9 +1990,10 @@
   }
 
   // ノートバッジ更新
-  function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string) {
+  function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       const allNotes = $archiveNotes
       const current = allNotes.find((n) => n.id === noteId)
       if (!current) return
@@ -1979,8 +2093,9 @@
   function deleteLeaf(leafId: string, pane: Pane) {
     const otherLeaf = pane === 'left' ? $rightLeaf : $leftLeaf
 
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       const allLeaves = $archiveLeaves
       const allNotes = $archiveNotes
       const targetLeaf = allLeaves.find((l) => l.id === leafId)
@@ -2031,7 +2146,7 @@
     }
   }
 
-  async function updateLeafContent(content: string, leafId: string) {
+  async function updateLeafContent(content: string, leafId: string, pane: Pane) {
     // オフラインリーフは専用の自動保存処理
     if (isOfflineLeaf(leafId)) {
       updateOfflineContent(content)
@@ -2039,8 +2154,9 @@
       return
     }
 
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       const allLeaves = $archiveLeaves
       const targetLeaf = allLeaves.find((l) => l.id === leafId)
       if (!targetLeaf) return
@@ -2094,9 +2210,10 @@
     }
   }
 
-  function updateLeafBadge(leafId: string, badgeIcon: string, badgeColor: string) {
+  function updateLeafBadge(leafId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       const allLeaves = $archiveLeaves
       const targetLeaf = allLeaves.find((l) => l.id === leafId)
       if (!targetLeaf) return
@@ -2197,15 +2314,16 @@
   function handleMoveConfirm(destNoteId: string | null) {
     const state = moveModalStore.getState()
     if (state.targetLeaf) {
-      moveLeafTo(destNoteId, state.targetLeaf)
+      moveLeafTo(destNoteId, state.targetLeaf, state.targetPane)
     } else if (state.targetNote) {
-      moveNoteTo(destNoteId, state.targetNote)
+      moveNoteTo(destNoteId, state.targetNote, state.targetPane)
     }
   }
 
-  async function moveLeafTo(destNoteId: string | null, targetLeaf: Leaf) {
+  async function moveLeafTo(destNoteId: string | null, targetLeaf: Leaf, pane: Pane) {
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       if (!destNoteId || targetLeaf.noteId === destNoteId) {
         closeMoveModal()
         return
@@ -2271,9 +2389,10 @@
     closeMoveModal()
   }
 
-  async function moveNoteTo(destNoteId: string | null, targetNote: Note) {
+  async function moveNoteTo(destNoteId: string | null, targetNote: Note, pane: Pane) {
+    const paneWorld = getWorldForPane(pane)
     // アーカイブ内の場合は専用処理
-    if ($currentWorld === 'archive') {
+    if (paneWorld === 'archive') {
       const currentParent = targetNote.parentId || null
       const nextParent = destNoteId
 
@@ -3122,7 +3241,8 @@
       githubConfigured={isGitHubConfigured}
       title={$settings.toolName}
       onTitleClick={() => {
-        currentWorld.set('home')
+        leftWorld.set('home')
+        rightWorld.set('home')
         goHome('left')
         goHome('right')
       }}
@@ -3178,7 +3298,7 @@
       targetNote={moveTargetNote}
       targetLeaf={moveTargetLeaf}
       pane={moveTargetPane}
-      currentWorld={$currentWorld}
+      currentWorld={moveTargetWorld}
       onConfirm={handleMoveConfirm}
       onClose={closeMoveModal}
     />
