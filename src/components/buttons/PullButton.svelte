@@ -48,19 +48,20 @@
   }
 
   .pull-button {
-    background: none;
+    background: transparent;
     border: none;
     cursor: pointer;
-    padding: 0.15rem;
+    padding: 0.35rem;
     color: var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.2s;
+    border-radius: 6px;
+    transition: background-color 0.2s;
   }
 
   .pull-button:hover:not(:disabled) {
-    opacity: 0.7;
+    background: var(--surface-1);
   }
 
   .pull-button:disabled {
