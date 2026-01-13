@@ -214,12 +214,23 @@
     }
   }
 
-  // ユーザーガイドを開く
+  // ユーザーガイドを開く（PreviewViewと同じロジック）
   const USER_GUIDE_BASE = 'https://github.com/kako-jun/agasteer/blob/main/docs/user-guide'
-  function openUserGuide() {
+  async function openUserGuide() {
     const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
     const url = `${USER_GUIDE_BASE}/${lang}/index.md`
-    window.open(url, '_blank', 'noopener,noreferrer')
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ url })
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('共有に失敗しました:', error)
+        }
+      }
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   }
 
   // キーボードナビゲーション用の状態

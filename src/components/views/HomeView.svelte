@@ -104,11 +104,28 @@
     return `${formatNumber(chars)} chars · ${formatNumber(lines)} lines`
   }
 
-  // ユーザーガイドのURL生成
+  // ユーザーガイドの特定ページを開く（PreviewViewと同じロジック）
   const USER_GUIDE_BASE = 'https://github.com/kako-jun/agasteer/blob/main/docs/user-guide'
-  function getHelpUrl(page: 'offline' | 'priority'): string {
+  async function openHelpPage(page: 'offline' | 'priority', event: Event) {
+    event.preventDefault()
+    event.stopPropagation() // カード選択を防ぐ
     const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
-    return `${USER_GUIDE_BASE}/${lang}/power/${page}.md`
+    const url = `${USER_GUIDE_BASE}/${lang}/power/${page}.md`
+
+    // Web Share APIが使える場合は共有機能を使う
+    if (navigator.share) {
+      try {
+        await navigator.share({ url })
+      } catch (error) {
+        // ユーザーがキャンセルした場合など
+        if ((error as Error).name !== 'AbortError') {
+          console.error('共有に失敗しました:', error)
+        }
+      }
+    } else {
+      // Web Share APIが使えない場合は別タブで開く
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   }
 </script>
 
@@ -132,17 +149,14 @@
         />
         <div class="leaf-title-row">
           <strong class="text-ellipsis">{offlineLeaf.title}</strong>
-          <a
+          <button
             class="help-link"
-            href={getHelpUrl('offline')}
-            target="_blank"
-            rel="noopener noreferrer"
             title={$_('header.help')}
             aria-label={$_('header.help')}
-            on:click|stopPropagation
+            on:click={(e) => openHelpPage('offline', e)}
           >
             <HelpIcon />
-          </a>
+          </button>
         </div>
         <div class="card-meta">
           {#if offlineLeaf.content}
@@ -179,17 +193,14 @@
         />
         <div class="leaf-title-row">
           <strong class="text-ellipsis">{priorityLeaf.title}</strong>
-          <a
+          <button
             class="help-link"
-            href={getHelpUrl('priority')}
-            target="_blank"
-            rel="noopener noreferrer"
             title={$_('header.help')}
             aria-label={$_('header.help')}
-            on:click|stopPropagation
+            on:click={(e) => openHelpPage('priority', e)}
           >
             <HelpIcon />
-          </a>
+          </button>
         </div>
         <div class="card-meta">
           {#if priorityLeaf.content}
