@@ -196,6 +196,7 @@
   $: moveTargetNote = $moveModalStore.targetNote
   $: moveTargetPane = $moveModalStore.targetPane
   $: moveTargetWorld = moveTargetPane === 'left' ? $leftWorld : $rightWorld
+  $: moveTargetNotes = moveTargetWorld === 'archive' ? $archiveNotes : $notes
 
   // 左右ペイン用の状態
   let isDualPane = false // 画面幅で切り替え
@@ -366,6 +367,19 @@
     } else {
       updateLeaves(newLeaves)
     }
+  }
+
+  // ノート・リーフがどのワールドに属するかを判定
+  function getWorldForNote(note: Note): WorldType {
+    if ($notes.some((n) => n.id === note.id)) return 'home'
+    if ($archiveNotes.some((n) => n.id === note.id)) return 'archive'
+    return 'home' // フォールバック
+  }
+
+  function getWorldForLeaf(leaf: Leaf): WorldType {
+    if ($leaves.some((l) => l.id === leaf.id)) return 'home'
+    if ($archiveLeaves.some((l) => l.id === leaf.id)) return 'archive'
+    return 'home' // フォールバック
   }
 
   // ========================================
@@ -2047,10 +2061,13 @@
     if (!draggedNote || draggedNote.id === targetNote.id) return
     if (draggedNote.parentId !== targetNote.parentId) return
 
-    const updatedNotes = reorderItems(draggedNote, targetNote, currentNotes, (n) =>
+    // ドラッグ元のノートからワールドを判定
+    const world = getWorldForNote(draggedNote)
+    const worldNotes = getNotesForWorld(world)
+    const updatedNotes = reorderItems(draggedNote, targetNote, worldNotes, (n) =>
       draggedNote!.parentId ? n.parentId === draggedNote!.parentId : !n.parentId
     )
-    setCurrentNotes(updatedNotes)
+    setNotesForWorld(world, updatedNotes)
     dragStore.endDragNote()
   }
 
@@ -2289,13 +2306,16 @@
     if (!draggedLeaf || draggedLeaf.id === targetLeaf.id) return
     if (draggedLeaf.noteId !== targetLeaf.noteId) return
 
+    // ドラッグ元のリーフからワールドを判定
+    const world = getWorldForLeaf(draggedLeaf)
+    const worldLeaves = getLeavesForWorld(world)
     const updatedLeaves = reorderItems(
       draggedLeaf,
       targetLeaf,
-      currentLeaves,
+      worldLeaves,
       (l) => l.noteId === draggedLeaf!.noteId
     )
-    setCurrentLeaves(updatedLeaves)
+    setLeavesForWorld(world, updatedLeaves)
     dragStore.endDragLeaf()
   }
 
@@ -2747,12 +2767,15 @@
       return
     }
 
+    // ペインのワールドに応じたリーフを取得
+    const paneLeaves = getLeavesForPane(pane)
+
     // 選択テキストがあればそれをダウンロード
     const editorView = pane === 'left' ? leftEditorView : rightEditorView
     if (editorView && editorView.getSelectedText) {
       const selectedText = editorView.getSelectedText()
       if (selectedText) {
-        const targetLeaf = currentLeaves.find((l) => l.id === leafId)
+        const targetLeaf = paneLeaves.find((l) => l.id === leafId)
         if (!targetLeaf) return
         const blob = new Blob([selectedText], { type: 'text/markdown' })
         const url = URL.createObjectURL(blob)
@@ -2768,7 +2791,7 @@
     }
 
     // 選択なしの場合は全文ダウンロード
-    const targetLeaf = currentLeaves.find((l) => l.id === leafId)
+    const targetLeaf = paneLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
     const blob = new Blob([targetLeaf.content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -2788,7 +2811,9 @@
       return
     }
 
-    const targetLeaf = currentLeaves.find((l) => l.id === leafId)
+    // ペインのワールドに応じたリーフを取得
+    const paneLeaves = getLeavesForPane(pane)
+    const targetLeaf = paneLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
     try {
@@ -3301,7 +3326,7 @@
 
     <MoveModal
       show={moveModalOpen}
-      notes={currentNotes}
+      notes={moveTargetNotes}
       targetNote={moveTargetNote}
       targetLeaf={moveTargetLeaf}
       pane={moveTargetPane}
