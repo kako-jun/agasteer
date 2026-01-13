@@ -2,7 +2,9 @@
  * Stale定期チェッカー
  *
  * リモートに新しい変更があるかを定期的にチェックし、
- * stale状態を検出したらisStaleストアをtrueにする。
+ * stale状態を検出したら:
+ * - ローカルがクリーン（isDirty === false）→ 自動Pull実行
+ * - ローカルがダーティ（isDirty === true）→ isStaleをtrueにする
  *
  * - 前回のチェックから5分経過後にチェック
  * - アクティブタブ（visible）のときのみ
@@ -18,6 +20,7 @@ import {
   isPulling,
   isPushing,
   isStale,
+  isDirty,
   lastStaleCheckTime,
   lastPulledPushCount,
   githubConfigured,
@@ -51,19 +54,35 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000 // 5分
  */
 export const staleCheckProgress = writable<number>(0)
 
+/**
+ * 自動Pullトリガー用ストア
+ * stale検出かつローカルがクリーンなときにtrueになる
+ * App.svelteで購読してPull処理を実行
+ */
+export const shouldAutoPull = writable<boolean>(false)
+
 let progressIntervalId: ReturnType<typeof setInterval> | null = null
 let isChecking = false
 
 /**
  * 定期チェックを実行
- * - stale検出時はisStaleをtrueにするだけ
+ * - stale検出時:
+ *   - ローカルがクリーン → shouldAutoPull.set(true)（自動Pull）
+ *   - ローカルがダーティ → isStale.set(true)（赤バッジ表示）
  */
 async function checkIfNeeded(): Promise<void> {
   // サイレントにstaleチェック（共通関数を使用）
   try {
     const result = await executeStaleCheck(get(settings), get(lastPulledPushCount))
     if (result.status === 'stale') {
-      isStale.set(true)
+      // ローカルがダーティかどうかで分岐
+      if (get(isDirty)) {
+        // ダーティ → 従来通り赤バッジ表示
+        isStale.set(true)
+      } else {
+        // クリーン → 自動Pullをトリガー
+        shouldAutoPull.set(true)
+      }
     }
     // up_to_date や check_failed の場合は何もしない（エラー通知もしない）
   } catch {

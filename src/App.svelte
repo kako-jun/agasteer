@@ -56,6 +56,7 @@
     startStaleChecker,
     stopStaleChecker,
     executeStaleCheck,
+    shouldAutoPull,
     setLastPushedSnapshot,
     // ワールドヘルパー（純粋関数）
     getNotesForWorld as _getNotesForWorld,
@@ -877,6 +878,32 @@
       await pushToGitHub()
     })
 
+    // 自動Pull機能（shouldAutoPullストアを購読して実行）
+    // stale-checker.tsでstale検出かつローカルがクリーンなときにtrueになる
+    const unsubscribeAutoPull = shouldAutoPull.subscribe(async (should) => {
+      if (!should) return
+
+      // フラグをリセット（連続実行防止）
+      shouldAutoPull.set(false)
+
+      // バックグラウンドでは実行しない
+      if (document.visibilityState !== 'visible') return
+
+      // GitHub設定がなければスキップ
+      if (!$githubConfigured) return
+
+      // Push/Pull中はスキップ
+      if ($isPulling || $isPushing) return
+
+      // 初回Pullが完了していなければスキップ
+      if (!isFirstPriorityFetched) return
+
+      console.log('Auto-pull triggered (stale detected, local is clean)')
+
+      // Pull実行（ダーティチェックなし、すでにstale-checkerで確認済み）
+      await pullFromGitHub(false)
+    })
+
     return () => {
       window.removeEventListener('popstate', handlePopState)
       window.removeEventListener('resize', updateDualPane)
@@ -884,6 +911,7 @@
       window.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       unsubscribeAutoPush()
+      unsubscribeAutoPull()
       cleanupActivityDetection()
       cleanupBeforeUnloadSave()
       stopStaleChecker()

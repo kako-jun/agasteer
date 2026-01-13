@@ -21,6 +21,16 @@ When there are unsaved changes, a **red dot** appears on the save button.
 
 If edits were made on another device, a warning appears before Push. You can choose to overwrite or Pull first.
 
+### Auto Push
+
+After editing, if you're idle for **42 seconds**, changes are automatically pushed to GitHub.
+
+- Saves you the trouble of manual saving
+- Won't auto-push while you're active (typing, clicking, scrolling, etc.)
+- A progress bar below the save button shows time until the next auto-push
+
+> **Tip**: If you need to save urgently, press the save button manually or use Ctrl+S.
+
 ---
 
 ## Retrieving from GitHub (Pull)
@@ -38,7 +48,12 @@ Pull is automatically executed when the app starts.
 
 ### Background Check
 
-Remote changes are automatically checked every 5 minutes. If there are new changes, a red dot appears on the Pull button.
+Remote changes are automatically checked every 5 minutes. If there are new changes:
+
+- **If no unsaved changes** → Pull is automatically executed
+- **If unsaved changes exist** → A red dot appears on the Pull button (please Pull manually)
+
+> **Tip**: If you've been idle for 5 minutes and have no unsaved changes, changes from other devices are automatically synced.
 
 ---
 
