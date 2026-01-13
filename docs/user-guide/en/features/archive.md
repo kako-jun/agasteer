@@ -28,6 +28,8 @@ Agasteer has two independent spaces.
 - When opening Archive for the first time, data is Pulled from GitHub (may take a few seconds)
 - From the second time, it's cached and displays instantly
 
+> **💡 Progress indicator**: On the Archive top screen, the statistics display (leaf count, character count) in the bottom-right increases in real-time. This lets you monitor the data fetching progress.
+
 ### Quick Return to Home
 
 Tap the title "Agasteer" in the top-left header → Returns to Home top from anywhere
