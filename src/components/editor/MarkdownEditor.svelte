@@ -178,7 +178,7 @@
         borderLeftColor: 'var(--accent)',
       },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: 'var(--selection)',
+        backgroundColor: 'var(--selection) !important',
         color: 'var(--text)',
         mixBlendMode: 'normal',
         opacity: 1,
@@ -234,7 +234,7 @@
           borderLeftColor: 'var(--accent)',
         },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-          backgroundColor: 'var(--selection)',
+          backgroundColor: 'var(--selection) !important',
           color: 'var(--text)',
           mixBlendMode: 'normal',
           opacity: 1,
