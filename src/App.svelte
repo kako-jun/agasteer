@@ -57,6 +57,15 @@
     stopStaleChecker,
     executeStaleCheck,
     setLastPushedSnapshot,
+    // ワールドヘルパー（純粋関数）
+    getNotesForWorld as _getNotesForWorld,
+    getLeavesForWorld as _getLeavesForWorld,
+    getWorldForPane as _getWorldForPane,
+    getNotesForPane as _getNotesForPane,
+    getLeavesForPane as _getLeavesForPane,
+    getWorldForNote as _getWorldForNote,
+    getWorldForLeaf as _getWorldForLeaf,
+    getDialogPositionForPane,
   } from './lib/stores'
   import {
     clearAllData,
@@ -311,45 +320,47 @@
   $: canPush = !$isPulling && !$isPushing && isFirstPriorityFetched
 
   // ペインごとのワールドに応じたノート・リーフを取得するヘルパー
+  // （純粋関数のラッパー：ストアから値を取得して渡す）
   function getNotesForWorld(world: WorldType): Note[] {
-    return world === 'archive' ? get(archiveNotes) : get(notes)
+    return _getNotesForWorld(world, get(notes), get(archiveNotes))
   }
 
   function getLeavesForWorld(world: WorldType): Leaf[] {
-    return world === 'archive' ? get(archiveLeaves) : get(leaves)
+    return _getLeavesForWorld(world, get(leaves), get(archiveLeaves))
   }
 
   function getWorldForPane(pane: Pane): WorldType {
-    return pane === 'left' ? get(leftWorld) : get(rightWorld)
+    return _getWorldForPane(pane, get(leftWorld), get(rightWorld))
   }
 
   function getNotesForPane(pane: Pane): Note[] {
-    return getNotesForWorld(getWorldForPane(pane))
+    return _getNotesForPane(pane, get(leftWorld), get(rightWorld), get(notes), get(archiveNotes))
   }
 
   function getLeavesForPane(pane: Pane): Leaf[] {
-    return getLeavesForWorld(getWorldForPane(pane))
+    return _getLeavesForPane(pane, get(leftWorld), get(rightWorld), get(leaves), get(archiveLeaves))
+  }
+
+  // ノート・リーフがどのワールドに属するかを判定
+  function getWorldForNote(note: Note): WorldType {
+    return _getWorldForNote(note, get(notes), get(archiveNotes))
+  }
+
+  function getWorldForLeaf(leaf: Leaf): WorldType {
+    return _getWorldForLeaf(leaf, get(leaves), get(archiveLeaves))
   }
 
   // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
-  $: currentNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
-  $: currentLeaves = $leftWorld === 'archive' ? $archiveLeaves : $leaves
+  $: currentNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
+  $: currentLeaves = _getLeavesForWorld($leftWorld, $leaves, $archiveLeaves)
 
   // 現在のワールドに応じたノート・リーフ更新ヘルパー
   function setCurrentNotes(newNotes: Note[]): void {
-    if ($leftWorld === 'archive') {
-      updateArchiveNotes(newNotes)
-    } else {
-      updateNotes(newNotes)
-    }
+    setNotesForWorld(get(leftWorld), newNotes)
   }
 
   function setCurrentLeaves(newLeaves: Leaf[]): void {
-    if ($leftWorld === 'archive') {
-      updateArchiveLeaves(newLeaves)
-    } else {
-      updateLeaves(newLeaves)
-    }
+    setLeavesForWorld(get(leftWorld), newLeaves)
   }
 
   // ペインのワールドに応じたノート・リーフ更新ヘルパー
@@ -367,19 +378,6 @@
     } else {
       updateLeaves(newLeaves)
     }
-  }
-
-  // ノート・リーフがどのワールドに属するかを判定
-  function getWorldForNote(note: Note): WorldType {
-    if ($notes.some((n) => n.id === note.id)) return 'home'
-    if ($archiveNotes.some((n) => n.id === note.id)) return 'archive'
-    return 'home' // フォールバック
-  }
-
-  function getWorldForLeaf(leaf: Leaf): WorldType {
-    if ($leaves.some((l) => l.id === leaf.id)) return 'home'
-    if ($archiveLeaves.some((l) => l.id === leaf.id)) return 'archive'
-    return 'home' // フォールバック
   }
 
   // ========================================
@@ -1133,7 +1131,7 @@
     const note = pane === 'left' ? $leftNote : $rightNote
     if (!note) return
 
-    const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+    const position = getDialogPositionForPane(pane)
     const confirmed = await confirmAsync($_('modal.archiveNote') || 'Archive this note?', position)
     if (confirmed) {
       await moveNoteToWorld(note, 'archive', pane)
@@ -1144,7 +1142,7 @@
     const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
     if (!leaf) return
 
-    const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+    const position = getDialogPositionForPane(pane)
     const confirmed = await confirmAsync($_('modal.archiveLeaf') || 'Archive this leaf?', position)
     if (confirmed) {
       await moveLeafToWorld(leaf, 'archive', pane)
@@ -1155,7 +1153,7 @@
     const note = pane === 'left' ? $leftNote : $rightNote
     if (!note) return
 
-    const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+    const position = getDialogPositionForPane(pane)
     const confirmed = await confirmAsync(
       $_('modal.restoreNote') || 'Restore this note to Home?',
       position
@@ -1169,7 +1167,7 @@
     const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
     if (!leaf) return
 
-    const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+    const position = getDialogPositionForPane(pane)
     const confirmed = await confirmAsync(
       $_('modal.restoreLeaf') || 'Restore this leaf to Home?',
       position
@@ -2030,7 +2028,7 @@
   function createNote(parentId: string | undefined, pane: Pane, name?: string) {
     if (!name) {
       // 名前が指定されていない場合はモーダルで入力を求める
-      const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+      const position = getDialogPositionForPane(pane)
       showPrompt(
         $_('footer.newNote'),
         (inputName) => {
@@ -2072,7 +2070,7 @@
       const allNotes = $archiveNotes
       const allLeaves = $archiveLeaves
 
-      const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+      const position = getDialogPositionForPane(pane)
       const confirmMessage = targetNote.parentId
         ? $_('modal.deleteSubNote')
         : $_('modal.deleteRootNote')
@@ -2218,7 +2216,7 @@
 
     if (!title) {
       // タイトルが指定されていない場合はモーダルで入力を求める
-      const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+      const position = getDialogPositionForPane(pane)
       showPrompt(
         $_('footer.newLeaf'),
         (inputTitle) => {
@@ -2265,7 +2263,7 @@
       const targetLeaf = allLeaves.find((l) => l.id === leafId)
       if (!targetLeaf) return
 
-      const position = pane === 'left' ? 'bottom-left' : 'bottom-right'
+      const position = getDialogPositionForPane(pane)
       showConfirm(
         $_('modal.deleteLeaf'),
         () => {
