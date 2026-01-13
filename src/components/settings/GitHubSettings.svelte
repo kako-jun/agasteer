@@ -25,9 +25,7 @@
   $: tokenGuideUrl = (() => {
     const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
     const anchor =
-      lang === 'ja'
-        ? '#2-personal-access-token%E3%82%92%E5%8F%96%E5%BE%97%E3%81%99%E3%82%8B'
-        : '#2-obtain-a-personal-access-token'
+      lang === 'ja' ? '#2-personal-access-tokenを取得する' : '#2-obtain-a-personal-access-token'
     return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
   })()
 
