@@ -21,5 +21,7 @@ Use the search box on the home screen to search across note names, leaf names, a
 
 ## Search Scope
 
-- Regular notes and leaves
+- Regular notes and leaves (Home world)
 - **Offline leaf** (local-only memo) is also included in search
+
+> **Note**: Currently, notes and leaves in the Archive are not included in search. Archive search support is planned for a future version.
