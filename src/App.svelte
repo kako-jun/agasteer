@@ -1633,13 +1633,17 @@
 
   // パンくずリストからの兄弟選択
   function selectSiblingFromBreadcrumb(id: string, type: 'note' | 'leaf', pane: Pane) {
+    // ペインのワールドに応じたノート・リーフを取得
+    const paneNotes = getNotesForPane(pane)
+    const paneLeaves = getLeavesForPane(pane)
+
     if (type === 'note') {
-      const note = currentNotes.find((n) => n.id === id)
+      const note = paneNotes.find((n) => n.id === id)
       if (note) {
         selectNote(note, pane)
       }
     } else if (type === 'leaf') {
-      const leaf = currentLeaves.find((l) => l.id === id)
+      const leaf = paneLeaves.find((l) => l.id === id)
       if (leaf) {
         selectLeaf(leaf, pane)
       }
@@ -1767,10 +1771,15 @@
     // 右ペインのパンくずリストかどうかを判定
     const isRight = id.endsWith('-right')
     const actualId = isRight ? id.replace('-right', '') : id
+    // ペインのワールドに応じたノート・リーフを取得
+    const pane: Pane = isRight ? 'right' : 'left'
+    const world = getWorldForPane(pane)
+    const paneNotes = getNotesForWorld(world)
+    const paneLeaves = getLeavesForWorld(world)
 
     if (type === 'note') {
-      const targetNote = currentNotes.find((f) => f.id === actualId)
-      const siblingWithSameName = currentNotes.find(
+      const targetNote = paneNotes.find((f) => f.id === actualId)
+      const siblingWithSameName = paneNotes.find(
         (n) =>
           n.id !== actualId &&
           (n.parentId || null) === (targetNote?.parentId || null) &&
@@ -1787,10 +1796,8 @@
       }
 
       // ノート名を更新
-      const updatedNotes = currentNotes.map((n) =>
-        n.id === actualId ? { ...n, name: trimmed } : n
-      )
-      setCurrentNotes(updatedNotes)
+      const updatedNotes = paneNotes.map((n) => (n.id === actualId ? { ...n, name: trimmed } : n))
+      setNotesForWorld(world, updatedNotes)
 
       const updatedNote = updatedNotes.find((f) => f.id === actualId)
       if (updatedNote) {
@@ -1801,15 +1808,15 @@
           $rightNote = updatedNote
         }
       }
-      if (!currentNotes.some((f) => f.id === $leftNote?.id)) {
+      if (!paneNotes.some((f) => f.id === $leftNote?.id)) {
         $leftNote = null
       }
-      if (isRight && !currentNotes.some((f) => f.id === $rightNote?.id)) {
+      if (isRight && !paneNotes.some((f) => f.id === $rightNote?.id)) {
         $rightNote = null
       }
     } else if (type === 'leaf') {
-      const targetLeaf = currentLeaves.find((n) => n.id === actualId)
-      const siblingLeafWithSameName = currentLeaves.find(
+      const targetLeaf = paneLeaves.find((n) => n.id === actualId)
+      const siblingLeafWithSameName = paneLeaves.find(
         (l) => l.id !== actualId && l.noteId === targetLeaf?.noteId && l.title.trim() === trimmed
       )
       if (siblingLeafWithSameName) {
@@ -1829,12 +1836,12 @@
         updatedContent = updateH1Title(targetLeaf.content, trimmed)
       }
 
-      const updatedLeaves = currentLeaves.map((n) =>
+      const updatedLeaves = paneLeaves.map((n) =>
         n.id === actualId
           ? { ...n, title: trimmed, content: updatedContent, updatedAt: Date.now() }
           : n
       )
-      setCurrentLeaves(updatedLeaves)
+      setLeavesForWorld(world, updatedLeaves)
 
       if (targetLeaf) {
         leafStatsStore.updateLeafContent(actualId, updatedContent, targetLeaf.content)
@@ -1849,10 +1856,10 @@
           $rightLeaf = updatedLeaf
         }
       }
-      if (!currentLeaves.some((n) => n.id === $leftLeaf?.id)) {
+      if (!paneLeaves.some((n) => n.id === $leftLeaf?.id)) {
         $leftLeaf = null
       }
-      if (isRight && !currentLeaves.some((n) => n.id === $rightLeaf?.id)) {
+      if (isRight && !paneLeaves.some((n) => n.id === $rightLeaf?.id)) {
         $rightLeaf = null
       }
     }
