@@ -141,6 +141,39 @@ Agasteerは、Svelteの`writable`と`derived`ストアを使用して状態を�
 
 **理由:** 2ペイン表示では左右で異なるノートを表示できるため、グローバルな「currentNote」という概念が不適切
 
+#### ワールドヘルパー関数（world-helpers.ts）
+
+ペインとワールド（Home/Archive）に応じたデータ取得を行う純粋関数群。ストアに依存しないため、テストやモジュール間での再利用が容易です。
+
+| 関数                       | 説明                                             |
+| -------------------------- | ------------------------------------------------ |
+| `getNotesForWorld`         | ワールドに応じたノート配列を取得                 |
+| `getLeavesForWorld`        | ワールドに応じたリーフ配列を取得                 |
+| `getWorldForPane`          | ペインに応じたワールドを取得                     |
+| `getNotesForPane`          | ペインのワールドに応じたノート配列を取得         |
+| `getLeavesForPane`         | ペインのワールドに応じたリーフ配列を取得         |
+| `getWorldForNote`          | ノートが属するワールドを判定                     |
+| `getWorldForLeaf`          | リーフが属するワールドを判定                     |
+| `getDialogPositionForPane` | ペインに応じたダイアログ位置（left/right）を決定 |
+
+**使用例:**
+
+```typescript
+import { getNotesForWorld, getDialogPositionForPane } from './lib/stores'
+
+// 純粋関数として使用（引数で値を渡す）
+const homeNotes = getNotesForWorld('home', allNotes, archiveNotes)
+
+// ダイアログ位置の決定
+const position = getDialogPositionForPane(pane) // 'bottom-left' | 'bottom-right'
+```
+
+**設計思想:**
+
+- **純粋関数**: ストアを参照せず、引数のみで動作
+- **再利用性**: App.svelte以外のモジュールでも使用可能
+- **一貫性**: ワールド・ペイン判定ロジックを一箇所に集約
+
 #### ダーティフラグ（isDirty）の管理
 
 `isDirty`ストアは、GitHubにPushされていない変更があるかどうかを追跡します。

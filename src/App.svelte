@@ -204,8 +204,8 @@
   $: moveTargetLeaf = $moveModalStore.targetLeaf
   $: moveTargetNote = $moveModalStore.targetNote
   $: moveTargetPane = $moveModalStore.targetPane
-  $: moveTargetWorld = moveTargetPane === 'left' ? $leftWorld : $rightWorld
-  $: moveTargetNotes = moveTargetWorld === 'archive' ? $archiveNotes : $notes
+  $: moveTargetWorld = _getWorldForPane(moveTargetPane, $leftWorld, $rightWorld)
+  $: moveTargetNotes = _getNotesForWorld(moveTargetWorld, $notes, $archiveNotes)
 
   // 左右ペイン用の状態
   let isDualPane = false // 画面幅で切り替え
@@ -272,10 +272,10 @@
   }
 
   // リアクティブ宣言（ワールドに応じたデータを使用）
-  $: leftBreadcrumbNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
-  $: leftBreadcrumbLeaves = $leftWorld === 'archive' ? $archiveLeaves : $leaves
-  $: rightBreadcrumbNotes = $rightWorld === 'archive' ? $archiveNotes : $notes
-  $: rightBreadcrumbLeaves = $rightWorld === 'archive' ? $archiveLeaves : $leaves
+  $: leftBreadcrumbNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
+  $: leftBreadcrumbLeaves = _getLeavesForWorld($leftWorld, $leaves, $archiveLeaves)
+  $: rightBreadcrumbNotes = _getNotesForWorld($rightWorld, $notes, $archiveNotes)
+  $: rightBreadcrumbLeaves = _getLeavesForWorld($rightWorld, $leaves, $archiveLeaves)
 
   $: breadcrumbs = buildBreadcrumbs(
     $leftView,
@@ -460,9 +460,9 @@
     const params = new URLSearchParams()
 
     // 左ペインのノートデータ（ワールドに応じて切り替え）
-    const leftNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
+    const leftNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
     // 右ペインのノートデータ
-    const rightNotes = $rightWorld === 'archive' ? $archiveNotes : $notes
+    const rightNotes = _getNotesForWorld($rightWorld, $notes, $archiveNotes)
 
     // 左ペイン（常に設定、ワールド情報を含む）
     const leftPath = buildPath($leftNote, $leftLeaf, leftNotes, $leftView, $leftWorld)
@@ -550,8 +550,8 @@
     }
 
     // 左ペインのデータ（アーカイブのPull後のデータを使用）
-    const leftNotesData = leftWorldInfo.world === 'archive' ? $archiveNotes : $notes
-    const leftLeavesData = leftWorldInfo.world === 'archive' ? $archiveLeaves : $leaves
+    const leftNotesData = _getNotesForWorld(leftWorldInfo.world, $notes, $archiveNotes)
+    const leftLeavesData = _getLeavesForWorld(leftWorldInfo.world, $leaves, $archiveLeaves)
 
     const leftResolution = resolvePath(leftPath, leftNotesData, leftLeavesData)
     leftWorld.set(leftResolution.world)
@@ -573,8 +573,8 @@
     // 右ペインの復元（2ペイン表示時のみ）
     if (rightPath && isDualPane) {
       // 右ペインのデータ（アーカイブのPull後のデータを使用）
-      const rightNotesData = rightWorldInfo.world === 'archive' ? $archiveNotes : $notes
-      const rightLeavesData = rightWorldInfo.world === 'archive' ? $archiveLeaves : $leaves
+      const rightNotesData = _getNotesForWorld(rightWorldInfo.world, $notes, $archiveNotes)
+      const rightLeavesData = _getLeavesForWorld(rightWorldInfo.world, $leaves, $archiveLeaves)
 
       const rightResolution = resolvePath(rightPath, rightNotesData, rightLeavesData)
       rightWorld.set(rightResolution.world)
@@ -1889,10 +1889,10 @@
 
   function refreshBreadcrumbs() {
     // ワールドに応じたデータを使用
-    const leftNotes = $leftWorld === 'archive' ? $archiveNotes : $notes
-    const leftLeaves = $leftWorld === 'archive' ? $archiveLeaves : $leaves
-    const rightNotes = $rightWorld === 'archive' ? $archiveNotes : $notes
-    const rightLeaves = $rightWorld === 'archive' ? $archiveLeaves : $leaves
+    const leftNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
+    const leftLeaves = _getLeavesForWorld($leftWorld, $leaves, $archiveLeaves)
+    const rightNotes = _getNotesForWorld($rightWorld, $notes, $archiveNotes)
+    const rightLeaves = _getLeavesForWorld($rightWorld, $leaves, $archiveLeaves)
 
     breadcrumbs = buildBreadcrumbs(
       $leftView,

@@ -173,7 +173,11 @@ agasteer/
 │   │   ├── github.ts                    # GitHub API統合
 │   │   ├── routing.ts                   # URLルーティング
 │   │   ├── storage.ts                   # IndexedDB/LocalStorage操作
-│   │   ├── stores.ts                    # Svelte Store状態管理
+│   │   ├── stores/                      # 状態管理モジュール
+│   │   │   ├── stores.ts                # Svelte Store状態管理
+│   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
+│   │   │   ├── context.ts               # Context API型定義
+│   │   │   └── ...                      # その他ストア関連
 │   │   ├── sync.ts                      # Push/Pull処理
 │   │   ├── theme.ts                     # テーマ管理
 │   │   ├── types.ts                     # TypeScript型定義
@@ -397,8 +401,17 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 
 - allNotes（ソート済みノート）
 
-**App.svelte内のワールド対応ヘルパー:**
-currentWorldに応じてcurrentNotes/currentLeavesをリアクティブに切り替え。setCurrentNotes/setCurrentLeavesでホーム/アーカイブを意識せずに操作可能。
+**ワールドヘルパー（world-helpers.ts）:**
+
+ペインとワールド（Home/Archive）に応じたデータ取得を行う**純粋関数群**。ストアに依存しないため、テストやモジュール間での再利用が容易です。
+
+- `getNotesForWorld`, `getLeavesForWorld` - ワールドに応じたデータ取得
+- `getWorldForPane`, `getNotesForPane`, `getLeavesForPane` - ペインに応じたデータ取得
+- `getWorldForNote`, `getWorldForLeaf` - データからワールドを判定
+- `getDialogPositionForPane` - ペインに応じたダイアログ位置決定
+
+**App.svelte内のワールド対応:**
+App.svelteでは上記純粋関数のラッパーを定義し、ストアから値を取得して渡す形で使用。これにより一貫性のあるワールド対応を実現しています。
 
 **注**: Version 5.0のリファクタリングにより、左右ペインの状態は**ローカル変数**で管理されるようになりました。`currentView`, `currentNote`, `currentLeaf`等のストアは削除され、完全な左右対称設計を実現しています。
 
