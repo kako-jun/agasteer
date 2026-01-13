@@ -20,7 +20,7 @@ Choose from 6 themes.
 ## How to Change
 
 1. Open settings (⚙️ in top-right header)
-2. Tap a theme button
+2. Tap a theme button in the "Appearance" section
 3. Changes apply immediately
 
 ---

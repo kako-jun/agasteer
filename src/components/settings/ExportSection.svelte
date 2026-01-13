@@ -21,8 +21,6 @@
 <style>
   .export-section {
     margin-top: 1.25rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
   }
 
   h3 {

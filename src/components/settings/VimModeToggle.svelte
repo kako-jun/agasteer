@@ -20,7 +20,7 @@
       checked={settings.vimMode ?? false}
       on:change={handleVimModeChange}
     />
-    <span>{$_('settings.extras.vimMode')}</span>
+    <span>{$_('settings.editor.vimMode')}</span>
   </label>
 </div>
 

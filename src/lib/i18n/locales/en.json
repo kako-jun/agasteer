@@ -126,11 +126,9 @@
       "videoGuideHint": "Need help with setup?",
       "videoGuide": "Watch video"
     },
-    "extras": {
-      "title": "Extras",
+    "appearance": {
+      "title": "Appearance",
       "language": "Language",
-      "linedMode": "Enable lined editor mode",
-      "vimMode": "Enable Vim Mode",
       "theme": {
         "title": "Select Theme",
         "yomi": "Yomi",
@@ -169,6 +167,14 @@
         "resetFailedRight": "Failed to clear right pane background",
         "opacity": "Opacity"
       }
+    },
+    "editor": {
+      "title": "Editor",
+      "linedMode": "Enable lined editor mode",
+      "vimMode": "Enable Vim Mode"
+    },
+    "data": {
+      "title": "Data"
     },
     "importExport": {
       "titleExport": "Export",

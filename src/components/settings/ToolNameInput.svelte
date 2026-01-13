@@ -21,18 +21,18 @@
 </script>
 
 <div class="tool-name-field">
-  <label for="tool-name">{$_('settings.extras.toolName.label')}</label>
+  <label for="tool-name">{$_('settings.appearance.toolName.label')}</label>
   <div class="tool-name-controls">
     <input
       id="tool-name"
       type="text"
       bind:value={settings.toolName}
-      placeholder={$_('settings.extras.toolName.placeholder')}
+      placeholder={$_('settings.appearance.toolName.placeholder')}
       on:input={handleToolNameInput}
     />
     {#if !isDefaultToolName}
       <button type="button" class="reset-button" on:click={handleResetToolName}>
-        {$_('settings.extras.toolName.reset')}
+        {$_('settings.appearance.toolName.reset')}
       </button>
     {/if}
   </div>

@@ -7,7 +7,7 @@ Use CodeMirror's Vim key bindings.
 ## Enable
 
 1. Open settings
-2. Turn ON "Enable Vim mode"
+2. Turn ON "Enable Vim mode" in the "Editor" section
 
 ---
 

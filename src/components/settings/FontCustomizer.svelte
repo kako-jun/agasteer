@@ -24,7 +24,7 @@
     const validExtensions = ['.ttf', '.otf', '.woff', '.woff2']
     const fileName = file.name.toLowerCase()
     if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      showAlert($_('settings.extras.font.invalidFormat'))
+      showAlert($_('settings.appearance.font.invalidFormat'))
       return
     }
 
@@ -35,7 +35,7 @@
       onSettingsChange({ hasCustomFont: true })
     } catch (error) {
       console.error('Failed to upload font:', error)
-      showAlert($_('settings.extras.font.uploadFailed'))
+      showAlert($_('settings.appearance.font.uploadFailed'))
     } finally {
       fontUploading = false
       input.value = ''
@@ -49,13 +49,13 @@
       onSettingsChange({ hasCustomFont: false })
     } catch (error) {
       console.error('Failed to reset font:', error)
-      showAlert($_('settings.extras.font.resetFailed'))
+      showAlert($_('settings.appearance.font.resetFailed'))
     }
   }
 </script>
 
 <div class="font-customizer">
-  <span class="sub-label">{$_('settings.extras.font.title')}</span>
+  <span class="sub-label">{$_('settings.appearance.font.title')}</span>
   <div class="font-controls">
     <input
       type="file"
@@ -87,11 +87,13 @@
         <path d="M8 7h8" />
         <path d="M8 11h8" />
       </svg>
-      {fontUploading ? $_('settings.extras.font.uploading') : $_('settings.extras.font.select')}
+      {fontUploading
+        ? $_('settings.appearance.font.uploading')
+        : $_('settings.appearance.font.select')}
     </button>
     {#if settings.hasCustomFont}
       <button type="button" class="test-button" on:click={handleResetFont}>
-        {$_('settings.extras.font.reset')}
+        {$_('settings.appearance.font.reset')}
       </button>
     {/if}
   </div>

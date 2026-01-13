@@ -14,7 +14,7 @@
 </script>
 
 <div class="theme-selector">
-  <span class="sub-label">{$_('settings.extras.theme.title')}</span>
+  <span class="sub-label">{$_('settings.appearance.theme.title')}</span>
   <div class="theme-buttons">
     <div class="theme-button-row">
       <button
@@ -22,21 +22,21 @@
         class:active={settings.theme === 'yomi'}
         on:click={() => handleThemeSelect('yomi')}
       >
-        {$_('settings.extras.theme.yomi')}
+        {$_('settings.appearance.theme.yomi')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'campus'}
         on:click={() => handleThemeSelect('campus')}
       >
-        {$_('settings.extras.theme.campus')}
+        {$_('settings.appearance.theme.campus')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'greenboard'}
         on:click={() => handleThemeSelect('greenboard')}
       >
-        {$_('settings.extras.theme.greenboard')}
+        {$_('settings.appearance.theme.greenboard')}
       </button>
     </div>
     <div class="theme-button-row">
@@ -45,21 +45,21 @@
         class:active={settings.theme === 'whiteboard'}
         on:click={() => handleThemeSelect('whiteboard')}
       >
-        {$_('settings.extras.theme.whiteboard')}
+        {$_('settings.appearance.theme.whiteboard')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'dotsD'}
         on:click={() => handleThemeSelect('dotsD')}
       >
-        {$_('settings.extras.theme.dotsD')}
+        {$_('settings.appearance.theme.dotsD')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'dotsF'}
         on:click={() => handleThemeSelect('dotsF')}
       >
-        {$_('settings.extras.theme.dotsF')}
+        {$_('settings.appearance.theme.dotsF')}
       </button>
     </div>
   </div>

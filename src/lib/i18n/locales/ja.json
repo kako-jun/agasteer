@@ -126,11 +126,9 @@
       "videoGuideHint": "設定方法がわからない場合は",
       "videoGuide": "動画で見る"
     },
-    "extras": {
-      "title": "おまけ",
+    "appearance": {
+      "title": "外観",
       "language": "言語",
-      "linedMode": "罫線モードを有効にする",
-      "vimMode": "Vimモードを有効にする",
       "theme": {
         "title": "テーマ選択",
         "yomi": "黄泉",
@@ -169,6 +167,14 @@
         "resetFailedRight": "右ペインの背景画像のクリアに失敗しました",
         "opacity": "濃さ"
       }
+    },
+    "editor": {
+      "title": "エディタ",
+      "linedMode": "罫線モードを有効にする",
+      "vimMode": "Vimモードを有効にする"
+    },
+    "data": {
+      "title": "データ管理"
     },
     "about": {
       "description": "「こういうのでいいんだよ」を志向しています。",

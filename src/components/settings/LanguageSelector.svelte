@@ -14,7 +14,7 @@
 </script>
 
 <div class="language-selector">
-  <label for="language">{$_('settings.extras.language')}</label>
+  <label for="language">{$_('settings.appearance.language')}</label>
   <div class="select-wrapper">
     <select id="language" bind:value={settings.locale} on:change={handleLocaleChange}>
       <option value="en">English</option>

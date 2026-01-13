@@ -20,7 +20,7 @@
       checked={settings.linedMode ?? false}
       on:change={handleLinedModeChange}
     />
-    <span>{$_('settings.extras.linedMode')}</span>
+    <span>{$_('settings.editor.linedMode')}</span>
   </label>
 </div>
 

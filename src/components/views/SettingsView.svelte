@@ -39,15 +39,28 @@
 
       <div class="form-row">
         <div class="form-field">
-          <h3>{$_('settings.extras.title')}</h3>
-
+          <h3>{$_('settings.appearance.title')}</h3>
           <LanguageSelector {settings} {onSettingsChange} />
           <ThemeSelector {settings} {onThemeChange} {onSettingsChange} />
           <ToolNameInput {settings} {onSettingsChange} />
           <FontCustomizer {settings} {onSettingsChange} />
           <BackgroundCustomizer {settings} {onSettingsChange} />
+        </div>
+      </div>
+      <hr />
+
+      <div class="form-row">
+        <div class="form-field">
+          <h3>{$_('settings.editor.title')}</h3>
           <LinedModeToggle {settings} {onSettingsChange} />
           <VimModeToggle {settings} {onSettingsChange} />
+        </div>
+      </div>
+      <hr />
+
+      <div class="form-row">
+        <div class="form-field">
+          <h3>{$_('settings.data.title')}</h3>
           <ExportSection {onExportZip} {exporting} />
           <ImportSection
             {onImport}

@@ -54,7 +54,7 @@
     const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
     const fileName = file.name.toLowerCase()
     if (!validExtensions.some((ext) => fileName.endsWith(ext))) {
-      showAlert($_('settings.extras.background.invalidFormat'))
+      showAlert($_('settings.appearance.background.invalidFormat'))
       return
     }
 
@@ -63,8 +63,8 @@
     const opacityKey = pane === 'left' ? 'backgroundOpacityLeft' : 'backgroundOpacityRight'
     const errorMsgKey =
       pane === 'left'
-        ? 'settings.extras.background.uploadFailedLeft'
-        : 'settings.extras.background.uploadFailedRight'
+        ? 'settings.appearance.background.uploadFailedLeft'
+        : 'settings.appearance.background.uploadFailedRight'
 
     try {
       if (pane === 'left') {
@@ -101,8 +101,8 @@
     const opacityKey = pane === 'left' ? 'backgroundOpacityLeft' : 'backgroundOpacityRight'
     const errorMsgKey =
       pane === 'left'
-        ? 'settings.extras.background.resetFailedLeft'
-        : 'settings.extras.background.resetFailedRight'
+        ? 'settings.appearance.background.resetFailedLeft'
+        : 'settings.appearance.background.resetFailedRight'
 
     try {
       await removeAndDeleteCustomBackground(pane)
@@ -122,18 +122,18 @@
 </script>
 
 <div class="background-customizer">
-  <span class="sub-label">{$_('settings.extras.background.title')}</span>
+  <span class="sub-label">{$_('settings.appearance.background.title')}</span>
   <div class="background-dual-pane">
     <!-- Left Pane -->
     <div class="background-pane">
-      <span class="pane-label">{$_('settings.extras.background.leftPane')}</span>
+      <span class="pane-label">{$_('settings.appearance.background.leftPane')}</span>
       {#if settings.hasCustomBackgroundLeft}
         <div class="background-preview background-preview-left">
-          <span class="preview-label">{$_('settings.extras.background.preview')}</span>
+          <span class="preview-label">{$_('settings.appearance.background.preview')}</span>
         </div>
         <label class="opacity-control">
           <span class="opacity-label">
-            {$_('settings.extras.background.opacity')}
+            {$_('settings.appearance.background.opacity')}
             <span class="opacity-value"
               >{Math.round((settings.backgroundOpacityLeft ?? DEFAULT_OPACITY) * 100)}%</span
             >
@@ -180,12 +180,12 @@
             <polyline points="21 15 16 10 5 21" />
           </svg>
           {backgroundLeftUploading
-            ? $_('settings.extras.background.uploading')
-            : $_('settings.extras.background.select')}
+            ? $_('settings.appearance.background.uploading')
+            : $_('settings.appearance.background.select')}
         </button>
         {#if settings.hasCustomBackgroundLeft}
           <button type="button" class="test-button" on:click={() => handleResetBackground('left')}>
-            {$_('settings.extras.background.reset')}
+            {$_('settings.appearance.background.reset')}
           </button>
         {/if}
       </div>
@@ -193,14 +193,14 @@
 
     <!-- Right Pane -->
     <div class="background-pane">
-      <span class="pane-label">{$_('settings.extras.background.rightPane')}</span>
+      <span class="pane-label">{$_('settings.appearance.background.rightPane')}</span>
       {#if settings.hasCustomBackgroundRight}
         <div class="background-preview background-preview-right">
-          <span class="preview-label">{$_('settings.extras.background.preview')}</span>
+          <span class="preview-label">{$_('settings.appearance.background.preview')}</span>
         </div>
         <label class="opacity-control">
           <span class="opacity-label">
-            {$_('settings.extras.background.opacity')}
+            {$_('settings.appearance.background.opacity')}
             <span class="opacity-value"
               >{Math.round((settings.backgroundOpacityRight ?? DEFAULT_OPACITY) * 100)}%</span
             >
@@ -247,12 +247,12 @@
             <polyline points="21 15 16 10 5 21" />
           </svg>
           {backgroundRightUploading
-            ? $_('settings.extras.background.uploading')
-            : $_('settings.extras.background.select')}
+            ? $_('settings.appearance.background.uploading')
+            : $_('settings.appearance.background.select')}
         </button>
         {#if settings.hasCustomBackgroundRight}
           <button type="button" class="test-button" on:click={() => handleResetBackground('right')}>
-            {$_('settings.extras.background.reset')}
+            {$_('settings.appearance.background.reset')}
           </button>
         {/if}
       </div>
