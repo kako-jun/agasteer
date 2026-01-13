@@ -208,7 +208,6 @@
                 class:current={currentWorld === 'archive'}
                 class:loading={isArchiveLoading}
                 on:click={() => handleWorldSelect('archive')}
-                disabled={isArchiveLoading}
               >
                 <span class="world-icon"><ArchiveIcon /></span>
                 {$_('breadcrumbs.worldArchive')}
