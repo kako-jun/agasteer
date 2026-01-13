@@ -1,7 +1,6 @@
 <script lang="ts">
   import { _, locale } from '../../lib/i18n'
   import type { Settings } from '../../lib/types'
-  import { openExternalUrl } from '../../lib/utils'
 
   export let settings: Settings
   export let onSettingsChange: (payload: Partial<Settings>) => void
@@ -18,21 +17,19 @@
     onSettingsChange({ [key]: value } as Partial<Settings>)
   }
 
-  function openSetupGuide() {
+  $: setupGuideUrl = (() => {
     const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
-    const url = `${SETUP_GUIDE_BASE}/${lang}/github-setup.md`
-    openExternalUrl(url)
-  }
+    return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md`
+  })()
 
-  function openTokenGuide() {
+  $: tokenGuideUrl = (() => {
     const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
     const anchor =
       lang === 'ja'
         ? '#2-personal-access-token%E3%82%92%E5%8F%96%E5%BE%97%E3%81%99%E3%82%8B'
         : '#2-obtain-a-personal-access-token'
-    const url = `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
-    openExternalUrl(url)
-  }
+    return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
+  })()
 
   let tokenCopied = false
 
@@ -58,9 +55,13 @@
         <label for="repo-name"
           >{$_('settings.github.repoName')} <span class="required">*</span></label
         >
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span class="help-icon" on:click={openSetupGuide} title="How to setup GitHub">
+        <a
+          href={setupGuideUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="help-icon"
+          title="How to setup GitHub"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="18"
@@ -76,7 +77,7 @@
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-        </span>
+        </a>
       </div>
       <div class="input-with-button">
         <input
@@ -118,11 +119,11 @@
         <label for="github-token"
           >{$_('settings.github.token')} <span class="required">*</span></label
         >
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span
+        <a
+          href={tokenGuideUrl}
+          target="_blank"
+          rel="noopener noreferrer"
           class="help-icon"
-          on:click={openTokenGuide}
           title="How to get a Personal Access Token"
         >
           <svg
@@ -140,7 +141,7 @@
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-        </span>
+        </a>
       </div>
       <div class="input-with-button">
         <input
@@ -407,8 +408,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
     color: var(--accent);
+    text-decoration: none;
     transition: all 0.2s;
     opacity: 0.7;
   }
