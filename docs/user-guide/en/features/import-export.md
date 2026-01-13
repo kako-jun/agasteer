@@ -60,6 +60,20 @@ Import export files.
 - Result summary is displayed
 - Unsupported elements (attachments, etc.) are skipped
 
+### When Same Name Exists
+
+If names conflict with existing notes/leaves, a **confirmation dialog appears before import**.
+
+**Options**:
+
+| Option     | Behavior                                                                        |
+| ---------- | ------------------------------------------------------------------------------- |
+| **Cancel** | Abort the import                                                                |
+| **Skip**   | Keep existing, don't import                                                     |
+| **Add**    | Note: Add leaves to existing note<br>Leaf: Auto-rename and add (e.g., `Memo_2`) |
+
+> **Tip**: If you import the same file twice, choose "Skip" to avoid duplicates.
+
 ### Notes
 
 - Import available after initial Pull is complete

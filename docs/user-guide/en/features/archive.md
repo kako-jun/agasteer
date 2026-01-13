@@ -50,9 +50,17 @@ Tap the title "Agasteer" in the top-left header → Returns to Home top from any
 
 ### When Same Name Exists
 
-If a note/leaf with the same name exists in Archive, a suffix is automatically added.
+If a note/leaf with the same name exists in Archive, a **confirmation dialog appears before the operation**.
 
-Example: `Note1` → `Note1_1`
+**Options**:
+
+| Option     | Behavior                                                                        |
+| ---------- | ------------------------------------------------------------------------------- |
+| **Cancel** | Abort the operation                                                             |
+| **Skip**   | Keep existing, don't move                                                       |
+| **Add**    | Note: Add leaves to existing note<br>Leaf: Auto-rename and add (e.g., `Task_2`) |
+
+> **Tip**: The choice applies to the entire operation. No need to choose individually.
 
 ---
 
@@ -67,4 +75,4 @@ Example: `Note1` → `Note1_1`
 
 - Returned to the Home world
 - Hierarchy structure is preserved
-- If same name exists in Home, a suffix is automatically added
+- If same name exists in Home, a confirmation dialog lets you choose how to handle it
