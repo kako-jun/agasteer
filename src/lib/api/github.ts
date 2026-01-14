@@ -440,7 +440,9 @@ export async function pushAllWithTreeAPI(
     const leafKeys = Object.keys(meta.leaves || {}).sort()
     for (const key of leafKeys) {
       const l = meta.leaves[key]
-      const entry: any = { id: l.id, updatedAt: l.updatedAt, order: l.order }
+      // __priority__は仮想リーフなのでupdatedAtを固定値0に正規化（比較時の差分を防ぐ）
+      const updatedAt = key === PRIORITY_LEAF_ID ? 0 : l.updatedAt
+      const entry: any = { id: l.id, updatedAt, order: l.order }
       if (l.badgeIcon) entry.badgeIcon = l.badgeIcon
       if (l.badgeColor) entry.badgeColor = l.badgeColor
       normalized.leaves[key] = entry
@@ -684,7 +686,7 @@ export async function pushAllWithTreeAPI(
     if (priorityMeta && (priorityMeta.badgeIcon || priorityMeta.badgeColor)) {
       metadata.leaves[PRIORITY_LEAF_ID] = {
         id: PRIORITY_LEAF_ID,
-        updatedAt: priorityMeta.updatedAt || Date.now(),
+        updatedAt: 0, // 固定値（仮想リーフなので実際の更新時刻は不要、比較時の差分を防ぐ）
         order: 0,
         badgeIcon: priorityMeta.badgeIcon,
         badgeColor: priorityMeta.badgeColor,
