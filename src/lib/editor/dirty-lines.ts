@@ -83,7 +83,7 @@ export function computeDirtyLines(baseContent: string | null, currentContent: st
  * 動的インポート後に呼び出す
  *
  * @param modules CodeMirrorモジュール
- * @param baseContent 基準コンテンツ（初期化時に1回だけ取得して渡す）
+ * @param getBaseContent 基準コンテンツを取得する関数（毎回呼び出してPush後の更新を反映）
  * @param isLeafDirty リーフがダーティかどうかを返す関数（ダーティでなければ計算スキップ）
  * @param debounceMs デバウンス時間（ミリ秒）
  */
@@ -95,7 +95,7 @@ export function createDirtyLineExtension(
     gutter: typeof import('@codemirror/view').gutter
     EditorView: typeof import('@codemirror/view').EditorView
   },
-  baseContent: string | null,
+  getBaseContent: () => string | null,
   isLeafDirty: () => boolean,
   debounceMs: number = 200
 ): {
@@ -156,6 +156,8 @@ export function createDirtyLineExtension(
     }
 
     const currentContent = view.state.doc.toString()
+    // baseContentを毎回動的に取得（Push後の更新を反映）
+    const baseContent = getBaseContent()
     const dirtyLines = computeDirtyLines(baseContent, currentContent)
 
     view.dispatch({

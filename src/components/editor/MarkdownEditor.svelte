@@ -24,6 +24,8 @@
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
   let isLoading = true // CodeMirrorローディング中フラグ
   let dirtyLineCleanup: (() => void) | null = null // ダーティラインマーカーのクリーンアップ関数
+  let updateDirtyLinesFnRef: ((view: any) => void) | null = null // ダーティライン更新関数の参照
+  let dirtyLeafIdsUnsubscribe: (() => void) | null = null // dirtyLeafIdsストアのアンサブスクライブ関数
 
   // モバイル判定（タッチデバイスかつ画面幅が小さい）
   function isMobileDevice(): boolean {
@@ -463,19 +465,31 @@
     // ダーティラインマーカー（常に有効）
     let updateDirtyLinesFn: ((view: any) => void) | null = null
     if (leafId && StateEffect && StateField && GutterMarker && gutter) {
-      // 基準コンテンツは初期化時に1回だけ取得
-      const baseContent = getLastPushedContent(leafId)
+      // 基準コンテンツを動的に取得する関数（Push後の更新を反映）
+      const getBaseContent = () => getLastPushedContent(leafId)
       // リーフがダーティかどうかをチェックする関数
       const isLeafDirty = () => get(dirtyLeafIds).has(leafId)
 
       const { extension, updateDirtyLines, cleanup } = createDirtyLineExtension(
         { StateEffect, StateField, GutterMarker, gutter, EditorView },
-        baseContent,
+        getBaseContent,
         isLeafDirty
       )
       extensions.push(extension)
       updateDirtyLinesFn = updateDirtyLines
+      updateDirtyLinesFnRef = updateDirtyLines // 参照を保持
       dirtyLineCleanup = cleanup
+
+      // dirtyLeafIdsの変更を監視（Push後にダーティ行をクリア）
+      if (dirtyLeafIdsUnsubscribe) {
+        dirtyLeafIdsUnsubscribe()
+      }
+      dirtyLeafIdsUnsubscribe = dirtyLeafIds.subscribe(() => {
+        // editorViewが存在する場合のみダーティ行を更新
+        if (editorView && updateDirtyLinesFnRef) {
+          updateDirtyLinesFnRef(editorView)
+        }
+      })
     }
 
     currentExtensions = extensions
@@ -523,6 +537,11 @@
 
   // テーマまたはVimモード変更時にエディタを再初期化
   $: if (editorView && (theme || vimMode !== undefined || linedMode !== undefined)) {
+    // dirtyLeafIdsストアの購読解除
+    if (dirtyLeafIdsUnsubscribe) {
+      dirtyLeafIdsUnsubscribe()
+      dirtyLeafIdsUnsubscribe = null
+    }
     // ダーティラインマーカーのクリーンアップ
     if (dirtyLineCleanup) {
       dirtyLineCleanup()
@@ -544,6 +563,11 @@
   })
 
   onDestroy(() => {
+    // dirtyLeafIdsストアの購読解除
+    if (dirtyLeafIdsUnsubscribe) {
+      dirtyLeafIdsUnsubscribe()
+      dirtyLeafIdsUnsubscribe = null
+    }
     // ダーティラインマーカーのクリーンアップ（デバウンスタイマー解除）
     if (dirtyLineCleanup) {
       dirtyLineCleanup()
