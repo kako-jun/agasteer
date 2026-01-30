@@ -31,10 +31,25 @@
 
 #### 抽出条件
 
-- **先頭パターン**: 段落の先頭行が `[n] ` で始まる（後ろにスペース必須）
-- **末尾パターン**: 段落の最終行が ` [n]` で終わる（前にスペース必須）
+**段落全体を引用**（`extractParagraphPriority()`）:
 
-`extractPriority()`関数で段落からマーカーを検出し、優先度の数値を返します。
+- 段落の先頭行左端が `[n] ` で始まる（後ろにスペース必須）
+- 段落の最後行右端が ` [n]` で終わる（前にスペース必須）
+
+**行単位で引用**（`extractLinePriorities()`）:
+
+- 先頭行の右端が ` [n]` で終わる
+- 最後行の左端が `[n] ` で始まる
+- 中間行の左端が `[n] ` で始まる、または右端が ` [n]` で終わる
+
+#### 優先順位
+
+1. 段落全体引用が優先される
+2. 段落全体引用に該当しない場合のみ、行単位引用を検出
+
+#### 段落全体引用時の挙動
+
+中間行にあるマーカーは除去され、独立したPriorityItemとしては抽出されない。`removeAllPriorityMarkers()`で全マーカーを除去してから引用。
 
 #### スペース必須の理由
 
@@ -142,17 +157,20 @@ Priorityリーフのバッジ情報（アイコン・色）は`metadata.json`の
 
 `src/lib/priority.ts`に以下の関数・ストアを配置：
 
-| 名前                      | 説明                                |
-| ------------------------- | ----------------------------------- |
-| extractPriority           | マーカー検出                        |
-| removePriorityMarker      | マーカー除去                        |
-| extractPriorityItems      | リーフから優先段落を抽出            |
-| priorityItems             | derived store                       |
-| generatePriorityContent   | Markdown生成（プレビュー用）        |
-| generatePriorityPlainText | プレーンテキスト生成（QR/シェア用） |
-| createPriorityLeaf        | 仮想リーフ生成                      |
-| isPriorityLeaf            | リーフID判定                        |
-| isLeafSaveable            | 保存対象判定（リーフ）              |
-| isNoteSaveable            | 保存対象判定（ノート）              |
+| 名前                      | 説明                                             |
+| ------------------------- | ------------------------------------------------ |
+| extractParagraphPriority  | 段落全体引用のマーカー検出                       |
+| extractLinePriorities     | 行単位引用のマーカー検出                         |
+| extractPriority           | （deprecated）extractParagraphPriorityのラッパー |
+| removeAllPriorityMarkers  | 全マーカー除去                                   |
+| removePriorityMarker      | （deprecated）removeAllPriorityMarkersのラッパー |
+| extractPriorityItems      | リーフから優先段落を抽出                         |
+| priorityItems             | derived store                                    |
+| generatePriorityContent   | Markdown生成（プレビュー用）                     |
+| generatePriorityPlainText | プレーンテキスト生成（QR/シェア用）              |
+| createPriorityLeaf        | 仮想リーフ生成                                   |
+| isPriorityLeaf            | リーフID判定                                     |
+| isLeafSaveable            | 保存対象判定（リーフ）                           |
+| isNoteSaveable            | 保存対象判定（ノート）                           |
 
 ---

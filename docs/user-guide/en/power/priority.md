@@ -20,10 +20,36 @@ Important work [2]
 
 ### Rules
 
-- At paragraph start: `[n] ` (space after)
-- At paragraph end: ` [n]` (space before)
+| Position              | Pattern                  | Quote Range          |
+| --------------------- | ------------------------ | -------------------- |
+| First line start      | `[n] text...`            | **Entire paragraph** |
+| Last line end         | `...text [n]`            | **Entire paragraph** |
+| First line end        | `...text [n]`            | That line only       |
+| Last line start       | `[n] text...`            | That line only       |
+| Middle line start/end | `[n] text` or `text [n]` | That line only       |
 
 > **Note**: Spaces are required to distinguish from `text[1]` (citation numbers) or `array[0]` (arrays).
+
+### Example
+
+```markdown
+[1] This entire paragraph is quoted
+Even if it spans
+multiple lines
+
+This line is not included
+[2] Only this line is quoted
+This line is also not included
+
+This paragraph is
+entirely quoted [3]
+```
+
+- `[1]` → Entire paragraph (3 lines)
+- `[2]` → Middle line only
+- `[3]` → Entire paragraph (2 lines)
+
+> **Note**: When an entire paragraph is quoted, markers in middle lines are removed.
 
 ---
 

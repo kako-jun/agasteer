@@ -34,19 +34,16 @@ export interface PriorityItem {
 }
 
 /**
- * 段落から [n] マーカーを検出し、優先度を抽出する
+ * 段落全体を引用する優先度を検出する
  *
- * 抽出条件:
+ * 抽出条件（段落全体を引用）:
  * - 段落の先頭行の左端が [n] で始まり、その後に半角スペースがある
  * - または段落最後行の右端が [n] で終わり、その前に半角スペースがある
- *
- * スペース必須にすることで、参考文献番号 `テキスト[1]` や
- * 配列表記 `array[0]` との誤マッチを防ぐ
  *
  * @param paragraph 段落テキスト
  * @returns 優先度（見つからなければ null）
  */
-export function extractPriority(paragraph: string): number | null {
+export function extractParagraphPriority(paragraph: string): number | null {
   const lines = paragraph.split('\n')
   if (lines.length === 0) return null
 
@@ -69,26 +66,129 @@ export function extractPriority(paragraph: string): number | null {
 }
 
 /**
- * [n] マーカーを段落から除去する
+ * 行単位で引用する優先度を検出する
+ *
+ * 抽出条件（行単位で引用）:
+ * - 先頭行の右端が [n] で終わる
+ * - 最後行の左端が [n] で始まる
+ * - 中間行の左端が [n] で始まる、または右端が [n] で終わる
+ *
+ * ※ 段落全体引用（先頭行左端、最後行右端）は extractParagraphPriority で処理
+ * ※ 同じ行に複数マーカーがある場合は最初に見つかったものだけ抽出
+ *
+ * @param paragraph 段落テキスト
+ * @returns 行番号（0始まり）と優先度のペアの配列
+ */
+export function extractLinePriorities(
+  paragraph: string
+): { lineIndex: number; priority: number; lineText: string }[] {
+  const lines = paragraph.split('\n')
+  if (lines.length === 0) return []
+
+  const results: { lineIndex: number; priority: number; lineText: string }[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const isFirstLine = i === 0
+    const isLastLine = i === lines.length - 1
+
+    // 行の左端が [n] で始まる場合（先頭行の左端は段落全体引用なので除外）
+    if (!isFirstLine) {
+      const startMatch = line.match(/^\[(\d+)\] /)
+      if (startMatch) {
+        results.push({
+          lineIndex: i,
+          priority: parseInt(startMatch[1], 10),
+          lineText: line.replace(/^\[(\d+)\] /, ''),
+        })
+        continue
+      }
+    }
+
+    // 行の右端が [n] で終わる場合（最後行の右端は段落全体引用なので除外）
+    if (!isLastLine) {
+      const endMatch = line.match(/ \[(\d+)\]$/)
+      if (endMatch) {
+        results.push({
+          lineIndex: i,
+          priority: parseInt(endMatch[1], 10),
+          lineText: line.replace(/ \[(\d+)\]$/, ''),
+        })
+        continue
+      }
+    }
+
+    // 先頭行の右端、最後行の左端もチェック
+    if (isFirstLine) {
+      const endMatch = line.match(/ \[(\d+)\]$/)
+      if (endMatch) {
+        results.push({
+          lineIndex: i,
+          priority: parseInt(endMatch[1], 10),
+          lineText: line.replace(/ \[(\d+)\]$/, ''),
+        })
+        continue
+      }
+    }
+
+    if (isLastLine) {
+      const startMatch = line.match(/^\[(\d+)\] /)
+      if (startMatch) {
+        results.push({
+          lineIndex: i,
+          priority: parseInt(startMatch[1], 10),
+          lineText: line.replace(/^\[(\d+)\] /, ''),
+        })
+        continue
+      }
+    }
+  }
+
+  return results
+}
+
+/**
+ * 後方互換性のためのラッパー（段落全体の優先度を返す）
+ * @deprecated extractParagraphPriority を使用してください
+ */
+export function extractPriority(paragraph: string): number | null {
+  return extractParagraphPriority(paragraph)
+}
+
+/**
+ * すべての [n] マーカーを段落から除去する
  *
  * @param paragraph 段落テキスト
  * @returns マーカーを除去したテキスト
  */
-export function removePriorityMarker(paragraph: string): string {
+export function removeAllPriorityMarkers(paragraph: string): string {
   const lines = paragraph.split('\n')
   if (lines.length === 0) return paragraph
 
-  // 先頭行から [n] を除去（スペースも除去）
-  lines[0] = lines[0].replace(/^\[(\d+)\] /, '')
-
-  // 最後行から [n] を除去（スペースも除去）
-  lines[lines.length - 1] = lines[lines.length - 1].replace(/ \[(\d+)\]$/, '')
+  for (let i = 0; i < lines.length; i++) {
+    // 行頭の [n] を除去
+    lines[i] = lines[i].replace(/^\[(\d+)\] /, '')
+    // 行末の [n] を除去
+    lines[i] = lines[i].replace(/ \[(\d+)\]$/, '')
+  }
 
   return lines.join('\n').trim()
 }
 
 /**
+ * 後方互換性のためのラッパー
+ * @deprecated removeAllPriorityMarkers を使用してください
+ */
+export function removePriorityMarker(paragraph: string): string {
+  return removeAllPriorityMarkers(paragraph)
+}
+
+/**
  * リーフのコンテンツから優先段落を抽出する
+ *
+ * 抽出ルール:
+ * 1. 段落の先頭行左端 or 最後行右端に [n] がある → 段落全体を引用（中間のマーカーは除去）
+ * 2. 上記に該当しない場合 → 行単位で [n] がある行だけを引用
  *
  * @param leaf リーフ
  * @param noteName ノート名
@@ -135,17 +235,35 @@ export function extractPriorityItems(
     const trimmed = text.trim()
     if (!trimmed) continue
 
-    const priority = extractPriority(trimmed)
-    if (priority !== null) {
+    // 1. 段落全体を引用するケースをチェック
+    const paragraphPriority = extractParagraphPriority(trimmed)
+    if (paragraphPriority !== null) {
       items.push({
-        priority,
-        content: removePriorityMarker(trimmed),
+        priority: paragraphPriority,
+        content: removeAllPriorityMarkers(trimmed),
         leafId: leaf.id,
         leafTitle: leaf.title,
         noteId: leaf.noteId,
         noteName,
         path,
         line,
+        displayOrder,
+      })
+      continue
+    }
+
+    // 2. 行単位で引用するケースをチェック
+    const linePriorities = extractLinePriorities(trimmed)
+    for (const { lineIndex, priority, lineText } of linePriorities) {
+      items.push({
+        priority,
+        content: lineText.trim(),
+        leafId: leaf.id,
+        leafTitle: leaf.title,
+        noteId: leaf.noteId,
+        noteName,
+        path,
+        line: line + lineIndex,
         displayOrder,
       })
     }
