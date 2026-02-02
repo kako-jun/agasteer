@@ -526,12 +526,15 @@
     const currentContent = editorView.state.doc.toString()
     if (currentContent === newContent) return
 
-    const newState = EditorState.create({
-      doc: newContent,
-      extensions: currentExtensions,
+    // スクロール位置を保持するため、setState()ではなくdispatch()で差分更新する
+    // setState()はエディタ状態全体を置き換えるため、スクロール位置がリセットされてしまう
+    editorView.dispatch({
+      changes: {
+        from: 0,
+        to: currentContent.length,
+        insert: newContent,
+      },
     })
-
-    editorView.setState(newState)
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
