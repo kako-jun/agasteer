@@ -315,5 +315,10 @@
     "createNote": "Click here to create a note",
     "createLeaf": "Click here to create a leaf",
     "saveToGitHub": "Save to GitHub to keep your data"
+  },
+  "install": {
+    "message": "Install app for a better experience",
+    "install": "Install",
+    "dismiss": "Later"
   }
 }

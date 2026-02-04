@@ -316,5 +316,10 @@
     "createNote": "ここをクリックしてノートを作成",
     "createLeaf": "ここをクリックしてリーフを作成",
     "saveToGitHub": "GitHubに保存してデータを残しましょう"
+  },
+  "install": {
+    "message": "アプリとしてインストールできます",
+    "install": "インストール",
+    "dismiss": "後で"
   }
 }
