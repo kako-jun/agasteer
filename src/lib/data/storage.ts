@@ -63,12 +63,14 @@ export interface AppState {
   isDirty: boolean
   tourShown: boolean
   saveGuideShown: boolean
+  pwaInstallDismissedAt?: number // PWAインストールバナー却下時刻（7日間cooldown用）
 }
 
 const defaultState: AppState = {
   isDirty: false,
   tourShown: false,
   saveGuideShown: false,
+  pwaInstallDismissedAt: undefined,
 }
 
 /**
@@ -210,6 +212,33 @@ export function isSaveGuideShown(): boolean {
  */
 export function setSaveGuideShown(shown: boolean): void {
   updateAppState({ saveGuideShown: shown })
+}
+
+/**
+ * PWAインストールバナー却下時刻を取得
+ */
+export function getPwaInstallDismissedAt(): number | undefined {
+  return loadStorageData().state.pwaInstallDismissedAt
+}
+
+/**
+ * PWAインストールバナー却下時刻を設定
+ */
+export function setPwaInstallDismissedAt(timestamp: number | undefined): void {
+  updateAppState({ pwaInstallDismissedAt: timestamp })
+}
+
+/**
+ * PWAインストールバナーを表示すべきか判定（7日間cooldown）
+ */
+export function shouldShowPwaInstallBanner(): boolean {
+  const dismissedAt = getPwaInstallDismissedAt()
+  if (dismissedAt === undefined) return true
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+  if (Date.now() - dismissedAt < SEVEN_DAYS_MS) return false
+  // cooldown期間が過ぎたら記録をクリア
+  setPwaInstallDismissedAt(undefined)
+  return true
 }
 
 // DB接続監視用のコールバック

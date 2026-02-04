@@ -80,6 +80,8 @@
     loadOfflineLeaf,
     createBackup,
     restoreFromBackup,
+    shouldShowPwaInstallBanner,
+    setPwaInstallDismissedAt,
     type IndexedDBBackup,
   } from './lib/data'
   import { applyTheme } from './lib/ui'
@@ -651,8 +653,10 @@
 
     // PWAインストールプロンプト（A2HS）
     const handleBeforeInstallPrompt = (e: Event) => {
-      // ユーザーが以前に却下した場合は表示しない
-      if (localStorage.getItem('pwa-install-dismissed')) return
+      // スタンドアロンモード（既にインストール済み）なら表示しない
+      if (isPWAStandalone) return
+      // 7日間のcooldown期間内であれば表示しない
+      if (!shouldShowPwaInstallBanner()) return
       // デフォルトのミニインフォバーを抑制
       e.preventDefault()
       // プロンプトを保存して後で使用
@@ -1979,8 +1983,8 @@
   function dismissInstallBanner() {
     showInstallBanner = false
     deferredPrompt = null
-    // 却下を記録（次回以降は表示しない）
-    localStorage.setItem('pwa-install-dismissed', 'true')
+    // 却下を記録（7日間のcooldown）
+    setPwaInstallDismissedAt(Date.now())
   }
 
   // パンくずリスト（左右共通）- breadcrumbs.tsに移動
