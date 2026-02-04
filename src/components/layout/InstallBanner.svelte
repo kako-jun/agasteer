@@ -1,5 +1,6 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n'
+  import AppIcon from '../icons/AppIcon.svelte'
 
   export let onInstall: () => void
   export let onDismiss: () => void
@@ -7,6 +8,7 @@
 
 <div class="install-banner">
   <div class="install-content">
+    <AppIcon size={24} />
     <span class="install-message">{$_('install.message')}</span>
     <div class="install-actions">
       <button class="install-button" on:click={onInstall}>
