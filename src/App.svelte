@@ -160,6 +160,7 @@
   import SearchBar from './components/layout/SearchBar.svelte'
   import SettingsModal from './components/layout/SettingsModal.svelte'
   import WelcomeModal from './components/layout/WelcomeModal.svelte'
+  import InstallBanner from './components/layout/InstallBanner.svelte'
   import { toggleSearch } from './lib/utils'
   import PaneView from './components/layout/PaneView.svelte'
   import type { PaneActions, PaneState } from './lib/stores'
@@ -192,6 +193,8 @@
   let showSettings = false
   let i18nReady = false // i18n初期化完了フラグ
   let showWelcome = false // ウェルカムモーダル表示フラグ
+  let showInstallBanner = false // PWAインストールバナー表示フラグ
+  let deferredPrompt: Event | null = null // BeforeInstallPromptEvent
   let isExportingZip = false
   let isImporting = false
   let isTesting = false
@@ -646,6 +649,26 @@
     const cleanupActivityDetection = initActivityDetection()
     const cleanupBeforeUnloadSave = setupBeforeUnloadSave()
 
+    // PWAインストールプロンプト（A2HS）
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // ユーザーが以前に却下した場合は表示しない
+      if (localStorage.getItem('pwa-install-dismissed')) return
+      // デフォルトのミニインフォバーを抑制
+      e.preventDefault()
+      // プロンプトを保存して後で使用
+      deferredPrompt = e
+      // バナーを表示
+      showInstallBanner = true
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+
+    // PWAがインストールされた時
+    const handleAppInstalled = () => {
+      showInstallBanner = false
+      deferredPrompt = null
+    }
+    window.addEventListener('appinstalled', handleAppInstalled)
+
     // 非同期初期化処理を即座に実行
     ;(async () => {
       const loadedSettings = loadSettings()
@@ -920,6 +943,8 @@
       window.removeEventListener('resize', updateDualPane)
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleAppInstalled)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       unsubscribeAutoPush()
       unsubscribeAutoPull()
@@ -1935,6 +1960,27 @@
   function openSettingsFromWelcome() {
     showWelcome = false
     showSettings = true
+  }
+
+  // PWAインストールプロンプト
+  async function handleInstall() {
+    if (!deferredPrompt) return // プロンプトを表示
+    ;(deferredPrompt as any).prompt()
+    // ユーザーの選択を待つ
+    const { outcome } = await (deferredPrompt as any).userChoice
+    if (outcome === 'accepted') {
+      console.log('PWA installed')
+    }
+    // 一度使ったらプロンプトは再利用できない
+    deferredPrompt = null
+    showInstallBanner = false
+  }
+
+  function dismissInstallBanner() {
+    showInstallBanner = false
+    deferredPrompt = null
+    // 却下を記録（次回以降は表示しない）
+    localStorage.setItem('pwa-install-dismissed', 'true')
   }
 
   // パンくずリスト（左右共通）- breadcrumbs.tsに移動
@@ -3570,5 +3616,9 @@
       pushMessage={$pushToastState.message}
       pushVariant={$pushToastState.variant}
     />
+
+    {#if showInstallBanner}
+      <InstallBanner onInstall={handleInstall} onDismiss={dismissInstallBanner} />
+    {/if}
   </div>
 {/if}
