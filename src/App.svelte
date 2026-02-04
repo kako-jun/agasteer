@@ -651,8 +651,16 @@
 
     // PWAインストールプロンプト（A2HS）
     const handleBeforeInstallPrompt = (e: Event) => {
-      // ユーザーが以前に却下した場合は表示しない
-      if (localStorage.getItem('pwa-install-dismissed')) return
+      // スタンドアロンモード（既にインストール済み）なら表示しない
+      if (isPWAStandalone) return
+      // 7日間のcooldown期間内であれば表示しない
+      const dismissedAt = localStorage.getItem('pwa-install-dismissed')
+      if (dismissedAt) {
+        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+        if (Date.now() - parseInt(dismissedAt, 10) < SEVEN_DAYS_MS) return
+        // cooldown期間が過ぎたら記録をクリア
+        localStorage.removeItem('pwa-install-dismissed')
+      }
       // デフォルトのミニインフォバーを抑制
       e.preventDefault()
       // プロンプトを保存して後で使用
@@ -1979,8 +1987,8 @@
   function dismissInstallBanner() {
     showInstallBanner = false
     deferredPrompt = null
-    // 却下を記録（次回以降は表示しない）
-    localStorage.setItem('pwa-install-dismissed', 'true')
+    // 却下を記録（7日間のcooldown）
+    localStorage.setItem('pwa-install-dismissed', Date.now().toString())
   }
 
   // パンくずリスト（左右共通）- breadcrumbs.tsに移動
