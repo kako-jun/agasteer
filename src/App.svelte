@@ -80,6 +80,8 @@
     loadOfflineLeaf,
     createBackup,
     restoreFromBackup,
+    shouldShowPwaInstallBanner,
+    setPwaInstallDismissedAt,
     type IndexedDBBackup,
   } from './lib/data'
   import { applyTheme } from './lib/ui'
@@ -654,13 +656,7 @@
       // スタンドアロンモード（既にインストール済み）なら表示しない
       if (isPWAStandalone) return
       // 7日間のcooldown期間内であれば表示しない
-      const dismissedAt = localStorage.getItem('pwa-install-dismissed')
-      if (dismissedAt) {
-        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
-        if (Date.now() - parseInt(dismissedAt, 10) < SEVEN_DAYS_MS) return
-        // cooldown期間が過ぎたら記録をクリア
-        localStorage.removeItem('pwa-install-dismissed')
-      }
+      if (!shouldShowPwaInstallBanner()) return
       // デフォルトのミニインフォバーを抑制
       e.preventDefault()
       // プロンプトを保存して後で使用
@@ -1988,7 +1984,7 @@
     showInstallBanner = false
     deferredPrompt = null
     // 却下を記録（7日間のcooldown）
-    localStorage.setItem('pwa-install-dismissed', Date.now().toString())
+    setPwaInstallDismissedAt(Date.now())
   }
 
   // パンくずリスト（左右共通）- breadcrumbs.tsに移動
