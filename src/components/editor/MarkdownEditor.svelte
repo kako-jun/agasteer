@@ -343,7 +343,9 @@
       dropCursor(),
       rectangularSelection(),
       crosshairCursor(),
-      // highlightActiveLine(), // Gboardと相性が悪いため除外
+      // Android + Gboard環境では、highlightActiveLine() がデコレーション更新時にDOMを変更し、
+      // ネイティブの範囲選択が段落境界で強制解除されるバグがある
+      ...(/android/i.test(navigator.userAgent) ? [] : [highlightActiveLine()]),
       markdown(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
