@@ -22,7 +22,7 @@ import {
   isStale,
   isDirty,
   lastStaleCheckTime,
-  lastPulledPushCount,
+  lastKnownCommitSha,
   githubConfigured,
 } from './stores'
 import { checkStaleStatus as checkStaleStatusRaw } from '../api/sync'
@@ -33,10 +33,10 @@ import { checkStaleStatus as checkStaleStatusRaw } from '../api/sync'
  */
 export async function executeStaleCheck(
   settingsValue: Settings,
-  lastPulledCount: number
+  lastCommitSha: string | null
 ): Promise<StaleCheckResult> {
   try {
-    const result = await checkStaleStatusRaw(settingsValue, lastPulledCount)
+    const result = await checkStaleStatusRaw(settingsValue, lastCommitSha)
     return result
   } finally {
     // チェック時刻を更新（成功・失敗・エラーに関わらず必ず実行）
@@ -73,7 +73,7 @@ let isChecking = false
 async function checkIfNeeded(): Promise<void> {
   // サイレントにstaleチェック（共通関数を使用）
   try {
-    const result = await executeStaleCheck(get(settings), get(lastPulledPushCount))
+    const result = await executeStaleCheck(get(settings), get(lastKnownCommitSha))
     if (result.status === 'stale') {
       // ローカルがダーティかどうかで分岐
       if (get(isDirty)) {

@@ -113,13 +113,24 @@ export type FetchPushCountResult =
   | { status: 'network_error'; error?: unknown } // ネットワークエラー
 
 /**
+ * リモートHEAD commit SHA取得の結果
+ * stale検出用（pushCountではなくcommit SHAで比較）
+ */
+export type FetchHeadShaResult =
+  | { status: 'success'; commitSha: string }
+  | { status: 'empty_repository' }
+  | { status: 'settings_invalid' }
+  | { status: 'auth_error' }
+  | { status: 'network_error'; error?: unknown }
+
+/**
  * Staleチェックの結果
  * 呼び出し側で各状態に応じた適切な処理を行うための型
  */
 export type StaleCheckResult =
-  | { status: 'stale'; remotePushCount: number; localPushCount: number } // リモートに新しい変更あり
+  | { status: 'stale'; remoteCommitSha: string; localCommitSha: string | null } // リモートに新しい変更あり
   | { status: 'up_to_date' } // 最新状態（Pushして良い）
-  | { status: 'check_failed'; reason: FetchPushCountResult } // チェック失敗（設定不正、認証エラー、ネットワークエラー等）
+  | { status: 'check_failed'; reason: FetchHeadShaResult } // チェック失敗（設定不正、認証エラー、ネットワークエラー等）
 
 // ============================================
 // 検索関連の型

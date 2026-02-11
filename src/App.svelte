@@ -19,6 +19,7 @@
     clearAllChanges,
     getPersistedDirtyFlag,
     lastPulledPushCount,
+    lastKnownCommitSha,
     isStale,
     lastPushTime,
     updateSettings,
@@ -826,7 +827,7 @@
           // モーダルを表示し、閉じたら状態確認を実行
           await alertAsync($_('modal.longBackground'), 'center')
           // staleチェックを実行
-          const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
+          const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
           if (staleResult.status === 'stale') {
             isStale.set(true)
           }
@@ -882,14 +883,14 @@
       console.log('Auto-push triggered')
 
       // Staleチェックを実行（共通関数で時刻も更新）
-      const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
+      const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
 
       switch (staleResult.status) {
         case 'stale':
           // リモートに新しい変更あり → 確認ダイアログを表示
           isStale.set(true)
           console.log(
-            `Auto-push stale: remote(${staleResult.remotePushCount}) > local(${staleResult.localPushCount})`
+            `Auto-push stale: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
           )
           // ユーザーに確認（手動Pushと同じモーダル）
           const confirmed = await confirmAsync($_('modal.staleEdit'))
@@ -2747,12 +2748,12 @@
       await flushPendingSaves()
 
       // Stale編集かどうかチェック（共通関数で時刻も更新）
-      const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
+      const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
 
       if (staleResult.status === 'stale') {
         // リモートに新しい変更あり → 確認ダイアログを表示
         console.log(
-          `Push blocked: remote(${staleResult.remotePushCount}) > local(${staleResult.localPushCount})`
+          `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
         )
         const confirmed = await confirmAsync($_('modal.staleEdit'))
         if (!confirmed) return
@@ -2793,7 +2794,11 @@
         setLastPushedSnapshot(get(notes), get(leaves), get(archiveNotes), get(archiveLeaves))
         clearAllChanges()
         lastPushTime.set(Date.now()) // 自動Push用に最終Push時刻を記録
-        // Push成功後にリモートから最新のpushCountを取得して更新
+        // Push成功後のcommit SHAをストアに保存（stale検出用）
+        if (result.commitSha) {
+          lastKnownCommitSha.set(result.commitSha)
+        }
+        // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
         if (result.message === 'github.pushOk') {
           const remoteResult = await fetchRemotePushCount($settings)
           if (remoteResult.status === 'success') {
@@ -3267,7 +3272,7 @@
       }
 
       // Staleチェック: リモートに変更があるか確認（共通関数で時刻も更新）
-      const staleResult = await executeStaleCheck($settings, get(lastPulledPushCount))
+      const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
 
       switch (staleResult.status) {
         case 'up_to_date':
@@ -3284,7 +3289,7 @@
         case 'stale':
           // リモートに変更あり → Pull実行
           console.log(
-            `Pull needed: remote(${staleResult.remotePushCount}) > local(${staleResult.localPushCount})`
+            `Pull needed: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
           )
           break
 
@@ -3394,7 +3399,11 @@
         leaves.set(sortedLeaves)
         rebuildLeafStats(sortedLeaves, result.notes)
 
-        // stale編集検出用にpushCountを記録
+        // stale編集検出用にcommit SHAを記録
+        if (result.commitSha) {
+          lastKnownCommitSha.set(result.commitSha)
+        }
+        // 統計表示用にpushCountを記録
         lastPulledPushCount.set(result.metadata.pushCount)
 
         // Pull完了時の状態をスナップショットとして保存（差分検出のベースライン）

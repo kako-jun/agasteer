@@ -308,6 +308,9 @@ export function clearAllChanges(): void {
 // Pull成功時のリモートpushCountを保持（stale編集検出用）
 export const lastPulledPushCount = writable<number>(0)
 
+// 最後に同期した時点のリモートHEAD commit SHA（stale検出用）
+export const lastKnownCommitSha = writable<string | null>(null)
+
 // stale状態（リモートに新しい変更がある）- Pullボタンに赤丸表示用
 export const isStale = writable<boolean>(false)
 

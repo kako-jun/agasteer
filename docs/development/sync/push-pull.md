@@ -281,6 +281,8 @@ Contents APIではなくBlob APIを使うことで、同一commitのtreeから�
 
 StatsPanel.svelte でホーム画面の右下に`lastPulledPushCount`を統計情報として表示します。Push成功後はリモートから最新の`pushCount`を取得して更新するため、常に正確な値が表示されます。
 
+なお、stale検出は`pushCount`ではなくcommit SHA比較で行われます（`lastKnownCommitSha`ストア）。詳細は[stale-detection.md](./stale-detection.md)を参照。
+
 ---
 
 ## データ損失バグの撲滅

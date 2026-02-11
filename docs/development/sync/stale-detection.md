@@ -6,29 +6,31 @@ PCとスマホなど複数デバイスで同時に編集している場合、他
 
 ### 仕組み
 
-`metadata.json`の`pushCount`を使用して、ローカルとリモートの状態を比較します。
+リモートのHEAD commit SHA（Refs API）とローカルで保持している`lastKnownCommitSha`を比較します。
+従来の`pushCount`比較ではアプリを経由しない直接git pushを検出できませんでしたが、commit SHA比較により全ての変更を検出可能になりました。
 
-#### lastPulledPushCountストア
+#### lastKnownCommitShaストア
 
-最後にPullした時点の`pushCount`を保持するストア。
+最後にリモートと同期した時点のHEAD commit SHAを保持するストア。
+Pull成功後およびPush成功後に更新される。
 
 #### stale検出ロジック
 
-`fetchRemotePushCount()`でリモートの`pushCount`を取得し、`lastPulledPushCount`と比較します。
+`fetchRemoteHeadSha()`でリモートのHEAD commit SHAを取得し、`lastKnownCommitSha`と比較します。
 
 **判定ロジック:**
 
-- `remotePushCount === -1` → チェック不可（Pull/Pushを進めてエラー表示）
-- `remotePushCount > lastPulledPushCount` → stale（リモートに新しい変更がある）
-- `remotePushCount <= lastPulledPushCount` → 最新（Pushして問題なし）
+- `lastKnownCommitSha === null` → まだ一度もPull/Pushしていない → up_to_date
+- `remoteCommitSha !== lastKnownCommitSha` → stale（リモートに新しい変更がある）
+- `remoteCommitSha === lastKnownCommitSha` → 最新（Pushして問題なし）
 
 **チェック不可の場合:**
 
-設定が無効、認証エラー、ネットワークエラー、空リポジトリ（初回コミットなし）などでリモートの状態を確認できない場合、`fetchRemotePushCount`は`-1`を返し、`checkIfStaleEdit`は`true`を返します。これにより、Pull/Push処理が続行され、適切なエラーメッセージ（例: 「トークンが無効です」「リポジトリが見つかりません」）が表示されるか、空リポジトリの場合は正常に初期化されます。
+設定が無効、認証エラー、ネットワークエラーなどでリモートの状態を確認できない場合、`check_failed`を返します。これにより、Pull/Push処理が続行され、適切なエラーメッセージ（例: 「トークンが無効です」「リポジトリが見つかりません」）が表示されます。
 
 **空リポジトリの扱い:**
 
-metadata.jsonが存在しない（404）場合は`-1`を返します。これにより「リモートに変更はありません」ではなく、Pullが実行され、空リポジトリとして正常に処理されます（github-integration.md参照）。
+Refs APIが404/409を返す場合は`empty_repository`として`up_to_date`を返します。空リポジトリの場合は初回Pullで正常に処理されます。
 
 ### Push時の確認フロー
 
@@ -37,18 +39,18 @@ metadata.jsonが存在しない（404）場合は`-1`を返します。これに
 3. staleの場合は確認ダイアログを表示
 4. staleでなければそのままPush
 
-### Push成功後のpushCount更新
+### Push成功後のcommit SHA更新
 
-Push成功後は、`fetchRemotePushCount()`でリモートから最新の`pushCount`を取得して`lastPulledPushCount`を更新。これにより、連続Pushでstale警告が出ることを防ぎ、UIに正確な値を表示します。
+Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`lastKnownCommitSha`を更新。これにより、連続Pushでstale警告が出ることを防ぎます。pushCountの更新は統計表示用に引き続き行われます。
 
 ### 動作フロー
 
-1. **Pull実行** → `lastPulledPushCount`にリモートの`pushCount`を保存
-2. **別デバイスでPush** → リモートの`pushCount`がインクリメント
-3. **このデバイスでPush** → `checkIfStaleEdit`でリモートの`pushCount`を取得
-4. **比較** → `remotePushCount > lastPulledPushCount`ならstale
+1. **Pull実行** → `lastKnownCommitSha`にリモートのHEAD commit SHAを保存
+2. **別デバイスでPush（または直接git push）** → リモートのHEAD commit SHAが変化
+3. **このデバイスでPush** → `fetchRemoteHeadSha`でリモートのHEAD commit SHAを取得
+4. **比較** → `remoteCommitSha !== lastKnownCommitSha`ならstale
 5. **警告表示** → ユーザーが確認後にPush、またはキャンセル
-6. **Push成功** → リモートから最新の`pushCount`を取得して`lastPulledPushCount`を更新
+6. **Push成功** → 新しいcommit SHAで`lastKnownCommitSha`を更新
 
 ### 定期的なstaleチェック
 

@@ -3,7 +3,15 @@
  * GitHubへのファイル保存とSHA取得を担当
  */
 
-import type { Leaf, Note, Settings, Metadata, WorldType, FetchPushCountResult } from '../types'
+import type {
+  Leaf,
+  Note,
+  Settings,
+  Metadata,
+  WorldType,
+  FetchPushCountResult,
+  FetchHeadShaResult,
+} from '../types'
 import { PRIORITY_LEAF_ID } from '../utils'
 
 // ============================================
@@ -103,6 +111,8 @@ export interface SaveResult {
   changedLeafCount?: number
   /** メタデータのみ変更されたか（リーフ変更なしでメタデータ変更あり） */
   metadataOnlyChanged?: boolean
+  /** Push成功時のcommit SHA（stale検出用） */
+  commitSha?: string
 }
 
 export interface TestResult {
@@ -118,6 +128,8 @@ export interface PullResult {
   leaves: Leaf[]
   metadata: Metadata
   rateLimitInfo?: RateLimitInfo
+  /** Pull成功時のcommit SHA（stale検出用） */
+  commitSha?: string
 }
 
 /**
@@ -763,7 +775,11 @@ export async function pushAllWithTreeAPI(
     const hasAnyChanges = leafChanged || metadataChanged
     if (!hasAnyChanges) {
       // 変更がない場合は何もせずに成功を返す
-      return { success: true, message: 'github.noChanges' }
+      return {
+        success: true,
+        message: 'github.noChanges',
+        commitSha: currentCommitSha ?? undefined,
+      }
     }
 
     // 変更がある場合のみpushCountをインクリメントし、metadata.jsonを追加
@@ -964,6 +980,7 @@ export async function pushAllWithTreeAPI(
       message: 'github.pushOk',
       changedLeafCount: changedLeafPaths.length,
       metadataOnlyChanged: !leafChanged && metadataChanged,
+      commitSha: newCommitSha,
     }
   } catch (error) {
     console.error('GitHub Tree API error:', error)
@@ -1047,6 +1064,18 @@ export async function pullFromGitHub(
 
     const repoData = await repoRes.json()
     const defaultBranch = repoData.default_branch || 'main'
+
+    // HEAD commit SHAを取得（stale検出用）
+    let pullCommitSha: string | undefined
+    const refRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/ref/heads/${defaultBranch}`,
+      { headers }
+    )
+    if (refRes.ok) {
+      const refData = await refRes.json()
+      pullCommitSha = refData.object.sha
+    }
+    // refRes失敗時（空リポジトリ等）はpullCommitSha=undefinedのまま続行
 
     // tree取得
     const treeRes = await fetch(
@@ -1341,6 +1370,7 @@ export async function pullFromGitHub(
       notes: sortedNotes,
       leaves: sortedLeaves,
       metadata,
+      commitSha: pullCommitSha,
     }
   } catch (error) {
     console.error('GitHub pull error:', error)
@@ -1351,6 +1381,45 @@ export async function pullFromGitHub(
       leaves: [],
       metadata: defaultMetadata,
     }
+  }
+}
+
+/**
+ * リモートHEADのcommit SHAを取得（Stale検出用）
+ *
+ * Refs APIを使用してリモートのHEAD commit SHAを軽量に取得する。
+ * pushCountではなくcommit SHAで比較することで、アプリを経由しない
+ * 直接git pushも検出可能になる。
+ *
+ * @returns FetchHeadShaResult - commit SHAまたはエラー状態
+ */
+export async function fetchRemoteHeadSha(settings: Settings): Promise<FetchHeadShaResult> {
+  const validation = validateGitHubSettings(settings)
+  if (!validation.valid) return { status: 'settings_invalid' }
+
+  try {
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
+      headers: { Authorization: `Bearer ${settings.token}` },
+    })
+    if (!repoRes.ok) {
+      if (repoRes.status === 401 || repoRes.status === 403) return { status: 'auth_error' }
+      return { status: 'network_error' }
+    }
+    const repoData = await repoRes.json()
+    const branch = repoData.default_branch || 'main'
+
+    const refRes = await fetch(
+      `https://api.github.com/repos/${settings.repoName}/git/ref/heads/${branch}`,
+      { headers: { Authorization: `Bearer ${settings.token}` } }
+    )
+    if (refRes.status === 404 || refRes.status === 409) return { status: 'empty_repository' }
+    if (refRes.status === 401 || refRes.status === 403) return { status: 'auth_error' }
+    if (!refRes.ok) return { status: 'network_error' }
+
+    const refData = await refRes.json()
+    return { status: 'success', commitSha: refData.object.sha }
+  } catch (e) {
+    return { status: 'network_error', error: e }
   }
 }
 

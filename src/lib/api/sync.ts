@@ -1,5 +1,5 @@
 import type { Note, Leaf, Settings, Metadata, StaleCheckResult } from '../types'
-import { pushAllWithTreeAPI, pullFromGitHub, fetchRemotePushCount } from './github'
+import { pushAllWithTreeAPI, pullFromGitHub, fetchRemoteHeadSha } from './github'
 import type { PullOptions, RateLimitInfo } from './github'
 
 export type { PullOptions, PullPriority, LeafSkeleton, RateLimitInfo } from './github'
@@ -17,6 +17,8 @@ export interface PushResult {
   changedLeafCount?: number
   /** メタデータのみ変更されたか（リーフ変更なしでメタデータ変更あり） */
   metadataOnlyChanged?: boolean
+  /** Push成功時のcommit SHA（stale検出用） */
+  commitSha?: string
 }
 
 /**
@@ -30,6 +32,8 @@ export interface PullResult {
   leaves: Leaf[]
   metadata: Metadata
   rateLimitInfo?: RateLimitInfo
+  /** Pull成功時のcommit SHA（stale検出用） */
+  commitSha?: string
 }
 
 /**
@@ -112,6 +116,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     rateLimitInfo: result.rateLimitInfo,
     changedLeafCount: result.changedLeafCount,
     metadataOnlyChanged: result.metadataOnlyChanged,
+    commitSha: result.commitSha,
   }
 }
 
@@ -136,6 +141,7 @@ export async function executePull(settings: Settings, options?: PullOptions): Pr
       notes: result.notes,
       leaves: result.leaves,
       metadata: result.metadata,
+      commitSha: result.commitSha,
     }
   } else {
     return {
@@ -151,16 +157,16 @@ export async function executePull(settings: Settings, options?: PullOptions): Pr
 }
 
 /**
- * Stale編集かどうかを判定
+ * Stale編集かどうかを判定（commit SHA比較方式）
  *
  * ## Stale（ステイル）とは
  * 「Stale = 古くなった」状態を指す。
  * 例: PCでPull→スマホで編集してPush→PCで編集を続行
  * この時、PCのローカルデータはリモートより古い（Stale）状態。
  *
- * ## 処理フェーズ
- *   Phase 1: リモートのpushCount取得
- *   Phase 2: 結果に応じた状態判定
+ * ## 判定ロジック
+ * リモートのHEAD commit SHA !== ローカルのlastKnownCommitSha → Stale
+ * pushCountではなくcommit SHAで比較することで、直接git pushも検出可能。
  *
  * ## 戻り値の状態
  * - stale: リモートに新しい変更あり（Push前にPullが必要）
@@ -168,29 +174,26 @@ export async function executePull(settings: Settings, options?: PullOptions): Pr
  * - check_failed: チェック失敗（設定不正、認証エラー、ネットワークエラー等）
  *
  * @param settings - GitHub設定
- * @param lastPulledPushCount - 最後にPullしたときのpushCount
+ * @param lastKnownCommitSha - 最後に同期した時点のcommit SHA
  * @returns StaleCheckResult - 明確な状態を持つ結果オブジェクト
  */
 export async function checkStaleStatus(
   settings: Settings,
-  lastPulledPushCount: number
+  lastKnownCommitSha: string | null
 ): Promise<StaleCheckResult> {
-  // Phase 1: リモートのpushCount取得
-  const result = await fetchRemotePushCount(settings)
+  const result = await fetchRemoteHeadSha(settings)
 
-  // Phase 2: 結果に応じた状態判定
   switch (result.status) {
-    case 'success': {
-      const remotePushCount = result.pushCount
-      if (remotePushCount > lastPulledPushCount) {
+    case 'success':
+      if (lastKnownCommitSha && result.commitSha !== lastKnownCommitSha) {
         return {
           status: 'stale',
-          remotePushCount,
-          localPushCount: lastPulledPushCount,
+          remoteCommitSha: result.commitSha,
+          localCommitSha: lastKnownCommitSha,
         }
       }
+      // lastKnownCommitShaがnull = まだ一度もPull/Pushしていない → staleとは言えない
       return { status: 'up_to_date' }
-    }
 
     case 'empty_repository':
       // 空リポジトリ = まだ誰もPushしていない → 最新状態として扱う

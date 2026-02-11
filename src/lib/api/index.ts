@@ -9,6 +9,7 @@ export {
   pullFromGitHub,
   pullArchive,
   fetchRemotePushCount,
+  fetchRemoteHeadSha,
   getBasePath,
   getMetadataPath,
   NOTES_PATH,
