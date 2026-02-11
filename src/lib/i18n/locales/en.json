@@ -257,7 +257,6 @@
     "duplicateChoiceAdd": "Add",
     "noNestedSubNote": "Cannot create a sub-note under another sub-note.",
     "needInitialPull": "Operations are locked until the initial Pull completes. Please Pull from settings.",
-    "exitApp": "You have unsaved changes. Continue?",
     "archiveNote": "Archive this note?",
     "archiveLeaf": "Archive this leaf?",
     "restoreNote": "Restore this note?",

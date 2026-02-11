@@ -258,7 +258,6 @@
     "duplicateChoiceAdd": "追加",
     "noNestedSubNote": "サブノートの下にはサブノートを作成できません。",
     "needInitialPull": "初回Pullが完了するまで操作できません。設定からPullしてください。",
-    "exitApp": "未保存の変更があります。続行しますか？",
     "archiveNote": "このノートをアーカイブしますか？",
     "archiveLeaf": "このリーフをアーカイブしますか？",
     "restoreNote": "このノートをリストアしますか？",
