@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { _, locale } from '../../lib/i18n'
   import type { Settings } from '../../lib/types'
 
@@ -30,6 +31,15 @@
   })()
 
   let tokenCopied = false
+
+  let initialRepoName = ''
+  let repoChanged = false
+
+  onMount(() => {
+    initialRepoName = settings.repoName || ''
+  })
+
+  $: repoChanged = initialRepoName !== '' && settings.repoName !== initialRepoName
 
   async function copyToken() {
     if (!settings.token) return
@@ -111,6 +121,11 @@
           </a>
         {/if}
       </div>
+      {#if repoChanged}
+        <div class="repo-change-warning">
+          {$_('settings.github.repoChangeWarning')}
+        </div>
+      {/if}
     </div>
     <div class="form-field">
       <div class="label-with-help">
@@ -242,6 +257,16 @@
 </div>
 
 <style>
+  .repo-change-warning {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: color-mix(in srgb, var(--error) 15%, var(--bg) 85%);
+    border: 1px solid var(--error);
+    border-radius: 4px;
+    color: var(--error);
+    font-size: 0.85rem;
+  }
+
   .github-settings {
     margin-bottom: 2rem;
   }

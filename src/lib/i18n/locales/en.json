@@ -125,7 +125,8 @@
       "testConnection": "Test Connection",
       "testing": "Testing...",
       "videoGuideHint": "Need help with setup?",
-      "videoGuide": "Watch video"
+      "videoGuide": "Watch video",
+      "repoChangeWarning": "Repository changed. Closing settings will pull from the new repository."
     },
     "appearance": {
       "title": "Appearance",
