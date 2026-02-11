@@ -282,6 +282,7 @@
     "treeCreateFailed": "Failed to create tree",
     "commitCreateFailed": "Failed to create commit",
     "branchUpdateFailed": "Failed to update branch",
+    "metadataFetchFailed": "Failed to fetch metadata (please retry)",
     "networkError": "Network error",
     "connectionOk": "Connection OK (auth and repo access successful)",
     "pullOk": "Pulled successfully",

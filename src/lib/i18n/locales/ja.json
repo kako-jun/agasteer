@@ -295,6 +295,7 @@
     "treeCreateFailed": "Tree作成に失敗しました",
     "commitCreateFailed": "コミット作成に失敗しました",
     "branchUpdateFailed": "ブランチ更新に失敗しました",
+    "metadataFetchFailed": "メタデータ取得に失敗しました（再試行してください）",
     "networkError": "ネットワークエラー",
     "connectionOk": "接続OK（認証・リポジトリ参照に成功）",
     "pullOk": "Pullしました",

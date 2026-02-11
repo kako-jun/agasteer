@@ -603,44 +603,47 @@ export async function pushAllWithTreeAPI(
     // .gitkeep用の空コンテンツのSHA（常に同じ）
     const emptyGitkeepSha = await calculateGitBlobSha('')
 
-    // 既存のmetadata.jsonからpushCountを取得
+    // 既存のmetadata.jsonからpushCountを取得（同一commitのtreeからBlob APIで読み取り）
     let currentPushCount = 0
     let existingMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     let existingArchiveMetadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
-    try {
-      const metadataRes = await fetchGitHubContents(
-        NOTES_METADATA_PATH,
-        settings.repoName,
-        settings.token
+    const metadataJsonSha = existingNotesFiles.get(NOTES_METADATA_PATH)
+    if (metadataJsonSha) {
+      // metadata.jsonが既存treeに存在する → Blob APIで取得（同一commitから読み取り）
+      const blobRes = await fetch(
+        `https://api.github.com/repos/${settings.repoName}/git/blobs/${metadataJsonSha}`,
+        { headers }
       )
-      if (metadataRes.ok) {
-        const metadataData = await metadataRes.json()
-        if (metadataData.content) {
-          const decoded = decodeBase64ToString(metadataData.content)
-          existingMetadata = JSON.parse(decoded)
-          currentPushCount = existingMetadata.pushCount || 0
-        }
+      if (!blobRes.ok) {
+        return { success: false, message: 'github.metadataFetchFailed' }
       }
-    } catch (e) {
-      // エラーは無視（初回Pushの場合）
+      try {
+        const blobData = await blobRes.json()
+        const decoded = decodeBase64ToString(blobData.content)
+        existingMetadata = JSON.parse(decoded)
+        currentPushCount = existingMetadata.pushCount || 0
+      } catch (e) {
+        return { success: false, message: 'github.metadataFetchFailed' }
+      }
     }
+    // metadata.jsonがtreeにない場合 = 初回Push → currentPushCount=0のまま（正常）
 
-    // アーカイブのmetadata.jsonを取得
-    try {
-      const archiveMetadataRes = await fetchGitHubContents(
-        ARCHIVE_METADATA_PATH,
-        settings.repoName,
-        settings.token
-      )
-      if (archiveMetadataRes.ok) {
-        const metadataData = await archiveMetadataRes.json()
-        if (metadataData.content) {
-          const decoded = decodeBase64ToString(metadataData.content)
+    // アーカイブのmetadata.jsonを取得（同一commitのtreeからBlob APIで読み取り）
+    const archiveMetadataJsonSha = existingArchiveFiles.get(ARCHIVE_METADATA_PATH)
+    if (archiveMetadataJsonSha) {
+      try {
+        const blobRes = await fetch(
+          `https://api.github.com/repos/${settings.repoName}/git/blobs/${archiveMetadataJsonSha}`,
+          { headers }
+        )
+        if (blobRes.ok) {
+          const blobData = await blobRes.json()
+          const decoded = decodeBase64ToString(blobData.content)
           existingArchiveMetadata = JSON.parse(decoded)
         }
+      } catch (e) {
+        // アーカイブmetadataの読み取り失敗はデフォルト値で続行（差分比較にのみ使用）
       }
-    } catch (e) {
-      // エラーは無視
     }
 
     // metadata.jsonを生成（pushCountはまだインクリメントしない）
