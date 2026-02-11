@@ -4,6 +4,17 @@ Agasteerの変更履歴を記録しています。
 
 ---
 
+## 2026-02-11 - バグ修正
+
+### GitHub同期
+
+- **pushCountリセットバグの修正**（#39）
+  - Push時のmetadata.json読み取りをContents APIからBlob APIに変更
+  - 既存ツリーのblob SHAから読み取ることでrace conditionを解消
+  - API失敗時にpushCountが0にリセットされる問題を修正（pushをabortするように変更）
+
+---
+
 ## 2026-01-06 - 機能追加とUI改善
 
 ### エディタ機能

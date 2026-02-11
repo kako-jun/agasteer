@@ -57,10 +57,11 @@ Push時は`.agasteer/notes/`と`.agasteer/archive/`の両方を処理します�
 2. 現在のブランチのHEADを取得
 3. 現在のコミットからTreeのSHAを取得
 4. 既存ツリーを取得（`.agasteer/`以外のファイルと必要に応じて`archive/`のSHAを記録）
-5. 新しいTreeを構築（全ファイルを明示的に指定）
-6. 新しいTreeを作成
-7. 新しいコミットを作成
-8. ブランチのリファレンスを更新（`force: true`）
+5. 既存ツリーからmetadata.jsonのblob SHAを取得し、Blob APIで読み取り（pushCount等）
+6. 新しいTreeを構築（全ファイルを明示的に指定）
+7. 新しいTreeを作成
+8. 新しいコミットを作成
+9. ブランチのリファレンスを更新（`force: true`）
 
 ### SHA最適化
 
@@ -336,9 +337,11 @@ Push回数カウント機能の実装中に、Push直後にPullしても`pushCou
 GitHub Contents API呼び出しにキャッシュバスター（`?t=${Date.now()}`）を付与。以下の箇所で使用：
 
 1. `fetchCurrentSha` - ファイルのSHA取得
-2. `pushAllWithTreeAPI` - Push時のmetadata.json取得
-3. `pullFromGitHub` - Pull時のmetadata.json取得
-4. `pullFromGitHub` - Pull時のリーフcontent取得
+2. `pullFromGitHub` - Pull時のmetadata.json取得
+3. `pullFromGitHub` - Pull時のリーフcontent取得
+
+> **注**: `pushAllWithTreeAPI`のmetadata.json取得は、Contents APIからBlob APIに変更済み。
+> 既存ツリーのblob SHAからBlob APIで読み取るため、キャッシュバスターは不要（同一commitのtreeに紐づく）。
 
 **効果:**
 

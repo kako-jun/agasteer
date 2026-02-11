@@ -267,7 +267,11 @@ Push回数は `metadata.json` の `pushCount` フィールドに保存されま�
 
 ### Push時の自動インクリメント
 
-`executePush` 関数内で、Push実行前に既存の `pushCount` を取得し、+1してmetadata.jsonに保存します。
+`pushAllWithTreeAPI` 関数内で、既存ツリーのblob SHAからBlob APIでmetadata.jsonを読み取り、`pushCount` を+1してmetadata.jsonに保存します。
+Contents APIではなくBlob APIを使うことで、同一commitのtreeから確実に読み取り、race conditionによるpushCountリセットを防止しています。
+
+- treeにmetadata.jsonがない場合 = 初回Push → pushCount=0から開始（正常）
+- Blob API失敗時 = APIエラー → pushをabortしてユーザーに再試行を促す
 
 ### Pull時のデータ取得
 
