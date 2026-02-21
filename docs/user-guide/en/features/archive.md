@@ -30,6 +30,16 @@ Agasteer has two independent spaces.
 - The statistics display (leaf count, character count) in the bottom-right increases in real-time, showing progress
 - From the second time, it's cached and displays instantly
 
+### Switching Restrictions
+
+World switching is blocked in the following situations:
+
+- **During Pull** (fetching home data)
+- **During Push** (saving to GitHub)
+- **During Archive loading** (fetching archive data)
+
+> **Tip**: Operations are restricted during sync to prevent data inconsistency. Please wait for the process to complete.
+
 ### Quick Return to Home
 
 Tap the title "Agasteer" in the top-left header → Returns to Home top from anywhere

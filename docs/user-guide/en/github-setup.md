@@ -89,11 +89,24 @@ Enter the copied token in Agasteer's settings screen.
 ## 3. Configure in Agasteer
 
 1. Open Agasteer's settings screen
-2. Enter `username/repository-name` in "GitHub Repository" (e.g., `kako-jun/memo`)
-3. Enter the copied token in "GitHub Token"
-4. Test the connection with the "Pull" button
+2. Enter the copied token in "GitHub Token" (left field)
+3. Enter `username/repository-name` in "GitHub Repository" (right field, e.g., `kako-jun/memo`)
+4. Test the connection with the "Test Connection" button
 
 If the settings are correct, your notes will sync with GitHub.
+
+### Switching Repositories
+
+If you want to use multiple repositories (e.g., one for daily notes and another for a dedicated project):
+
+1. Tap the "▼" button next to the repository input field
+2. Previously connected repositories appear in a dropdown
+3. Select the repository you want to switch to
+4. You can also type a new repository name directly
+
+> **Tip**: To access multiple repositories with the same token, select all target repositories when creating the token, or choose "All repositories".
+
+Use the "×" button on each dropdown entry to remove a repository from the history.
 
 ---
 

@@ -305,7 +305,7 @@ stores.tsにモジュールレベルの変数として、Home用とArchive用そ
 
 1. ブラウザタブがアクティブ（`visibilityState === 'visible'`）
 2. GitHub設定済み
-3. Push/Pull処理中でない
+3. Push/Pull処理中でない、かつアーカイブロード中でない
 4. ダーティな変更がある（`isDirty === true`）
 5. 前回Pushから5分以上経過
 6. 初回Pull完了済み

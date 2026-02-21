@@ -35,11 +35,63 @@
   let initialRepoName = ''
   let repoChanged = false
 
+  // Combo-box state
+  let dropdownOpen = false
+  let comboBoxRef: HTMLDivElement
+
+  $: repoHistory = settings.repoHistory || []
+
   onMount(() => {
     initialRepoName = settings.repoName || ''
+
+    // Ensure current repoName is in history
+    if (settings.repoName && !(settings.repoHistory || []).includes(settings.repoName)) {
+      const updated = [settings.repoName, ...(settings.repoHistory || [])]
+      settings.repoHistory = updated
+      onSettingsChange({ repoHistory: updated })
+    }
   })
 
   $: repoChanged = initialRepoName !== '' && settings.repoName !== initialRepoName
+
+  function handleRepoInput(event: Event) {
+    const value = (event.target as HTMLInputElement).value
+    settings.repoName = value
+    onSettingsChange({ repoName: value })
+  }
+
+  function handleRepoBlur() {
+    // Add to history on blur if non-empty and not already present
+    if (settings.repoName && !repoHistory.includes(settings.repoName)) {
+      const updated = [settings.repoName, ...repoHistory]
+      settings.repoHistory = updated
+      onSettingsChange({ repoHistory: updated })
+    }
+  }
+
+  function selectRepo(repo: string) {
+    settings.repoName = repo
+    onSettingsChange({ repoName: repo })
+    dropdownOpen = false
+  }
+
+  function removeRepo(repo: string, event: Event) {
+    event.stopPropagation()
+    const updated = repoHistory.filter((r) => r !== repo)
+    settings.repoHistory = updated
+    onSettingsChange({ repoHistory: updated })
+    // If removing the current repo, don't clear the input
+  }
+
+  function toggleDropdown() {
+    dropdownOpen = !dropdownOpen
+  }
+
+  function handleClickOutside(event: MouseEvent) {
+    if (comboBoxRef && !comboBoxRef.contains(event.target as Node)) {
+      dropdownOpen = false
+    }
+  }
 
   async function copyToken() {
     if (!settings.token) return
@@ -55,78 +107,12 @@
   }
 </script>
 
+<svelte:window on:click={handleClickOutside} />
+
 <div class="github-settings">
   <h3>{$_('settings.github.title')}</h3>
   <div class="form-row">
-    <div class="form-field">
-      <div class="label-with-help">
-        <label for="repo-name"
-          >{$_('settings.github.repoName')} <span class="required">*</span></label
-        >
-        <a
-          href={setupGuideUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="help-icon"
-          title="How to setup GitHub"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-        </a>
-      </div>
-      <div class="input-with-button">
-        <input
-          id="repo-name"
-          type="text"
-          bind:value={settings.repoName}
-          on:input={(e) => handleTextInput('repoName', e)}
-          placeholder={$_('settings.github.repoPlaceholder')}
-        />
-        {#if settings.repoName}
-          <a
-            href="https://github.com/{settings.repoName}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="repo-link-button"
-            title="Open repository on GitHub"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-          </a>
-        {/if}
-      </div>
-      {#if repoChanged}
-        <div class="repo-change-warning">
-          {$_('settings.github.repoChangeWarning')}
-        </div>
-      {/if}
-    </div>
+    <!-- Token field (LEFT) -->
     <div class="form-field">
       <div class="label-with-help">
         <label for="github-token"
@@ -205,6 +191,139 @@
           </button>
         {/if}
       </div>
+    </div>
+
+    <!-- Repository field (RIGHT) with combo-box -->
+    <div class="form-field">
+      <div class="label-with-help">
+        <label for="repo-name"
+          >{$_('settings.github.repoName')} <span class="required">*</span></label
+        >
+        <a
+          href={setupGuideUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="help-icon"
+          title="How to setup GitHub"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </a>
+      </div>
+      <div class="combo-box" bind:this={comboBoxRef}>
+        <div class="input-with-button">
+          <input
+            id="repo-name"
+            type="text"
+            bind:value={settings.repoName}
+            on:input={handleRepoInput}
+            on:blur={handleRepoBlur}
+            placeholder={$_('settings.github.repoPlaceholder')}
+          />
+          {#if repoHistory.length > 0}
+            <button
+              type="button"
+              class="dropdown-toggle"
+              on:click={toggleDropdown}
+              title="Recent repositories"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class:flipped={dropdownOpen}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          {/if}
+          {#if settings.repoName}
+            <a
+              href="https://github.com/{settings.repoName}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="repo-link-button"
+              title="Open repository on GitHub"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+          {/if}
+        </div>
+        {#if dropdownOpen && repoHistory.length > 0}
+          <ul class="dropdown-list">
+            {#each repoHistory as repo}
+              <li class="dropdown-item" class:active={repo === settings.repoName}>
+                <button
+                  type="button"
+                  class="dropdown-item-select"
+                  on:click={() => selectRepo(repo)}
+                >
+                  {repo}
+                </button>
+                <button
+                  type="button"
+                  class="dropdown-item-remove"
+                  on:click={(e) => removeRepo(repo, e)}
+                  title={$_('settings.github.removeRepo')}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+      {#if repoChanged}
+        <div class="repo-change-warning">
+          {$_('settings.github.repoChangeWarning')}
+        </div>
+      {/if}
     </div>
   </div>
   <div class="video-guide-hint">
@@ -373,6 +492,105 @@
   input[type='password']:focus {
     outline: none;
     border-color: var(--accent);
+  }
+
+  /* Combo-box styles */
+  .combo-box {
+    position: relative;
+  }
+
+  .dropdown-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .dropdown-toggle:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .dropdown-toggle svg.flipped {
+    transform: rotate(180deg);
+  }
+
+  .dropdown-toggle svg {
+    transition: transform 0.2s;
+  }
+
+  .dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin: 0.25rem 0 0;
+    padding: 0;
+    list-style: none;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+  }
+
+  .dropdown-item.active {
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg) 85%);
+  }
+
+  .dropdown-item-select {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dropdown-item-select:hover {
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg) 90%);
+  }
+
+  .dropdown-item-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem;
+    margin-right: 0.25rem;
+    background: none;
+    border: none;
+    border-radius: 3px;
+    color: var(--text);
+    opacity: 0.4;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .dropdown-item-remove:hover {
+    opacity: 1;
+    color: var(--error, #e74c3c);
+    background: color-mix(in srgb, var(--error, #e74c3c) 10%, transparent 90%);
   }
 
   .test-actions {

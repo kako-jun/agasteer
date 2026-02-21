@@ -29,6 +29,8 @@
   export let onWorldChange: ((world: WorldType) => void) | null = null
   /** アーカイブがロード中かどうか */
   export let isArchiveLoading: boolean = false
+  /** Pull/Push中かどうか（ワールド切り替えを無効化） */
+  export let isSyncing: boolean = false
 
   let inputValue = ''
   let inputElement: HTMLInputElement | null = null
@@ -39,6 +41,8 @@
 
   function toggleWorldDropdown(e: MouseEvent) {
     e.stopPropagation()
+    // Pull/Push中またはアーカイブロード中はドロップダウンを開かない
+    if (isSyncing || isArchiveLoading) return
     // 他のドロップダウンを閉じる
     openDropdownIndex = null
     if (!worldDropdownOpen && worldSeparatorButton) {

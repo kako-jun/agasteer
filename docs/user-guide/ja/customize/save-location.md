@@ -15,6 +15,7 @@
 | カスタムフォント | IndexedDB（ブラウザのみ）    |
 | 背景画像         | IndexedDB（ブラウザのみ）    |
 | GitHub Token     | LocalStorage（ブラウザのみ） |
+| リポジトリ履歴   | LocalStorage（ブラウザのみ） |
 
 ---
 

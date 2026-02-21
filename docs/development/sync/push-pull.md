@@ -34,7 +34,7 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 
 **処理ステップ:**
 
-1. 交通整理: Pull/Push中は不可
+1. 交通整理: Pull/Push中またはアーカイブロード中は不可
 2. 即座にロック取得（非同期処理の前に取得することが重要）
 3. 保留中の自動保存をフラッシュ
 4. Staleチェック（共通関数で時刻も更新）
@@ -48,7 +48,7 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 ```mermaid
 flowchart TD
     Start[Push開始] --> Check1{canSync?}
-    Check1 -->|No: Pull中| End1[スキップ]
+    Check1 -->|No: Pull中/Archive中| End1[スキップ]
     Check1 -->|Yes| Lock[isPushing = true]
     Lock --> Flush[保留中の保存をフラッシュ]
     Flush --> Stale[Staleチェック]
@@ -146,7 +146,7 @@ Push処理は単一のトランザクション的処理であり、「一部だ�
 
 **処理ステップ:**
 
-1. 交通整理: Pull/Push中は不可
+1. 交通整理: Pull/Push中またはアーカイブロード中は不可
 2. 即座にロック取得
 3. ダーティチェック（ロックを保持したまま確認ダイアログ）
 4. Staleチェック（up_to_dateなら早期リターン）
@@ -159,7 +159,7 @@ Push処理は単一のトランザクション的処理であり、「一部だ�
 ```mermaid
 flowchart TD
     Start[Pull開始] --> Check1{canSync?}
-    Check1 -->|No: Pull/Push中| End1[スキップ]
+    Check1 -->|No: Pull/Push/Archive中| End1[スキップ]
     Check1 -->|Yes| Lock[isPulling = true]
     Lock --> Check2{ダーティ?}
     Check2 -->|Yes| Confirm[確認ダイアログ<br/>ロック保持]
@@ -357,6 +357,34 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 
 ---
 
+## アーカイブロード中の操作制限
+
+### 発生していた問題
+
+ホームのPull中にアーカイブビューに切り替えると、アーカイブのPullが並行で走り始めます。ホームのPull完了時にアーカイブのPullが未完了でもPushボタンが有効になり、不完全なアーカイブデータがPushされる可能性がありました。
+
+### 解決方法
+
+`isArchiveLoading`フラグを既存の`isPulling`/`isPushing`と同列の排他条件に追加しました。
+
+**ブロックされる操作:**
+
+| 操作                                    | ブロック条件                                     |
+| --------------------------------------- | ------------------------------------------------ |
+| ワールド切り替え（`handleWorldChange`） | `isPulling \|\| isPushing \|\| isArchiveLoading` |
+| Pull実行（`pullFromGitHub`）            | `canSync`失敗 \|\| `isArchiveLoading`            |
+| Push実行（`pushToGitHub`）              | `canSync`失敗 \|\| `isArchiveLoading`            |
+| ノート移動（`moveNoteToWorld`）         | `isPulling \|\| isPushing \|\| isArchiveLoading` |
+| リーフ移動（`moveLeafToWorld`）         | `isPulling \|\| isPushing \|\| isArchiveLoading` |
+| 自動Push/自動Pull                       | `isPulling \|\| isPushing \|\| isArchiveLoading` |
+
+**UIの制御:**
+
+- `canPull`/`canPush`リアクティブ宣言に`!isArchiveLoading`条件を追加
+- Breadcrumbsコンポーネントに`isSyncing`プロパティを追加し、Pull/Push中はワールド切替ドロップダウンを無効化
+
+---
+
 ## 設定画面でのPush/Pull
 
 ### 設定画面を開くとき
@@ -381,6 +409,7 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 - **Push処理**: `pushToGitHub()` - 1つの統合関数
 - **Pull処理**: `pullFromGitHub()` - 1つの統合関数
 - **ロック管理**: 最初に取得、finally句で解放、Promise版ダイアログでロック保持
+- **アーカイブロード保護**: `isArchiveLoading`中はPull/Push/ワールド切替/ノート移動を全てブロック
 - **データ損失**: 排他制御の強化により撲滅
 - **第一優先Pull**: 段階的ローディングで早期編集開始
 - **編集保護**: Pull中の編集内容を保持

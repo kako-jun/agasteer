@@ -17,6 +17,7 @@ export type WorldType = 'home' | 'archive'
 export interface Settings {
   token: string
   repoName: string
+  repoHistory?: string[]
   theme: ThemeType
   toolName: string
   locale: Locale

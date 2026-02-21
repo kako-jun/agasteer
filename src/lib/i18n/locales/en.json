@@ -126,7 +126,9 @@
       "testing": "Testing...",
       "videoGuideHint": "Need help with setup?",
       "videoGuide": "Watch video",
-      "repoChangeWarning": "Repository changed. Closing settings will pull from the new repository."
+      "repoChangeWarning": "Repository changed. Closing settings will pull from the new repository.",
+      "repoHistoryEmpty": "No recent repositories",
+      "removeRepo": "Remove from history"
     },
     "appearance": {
       "title": "Appearance",

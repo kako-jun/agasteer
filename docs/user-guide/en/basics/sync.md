@@ -82,6 +82,7 @@ During Pull, a semi-transparent overlay (glass effect) covers the editing area, 
 
 - To maintain data consistency
 - Offline leaves are an exception (editable even during Pull)
+- **Switching to Archive is also blocked during Pull** (to prevent data inconsistency)
 
 ---
 

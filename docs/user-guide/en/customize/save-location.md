@@ -15,6 +15,7 @@ A list of where each setting is stored.
 | Custom Font      | IndexedDB (browser only)    |
 | Background Image | IndexedDB (browser only)    |
 | GitHub Token     | LocalStorage (browser only) |
+| Repo History     | LocalStorage (browser only) |
 
 ---
 

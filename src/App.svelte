@@ -337,8 +337,8 @@
   )
 
   // Pull/Push中はボタンを無効化（リアクティブに追跡）
-  $: canPull = !$isPulling && !$isPushing
-  $: canPush = !$isPulling && !$isPushing && isFirstPriorityFetched
+  $: canPull = !$isPulling && !$isPushing && !isArchiveLoading
+  $: canPush = !$isPulling && !$isPushing && !isArchiveLoading && isFirstPriorityFetched
 
   // ペインごとのワールドに応じたノート・リーフを取得するヘルパー
   // （純粋関数のラッパー：ストアから値を取得して渡す）
@@ -883,8 +883,8 @@
       // GitHub設定がなければスキップ
       if (!$githubConfigured) return
 
-      // Push/Pull中はスキップ
-      if ($isPulling || $isPushing) return
+      // Push/Pull中またはアーカイブロード中はスキップ
+      if ($isPulling || $isPushing || isArchiveLoading) return
 
       // 初回Pullが完了していなければスキップ
       if (!isFirstPriorityFetched) return
@@ -940,8 +940,8 @@
       // GitHub設定がなければスキップ
       if (!$githubConfigured) return
 
-      // Push/Pull中はスキップ
-      if ($isPulling || $isPushing) return
+      // Push/Pull中またはアーカイブロード中はスキップ
+      if ($isPulling || $isPushing || isArchiveLoading) return
 
       // 初回Pullが完了していなければスキップ
       if (!isFirstPriorityFetched) return
@@ -1177,6 +1177,9 @@
     const currentPaneWorld = pane === 'left' ? $leftWorld : $rightWorld
     if (world === currentPaneWorld) return
 
+    // Pull/Push中またはアーカイブロード中はワールド切り替えを禁止
+    if ($isPulling || $isPushing || isArchiveLoading) return
+
     // 先にワールドを切り替え（ペインごとに独立）
     if (pane === 'left') {
       leftWorld.set(world)
@@ -1268,6 +1271,9 @@
   }
 
   async function moveNoteToWorld(note: Note, targetWorld: WorldType, pane: Pane) {
+    // Pull/Push中またはアーカイブロード中は移動を禁止
+    if ($isPulling || $isPushing || isArchiveLoading) return
+
     // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
     // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
     let freshArchiveNotes: Note[] | null = null
@@ -1514,6 +1520,9 @@
   }
 
   async function moveLeafToWorld(leaf: Leaf, targetWorld: WorldType, pane: Pane) {
+    // Pull/Push中またはアーカイブロード中は移動を禁止
+    if ($isPulling || $isPushing || isArchiveLoading) return
+
     // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
     // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
     let freshArchiveNotes: Note[] | null = null
@@ -2745,8 +2754,8 @@
    * すべてのPush処理がこの1つの関数を通る
    */
   async function pushToGitHub() {
-    // 交通整理: Push不可なら何もしない
-    if (!canSync($isPulling, $isPushing).canPush) return
+    // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
+    if (!canSync($isPulling, $isPushing).canPush || isArchiveLoading) return
 
     // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
     $isPushing = true
@@ -3259,8 +3268,8 @@
    * を1つの関数で実行し、自動的に排他制御を行う
    */
   async function pullFromGitHub(isInitialStartup = false, onCancel?: () => void | Promise<void>) {
-    // 交通整理: Pull/Push中は不可
-    if (!canSync($isPulling, $isPushing).canPull) return
+    // 交通整理: Pull/Push中またはアーカイブロード中は不可
+    if (!canSync($isPulling, $isPushing).canPull || isArchiveLoading) return
 
     // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
     $isPulling = true

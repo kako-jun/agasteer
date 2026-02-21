@@ -120,6 +120,7 @@ const OFFLINE_STORE = 'offline'
 export const defaultSettings: Settings = {
   token: '',
   repoName: '',
+  repoHistory: [],
   theme: 'yomi',
   toolName: 'Agasteer',
   locale: 'en', // デフォルトは英語

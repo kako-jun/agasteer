@@ -10,20 +10,21 @@ Agasteerのデータモデル、型定義、状態管理について説明しま
 
 ユーザー設定を保持。
 
-| フィールド               | 型        | 説明                               |
-| ------------------------ | --------- | ---------------------------------- |
-| token                    | string    | GitHub Personal Access Token       |
-| repoName                 | string    | "owner/repo"形式                   |
-| theme                    | ThemeType | テーマ名                           |
-| toolName                 | string    | アプリケーション名（タブタイトル） |
-| locale                   | Locale    | 言語（'ja' / 'en'）                |
-| linedMode                | boolean   | 罫線エディタモード                 |
-| vimMode                  | boolean   | Vimモード                          |
-| hasCustomFont            | boolean   | カスタムフォント適用フラグ         |
-| hasCustomBackgroundLeft  | boolean   | 左ペイン背景画像適用フラグ         |
-| hasCustomBackgroundRight | boolean   | 右ペイン背景画像適用フラグ         |
-| backgroundOpacityLeft    | number    | 左ペイン背景画像透明度             |
-| backgroundOpacityRight   | number    | 右ペイン背景画像透明度             |
+| フィールド               | 型        | 説明                                                     |
+| ------------------------ | --------- | -------------------------------------------------------- |
+| token                    | string    | GitHub Personal Access Token                             |
+| repoName                 | string    | "owner/repo"形式                                         |
+| repoHistory              | string[]? | 過去に接続したリポジトリのリスト（ドロップダウン切替用） |
+| theme                    | ThemeType | テーマ名                                                 |
+| toolName                 | string    | アプリケーション名（タブタイトル）                       |
+| locale                   | Locale    | 言語（'ja' / 'en'）                                      |
+| linedMode                | boolean   | 罫線エディタモード                                       |
+| vimMode                  | boolean   | Vimモード                                                |
+| hasCustomFont            | boolean   | カスタムフォント適用フラグ                               |
+| hasCustomBackgroundLeft  | boolean   | 左ペイン背景画像適用フラグ                               |
+| hasCustomBackgroundRight | boolean   | 右ペイン背景画像適用フラグ                               |
+| backgroundOpacityLeft    | number    | 左ペイン背景画像透明度                                   |
+| backgroundOpacityRight   | number    | 右ペイン背景画像透明度                                   |
 
 **注意**: コミット時のユーザー名とメールアドレスは固定値（`agasteer` / `agasteer@example.com`）を使用します。
 

@@ -22,6 +22,7 @@
     metadata,
     archiveMetadata,
     isDirty,
+    isPulling,
     isPushing,
     leftNote,
     rightNote,
@@ -119,6 +120,7 @@
   currentWorld={paneWorld}
   onWorldChange={(world) => actions.handleWorldChange(world, pane)}
   isArchiveLoading={$state.isArchiveLoading}
+  isSyncing={$isPulling || $isPushing}
 />
 
 <main class="main-pane">
