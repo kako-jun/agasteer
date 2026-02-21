@@ -561,6 +561,7 @@
     color: var(--text);
     font-size: 0.9rem;
     text-align: left;
+    justify-content: flex-start;
     cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
