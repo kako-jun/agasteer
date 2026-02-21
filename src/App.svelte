@@ -1,6 +1,6 @@
 <script lang="ts">
   import './App.css'
-  import { waitForSwCheck } from './main'
+  import { waitForSwCheck } from './lib/sw-check'
   import { onMount, tick, setContext } from 'svelte'
   import { writable, get } from 'svelte/store'
   import type { Note, Leaf, Breadcrumb, View, Metadata, WorldType, SearchMatch } from './lib/types'
@@ -688,12 +688,13 @@
       const loadedSettings = loadSettings()
       settings.set(loadedSettings)
 
+      // テーマを先に適用（ローディング画面のバックグラウンドカラーに反映させるため）
+      applyTheme(loadedSettings.theme, loadedSettings)
+      document.title = loadedSettings.toolName
+
       // i18n初期化（翻訳読み込み完了を待機）
       await initI18n(loadedSettings.locale)
       i18nReady = true
-
-      applyTheme(loadedSettings.theme, loadedSettings)
-      document.title = loadedSettings.toolName
 
       // オフラインリーフを読み込み（GitHub設定に関係なく常に利用可能）
       const savedOfflineLeaf = await loadOfflineLeaf(OFFLINE_LEAF_ID)

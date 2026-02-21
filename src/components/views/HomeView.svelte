@@ -209,7 +209,15 @@
     {/if}
 
     <!-- ノートカード: 特殊リーフの後に表示 -->
-    {#if notes.length === 0 && isFirstPriorityFetched}
+    {#if notes.length === 0 && !isFirstPriorityFetched && !isArchive}
+      <div class="fetch-loading-state">
+        <div class="fetch-loading-dots">
+          <span class="fetch-dot">.</span>
+          <span class="fetch-dot">.</span>
+          <span class="fetch-dot">.</span>
+        </div>
+      </div>
+    {:else if notes.length === 0 && isFirstPriorityFetched}
       <div class="empty-state">
         <p>{isArchive ? $_('home.noNotesArchive') : $_('home.noNotes')}</p>
       </div>
@@ -275,6 +283,47 @@
     margin: 0;
     opacity: 0.8;
     white-space: pre-line;
+  }
+
+  .fetch-loading-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fetch-loading-dots {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .fetch-dot {
+    font-size: 2.5rem;
+    color: var(--accent);
+    animation: fetch-pulse 1.5s ease-in-out infinite;
+  }
+
+  .fetch-dot:nth-child(2) {
+    animation-delay: 0.3s;
+  }
+
+  .fetch-dot:nth-child(3) {
+    animation-delay: 0.6s;
+  }
+
+  @keyframes fetch-pulse {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
   }
 
   /* リーフカード（NoteViewと同じスタイル） */
