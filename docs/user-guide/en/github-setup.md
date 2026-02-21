@@ -108,6 +108,13 @@ If you want to use multiple repositories (e.g., one for daily notes and another 
 
 Use the "×" button on each dropdown entry to remove a repository from the history.
 
+When you switch repositories, the following data is automatically reset:
+
+- **Home notes and leaves**: Automatically fetched from the new repository when you close the settings screen
+- **Archive**: Cleared and re-fetched from the new repository the next time you view the archive
+- **Unsaved changes**: Reset (make sure to Push before switching)
+- **Sync state**: Stale checks and Push history are also reset
+
 ---
 
 ## Troubleshooting

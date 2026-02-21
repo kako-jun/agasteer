@@ -86,6 +86,19 @@ During Pull, a semi-transparent overlay (glass effect) covers the editing area, 
 
 ---
 
+## Behavior When Switching Repositories
+
+When you change the repository in the settings screen, the following happens automatically:
+
+- **Home data**: Automatically pulled from the new repository when you close the settings screen
+- **Archive data**: Cleared. It will be fetched from the new repository the next time you view the archive
+- **Unsaved changes**: Reset. Make sure to Push (save) before switching
+- **Sync checks**: Stale detection and Push history are reset, restarting with the new repository's state
+
+> **Tip**: If you only change the theme or tool name, no Pull is executed. Auto-Pull only runs when the repository is changed.
+
+---
+
 ## Statistics
 
 Statistics are displayed in the bottom-right of the home screen.

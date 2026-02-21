@@ -393,7 +393,9 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 
 ### 設定画面を閉じるとき
 
-設定画面を閉じるときには**Pullが実行される**（`closeSettings()` → `handleCloseSettings()`）。これにより、リポジトリやトークンを変更した場合でも、新しい設定での最新データが自動的に取得される。
+設定画面を閉じるときに**Pullが実行されるのは、リポジトリが変更された場合またはインポートが行われた場合のみ**（`handleCloseSettings()`）。テーマやツール名だけの変更ではPullは実行されない。
+
+Pull/Push/アーカイブロード中に設定画面を閉じた場合は、新しいPullを発行せずリセット済みの状態で閉じる（`resetForRepoSwitch()`で既にデータがクリアされているため、次回操作時に新リポからPullされる）。
 
 ### リポジトリ変更時の注意表示
 
@@ -401,6 +403,77 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 
 - 初回設定（空欄→入力）の場合は警告不要
 - 変更を元に戻した場合は警告が消える
+
+---
+
+## リポジトリ切替時の状態リセット
+
+### 背景
+
+リポジトリを切り替えた際、旧リポの状態（アーカイブデータ、commit SHA、ダーティスナップショット等）が残っていると、新リポに対して誤ったデータがPushされたり、stale検出が誤動作する可能性がある。これを防ぐため、リポ切替時に全リポ固有状態を一括リセットする。
+
+### トリガー
+
+`handleSettingsChange()`内で`repoName`の変更を検知すると、以下を即座に実行する：
+
+1. `repoChangedInSettings = true`（設定画面閉じる時のPull判定用フラグ）
+2. `isPullCompleted = false` / `isFirstPriorityFetched = false`（操作ロック）
+3. `resetForRepoSwitch()`（stores.tsの一括リセット関数）
+
+### resetForRepoSwitch() がリセットする変数一覧
+
+| 変数/ストア                | リセット先  | 理由                                               |
+| -------------------------- | ----------- | -------------------------------------------------- |
+| `archiveNotes`             | `[]`        | 旧リポのアーカイブデータが残ると新リポにPushされる |
+| `archiveLeaves`            | `[]`        | 同上                                               |
+| `archiveMetadata`          | 初期値      | 同上                                               |
+| `isArchiveLoaded`          | `false`     | 次回アーカイブ表示時に新リポからPullするため       |
+| `archiveLeafStatsStore`    | リセット    | 旧リポの統計を表示しないため                       |
+| `lastPushedNotes`          | `[]`        | 旧リポのスナップショットでダーティ誤検出を防止     |
+| `lastPushedLeaves`         | `[]`        | 同上                                               |
+| `lastPushedArchiveNotes`   | `[]`        | 同上                                               |
+| `lastPushedArchiveLeaves`  | `[]`        | 同上                                               |
+| `dirtyNoteIds`             | `new Set()` | ダーティフラグをクリア                             |
+| `dirtyLeafIds`             | `new Set()` | 同上                                               |
+| `isStructureDirty`         | `false`     | 同上                                               |
+| `lastKnownCommitSha`       | `null`      | 旧リポのSHAでstale誤判定を防止                     |
+| `lastPulledPushCount`      | `0`         | 旧リポの統計をクリア                               |
+| `isStale`                  | `false`     | staleバッジをクリア                                |
+| `lastPushTime`             | `0`         | 自動Pushタイマーをリセット                         |
+| `lastStaleCheckTime`       | `0`         | 新Pullが完了するまでstaleチェックを抑制            |
+| `leftWorld` / `rightWorld` | `'home'`    | 旧リポのアーカイブ表示を防止                       |
+
+### handleCloseSettings() の条件分岐
+
+```typescript
+async function handleCloseSettings() {
+  // リポ変更またはインポートがあった場合のみPull実行
+  if (repoChangedInSettings || importOccurredInSettings) {
+    // Pull/Push/アーカイブロード中は新Pullを発行しない
+    // （resetForRepoSwitchで既にデータクリア済み）
+    if (!$isPulling && !$isPushing && !isArchiveLoading) {
+      await pullFromGitHub(false)
+    }
+  }
+  repoChangedInSettings = false
+  importOccurredInSettings = false
+}
+```
+
+### リポ切替フロー
+
+```mermaid
+flowchart TD
+    Start[設定画面でrepoName変更] --> Detect[handleSettingsChange<br/>repoName変更を検知]
+    Detect --> Flag[repoChangedInSettings = true]
+    Flag --> Lock[isPullCompleted = false<br/>isFirstPriorityFetched = false]
+    Lock --> Reset[resetForRepoSwitch<br/>全リポ固有状態をリセット]
+    Reset --> Close{設定画面を閉じる}
+    Close --> Check{Pull/Push中?}
+    Check -->|Yes| Done1[リセット済み状態で閉じる<br/>次回操作時にPull]
+    Check -->|No| Pull[pullFromGitHub<br/>新リポからPull]
+    Pull --> Done2[新リポのデータで表示]
+```
 
 ---
 
@@ -413,4 +486,5 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 - **データ損失**: 排他制御の強化により撲滅
 - **第一優先Pull**: 段階的ローディングで早期編集開始
 - **編集保護**: Pull中の編集内容を保持
+- **リポ切替保護**: `resetForRepoSwitch()`で全リポ固有状態を一括リセット、旧リポのデータ混入を防止
 - **不完全Pull保護**: リーフ取得失敗時はUIをロックしてデータ消失を防止
