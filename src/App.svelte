@@ -60,6 +60,7 @@
     executeStaleCheck,
     shouldAutoPull,
     setLastPushedSnapshot,
+    resetForRepoSwitch,
     // ワールドヘルパー（純粋関数）
     getNotesForWorld as _getNotesForWorld,
     getLeavesForWorld as _getLeavesForWorld,
@@ -203,6 +204,7 @@
   let isTesting = false
   let importOccurredInSettings = false
   let isClosingSettingsPull = false
+  let repoChangedInSettings = false // 設定画面でリポが変更された
   let isArchiveLoading = false // アーカイブをロード中
 
   // leafStatsStoreとmoveModalStoreへのリアクティブアクセス
@@ -3230,6 +3232,7 @@
   }
 
   function handleSettingsChange(payload: Partial<typeof $settings>) {
+    const repoChanged = payload.repoName !== undefined && payload.repoName !== $settings.repoName
     const next = { ...$settings, ...payload }
     updateSettings(next)
     if (payload.theme) {
@@ -3238,12 +3241,27 @@
     if (payload.toolName) {
       document.title = payload.toolName
     }
+    // リポジトリが変更された場合、全リポ固有状態をリセット
+    if (repoChanged) {
+      repoChangedInSettings = true
+      isPullCompleted = false
+      isFirstPriorityFetched = false
+      resetForRepoSwitch()
+    }
   }
   async function handleCloseSettings() {
-    isClosingSettingsPull = true
-    await pullFromGitHub(false)
+    // リポ変更またはインポートがあった場合のみPull実行
+    if (repoChangedInSettings || importOccurredInSettings) {
+      // Pull/Push/アーカイブロード中の場合は完了を待たずにリセット済み状態で閉じる
+      // （resetForRepoSwitchで既にデータクリア済み、次回操作時に新リポからPullされる）
+      if (!$isPulling && !$isPushing && !isArchiveLoading) {
+        isClosingSettingsPull = true
+        await pullFromGitHub(false)
+        isClosingSettingsPull = false
+      }
+    }
+    repoChangedInSettings = false
     importOccurredInSettings = false
-    isClosingSettingsPull = false
   }
 
   async function handleTestConnection() {

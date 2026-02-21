@@ -14,6 +14,7 @@ import {
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
 } from '../data/storage'
 import { scheduleLeavesSave, scheduleNotesSave } from './auto-save'
+import { archiveLeafStatsStore } from './leaf-stats'
 
 // ============================================
 // 基本ストア（Home用）
@@ -411,4 +412,34 @@ export function resetArchive(): void {
   archiveLeaves.set([])
   archiveMetadata.set({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
   isArchiveLoaded.set(false)
+}
+
+/**
+ * リポジトリ切替時の全状態リセット
+ * アーカイブ、Git参照、ダーティスナップショット、stale検出をすべてクリアする
+ */
+export function resetForRepoSwitch(): void {
+  // アーカイブデータをクリア
+  resetArchive()
+  archiveLeafStatsStore.reset()
+
+  // Pushスナップショットをクリア（旧リポのスナップショットで誤検出しないように）
+  lastPushedNotes = []
+  lastPushedLeaves = []
+  lastPushedArchiveNotes = []
+  lastPushedArchiveLeaves = []
+
+  // ダーティフラグをクリア
+  clearAllChanges()
+
+  // Git参照をクリア（旧リポのSHAで誤判定しないように）
+  lastKnownCommitSha.set(null)
+  lastPulledPushCount.set(0)
+  isStale.set(false)
+  lastPushTime.set(0)
+  lastStaleCheckTime.set(0)
+
+  // ワールドをホームに戻す（旧リポのアーカイブ表示を防止）
+  leftWorld.set('home')
+  rightWorld.set('home')
 }
