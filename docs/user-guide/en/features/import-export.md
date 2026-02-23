@@ -49,16 +49,25 @@ Import export files.
 
 ### Supported Formats
 
-| Format            | File Type                     |
-| ----------------- | ----------------------------- |
-| Agasteer format   | Exported file                 |
-| SimpleNote format | .json (or .zip containing it) |
+| Format             | File Type                                                |
+| ------------------ | -------------------------------------------------------- |
+| Agasteer format    | Exported file                                            |
+| SimpleNote format  | .json (or .zip containing it)                            |
+| Google Keep format | Google Takeout .zip, or individual .json after unzipping |
 
 ### Behavior After Import
 
-- A new note is created with leaves placed inside
-- Result summary is displayed
-- Unsupported elements (attachments, etc.) are skipped
+- A note named after the source (`SimpleNote_1`, `GoogleKeep_1`) is created with leaves placed flat inside
+- An "Import Summary" report leaf is generated as the first leaf (records what was imported and what was skipped)
+- Unsupported elements are skipped and recorded in the report
+
+### Google Keep Notes
+
+- Checklists converted to `- [ ]` / `- [x]`
+- Links (annotations) appended at end of content
+- Image attachments, colors, labels, pinned state are not supported (recorded in report)
+- HTML files and image files are not used (JSON only)
+- Notes with `isTrashed: true` are skipped
 
 ### When Same Name Exists
 
