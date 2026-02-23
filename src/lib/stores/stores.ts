@@ -14,7 +14,6 @@ import {
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
 } from '../data/storage'
 import { scheduleLeavesSave, scheduleNotesSave } from './auto-save'
-import { archiveLeafStatsStore } from './leaf-stats'
 
 // ============================================
 // 基本ストア（Home用）
@@ -421,7 +420,6 @@ export function resetArchive(): void {
 export function resetForRepoSwitch(): void {
   // アーカイブデータをクリア
   resetArchive()
-  archiveLeafStatsStore.reset()
 
   // Pushスナップショットをクリア（旧リポのスナップショットで誤検出しないように）
   lastPushedNotes = []

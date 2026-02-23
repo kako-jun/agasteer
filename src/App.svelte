@@ -3247,6 +3247,7 @@
       isPullCompleted = false
       isFirstPriorityFetched = false
       resetForRepoSwitch()
+      archiveLeafStatsStore.reset()
     }
   }
   async function handleCloseSettings() {
