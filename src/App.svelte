@@ -1863,8 +1863,13 @@
     const paneLeaves = getLeavesForPane(pane)
 
     if (view === 'home') {
-      // ルートノートを返す
-      return paneNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
+      const specialLeaves: Leaf[] = []
+      if (getWorldForPane(pane) !== 'archive') {
+        if (currentOfflineLeaf) specialLeaves.push(currentOfflineLeaf)
+        if (currentPriorityLeaf && isPullCompleted) specialLeaves.push(currentPriorityLeaf)
+      }
+      const rootNotes = paneNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
+      return [...specialLeaves, ...rootNotes]
     } else if (view === 'note' && note) {
       // サブノートとリーフを結合
       const subNotes = paneNotes
@@ -1885,7 +1890,7 @@
 
     if (items.length === 0) return
 
-    const gridColumns = nav.calculateGridColumns()
+    const gridColumns = nav.calculateGridColumns(pane)
     let newIndex = currentIndex
 
     switch (direction) {
@@ -1923,7 +1928,14 @@
 
     const item = items[index]
     if ('noteId' in item) {
-      selectLeaf(item as Leaf, pane)
+      const leaf = item as Leaf
+      if (isOfflineLeaf(leaf.id)) {
+        openOfflineView(pane)
+      } else if (isPriorityLeaf(leaf.id)) {
+        openPriorityView(pane)
+      } else {
+        selectLeaf(leaf, pane)
+      }
     } else {
       selectNote(item as Note, pane)
     }
@@ -3422,6 +3434,8 @@
       if (result.success) {
         // 全リーフ取得完了
         isPullCompleted = true
+        selectedIndexLeft = 0
+        selectedIndexRight = 0
 
         // leavesストアはonLeafで逐次更新済みなので、最終的なソートのみ
         // ただし、Pull中にユーザーが編集したリーフのcontentは保持する

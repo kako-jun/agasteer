@@ -352,7 +352,7 @@ export function navigateGrid(
   if (items.length === 0) return
 
   // グリッドのカラム数を計算（CSS Gridの設定に合わせる）
-  const gridColumns = calculateGridColumns()
+  const gridColumns = calculateGridColumns(state.focusedPane)
 
   let newIndex = currentIndex
 
@@ -387,25 +387,27 @@ export function navigateGrid(
  * グリッドのカラム数を計算
  * 実際のDOM要素の位置から正確に計算
  */
-export function calculateGridColumns(): number {
-  // .card-grid 内のカード要素を取得
-  const cards = document.querySelectorAll('.card-grid > .note-card, .card-grid > .leaf-card')
-  if (cards.length === 0) return 1 // カードがない場合は1カラム
+export function calculateGridColumns(pane?: Pane): number {
+  let selector: string
+  if (pane === 'left') {
+    selector = '.left-column .card-grid > .note-card, .left-column .card-grid > .leaf-card'
+  } else if (pane === 'right') {
+    selector = '.right-column .card-grid > .note-card, .right-column .card-grid > .leaf-card'
+  } else {
+    selector = '.card-grid > .note-card, .card-grid > .leaf-card'
+  }
+  const cards = document.querySelectorAll(selector)
+  if (cards.length === 0) return 1
+  if (cards.length === 1) return 1
 
-  if (cards.length === 1) return 1 // カードが1つしかない場合は1カラム
-
-  // 最初のカードの上端Y座標を取得
   const firstCardTop = cards[0].getBoundingClientRect().top
 
-  // 同じ行にあるカードを数える（Y座標が同じもの）
   let columnsInFirstRow = 0
   for (let i = 0; i < cards.length; i++) {
     const cardTop = cards[i].getBoundingClientRect().top
-    // 1px以内の誤差は同じ行とみなす
     if (Math.abs(cardTop - firstCardTop) < 1) {
       columnsInFirstRow++
     } else {
-      // 次の行に到達したら終了
       break
     }
   }
