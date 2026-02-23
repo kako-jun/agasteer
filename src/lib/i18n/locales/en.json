@@ -258,6 +258,7 @@
     "duplicateChoiceSkip": "Skip",
     "duplicateChoiceAdd": "Add",
     "noNestedSubNote": "Cannot create a sub-note under another sub-note.",
+    "cannotMoveNoteWithChildren": "Cannot move a note with sub-notes under another note.",
     "needInitialPull": "Operations are locked until the initial Pull completes. Please Pull from settings.",
     "archiveNote": "Archive this note?",
     "archiveLeaf": "Archive this leaf?",

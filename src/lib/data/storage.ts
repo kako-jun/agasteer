@@ -433,26 +433,16 @@ function replaceAllInStore<T extends { id: string }>(
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')
     const store = tx.objectStore(storeName)
+
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error ?? new Error('Transaction aborted'))
+
     const clearReq = store.clear()
-
-    clearReq.onerror = () => reject(clearReq.error)
     clearReq.onsuccess = () => {
-      if (items.length === 0) {
-        resolve()
-        return
+      for (const item of items) {
+        store.put(item)
       }
-
-      let remaining = items.length
-      items.forEach((item) => {
-        const putReq = store.put(item)
-        putReq.onerror = () => reject(putReq.error)
-        putReq.onsuccess = () => {
-          remaining -= 1
-          if (remaining === 0) {
-            resolve()
-          }
-        }
-      })
     }
   })
 }
@@ -479,6 +469,7 @@ export async function saveLeaves(newLeaves: Leaf[]): Promise<void> {
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, newLeaves)
   } catch (error) {
     console.error('Failed to save leaves to IndexedDB:', error)
+    throw error
   }
 }
 
@@ -506,6 +497,7 @@ export async function saveNotes(notes: Note[]): Promise<void> {
     await replaceAllInStore<Note>(db, NOTES_STORE, notes)
   } catch (error) {
     console.error('Failed to save notes to IndexedDB:', error)
+    throw error
   }
 }
 
@@ -690,8 +682,7 @@ export async function createBackup(): Promise<IndexedDBBackup> {
     }
   } catch (error) {
     console.error('Failed to create IndexedDB backup:', error)
-    // バックアップ作成失敗時は空のバックアップを返す
-    return { notes: [], leaves: [], timestamp: Date.now() }
+    throw error
   }
 }
 

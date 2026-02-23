@@ -123,11 +123,31 @@ export function deleteNote(options: DeleteNoteOptions): void {
 
 /**
  * ノート名を更新
+ * @returns true if renamed, false if blocked by duplicate
  */
-export function updateNoteName(noteId: string, newName: string): void {
+export function updateNoteName(
+  noteId: string,
+  newName: string,
+  translate?: (key: string) => string
+): boolean {
   const allNotes = get(notes)
+  const target = allNotes.find((n) => n.id === noteId)
+  if (!target) return false
+
+  const parentId = target.parentId || null
+  const hasDuplicate = allNotes.some(
+    (n) => n.id !== noteId && (n.parentId || null) === parentId && n.name.trim() === newName.trim()
+  )
+  if (hasDuplicate) {
+    if (translate) {
+      showAlert(translate('modal.duplicateNoteSameLevel'))
+    }
+    return false
+  }
+
   const updatedNotes = allNotes.map((f) => (f.id === noteId ? { ...f, name: newName } : f))
   updateNotes(updatedNotes)
+  return true
 }
 
 /**
@@ -188,6 +208,13 @@ export function moveNoteTo(
   if (nextParent) {
     const dest = allNotes.find((n) => n.id === nextParent)
     if (!dest || dest.parentId) {
+      return { success: false }
+    }
+
+    // 移動元にサブノートがある場合、3階層になるのでブロック
+    const hasChildren = allNotes.some((n) => n.parentId === note.id)
+    if (hasChildren) {
+      showAlert(translate('modal.cannotMoveNoteWithChildren'))
       return { success: false }
     }
   }

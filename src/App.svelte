@@ -1830,6 +1830,11 @@
     const tempIndex = selectedIndexLeft
     selectedIndexLeft = selectedIndexRight
     selectedIndexRight = tempIndex
+
+    // ワールドも入れ替え
+    const tempWorld = $leftWorld
+    leftWorld.set($rightWorld)
+    rightWorld.set(tempWorld)
   }
 
   function copyLeftToRight() {
@@ -1838,6 +1843,7 @@
     $rightLeaf = $leftLeaf
     $rightView = $leftView
     selectedIndexRight = selectedIndexLeft
+    rightWorld.set($leftWorld)
   }
 
   function copyRightToLeft() {
@@ -1846,6 +1852,7 @@
     $leftLeaf = $rightLeaf
     $leftView = $rightView
     selectedIndexLeft = selectedIndexRight
+    leftWorld.set($rightWorld)
   }
 
   // キーボードナビゲーション用ヘルパー（ペインのワールドに対応）

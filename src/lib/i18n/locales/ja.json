@@ -259,6 +259,7 @@
     "duplicateChoiceSkip": "スキップ",
     "duplicateChoiceAdd": "追加",
     "noNestedSubNote": "サブノートの下にはサブノートを作成できません。",
+    "cannotMoveNoteWithChildren": "サブノートを持つノートは別のノート配下に移動できません。",
     "needInitialPull": "初回Pullが完了するまで操作できません。設定からPullしてください。",
     "archiveNote": "このノートをアーカイブしますか？",
     "archiveLeaf": "このリーフをアーカイブしますか？",

@@ -234,7 +234,20 @@ async function fetchGitHubContents(
  * UTF-8テキストをBase64エンコード
  */
 function encodeContent(content: string): string {
-  return btoa(unescape(encodeURIComponent(content)))
+  const encoder = new TextEncoder()
+  const bytes = encoder.encode(content)
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+  return btoa(binary)
+}
+
+function decodeBase64ToString(base64: string): string {
+  const clean = base64.replace(/\n/g, '')
+  const binary = atob(clean)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new TextDecoder().decode(bytes)
 }
 
 /**
@@ -409,15 +422,6 @@ export async function pushAllWithTreeAPI(
   const archiveNotes = isOptionsArg ? leavesOrOptions.archiveNotes : undefined
   const archiveMetadata = isOptionsArg ? leavesOrOptions.archiveMetadata : undefined
   const isArchiveLoaded = isOptionsArg ? leavesOrOptions.isArchiveLoaded : false
-  const decodeBase64ToString = (base64: string): string => {
-    const clean = base64.replace(/\n/g, '')
-    const binary = atob(clean)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i)
-    }
-    return new TextDecoder().decode(bytes)
-  }
 
   const stableStringify = (value: any): string => {
     if (value === null || typeof value !== 'object') {
@@ -574,6 +578,11 @@ export async function pushAllWithTreeAPI(
       }
       if (existingTreeRes.ok) {
         const existingTreeData = await existingTreeRes.json()
+        if (existingTreeData.truncated) {
+          throw new Error(
+            'Repository tree is too large (truncated). Push aborted to prevent data loss.'
+          )
+        }
         const entries: { path: string; mode: string; type: string; sha: string }[] =
           existingTreeData.tree || []
         for (const entry of entries) {
@@ -1123,21 +1132,29 @@ export async function pullFromGitHub(
     }
 
     const treeData = await treeRes.json()
-    const entries: { path: string; type: string }[] = treeData.tree || []
+    if (treeData.truncated) {
+      return {
+        success: false,
+        message: 'github.treeTruncated',
+        notes: [],
+        leaves: [],
+        metadata: defaultMetadata,
+      }
+    }
+    const entries: { path: string; type: string; sha: string }[] = treeData.tree || []
 
-    // metadata.jsonを取得してパース
+    // metadata.jsonをtreeから取得してBlob APIでパース（同一commitから読み取り）
     let metadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
-    try {
-      const metadataRes = await fetchGitHubContents(
-        NOTES_METADATA_PATH,
-        settings.repoName,
-        settings.token
-      )
-      if (metadataRes.ok) {
-        const metadataData = await metadataRes.json()
-        if (metadataData.content) {
-          const base64 = metadataData.content.replace(/\n/g, '')
-          const jsonText = decodeURIComponent(escape(atob(base64)))
+    const metadataEntry = entries.find((e) => e.type === 'blob' && e.path === NOTES_METADATA_PATH)
+    if (metadataEntry) {
+      try {
+        const blobRes = await fetch(
+          `https://api.github.com/repos/${settings.repoName}/git/blobs/${metadataEntry.sha}`,
+          { headers }
+        )
+        if (blobRes.ok) {
+          const blobData = await blobRes.json()
+          const jsonText = decodeBase64ToString(blobData.content)
           const parsed = JSON.parse(jsonText)
           metadata = {
             version: parsed.version || 1,
@@ -1146,9 +1163,9 @@ export async function pullFromGitHub(
             pushCount: parsed.pushCount || 0,
           }
         }
+      } catch (e) {
+        console.warn(`${NOTES_METADATA_PATH} not found or invalid, using defaults`)
       }
-    } catch (e) {
-      console.warn(`${NOTES_METADATA_PATH} not found or invalid, using defaults`)
     }
 
     const noteMap = new Map<string, Note>()
@@ -1461,8 +1478,7 @@ export async function fetchRemotePushCount(settings: Settings): Promise<FetchPus
     if (metadataRes.ok) {
       const metadataData = await metadataRes.json()
       if (metadataData.content) {
-        const base64 = metadataData.content.replace(/\n/g, '')
-        const jsonText = decodeURIComponent(escape(atob(base64)))
+        const jsonText = decodeBase64ToString(metadataData.content)
         const parsed = JSON.parse(jsonText)
         return { status: 'success', pushCount: parsed.pushCount || 0 }
       }
@@ -1671,7 +1687,16 @@ export async function pullArchive(
     }
 
     const treeData = await treeRes.json()
-    const entries: { path: string; type: string }[] = treeData.tree || []
+    if (treeData.truncated) {
+      return {
+        success: false,
+        message: 'github.treeTruncated',
+        notes: [],
+        leaves: [],
+        metadata: defaultMetadata,
+      }
+    }
+    const entries: { path: string; type: string; sha: string }[] = treeData.tree || []
 
     // アーカイブパスのエントリがあるか確認
     const hasArchive = entries.some((e) => e.path.startsWith(`${ARCHIVE_PATH}/`))
@@ -1686,19 +1711,20 @@ export async function pullArchive(
       }
     }
 
-    // アーカイブのmetadata.jsonを取得
+    // アーカイブのmetadata.jsonをtreeから取得してBlob APIでパース（同一commitから読み取り）
     let metadata: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
-    try {
-      const metadataRes = await fetchGitHubContents(
-        ARCHIVE_METADATA_PATH,
-        settings.repoName,
-        settings.token
-      )
-      if (metadataRes.ok) {
-        const metadataData = await metadataRes.json()
-        if (metadataData.content) {
-          const base64 = metadataData.content.replace(/\n/g, '')
-          const jsonText = decodeURIComponent(escape(atob(base64)))
+    const archiveMetadataEntry = entries.find(
+      (e) => e.type === 'blob' && e.path === ARCHIVE_METADATA_PATH
+    )
+    if (archiveMetadataEntry) {
+      try {
+        const blobRes = await fetch(
+          `https://api.github.com/repos/${settings.repoName}/git/blobs/${archiveMetadataEntry.sha}`,
+          { headers }
+        )
+        if (blobRes.ok) {
+          const blobData = await blobRes.json()
+          const jsonText = decodeBase64ToString(blobData.content)
           const parsed = JSON.parse(jsonText)
           metadata = {
             version: parsed.version || 1,
@@ -1707,9 +1733,9 @@ export async function pullArchive(
             pushCount: parsed.pushCount || 0,
           }
         }
+      } catch (e) {
+        console.warn(`${ARCHIVE_METADATA_PATH} not found or invalid, using defaults`)
       }
-    } catch (e) {
-      console.warn(`${ARCHIVE_METADATA_PATH} not found or invalid, using defaults`)
     }
 
     const noteMap = new Map<string, Note>()

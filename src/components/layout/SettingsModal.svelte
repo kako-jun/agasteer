@@ -26,7 +26,7 @@
   }
 
   function handleOverlayKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+    if (e.key === 'Escape') {
       e.preventDefault()
       onClose()
     }

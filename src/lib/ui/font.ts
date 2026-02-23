@@ -73,7 +73,7 @@ export async function applyCustomFont(font: CustomFont): Promise<void> {
   style.textContent = `
     @font-face {
       font-family: '${CUSTOM_FONT_FAMILY}';
-      src: url(${url}) format('truetype');
+      src: url("${url}") format('truetype');
       font-weight: normal;
       font-style: normal;
     }
@@ -170,7 +170,7 @@ function applySystemMonoFont(font: CustomFont): void {
   style.textContent = `
     @font-face {
       font-family: '${SYSTEM_MONO_FONT_FAMILY}';
-      src: url(${url}) format('truetype');
+      src: url("${url}") format('truetype');
       font-weight: normal;
       font-style: normal;
     }

@@ -448,13 +448,11 @@
     if (darkThemes.includes(theme)) {
       extensions.push(createEditorDarkTheme())
       if (linedMode) {
-        if (lineNumbers) extensions.push(lineNumbers())
         extensions.push(createLinedTheme(true))
       }
     } else {
       extensions.push(createEditorLightTheme())
       if (linedMode) {
-        if (lineNumbers) extensions.push(lineNumbers())
         extensions.push(createLinedTheme(false))
       }
     }
@@ -580,6 +578,10 @@
     }
     if (editorView) {
       editorView.destroy()
+    }
+    // Vimコールバックのクリーンアップ
+    if (window.editorCallbacks) {
+      delete window.editorCallbacks[pane]
     }
   })
 </script>

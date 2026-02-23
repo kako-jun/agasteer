@@ -52,7 +52,7 @@ export function createLeaf(options: CreateLeafOptions): Leaf | null {
   const existingTitles = noteLeaves.map((l) => l.title)
 
   // タイトルが指定されている場合、重複チェック
-  if (title && existingTitles.includes(title)) {
+  if (title && existingTitles.some((t) => t.trim() === title.trim())) {
     showAlert(translate('modal.duplicateLeafSameNote'))
     return null
   }

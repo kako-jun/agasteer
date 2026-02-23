@@ -62,11 +62,12 @@ function createLeafStatsStore() {
     addLeaf(leafId: string, content: string) {
       update((state) => {
         const chars = computeLeafCharCount(content)
-        state.leafCharCounts.set(leafId, chars)
+        const newMap = new Map(state.leafCharCounts)
+        newMap.set(leafId, chars)
         return {
-          ...state,
           totalLeafCount: state.totalLeafCount + 1,
           totalLeafChars: state.totalLeafChars + chars,
+          leafCharCounts: newMap,
         }
       })
     },
@@ -78,11 +79,12 @@ function createLeafStatsStore() {
       update((state) => {
         const chars =
           state.leafCharCounts.get(leafId) ?? (content ? computeLeafCharCount(content) : 0)
-        state.leafCharCounts.delete(leafId)
+        const newMap = new Map(state.leafCharCounts)
+        newMap.delete(leafId)
         return {
-          ...state,
           totalLeafCount: Math.max(0, state.totalLeafCount - 1),
           totalLeafChars: Math.max(0, state.totalLeafChars - chars),
+          leafCharCounts: newMap,
         }
       })
     },
@@ -95,10 +97,12 @@ function createLeafStatsStore() {
         const prevChars =
           state.leafCharCounts.get(leafId) ?? (prevContent ? computeLeafCharCount(prevContent) : 0)
         const nextChars = computeLeafCharCount(newContent)
-        state.leafCharCounts.set(leafId, nextChars)
+        const newMap = new Map(state.leafCharCounts)
+        newMap.set(leafId, nextChars)
         return {
-          ...state,
+          totalLeafCount: state.totalLeafCount,
           totalLeafChars: state.totalLeafChars + (nextChars - prevChars),
+          leafCharCounts: newMap,
         }
       })
     },

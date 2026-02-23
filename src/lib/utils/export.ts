@@ -105,11 +105,25 @@ export async function buildNotesZip(
 
     // リーフを追加
     const sortedLeaves = [...leaves].sort((a, b) => a.order - b.order)
+    const usedPaths = new Set<string>()
     for (const leaf of sortedLeaves) {
       const note = noteMap.get(leaf.noteId) || null
       const folderPath = note ? buildFolderPath(note) : ''
-      const path = folderPath ? `${folderPath}/${leaf.title}.md` : `${leaf.title}.md`
-      notesFolder.file(path, leaf.content)
+      const safeTitle = leaf.title.replace(/[/\\:*?"<>|]/g, '_')
+      let basePath = folderPath ? `${folderPath}/${safeTitle}.md` : `${safeTitle}.md`
+      if (usedPaths.has(basePath)) {
+        let suffix = 2
+        let candidate: string
+        do {
+          candidate = folderPath
+            ? `${folderPath}/${safeTitle}_${suffix}.md`
+            : `${safeTitle}_${suffix}.md`
+          suffix++
+        } while (usedPaths.has(candidate))
+        basePath = candidate
+      }
+      usedPaths.add(basePath)
+      notesFolder.file(basePath, leaf.content)
     }
 
     // metadata.json
@@ -128,10 +142,24 @@ export async function buildNotesZip(
       metadataToWrite.notes[folderPath] = meta as Metadata['notes'][string]
     }
 
-    for (const leaf of leaves) {
+    const usedMetaPaths = new Set<string>()
+    for (const leaf of sortedLeaves) {
       const note = noteMap.get(leaf.noteId) || null
       const folderPath = note ? buildFolderPath(note) : ''
-      const relativePath = folderPath ? `${folderPath}/${leaf.title}.md` : `${leaf.title}.md`
+      const safeTitle = leaf.title.replace(/[/\\:*?"<>|]/g, '_')
+      let relativePath = folderPath ? `${folderPath}/${safeTitle}.md` : `${safeTitle}.md`
+      if (usedMetaPaths.has(relativePath)) {
+        let suffix = 2
+        let candidate: string
+        do {
+          candidate = folderPath
+            ? `${folderPath}/${safeTitle}_${suffix}.md`
+            : `${safeTitle}_${suffix}.md`
+          suffix++
+        } while (usedMetaPaths.has(candidate))
+        relativePath = candidate
+      }
+      usedMetaPaths.add(relativePath)
       const meta: Record<string, unknown> = {
         id: leaf.id,
         updatedAt: leaf.updatedAt,
@@ -175,10 +203,24 @@ export async function buildNotesZip(
 
       // アーカイブリーフを追加
       const sortedArchiveLeaves = [...archiveLeaves].sort((a, b) => a.order - b.order)
+      const usedArchivePaths = new Set<string>()
       for (const leaf of sortedArchiveLeaves) {
         const note = archiveNoteMap.get(leaf.noteId) || null
         const folderPath = note ? buildArchiveFolderPath(note) : ''
-        const path = folderPath ? `${folderPath}/${leaf.title}.md` : `${leaf.title}.md`
+        const safeTitle = leaf.title.replace(/[/\\:*?"<>|]/g, '_')
+        let path = folderPath ? `${folderPath}/${safeTitle}.md` : `${safeTitle}.md`
+        if (usedArchivePaths.has(path)) {
+          let suffix = 2
+          let candidate: string
+          do {
+            candidate = folderPath
+              ? `${folderPath}/${safeTitle}_${suffix}.md`
+              : `${safeTitle}_${suffix}.md`
+            suffix++
+          } while (usedArchivePaths.has(candidate))
+          path = candidate
+        }
+        usedArchivePaths.add(path)
         archiveFolder.file(path, leaf.content)
       }
 
@@ -198,10 +240,24 @@ export async function buildNotesZip(
         archiveMetadataToWrite.notes[folderPath] = meta as Metadata['notes'][string]
       }
 
-      for (const leaf of archiveLeaves) {
+      const usedArchiveMetaPaths = new Set<string>()
+      for (const leaf of sortedArchiveLeaves) {
         const note = archiveNoteMap.get(leaf.noteId) || null
         const folderPath = note ? buildArchiveFolderPath(note) : ''
-        const relativePath = folderPath ? `${folderPath}/${leaf.title}.md` : `${leaf.title}.md`
+        const safeTitle = leaf.title.replace(/[/\\:*?"<>|]/g, '_')
+        let relativePath = folderPath ? `${folderPath}/${safeTitle}.md` : `${safeTitle}.md`
+        if (usedArchiveMetaPaths.has(relativePath)) {
+          let suffix = 2
+          let candidate: string
+          do {
+            candidate = folderPath
+              ? `${folderPath}/${safeTitle}_${suffix}.md`
+              : `${safeTitle}_${suffix}.md`
+            suffix++
+          } while (usedArchiveMetaPaths.has(candidate))
+          relativePath = candidate
+        }
+        usedArchiveMetaPaths.add(relativePath)
         const meta: Record<string, unknown> = {
           id: leaf.id,
           updatedAt: leaf.updatedAt,

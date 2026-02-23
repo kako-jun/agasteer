@@ -15,7 +15,11 @@
   let DOMPurify: any
 
   // マークダウンをHTMLに変換してサニタイズ
-  $: htmlContent = isLoading ? '' : DOMPurify.sanitize(marked(leaf.content) as string)
+  $: htmlContent = isLoading
+    ? ''
+    : DOMPurify.sanitize(marked(leaf.content) as string, {
+        ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|#):/i,
+      })
 
   // marked/DOMPurifyを動的ロード
   async function loadMarkdownTools() {
