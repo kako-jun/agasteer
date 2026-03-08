@@ -2785,17 +2785,21 @@
       await flushPendingSaves()
 
       // Stale編集かどうかチェック（共通関数で時刻も更新）
-      const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
+      // 直前のPushから30秒以内はスキップ（APIキャッシュによる誤判定を防止）
+      const timeSinceLastPush = Date.now() - get(lastPushTime)
+      if (timeSinceLastPush > 30_000) {
+        const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
 
-      if (staleResult.status === 'stale') {
-        // リモートに新しい変更あり → 確認ダイアログを表示
-        console.log(
-          `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
-        )
-        const confirmed = await confirmAsync($_('modal.staleEdit'))
-        if (!confirmed) return
+        if (staleResult.status === 'stale') {
+          // リモートに新しい変更あり → 確認ダイアログを表示
+          console.log(
+            `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
+          )
+          const confirmed = await confirmAsync($_('modal.staleEdit'))
+          if (!confirmed) return
+        }
+        // check_failedやup_to_dateの場合はそのまま続行
       }
-      // check_failedやup_to_dateの場合はそのまま続行
 
       // Push開始を通知
       showPushToast($_('loading.pushing'))

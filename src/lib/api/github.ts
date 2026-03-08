@@ -1417,6 +1417,7 @@ export async function fetchRemoteHeadSha(settings: Settings): Promise<FetchHeadS
   try {
     const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
       headers: { Authorization: `Bearer ${settings.token}` },
+      cache: 'no-store',
     })
     if (!repoRes.ok) {
       if (repoRes.status === 401 || repoRes.status === 403) return { status: 'auth_error' }
@@ -1427,7 +1428,10 @@ export async function fetchRemoteHeadSha(settings: Settings): Promise<FetchHeadS
 
     const refRes = await fetch(
       `https://api.github.com/repos/${settings.repoName}/git/ref/heads/${branch}`,
-      { headers: { Authorization: `Bearer ${settings.token}` } }
+      {
+        headers: { Authorization: `Bearer ${settings.token}` },
+        cache: 'no-store',
+      }
     )
     if (refRes.status === 404 || refRes.status === 409) return { status: 'empty_repository' }
     if (refRes.status === 401 || refRes.status === 403) return { status: 'auth_error' }
