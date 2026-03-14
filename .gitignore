@@ -33,3 +33,4 @@ dist-ssr
 .serena/
 .claude/settings.local.json
 .mcp.json
+tsconfig.tsbuildinfo
