@@ -14,6 +14,8 @@ PCとスマホなど複数デバイスで同時に編集している場合、他
 最後にリモートと同期した時点のHEAD commit SHAを保持するストア。
 Pull成功後およびPush成功後に更新される。
 
+**永続化:** LocalStorage（`AppState.lastKnownCommitSha`）に保存される。ページリロードや再起動後も値が復元されるため、リロード直後のstaleチェックでも正しく判定できる。リポジトリ切替時は`null`にリセットされる。
+
 #### stale検出ロジック
 
 `fetchRemoteHeadSha()`でリモートのHEAD commit SHAを取得し、`lastKnownCommitSha`と比較します。
@@ -125,6 +127,10 @@ Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`
 1. `isStale`ストアを`true`に設定
 2. Pullボタンに赤い丸印（notification badge）を表示
 3. ユーザーがPullボタンを押すまで待機
+
+#### up_to_date時のisStale解除
+
+staleチェックが`up_to_date`を返した場合、`isStale`を`false`に戻す。これにより、一度staleと判定された後にリモート側の状態が解消された場合（例: 別デバイスで元に戻した等）や、誤判定があった場合に赤バッジが自動的に消える。`check_failed`の場合は判定不能のため現状を維持する。
 
 **設計意図:**
 

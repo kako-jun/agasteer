@@ -64,6 +64,7 @@ export interface AppState {
   tourShown: boolean
   saveGuideShown: boolean
   pwaInstallDismissedAt?: number // PWAインストールバナー却下時刻（7日間cooldown用）
+  lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
 }
 
 const defaultState: AppState = {
@@ -199,6 +200,20 @@ export function isTourShown(): boolean {
  */
 export function setTourShown(shown: boolean): void {
   updateAppState({ tourShown: shown })
+}
+
+/**
+ * lastKnownCommitShaを取得（起動時の復元用）
+ */
+export function getPersistedCommitSha(): string | null {
+  return loadStorageData().state.lastKnownCommitSha ?? null
+}
+
+/**
+ * lastKnownCommitShaを保存
+ */
+export function setPersistedCommitSha(sha: string | null): void {
+  updateAppState({ lastKnownCommitSha: sha })
 }
 
 /**

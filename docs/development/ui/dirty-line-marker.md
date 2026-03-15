@@ -48,13 +48,13 @@ Agasteerには既にリーフ単位のダーティチェック機能がある：
 ### 基準コンテンツの管理
 
 ```typescript
-// エディタ初期化時に1回だけ取得してキャッシュ
-const baseContent = getLastPushedContent(leafId)
+// 基準コンテンツを動的に取得する関数（Push後の更新を反映）
+const getBaseContent = () => getLastPushedContent(leafId)
 ```
 
 - `lastPushedLeaves` または `lastPushedArchiveLeaves` から検索
 - 見つからなければ `null`（新規リーフ = 全行がダーティ）
-- **毎回取得せず、初期化時に1回だけ取得**
+- **毎回動的に取得**（Push成功後にスナップショットが更新されるため、キャッシュすると古い基準で比較してしまう）
 
 ### 行単位差分の計算
 
@@ -69,7 +69,10 @@ const baseContent = getLastPushedContent(leafId)
 └──────────────┘      └──────────────┘      └─────────────────┘
 ```
 
-**アルゴリズム**: 単純な行番号ベースの比較（O(n)）
+**アルゴリズム**: LCS（Longest Common Subsequence）ベースの差分検出（O(n×m)）
+
+基準と現在の行配列でLCSを計算し、LCSに含まれない行をダーティとしてマークする。
+単純な行番号比較では行の挿入/削除で後続行が全てダーティになるが、LCSなら順序を保持した共通部分を正しく検出できる。
 
 ```typescript
 export function computeDirtyLines(baseContent: string | null, currentContent: string): Set<number> {
@@ -77,10 +80,11 @@ export function computeDirtyLines(baseContent: string | null, currentContent: st
   if (baseContent === null) {
     // 全行を追加
   }
-  // 行番号ベースで比較
   const baseLines = baseContent.split('\n')
   const currentLines = currentContent.split('\n')
-  // 各行を比較してダーティ行を検出
+  // LCSを計算し、LCSに含まれない行をダーティとしてマーク
+  const lcsIndices = computeLCS(baseLines, currentLines)
+  // lcsIndicesに含まれない行 → ダーティ
 }
 ```
 
@@ -115,14 +119,14 @@ function updateDirtyLines(view) {
 }
 ```
 
-#### 3. 基準コンテンツのキャッシュ
+#### 3. 基準コンテンツの動的取得
 
 ```typescript
-// 初期化時に1回だけ取得
-const baseContent = getLastPushedContent(leafId)
+// 基準コンテンツを動的に取得する関数を渡す
+const getBaseContent = () => getLastPushedContent(leafId)
 
-// 以降は保持した値を使用（毎回検索しない）
-const dirtyLines = computeDirtyLines(baseContent, currentContent)
+// 毎回最新の基準を取得して比較（Push後の更新を即座に反映）
+const dirtyLines = computeDirtyLines(getBaseContent(), currentContent)
 ```
 
 ### CodeMirrorガターマーカー
@@ -146,6 +150,11 @@ const dirtyLineGutter = gutter({
     const lineNo = view.state.doc.lineAt(line.from).number
     const dirtyLines = view.state.field(dirtyLinesField)
     return dirtyLines.has(lineNo) ? marker : null
+  },
+  // StateFieldが変更されたらガターを再描画する
+  // これがないとPush後にダーティ線が即座に消えない
+  lineMarkerChange(update) {
+    return update.transactions.some((tr) => tr.effects.some((e) => e.is(setDirtyLines)))
   },
 })
 ```
@@ -216,15 +225,15 @@ CSS変数 `--dirty-line` を使用：
 ### Phase 3: 最適化 [完了]
 
 - [x] デバウンス処理（200ms）
-- [x] 基準コンテンツのキャッシュ（初期化時に1回取得）
+- [x] 基準コンテンツの動的取得（Push後の更新を即座に反映）
 - [x] `dirtyLeafIds` との連携（ダーティでなければスキップ）
+- [x] `lineMarkerChange` によるガター再描画（Push後に即座にマーカー消去）
 - [x] クリーンアップ処理（タイマー解除）
 
 ### 今後の拡張（未実装）
 
 - [ ] 「変更を破棄」機能（行単位でのリバート）
 - [ ] 変更行へのジャンプ機能
-- [ ] LCSアルゴリズムによる高精度な差分検出（行の挿入/削除対応）
 
 ## 参考リンク
 

@@ -751,6 +751,8 @@
             const savedLeaves = await loadLeaves()
             notes.set(savedNotes)
             leaves.set(savedLeaves)
+            // IndexedDBのデータをベースラインとして記録（dirty誤検出を防止）
+            setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
             // リーフのisDirtyでは検出できない構造変更があった場合、isStructureDirtyを復元
             if (wasDirty && !get(isDirty)) {
               isStructureDirty.set(true)
@@ -841,6 +843,8 @@
           const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
           if (staleResult.status === 'stale') {
             isStale.set(true)
+          } else if (staleResult.status === 'up_to_date') {
+            isStale.set(false)
           }
         }
         lastVisibleTime = now

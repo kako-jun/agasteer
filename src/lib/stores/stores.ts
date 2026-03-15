@@ -12,6 +12,8 @@ import {
   saveSettings,
   setPersistedDirtyFlag,
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
+  getPersistedCommitSha,
+  setPersistedCommitSha,
 } from '../data/storage'
 import { scheduleLeavesSave, scheduleNotesSave } from './auto-save'
 
@@ -309,7 +311,11 @@ export function clearAllChanges(): void {
 export const lastPulledPushCount = writable<number>(0)
 
 // 最後に同期した時点のリモートHEAD commit SHA（stale検出用）
-export const lastKnownCommitSha = writable<string | null>(null)
+// localStorageから復元し、変更時に永続化する
+export const lastKnownCommitSha = writable<string | null>(getPersistedCommitSha())
+lastKnownCommitSha.subscribe((sha) => {
+  setPersistedCommitSha(sha)
+})
 
 // stale状態（リモートに新しい変更がある）- Pullボタンに赤丸表示用
 export const isStale = writable<boolean>(false)

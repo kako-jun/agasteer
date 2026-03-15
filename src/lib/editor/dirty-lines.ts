@@ -140,6 +140,10 @@ export function createDirtyLineExtension(
       const dirtyLines = view.state.field(dirtyLinesField)
       return dirtyLines.has(lineNo) ? marker : null
     },
+    // StateFieldが変更されたらガターを再描画する
+    lineMarkerChange(update) {
+      return update.transactions.some((tr) => tr.effects.some((e) => e.is(setDirtyLines)))
+    },
   })
 
   // デバウンス用タイマー

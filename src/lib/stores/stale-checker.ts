@@ -83,8 +83,11 @@ async function checkIfNeeded(): Promise<void> {
         // クリーン → 自動Pullをトリガー
         shouldAutoPull.set(true)
       }
+    } else if (result.status === 'up_to_date') {
+      // リモートに変更なし → stale状態を解除
+      isStale.set(false)
     }
-    // up_to_date や check_failed の場合は何もしない（エラー通知もしない）
+    // check_failed の場合は現状を維持（エラー通知もしない）
   } catch {
     // ネットワークエラー等は無視（executeStaleCheck内で時刻は更新済み）
   }
