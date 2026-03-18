@@ -13,6 +13,7 @@ import type {
   Locale,
 } from '../types'
 import { getLocaleFromNavigator } from 'svelte-i18n'
+import { encryptToken, decryptToken, isEncryptedToken, obfuscateToken } from '../utils/crypto'
 
 /**
  * ストレージエラークラス
@@ -140,22 +141,65 @@ function normalizeTheme(theme: string): ThemeType {
 }
 
 /**
- * 設定を読み込む
+ * 設定を読み込む（非同期版）
+ * トークンが暗号化されている場合は復号する
  */
-export function loadSettings(): Settings {
+export async function loadSettings(): Promise<Settings> {
   const data = loadStorageData()
   const settings = { ...defaultSettings, ...data.settings }
   settings.theme = normalizeTheme(settings.theme)
+
+  // 暗号化されたトークンを復号
+  if (settings.token && isEncryptedToken(settings.token)) {
+    settings.token = await decryptToken(settings.token)
+  }
+
   return settings
 }
 
 /**
  * 設定を保存
+ * トークンを暗号化してLocalStorageに保存する
+ * 暗号化は非同期のため、暗号化完了後にLocalStorageを再更新する
  */
 export function saveSettings(settings: Settings): void {
   const data = loadStorageData()
-  data.settings = settings
-  saveStorageData(data)
+  // まずトークンを仮の状態で保存（token以外の設定変更を即座に反映）
+  const settingsForStorage = { ...settings }
+
+  // トークンが平文（暗号化プレフィックスなし）の場合、非同期で暗号化
+  if (settingsForStorage.token && !isEncryptedToken(settingsForStorage.token)) {
+    // 暗号化完了までは平文で保存せず、空にしておく
+    // 暗号化が完了したら上書きする
+    const plainToken = settingsForStorage.token
+    settingsForStorage.token =
+      data.settings?.token && isEncryptedToken(data.settings.token)
+        ? data.settings.token // 既存の暗号化トークンを維持
+        : '' // 初回は空（暗号化完了で上書き）
+    data.settings = settingsForStorage
+    saveStorageData(data)
+
+    // 非同期で暗号化してから再保存
+    // NOTE: この非同期処理と他のsaveSettings呼び出しの間にレースコンディションの可能性があるが、
+    // トークン変更は低頻度のため現状は許容する
+    encryptToken(plainToken)
+      .then((encrypted) => {
+        const freshData = loadStorageData()
+        freshData.settings = { ...freshData.settings, token: encrypted }
+        saveStorageData(freshData)
+      })
+      .catch((err) => {
+        console.error('Failed to encrypt token, using obfuscation fallback:', err)
+        // 暗号化失敗時は難読化で保存（平文をlocalStorageに入れない）
+        const freshData = loadStorageData()
+        freshData.settings = { ...freshData.settings, token: obfuscateToken(plainToken) }
+        saveStorageData(freshData)
+      })
+  } else {
+    // 既に暗号化済み or トークン空 → そのまま保存
+    data.settings = settingsForStorage
+    saveStorageData(data)
+  }
 }
 
 /**

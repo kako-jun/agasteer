@@ -685,7 +685,7 @@
 
     // 非同期初期化処理を即座に実行
     ;(async () => {
-      const loadedSettings = loadSettings()
+      const loadedSettings = await loadSettings()
       settings.set(loadedSettings)
 
       // i18n初期化（翻訳読み込み完了を待機）
@@ -3318,14 +3318,32 @@
     try {
       // 未保存の変更がある場合は確認（PWA強制終了後の再起動も考慮）
       if (get(isDirty) || getPersistedDirtyFlag()) {
-        const message = isInitialStartup
-          ? $_('modal.unsavedChangesOnStartup')
-          : $_('modal.unsavedChanges')
-        const confirmed = await confirmAsync(message)
-        if (!confirmed) {
-          // キャンセル時: onCancelを呼んでからreturn
-          await onCancel?.()
-          return
+        if (isInitialStartup) {
+          // 起動時: Push first は選べない（まだPullしていないため）ので従来通り
+          const confirmed = await confirmAsync($_('modal.unsavedChangesOnStartup'))
+          if (!confirmed) {
+            await onCancel?.()
+            return
+          }
+        } else {
+          // 通常時: Push first / Pull (overwrite) / Cancel の3択
+          const choice = await choiceAsync($_('modal.unsavedChangesChoice'), [
+            { label: $_('modal.pushFirst'), value: 'push', variant: 'primary' },
+            { label: $_('modal.pullOverwrite'), value: 'pull', variant: 'secondary' },
+            { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
+          ])
+
+          if (choice === 'push') {
+            // Push first: isPullingロックを解放してPush→Pull
+            $isPulling = false
+            await pushToGitHub()
+            // Push後に再度Pull（再帰呼び出し）
+            return pullFromGitHub(false, onCancel)
+          } else if (choice === 'cancel' || choice === null) {
+            await onCancel?.()
+            return
+          }
+          // choice === 'pull' → 続行（上書き）
         }
       }
 
