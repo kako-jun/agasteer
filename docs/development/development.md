@@ -120,8 +120,8 @@ git push origin main
 ### 現在の実装
 
 1. **トークン保存**
-   - LocalStorageにクリアテキストで保存
-   - ⚠️ XSS攻撃に対して脆弱
+   - LocalStorageにAES-GCM暗号化して保存（デバイス固有鍵による難読化）
+   - `crypto.subtle` 非対応環境ではXOR難読化にフォールバック
    - 推奨: 信頼できる端末でのみ使用
 
 2. **HTTPS通信**
@@ -133,15 +133,11 @@ git push origin main
 
 ### 改善提案
 
-1. **トークンの暗号化**
-   - crypto-jsのAES暗号化を使用
-   - パスフレーズで暗号化/復号化
-
-2. **トークンの有効期限管理**
+1. **トークンの有効期限管理**
    - 設定にexpiration dateを保存
    - 期限切れ時にアラート表示
 
-3. **Content Security Policy**
+2. **Content Security Policy**
    - index.htmlのmetaタグでCSPを設定
    - `default-src 'self'`、`connect-src 'self' https://api.github.com`
 

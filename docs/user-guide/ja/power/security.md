@@ -8,7 +8,7 @@
 
 | データ       | 保存先                            |
 | ------------ | --------------------------------- |
-| GitHub Token | LocalStorage（平文）              |
+| GitHub Token | LocalStorage（AES-GCM暗号化）     |
 | ノート内容   | IndexedDB + GitHub（HTTPS暗号化） |
 | 設定情報     | LocalStorage                      |
 

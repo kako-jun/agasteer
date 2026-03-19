@@ -8,7 +8,7 @@ Data storage locations and security considerations.
 
 | Data         | Storage                              |
 | ------------ | ------------------------------------ |
-| GitHub Token | LocalStorage (plaintext)             |
+| GitHub Token | LocalStorage (AES-GCM encrypted)     |
 | Note Content | IndexedDB + GitHub (HTTPS encrypted) |
 | Settings     | LocalStorage                         |
 
