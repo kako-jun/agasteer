@@ -2955,9 +2955,9 @@
         if (existingNote) {
           // 重複がある場合は確認ダイアログを表示
           const choice = await choiceAsync($_('modal.duplicateChoiceMessage'), [
-            { label: $_('common.cancel'), value: 'cancel', variant: 'cancel' },
-            { label: $_('modal.duplicateChoiceSkip'), value: 'skip', variant: 'secondary' },
             { label: $_('modal.duplicateChoiceAdd'), value: 'add', variant: 'primary' },
+            { label: $_('modal.duplicateChoiceSkip'), value: 'skip', variant: 'secondary' },
+            { label: $_('common.cancel'), value: 'cancel', variant: 'cancel' },
           ])
 
           if (choice === 'cancel' || choice === null) {
