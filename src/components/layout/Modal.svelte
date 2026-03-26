@@ -115,18 +115,20 @@
             >{$_('common.ok')}</button
           >
         {:else if type === 'choice'}
-          {#each choiceOptions as option}
-            <button
-              class={option.variant === 'primary'
-                ? 'primary'
-                : option.variant === 'cancel'
-                  ? 'cancel'
-                  : 'secondary'}
-              on:click={() => handleChoiceSelect(option.value)}
-            >
-              {option.label}
-            </button>
-          {/each}
+          <div class="choice-buttons">
+            {#each choiceOptions as option}
+              <button
+                class={option.variant === 'primary'
+                  ? 'primary'
+                  : option.variant === 'cancel'
+                    ? 'cancel'
+                    : 'secondary'}
+                on:click={() => handleChoiceSelect(option.value)}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
         {:else}
           <button class="primary" on:click={handleConfirm}>{$_('common.ok')}</button>
         {/if}
@@ -217,6 +219,18 @@
   .modal-buttons button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .choice-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .choice-buttons button {
+    width: 100%;
+    text-align: center;
   }
 
   .prompt-input {
