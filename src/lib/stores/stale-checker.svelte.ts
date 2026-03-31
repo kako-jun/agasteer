@@ -12,7 +12,6 @@
  * - サイレント実行（UIブロックなし、通知なし）
  */
 
-import { get, writable } from 'svelte/store'
 import type { Settings } from '../types'
 import type { StaleCheckResult } from '../api/sync'
 import {
@@ -24,7 +23,7 @@ import {
   lastStaleCheckTime,
   lastKnownCommitSha,
   githubConfigured,
-} from './stores'
+} from './stores.svelte'
 import { checkStaleStatus as checkStaleStatusRaw } from '../api/sync'
 import { getPushInFlightAt, setPushInFlightAt } from '../data/storage'
 
@@ -41,7 +40,7 @@ export async function executeStaleCheck(
     return result
   } finally {
     // チェック時刻を更新（成功・失敗・エラーに関わらず必ず実行）
-    lastStaleCheckTime.set(Date.now())
+    lastStaleCheckTime.value = Date.now()
   }
 }
 
@@ -53,14 +52,30 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000 // 5分
  * 前回チェックからの経過時間を表示
  * 0 = チェック直後、1 = 次のチェック直前
  */
-export const staleCheckProgress = writable<number>(0)
+let _staleCheckProgress = $state<number>(0)
+export const staleCheckProgress = {
+  get value() {
+    return _staleCheckProgress
+  },
+  set value(v: number) {
+    _staleCheckProgress = v
+  },
+}
 
 /**
  * 自動Pullトリガー用ストア
  * stale検出かつローカルがクリーンなときにtrueになる
  * App.svelteで購読してPull処理を実行
  */
-export const shouldAutoPull = writable<boolean>(false)
+let _shouldAutoPull = $state<boolean>(false)
+export const shouldAutoPull = {
+  get value() {
+    return _shouldAutoPull
+  },
+  set value(v: boolean) {
+    _shouldAutoPull = v
+  },
+}
 
 let progressIntervalId: ReturnType<typeof setInterval> | null = null
 let isChecking = false
@@ -68,13 +83,13 @@ let isChecking = false
 /**
  * 定期チェックを実行
  * - stale検出時:
- *   - ローカルがクリーン → shouldAutoPull.set(true)（自動Pull）
- *   - ローカルがダーティ → isStale.set(true)（赤バッジ表示）
+ *   - ローカルがクリーン → shouldAutoPull.value = true（自動Pull）
+ *   - ローカルがダーティ → isStale.value = true（赤バッジ表示）
  */
 async function checkIfNeeded(): Promise<void> {
   // サイレントにstaleチェック（共通関数を使用）
   try {
-    const result = await executeStaleCheck(get(settings), get(lastKnownCommitSha))
+    const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
     if (result.status === 'stale') {
       // Push飛行中フラグがある場合、スリープでPushレスポンスが消失した可能性がある
       const pushInFlight = getPushInFlightAt()
@@ -83,20 +98,20 @@ async function checkIfNeeded(): Promise<void> {
         // Pushは成功していたとみなし、SHAのみ更新してstaleを回避
         // スナップショットとダーティは変更しない（push後の追加編集を保護）
         console.log('Periodic stale check: push-in-flight detected, updating SHA')
-        lastKnownCommitSha.set(result.remoteCommitSha)
+        lastKnownCommitSha.value = result.remoteCommitSha
         setPushInFlightAt(undefined)
-        isStale.set(false)
+        isStale.value = false
       } else {
         // フラグが期限切れの場合はクリア
         if (pushInFlight) {
           setPushInFlightAt(undefined)
         }
-        if (get(isDirty)) {
+        if (isDirty.value) {
           // ダーティ → 従来通り赤バッジ表示
-          isStale.set(true)
+          isStale.value = true
         } else {
           // クリーン → 自動Pullをトリガー
-          shouldAutoPull.set(true)
+          shouldAutoPull.value = true
         }
       }
     } else if (result.status === 'up_to_date') {
@@ -105,7 +120,7 @@ async function checkIfNeeded(): Promise<void> {
       if (getPushInFlightAt()) {
         setPushInFlightAt(undefined)
       }
-      isStale.set(false)
+      isStale.value = false
     }
     // check_failed の場合は現状を維持（エラー通知もしない）
   } catch {
@@ -118,7 +133,7 @@ async function checkIfNeeded(): Promise<void> {
  */
 function canPerformCheck(): boolean {
   // GitHub未設定
-  if (!get(githubConfigured)) {
+  if (!githubConfigured.value) {
     return false
   }
 
@@ -128,12 +143,12 @@ function canPerformCheck(): boolean {
   }
 
   // Pull/Push中
-  if (get(isPulling) || get(isPushing)) {
+  if (isPulling.value || isPushing.value) {
     return false
   }
 
   // まだ一度もチェックしていない（初回Pull前）
-  if (get(lastStaleCheckTime) === 0) {
+  if (lastStaleCheckTime.value === 0) {
     return false
   }
 
@@ -146,7 +161,7 @@ function canPerformCheck(): boolean {
 async function updateProgressAndCheck(): Promise<void> {
   // 条件が整っていなければバーを表示しない
   if (!canPerformCheck()) {
-    staleCheckProgress.set(0)
+    staleCheckProgress.value = 0
     return
   }
 
@@ -155,10 +170,10 @@ async function updateProgressAndCheck(): Promise<void> {
     return
   }
 
-  const lastCheck = get(lastStaleCheckTime)
+  const lastCheck = lastStaleCheckTime.value
   const elapsed = Date.now() - lastCheck
   const progress = Math.min(elapsed / CHECK_INTERVAL_MS, 1)
-  staleCheckProgress.set(progress)
+  staleCheckProgress.value = progress
 
   // 5分経過したらチェックを実行
   if (progress >= 1) {
@@ -168,7 +183,7 @@ async function updateProgressAndCheck(): Promise<void> {
     } finally {
       isChecking = false
       // チェック完了後、即座にバーをリセット
-      staleCheckProgress.set(0)
+      staleCheckProgress.value = 0
     }
   }
 }
@@ -193,5 +208,5 @@ export function stopStaleChecker(): void {
     clearInterval(progressIntervalId)
     progressIntervalId = null
   }
-  staleCheckProgress.set(0)
+  staleCheckProgress.value = 0
 }

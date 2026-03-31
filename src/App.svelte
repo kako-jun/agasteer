@@ -1,8 +1,7 @@
 <script lang="ts">
   import './App.css'
-  import { waitForSwCheck } from './main'
   import { onMount, tick, setContext } from 'svelte'
-  import { get } from 'svelte/store'
+
   import type { Note, Leaf, Breadcrumb, WorldType, SearchMatch } from './lib/types'
   import * as nav from './lib/navigation'
   import type { Pane } from './lib/navigation'
@@ -14,12 +13,7 @@
     rootNotes,
     githubConfigured,
     metadata,
-    isDirty,
-    isStructureDirty,
-    clearAllChanges,
-    getPersistedDirtyFlag,
     lastPulledPushCount,
-    lastKnownCommitSha,
     isStale,
     updateSettings,
     leftNote,
@@ -43,17 +37,7 @@
     isArchiveLoaded,
     leftWorld,
     rightWorld,
-    initActivityDetection,
-    setupBeforeUnloadSave,
     scheduleOfflineSave,
-    flushPendingSaves,
-    shouldAutoPush,
-    resetAutoPushTimer,
-    startStaleChecker,
-    stopStaleChecker,
-    executeStaleCheck,
-    shouldAutoPull,
-    setLastPushedSnapshot,
     setArchiveBaseline,
     resetForRepoSwitch,
     // ワールドヘルパー（純粋関数）
@@ -66,26 +50,11 @@
     getWorldForLeaf as _getWorldForLeaf,
     getDialogPositionForPane,
   } from './lib/stores'
-  import {
-    loadSettings,
-    loadNotes,
-    loadLeaves,
-    saveNotes,
-    saveLeaves,
-    saveOfflineLeaf,
-    loadOfflineLeaf,
-    shouldShowPwaInstallBanner,
-    setPwaInstallDismissedAt,
-    setPushInFlightAt,
-    getPushInFlightAt,
-    type IndexedDBBackup,
-  } from './lib/data'
+  import { saveOfflineLeaf, setPwaInstallDismissedAt } from './lib/data'
   import { applyTheme } from './lib/ui'
-  import { loadAndApplyCustomFont, loadAndApplySystemMonoFont } from './lib/ui'
-  import { loadAndApplyCustomBackgrounds } from './lib/ui'
   import { pullArchive, translateGitHubMessage } from './lib/api'
-  import type { LeafSkeleton } from './lib/api'
-  import { initI18n, _, locale } from './lib/i18n'
+  // LeafSkeleton type moved to app-state.svelte.ts
+  import { _, locale } from './lib/i18n'
 
   import {
     pushToastState,
@@ -118,14 +87,12 @@
     pushToGitHub as pushToGitHubAction,
     pullFromGitHub as pullFromGitHubAction,
     handleTestConnection as handleTestConnectionAction,
-    type GitActionContext,
   } from './lib/actions/git'
   import {
     moveNoteToWorld as moveNoteToWorldAction,
     moveLeafToWorld as moveLeafToWorldAction,
     moveLeafTo as moveLeafToAction,
     moveNoteTo as moveNoteToAction,
-    type MoveActionContext,
   } from './lib/actions/move'
   import {
     saveEditBreadcrumb as saveEditBreadcrumbAction,
@@ -137,7 +104,6 @@
     updateLeafContent as updateLeafContentAction,
     updateLeafBadge as updateLeafBadgeAction,
     updatePriorityBadge as updatePriorityBadgeAction,
-    type CrudActionContext,
   } from './lib/actions/crud'
   import {
     exportNotesAsZip as exportNotesAsZipAction,
@@ -145,7 +111,6 @@
     handleAgasteerImport as handleAgasteerImportAction,
     downloadLeafAsMarkdown as downloadLeafAsMarkdownAction,
     downloadLeafAsImage as downloadLeafAsImageAction,
-    type IoActionContext,
   } from './lib/actions/io'
   import {
     handlePaneScroll as handlePaneScrollLib,
@@ -173,9 +138,6 @@
     OFFLINE_LEAF_ID,
   } from './lib/utils'
   import {
-    // Constants
-    isPWAStandalone,
-    PWA_EXIT_GUARD_KEY,
     // World helpers
     getNotesForWorld,
     getLeavesForWorld,
@@ -190,128 +152,34 @@
     setLeavesForWorld,
     // Pane state store
     paneStateStore,
+    // Phase 2: App state & derived state
+    appState,
+    derivedState,
+    // Phase 3: App actions registry
+    registerAppActions,
+    // Phase 4: initApp
+    initApp,
   } from './lib/app-state.svelte'
 
   // ========================================
-  // Local state ($state) — Phase 2で app-state.svelte.ts に移動予定
+  // Non-reactive local variables (not $state)
   // ========================================
-  let breadcrumbs: Breadcrumb[] = $state([])
-  let breadcrumbsRight: Breadcrumb[] = $state([])
-  let editingBreadcrumb: string | null = $state(null)
-
-  let isLoadingUI = $state(false) // ガラス効果（Pull中のみ）
-  let isFirstPriorityFetched = $state(false) // 第1優先リーフの取得が完了したか
-  let isPullCompleted = $state(false) // 全リーフのPullが完了したか
-  let showSettings = $state(false)
-  let i18nReady = $state(false) // i18n初期化完了フラグ
-  let showWelcome = $state(false) // ウェルカムモーダル表示フラグ
-  let showInstallBanner = $state(false) // PWAインストールバナー表示フラグ
-  let deferredPrompt: Event | null = $state(null) // BeforeInstallPromptEvent
-  let isExportingZip = $state(false)
-  let isImporting = $state(false)
-  let isTesting = $state(false)
-  let importOccurredInSettings = false
   let isClosingSettingsPull = false
   let repoChangedInSettings = false // 設定画面でリポが変更された
-  let isArchiveLoading = $state(false) // アーカイブをロード中
 
-  // 左右ペイン用の状態
-  let isDualPane = $state(false) // 画面幅で切り替え
+  // PWA終了ガードにいるかどうかのフラグ（appState.atGuardEntry に移動済み）
 
-  // PWA終了ガードにいるかどうかのフラグ
-  let atGuardEntry = false
-
-  // キーボードナビゲーション用の状態
-  let selectedIndexLeft = $state(0) // 左ペインで選択中のアイテムインデックス
-  let selectedIndexRight = $state(0) // 右ペインで選択中のアイテムインデックス
-
-  // スクロール同期用のコンポーネント参照
-  let leftEditorView: any = $state(null)
-  let leftPreviewView: any = $state(null)
-  let rightEditorView: any = $state(null)
-  let rightPreviewView: any = $state(null)
-
-  // 未取得リーフのID（ローディング表示用）
-  let loadingLeafIds = $state(new Set<string>())
-
-  // スケルトン表示用のリーフメタ情報（Pull中のみ使用）
-  let leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
-
-  // URLルーティング
-  let isRestoringFromUrl = false
-
-  // Pull/Push中はボタンを無効化（リアクティブに追跡）
-  let canPull = $derived(!$isPulling && !$isPushing && !isArchiveLoading)
-  let canPush = $derived(!$isPulling && !$isPushing && !isArchiveLoading && isFirstPriorityFetched)
-
-  // dragStoreへのリアクティブアクセス
-  let draggedNote = $derived($dragStore.draggedNote)
-  let draggedLeaf = $derived($dragStore.draggedLeaf)
-  let dragOverNoteId = $derived($dragStore.dragOverNoteId)
-  let dragOverLeafId = $derived($dragStore.dragOverLeafId)
-
-  // leafStatsStoreとmoveModalStoreへのリアクティブアクセス
-  // 左ペインのワールドとビューに応じて統計を切り替え
-  let totalLeafCount = $derived(
-    $leftWorld === 'archive' && $leftView === 'home'
-      ? $archiveLeafStatsStore.totalLeafCount
-      : $leafStatsStore.totalLeafCount
-  )
-  let totalLeafChars = $derived(
-    $leftWorld === 'archive' && $leftView === 'home'
-      ? $archiveLeafStatsStore.totalLeafChars
-      : $leafStatsStore.totalLeafChars
-  )
-  let moveModalOpen = $derived($moveModalStore.isOpen)
-  let moveTargetLeaf = $derived($moveModalStore.targetLeaf)
-  let moveTargetNote = $derived($moveModalStore.targetNote)
-  let moveTargetPane = $derived($moveModalStore.targetPane)
-  let moveTargetWorld = $derived(_getWorldForPane(moveTargetPane, $leftWorld, $rightWorld))
-  let moveTargetNotes = $derived(_getNotesForWorld(moveTargetWorld, $notes, $archiveNotes))
-
-  // リアクティブ宣言（ワールドに応じたデータを使用）
-  let leftBreadcrumbNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
-  let leftBreadcrumbLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
-  let rightBreadcrumbNotes = $derived(_getNotesForWorld($rightWorld, $notes, $archiveNotes))
-  let rightBreadcrumbLeaves = $derived(_getLeavesForWorld($rightWorld, $leaves, $archiveLeaves))
-
-  let isGitHubConfigured = $derived($githubConfigured)
-
-  // Priorityリーフをリアクティブに生成（metadataからバッジ情報を復元）
-  let priorityBadgeMeta = $derived($metadata.leaves?.[PRIORITY_LEAF_ID])
-  let currentPriorityLeaf = $derived(
-    createPriorityLeaf($priorityItems, priorityBadgeMeta?.badgeIcon, priorityBadgeMeta?.badgeColor)
-  )
-
-  // オフラインリーフをリアクティブに生成（ストアから）
-  let currentOfflineLeaf = $derived(
-    createOfflineLeaf(
-      $offlineLeafStore.content,
-      $offlineLeafStore.badgeIcon,
-      $offlineLeafStore.badgeColor
-    )
-  )
-
-  // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
-  let currentNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
-  let currentLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
-
-  // Pushボタン無効理由を計算
+  // Pushボタン無効理由を計算（$_はsvelte-i18nストアで.svelte内でのみ使用可能）
   let pushDisabledReason = $derived(
-    $pullProgressInfo
+    derivedState.pullProgressData
       ? $_('home.leafFetched', {
-          values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
+          values: {
+            fetched: derivedState.pullProgressData.fetched,
+            total: derivedState.pullProgressData.total,
+          },
         })
       : ''
   )
-
-  // PWA終了ガード用のダミーエントリを追加
-  function pushExitGuard() {
-    if (isPWAStandalone) {
-      history.pushState({ [PWA_EXIT_GUARD_KEY]: true }, '', location.href)
-      atGuardEntry = true
-    }
-  }
 
   // ユーザーガイドを開く
   const USER_GUIDE_BASE = 'https://github.com/kako-jun/agasteer/blob/main/docs/user-guide'
@@ -324,16 +192,21 @@
   // スクロール同期関数（scroll-sync.tsに移行）
   function getScrollSyncState(): ScrollSyncState {
     return {
-      isDualPane,
-      leftLeaf: $leftLeaf,
-      rightLeaf: $rightLeaf,
-      leftView: $leftView,
-      rightView: $rightView,
+      isDualPane: appState.isDualPane,
+      leftLeaf: leftLeaf.value,
+      rightLeaf: rightLeaf.value,
+      leftView: leftView.value,
+      rightView: rightView.value,
     }
   }
 
   function getScrollSyncViews(): ScrollSyncViews {
-    return { leftEditorView, leftPreviewView, rightEditorView, rightPreviewView }
+    return {
+      leftEditorView: appState.leftEditorView,
+      leftPreviewView: appState.leftPreviewView,
+      rightEditorView: appState.rightEditorView,
+      rightPreviewView: appState.rightPreviewView,
+    }
   }
 
   function handlePaneScroll(pane: Pane, scrollTop: number, scrollHeight: number) {
@@ -349,31 +222,31 @@
   }
 
   $effect(() => {
-    breadcrumbs = buildBreadcrumbs(
-      $leftView,
-      $leftNote,
-      $leftLeaf,
-      leftBreadcrumbNotes,
+    appState.breadcrumbs = buildBreadcrumbs(
+      leftView.value,
+      leftNote.value,
+      leftLeaf.value,
+      derivedState.leftBreadcrumbNotes,
       'left',
       goHome,
       selectNote,
-      leftBreadcrumbLeaves
+      derivedState.leftBreadcrumbLeaves
     )
   })
   $effect(() => {
-    breadcrumbsRight = buildBreadcrumbs(
-      $rightView,
-      $rightNote,
-      $rightLeaf,
-      rightBreadcrumbNotes,
+    appState.breadcrumbsRight = buildBreadcrumbs(
+      rightView.value,
+      rightNote.value,
+      rightLeaf.value,
+      derivedState.rightBreadcrumbNotes,
       'right',
       goHome,
       selectNote,
-      rightBreadcrumbLeaves
+      derivedState.rightBreadcrumbLeaves
     )
   })
   $effect(() => {
-    document.title = $settings.toolName
+    document.title = settings.value.toolName
   })
 
   // ========================================
@@ -382,31 +255,31 @@
 
   // paneState をリアクティブに更新
   $effect(() => {
-    paneStateStore.set({
-      isFirstPriorityFetched,
-      isPullCompleted,
-      canPush,
+    paneStateStore.value = {
+      isFirstPriorityFetched: appState.isFirstPriorityFetched,
+      isPullCompleted: appState.isPullCompleted,
+      canPush: derivedState.canPush,
       pushDisabledReason,
-      selectedIndexLeft,
-      selectedIndexRight,
-      editingBreadcrumb,
-      dragOverNoteId,
-      dragOverLeafId,
-      loadingLeafIds,
-      leafSkeletonMap,
-      totalLeafCount,
-      totalLeafChars,
-      lastPulledPushCount: $lastPulledPushCount,
-      currentPriorityLeaf,
-      currentOfflineLeaf,
-      breadcrumbs,
-      breadcrumbsRight,
-      showWelcome,
-      isLoadingUI,
-      leftWorld: $leftWorld,
-      rightWorld: $rightWorld,
-      isArchiveLoading,
-    })
+      selectedIndexLeft: appState.selectedIndexLeft,
+      selectedIndexRight: appState.selectedIndexRight,
+      editingBreadcrumb: appState.editingBreadcrumb,
+      dragOverNoteId: derivedState.dragOverNoteId,
+      dragOverLeafId: derivedState.dragOverLeafId,
+      loadingLeafIds: appState.loadingLeafIds,
+      leafSkeletonMap: appState.leafSkeletonMap,
+      totalLeafCount: derivedState.totalLeafCount,
+      totalLeafChars: derivedState.totalLeafChars,
+      lastPulledPushCount: lastPulledPushCount.value,
+      currentPriorityLeaf: derivedState.currentPriorityLeaf,
+      currentOfflineLeaf: derivedState.currentOfflineLeaf,
+      breadcrumbs: appState.breadcrumbs,
+      breadcrumbsRight: appState.breadcrumbsRight,
+      showWelcome: appState.showWelcome,
+      isLoadingUI: appState.isLoadingUI,
+      leftWorld: leftWorld.value,
+      rightWorld: rightWorld.value,
+      isArchiveLoading: appState.isArchiveLoading,
+    }
   })
 
   // Context に設定
@@ -414,30 +287,36 @@
 
   function updateUrlFromState() {
     // 初期化完了まで、URL更新をスキップ
-    if (isRestoringFromUrl || $isPulling || !isFirstPriorityFetched) {
+    if (appState.isRestoringFromUrl || isPulling.value || !appState.isFirstPriorityFetched) {
       return
     }
 
     const params = new URLSearchParams()
 
     // 左ペインのノートデータ（ワールドに応じて切り替え）
-    const leftNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
+    const leftNotes = _getNotesForWorld(leftWorld.value, notes.value, archiveNotes.value)
     // 右ペインのノートデータ
-    const rightNotes = _getNotesForWorld($rightWorld, $notes, $archiveNotes)
+    const rightNotes = _getNotesForWorld(rightWorld.value, notes.value, archiveNotes.value)
 
     // 左ペイン（常に設定、ワールド情報を含む）
-    const leftPath = buildPath($leftNote, $leftLeaf, leftNotes, $leftView, $leftWorld)
+    const leftPath = buildPath(
+      leftNote.value,
+      leftLeaf.value,
+      leftNotes,
+      leftView.value,
+      leftWorld.value
+    )
     params.set('left', leftPath)
 
     // 右ペイン（2ペイン表示時は独立した状態、1ペイン時は左と同じ）
-    const rightPath = isDualPane
-      ? buildPath($rightNote, $rightLeaf, rightNotes, $rightView, $rightWorld)
+    const rightPath = appState.isDualPane
+      ? buildPath(rightNote.value, rightLeaf.value, rightNotes, rightView.value, rightWorld.value)
       : leftPath
     params.set('right', rightPath)
 
     const newUrl = `?${params.toString()}`
     window.history.pushState({}, '', newUrl)
-    atGuardEntry = false
+    appState.atGuardEntry = false
   }
 
   async function restoreStateFromUrl(alreadyRestoring = false) {
@@ -451,35 +330,35 @@
       const leafId = params.get('leaf')
 
       if (leafId) {
-        const leaf = $leaves.find((n) => n.id === leafId)
+        const leaf = leaves.value.find((n) => n.id === leafId)
         if (leaf) {
-          const note = $notes.find((f) => f.id === leaf.noteId)
+          const note = notes.value.find((f) => f.id === leaf.noteId)
           if (note) {
-            $leftNote = note
-            $leftLeaf = leaf
-            $leftView = 'edit'
-            leftWorld.set('home')
+            leftNote.value = note
+            leftLeaf.value = leaf
+            leftView.value = 'edit'
+            leftWorld.value = 'home'
           }
         }
       } else if (noteId) {
-        const note = $notes.find((f) => f.id === noteId)
+        const note = notes.value.find((f) => f.id === noteId)
         if (note) {
-          $leftNote = note
-          $leftLeaf = null
-          $leftView = 'note'
-          leftWorld.set('home')
+          leftNote.value = note
+          leftLeaf.value = null
+          leftView.value = 'note'
+          leftWorld.value = 'home'
         }
       } else {
-        $leftNote = null
-        $leftLeaf = null
-        $leftView = 'home'
-        leftWorld.set('home')
+        leftNote.value = null
+        leftLeaf.value = null
+        leftView.value = 'home'
+        leftWorld.value = 'home'
       }
       return
     }
 
     if (!alreadyRestoring) {
-      isRestoringFromUrl = true
+      appState.isRestoringFromUrl = true
     }
 
     // 左ペインの復元
@@ -493,445 +372,117 @@
 
     // アーカイブが必要だが未ロードの場合、先にPullする
     const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
-    if (needsArchive && !$isArchiveLoaded && $settings.token && $settings.repoName) {
-      isArchiveLoading = true
+    if (needsArchive && !isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
+      appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
-        const result = await pullArchive($settings, {
+        const result = await pullArchive(settings.value, {
           onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
         })
         if (result.success) {
-          archiveNotes.set(result.notes)
-          archiveLeaves.set(result.leaves)
-          archiveMetadata.set(result.metadata)
-          isArchiveLoaded.set(true)
+          archiveNotes.value = result.notes
+          archiveLeaves.value = result.leaves
+          archiveMetadata.value = result.metadata
+          isArchiveLoaded.value = true
           // Archive部分のベースラインのみ更新（Home側に影響しない）
           setArchiveBaseline(result.notes, result.leaves)
         }
       } catch (e) {
         console.error('Archive pull failed during URL restore:', e)
       } finally {
-        isArchiveLoading = false
+        appState.isArchiveLoading = false
       }
     }
 
     // 左ペインのデータ（アーカイブのPull後のデータを使用）
-    const leftNotesData = _getNotesForWorld(leftWorldInfo.world, $notes, $archiveNotes)
-    const leftLeavesData = _getLeavesForWorld(leftWorldInfo.world, $leaves, $archiveLeaves)
+    const leftNotesData = _getNotesForWorld(leftWorldInfo.world, notes.value, archiveNotes.value)
+    const leftLeavesData = _getLeavesForWorld(
+      leftWorldInfo.world,
+      leaves.value,
+      archiveLeaves.value
+    )
 
     const leftResolution = resolvePath(leftPath, leftNotesData, leftLeavesData)
-    leftWorld.set(leftResolution.world)
+    leftWorld.value = leftResolution.world
 
     if (leftResolution.type === 'home') {
-      $leftNote = null
-      $leftLeaf = null
-      $leftView = 'home'
+      leftNote.value = null
+      leftLeaf.value = null
+      leftView.value = 'home'
     } else if (leftResolution.type === 'note') {
-      $leftNote = leftResolution.note
-      $leftLeaf = null
-      $leftView = 'note'
+      leftNote.value = leftResolution.note
+      leftLeaf.value = null
+      leftView.value = 'note'
     } else if (leftResolution.type === 'leaf') {
-      $leftNote = leftResolution.note
-      $leftLeaf = leftResolution.leaf
-      $leftView = leftResolution.isPreview ? 'preview' : 'edit'
+      leftNote.value = leftResolution.note
+      leftLeaf.value = leftResolution.leaf
+      leftView.value = leftResolution.isPreview ? 'preview' : 'edit'
     }
 
     // 右ペインの復元（2ペイン表示時のみ）
-    if (rightPath && isDualPane) {
+    if (rightPath && appState.isDualPane) {
       // 右ペインのデータ（アーカイブのPull後のデータを使用）
-      const rightNotesData = _getNotesForWorld(rightWorldInfo.world, $notes, $archiveNotes)
-      const rightLeavesData = _getLeavesForWorld(rightWorldInfo.world, $leaves, $archiveLeaves)
+      const rightNotesData = _getNotesForWorld(
+        rightWorldInfo.world,
+        notes.value,
+        archiveNotes.value
+      )
+      const rightLeavesData = _getLeavesForWorld(
+        rightWorldInfo.world,
+        leaves.value,
+        archiveLeaves.value
+      )
 
       const rightResolution = resolvePath(rightPath, rightNotesData, rightLeavesData)
-      rightWorld.set(rightResolution.world)
+      rightWorld.value = rightResolution.world
 
       if (rightResolution.type === 'home') {
-        $rightNote = null
-        $rightLeaf = null
-        $rightView = 'home'
+        rightNote.value = null
+        rightLeaf.value = null
+        rightView.value = 'home'
       } else if (rightResolution.type === 'note') {
-        $rightNote = rightResolution.note
-        $rightLeaf = null
-        $rightView = 'note'
+        rightNote.value = rightResolution.note
+        rightLeaf.value = null
+        rightView.value = 'note'
       } else if (rightResolution.type === 'leaf') {
-        $rightNote = rightResolution.note
-        $rightLeaf = rightResolution.leaf
-        $rightView = rightResolution.isPreview ? 'preview' : 'edit'
+        rightNote.value = rightResolution.note
+        rightLeaf.value = rightResolution.leaf
+        rightView.value = rightResolution.isPreview ? 'preview' : 'edit'
       }
     } else {
       // 1ペイン表示時は右ペインを左と同じにする
-      $rightNote = $leftNote
-      $rightLeaf = $leftLeaf
-      $rightView = $leftView
-      rightWorld.set($leftWorld)
+      rightNote.value = leftNote.value
+      rightLeaf.value = leftLeaf.value
+      rightView.value = leftView.value
+      rightWorld.value = leftWorld.value
     }
 
     if (!alreadyRestoring) {
-      isRestoringFromUrl = false
+      appState.isRestoringFromUrl = false
     }
   }
 
   // ペインの状態変更をURLに反映
   $effect(() => {
-    $leftNote
-    $leftLeaf
-    $leftView
-    $leftWorld
-    $rightNote
-    $rightLeaf
-    $rightView
-    $rightWorld
+    leftNote.value
+    leftLeaf.value
+    leftView.value
+    leftWorld.value
+    rightNote.value
+    rightLeaf.value
+    rightView.value
+    rightWorld.value
     updateUrlFromState()
   })
 
-  // 初期化
+  // 初期化（ロジックは app-state.svelte.ts の initApp() に抽出済み）
   onMount(() => {
-    // 訪問者カウントをインクリメント（非表示、1日1回制限あり）
-    // 設定ページでも表示されるが、nostalgicの重複防止機構で1回のみカウント
-    fetch('https://api.nostalgic.llll-ll.com/visit?action=increment&id=agasteer-c347357a').catch(
-      () => {}
-    )
-
-    // ユーザーアクティビティ検知を初期化（自動保存のデバウンス用）
-    const cleanupActivityDetection = initActivityDetection()
-    const cleanupBeforeUnloadSave = setupBeforeUnloadSave()
-
-    // PWAインストールプロンプト（A2HS）
-    const handleBeforeInstallPrompt = (e: Event) => {
-      // スタンドアロンモード（既にインストール済み）なら表示しない
-      if (isPWAStandalone) return
-      // 7日間のcooldown期間内であれば表示しない
-      if (!shouldShowPwaInstallBanner()) return
-      // デフォルトのミニインフォバーを抑制
-      e.preventDefault()
-      // プロンプトを保存して後で使用
-      deferredPrompt = e
-      // バナーを表示
-      showInstallBanner = true
-    }
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-
-    // PWAがインストールされた時
-    const handleAppInstalled = () => {
-      showInstallBanner = false
-      deferredPrompt = null
-    }
-    window.addEventListener('appinstalled', handleAppInstalled)
-
-    // 非同期初期化処理を即座に実行
-    ;(async () => {
-      const loadedSettings = await loadSettings()
-      settings.set(loadedSettings)
-
-      // i18n初期化（翻訳読み込み完了を待機）
-      await initI18n(loadedSettings.locale)
-      i18nReady = true
-
-      applyTheme(loadedSettings.theme, loadedSettings)
-      document.title = loadedSettings.toolName
-
-      // オフラインリーフを読み込み（GitHub設定に関係なく常に利用可能）
-      const savedOfflineLeaf = await loadOfflineLeaf(OFFLINE_LEAF_ID)
-      if (savedOfflineLeaf) {
-        offlineLeafStore.set({
-          content: savedOfflineLeaf.content,
-          badgeIcon: savedOfflineLeaf.badgeIcon || '',
-          badgeColor: savedOfflineLeaf.badgeColor || '',
-          updatedAt: savedOfflineLeaf.updatedAt,
-        })
-      }
-
-      // システム等幅Webフォントを読み込む（エディタ + codeブロック用）
-      // カスタムフォントより先に読み込む（カスタムフォントが優先される）
-      loadAndApplySystemMonoFont().catch((error) => {
-        console.error('Failed to load system mono font:', error)
-      })
-
-      // カスタムフォントがあれば適用（アプリ全体に適用、システム等幅フォントより優先）
-      if (loadedSettings.hasCustomFont) {
-        loadAndApplyCustomFont().catch((error) => {
-          console.error('Failed to load custom font:', error)
-        })
-      }
-
-      // カスタム背景画像があれば適用（左右別々）
-      if (loadedSettings.hasCustomBackgroundLeft || loadedSettings.hasCustomBackgroundRight) {
-        const leftOpacity = loadedSettings.backgroundOpacityLeft ?? 0.1
-        const rightOpacity = loadedSettings.backgroundOpacityRight ?? 0.1
-        loadAndApplyCustomBackgrounds(leftOpacity, rightOpacity).catch((error) => {
-          console.error('Failed to load custom backgrounds:', error)
-        })
-      }
-
-      // 初回Pull（GitHubから最新データを取得）
-      // 重要: IndexedDBからは読み込まない
-      // Pull成功時にIndexedDBは全削除→全作成される
-      // Pull成功後、URLから状態を復元（handlePull内で実行）
-
-      // PWA更新チェック完了を待つ（更新があればリロードされる）
-      await waitForSwCheck
-
-      // GitHub設定チェック
-      const isConfigured = loadedSettings.token && loadedSettings.repoName
-      if (isConfigured) {
-        // 初回Pull実行（pullFromGitHub内でdirtyチェック、staleチェックを行う）
-        // キャンセル時はIndexedDBから読み込んで操作可能にする
-        await pullFromGitHub(true, async () => {
-          try {
-            // 保留中の変更を先にIndexedDBへ保存
-            await flushPendingSaves()
-            // localStorage に保存されているダーティフラグを保存（後で復元するため）
-            const wasDirty = getPersistedDirtyFlag()
-            const savedNotes = await loadNotes()
-            const savedLeaves = await loadLeaves()
-            notes.set(savedNotes)
-            leaves.set(savedLeaves)
-            // IndexedDBのデータをベースラインとして記録（dirty誤検出を防止）
-            setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
-            // ベースラインとローカルが同じなのでダーティをクリア
-            clearAllChanges()
-            // リーフのisDirtyでは検出できない構造変更があった場合、isStructureDirtyを復元
-            if (wasDirty) {
-              isStructureDirty.set(true)
-            }
-            isFirstPriorityFetched = true
-            restoreStateFromUrl(false)
-          } catch (error) {
-            console.error('Failed to load from IndexedDB:', error)
-            // 失敗した場合はPullを実行
-            await pullFromGitHub(true)
-          }
-        })
-      } else {
-        // 未設定の場合はウェルカムモーダルを表示
-        showWelcome = true
-        // GitHub設定が未完了の間は操作をロックしたまま
-      }
-
-      // Stale定期チェッカーを開始（5分ごと、前回Pullから5分経過後にチェック）
-      startStaleChecker()
-    })()
-
-    // アスペクト比を監視して isDualPane を更新（横 > 縦で2ペイン表示）
-    const updateDualPane = () => {
-      isDualPane = window.innerWidth > window.innerHeight
-    }
-    updateDualPane()
-
-    window.addEventListener('resize', updateDualPane)
-
-    // PWAスタンドアロンモードの場合、初期終了ガードを追加
-    pushExitGuard()
-
-    // ブラウザの戻る/進むボタンに対応（PWA終了ガード含む）
-    const handlePopState = (e: PopStateEvent) => {
-      const wasAtGuard = atGuardEntry
-      atGuardEntry = false
-
-      // PWA終了ガード検出（2パターン）
-      // ケース1: 後方のエントリからガードエントリに到達（e.stateにガードキーあり）
-      // ケース2: ガードエントリにいて、その前に戻った（e.stateにはないがフラグで検出）
-      if (isPWAStandalone && (e.state?.[PWA_EXIT_GUARD_KEY] || wasAtGuard)) {
-        // ガードを再追加（アプリ終了を防ぐ）
-        pushExitGuard()
-
-        // 未保存の変更がある場合はトーストで警告
-        if (get(isDirty)) {
-          showPushToast($_('leaf.unsaved'), 'error')
-        }
-        return
-      }
-
-      // 通常のpopstate処理
-      restoreStateFromUrl()
-    }
-    window.addEventListener('popstate', handlePopState)
-
-    // ページ離脱時の確認（未保存の変更がある場合）
-    // ブラウザ標準のダイアログを使用
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (get(isDirty)) {
-        e.preventDefault()
-        e.returnValue = '' // Chrome requires returnValue to be set
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    // グローバルキーボードナビゲーション
-    const handleKeyDown = (e: KeyboardEvent) => {
-      handleGlobalKeyDown(e)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-
-    // PWAバックグラウンド復帰時の処理
-    // 長時間バックグラウンドにいた場合は、Service Workerの状態やIndexedDBが不安定になる可能性があるためリロード
-    let lastVisibleTime = Date.now()
-    const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        const now = Date.now()
-        const elapsed = now - lastVisibleTime
-        if (elapsed > BACKGROUND_THRESHOLD_MS) {
-          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
-          // モーダルを表示し、閉じたら状態確認を実行
-          await alertAsync($_('modal.longBackground'), 'center')
-          // staleチェックを実行
-          const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
-          if (staleResult.status === 'stale') {
-            // Push飛行中フラグがある場合、スリープでPushレスポンスが消失した可能性がある
-            // （GitHub側ではPushが成功しているが、レスポンスが届かずSHAが未更新）
-            const pushInFlight = getPushInFlightAt()
-            const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000 // 1時間
-            if (pushInFlight && now - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
-              console.log('Stale detected with push-in-flight flag: resolving as interrupted push')
-              // SHAのみ更新し、スナップショットとダーティは変更しない。
-              // push後〜sleep前にユーザーが追加編集した場合、その編集がダーティとして残り、
-              // 次回pushで正しく送信される。既にpush済みの内容との差分がなければno-op pushになる。
-              lastKnownCommitSha.set(staleResult.remoteCommitSha)
-              setPushInFlightAt(undefined)
-              isStale.set(false)
-            } else {
-              // フラグが期限切れの場合はクリアして通常のstale処理
-              if (pushInFlight) {
-                setPushInFlightAt(undefined)
-              }
-              isStale.set(true)
-            }
-          } else if (staleResult.status === 'up_to_date') {
-            // PushがGitHubに届かなかった場合もここに来る（SHAが変わっていない）
-            // 飛行中フラグがあれば安全にクリア
-            if (getPushInFlightAt()) {
-              setPushInFlightAt(undefined)
-            }
-            isStale.set(false)
-          }
-        }
-        lastVisibleTime = now
-
-        // PWA復帰時のレイアウト修復（フッターが画面外に出る問題の対策）
-        requestAnimationFrame(() => {
-          // resizeイベントをトリガーしてレイアウトを再計算
-          window.dispatchEvent(new Event('resize'))
-
-          // フッターが画面内にあることを確認し、なければスクロールをリセット
-          const footers = document.querySelectorAll('.footer-fixed')
-          footers.forEach((footer) => {
-            const rect = footer.getBoundingClientRect()
-            if (rect.top > window.innerHeight || rect.bottom < 0) {
-              // フッターが画面外にある場合、親コンテナのスクロールをリセット
-              const parent = footer.closest('.left-column, .right-column')
-              if (parent) {
-                const mainPane = parent.querySelector('.main-pane')
-                if (mainPane) {
-                  mainPane.scrollTop = 0
-                }
-              }
-            }
-          })
-        })
-      } else {
-        lastVisibleTime = Date.now()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    // 自動Push機能（shouldAutoPushストアを購読して実行）
-    const unsubscribeAutoPush = shouldAutoPush.subscribe(async (should) => {
-      if (!should) return
-
-      // フラグをリセット（連続実行防止）
-      shouldAutoPush.set(false)
-
-      // バックグラウンドでは実行しない
-      if (document.visibilityState !== 'visible') return
-
-      // GitHub設定がなければスキップ
-      if (!$githubConfigured) return
-
-      // Push/Pull中またはアーカイブロード中はスキップ
-      if ($isPulling || $isPushing || isArchiveLoading) return
-
-      // 初回Pullが完了していなければスキップ
-      if (!isFirstPriorityFetched) return
-
-      console.log('Auto-push triggered')
-
-      // Staleチェックを実行（共通関数で時刻も更新）
-      const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
-
-      switch (staleResult.status) {
-        case 'stale':
-          // リモートに新しい変更あり → 確認ダイアログを表示
-          isStale.set(true)
-          console.log(
-            `Auto-push stale: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
-          )
-          // ユーザーに確認（手動Pushと同じモーダル）
-          const confirmed = await confirmAsync($_('modal.staleEdit'))
-          if (!confirmed) {
-            // キャンセル → タイマーリセットして終了
-            resetAutoPushTimer()
-            return
-          }
-          // OK → 強制Pushを続行（breakしてswitch抜ける）
-          break
-
-        case 'check_failed':
-          // チェック失敗（ネットワークエラー等）→ 静かにスキップ
-          console.warn('Stale check failed, skipping auto-push:', staleResult.reason)
-          // タイマーをリセット（リトライループ防止、次の42秒後に再試行）
-          resetAutoPushTimer()
-          return
-
-        case 'up_to_date':
-          // 最新状態 → 自動Push実行
-          break
-      }
-
-      await pushToGitHub()
+    return initApp({
+      pullFromGitHub,
+      pushToGitHub,
+      restoreStateFromUrl,
+      handleGlobalKeyDown,
     })
-
-    // 自動Pull機能（shouldAutoPullストアを購読して実行）
-    // stale-checker.tsでstale検出かつローカルがクリーンなときにtrueになる
-    const unsubscribeAutoPull = shouldAutoPull.subscribe(async (should) => {
-      if (!should) return
-
-      // フラグをリセット（連続実行防止）
-      shouldAutoPull.set(false)
-
-      // バックグラウンドでは実行しない
-      if (document.visibilityState !== 'visible') return
-
-      // GitHub設定がなければスキップ
-      if (!$githubConfigured) return
-
-      // Push/Pull中またはアーカイブロード中はスキップ
-      if ($isPulling || $isPushing || isArchiveLoading) return
-
-      // 初回Pullが完了していなければスキップ
-      if (!isFirstPriorityFetched) return
-
-      console.log('Auto-pull triggered (stale detected, local is clean)')
-
-      // Pull実行（ダーティチェックなし、すでにstale-checkerで確認済み）
-      await pullFromGitHub(false)
-    })
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState)
-      window.removeEventListener('resize', updateDualPane)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-      window.removeEventListener('appinstalled', handleAppInstalled)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      unsubscribeAutoPush()
-      unsubscribeAutoPull()
-      cleanupActivityDetection()
-      cleanupBeforeUnloadSave()
-      stopStaleChecker()
-    }
   })
 
   // ========================================
@@ -941,20 +492,20 @@
   // ナビゲーション状態を取得する関数
   function getNavState(): nav.NavigationState {
     return {
-      leftView: $leftView,
-      leftNote: $leftNote,
-      leftLeaf: $leftLeaf,
-      rightView: $rightView,
-      rightNote: $rightNote,
-      rightLeaf: $rightLeaf,
-      isDualPane,
-      focusedPane: $focusedPane,
-      selectedIndexLeft,
-      selectedIndexRight,
-      showSettings,
-      isFirstPriorityFetched,
-      leftEditorView,
-      rightEditorView,
+      leftView: leftView.value,
+      leftNote: leftNote.value,
+      leftLeaf: leftLeaf.value,
+      rightView: rightView.value,
+      rightNote: rightNote.value,
+      rightLeaf: rightLeaf.value,
+      isDualPane: appState.isDualPane,
+      focusedPane: focusedPane.value,
+      selectedIndexLeft: appState.selectedIndexLeft,
+      selectedIndexRight: appState.selectedIndexRight,
+      showSettings: appState.showSettings,
+      isFirstPriorityFetched: appState.isFirstPriorityFetched,
+      leftEditorView: appState.leftEditorView,
+      rightEditorView: appState.rightEditorView,
     }
   }
 
@@ -969,15 +520,15 @@
 
   // ナビゲーション関数実行後に状態を同期
   function syncNavState(state: nav.NavigationState) {
-    $leftView = state.leftView
-    $leftNote = state.leftNote
-    $leftLeaf = state.leftLeaf
-    $rightView = state.rightView
-    $rightNote = state.rightNote
-    $rightLeaf = state.rightLeaf
-    $focusedPane = state.focusedPane
-    selectedIndexLeft = state.selectedIndexLeft
-    selectedIndexRight = state.selectedIndexRight
+    leftView.value = state.leftView
+    leftNote.value = state.leftNote
+    leftLeaf.value = state.leftLeaf
+    rightView.value = state.rightView
+    rightNote.value = state.rightNote
+    rightLeaf.value = state.rightLeaf
+    focusedPane.value = state.focusedPane
+    appState.selectedIndexLeft = state.selectedIndexLeft
+    appState.selectedIndexRight = state.selectedIndexRight
   }
 
   // 公開ナビゲーション関数（navigation.tsのラッパー）
@@ -989,62 +540,62 @@
 
   function openPriorityView(pane: Pane) {
     // 優先段落を集約した仮想リーフを生成（ホーム直下なのでnoteはnull）
-    const items = get(priorityItems)
+    const items = priorityItems.value
     const priorityLeaf = createPriorityLeaf(items)
 
     if (pane === 'left') {
-      $leftNote = null
-      $leftLeaf = priorityLeaf
-      $leftView = 'preview' // 読み取り専用なのでプレビューで開く
+      leftNote.value = null
+      leftLeaf.value = priorityLeaf
+      leftView.value = 'preview' // 読み取り専用なのでプレビューで開く
     } else {
-      $rightNote = null
-      $rightLeaf = priorityLeaf
-      $rightView = 'preview'
+      rightNote.value = null
+      rightLeaf.value = priorityLeaf
+      rightView.value = 'preview'
     }
   }
 
   function openOfflineView(pane: Pane) {
     // オフラインリーフを開く（編集可能）
     if (pane === 'left') {
-      $leftNote = null
-      $leftLeaf = currentOfflineLeaf
-      $leftView = 'edit'
+      leftNote.value = null
+      leftLeaf.value = derivedState.currentOfflineLeaf
+      leftView.value = 'edit'
     } else {
-      $rightNote = null
-      $rightLeaf = currentOfflineLeaf
-      $rightView = 'edit'
+      rightNote.value = null
+      rightLeaf.value = derivedState.currentOfflineLeaf
+      rightView.value = 'edit'
     }
   }
 
   function updateOfflineBadge(icon: string, color: string) {
-    offlineLeafStore.update((s) => ({ ...s, badgeIcon: icon, badgeColor: color }))
+    offlineLeafStore.value = { ...offlineLeafStore.value, badgeIcon: icon, badgeColor: color }
     // バッジ変更は即座に保存
-    const leaf = createOfflineLeaf($offlineLeafStore.content, icon, color)
+    const leaf = createOfflineLeaf(offlineLeafStore.value.content, icon, color)
     saveOfflineLeaf(leaf)
   }
 
   function updateOfflineContent(content: string) {
     const now = Date.now()
-    offlineLeafStore.update((s) => ({ ...s, content, updatedAt: now }))
+    offlineLeafStore.value = { ...offlineLeafStore.value, content, updatedAt: now }
     // 共通の自動保存機構を使用（1秒後に保存）
     scheduleOfflineSave()
   }
 
   function navigateToLeafFromPriority(leafId: string, pane: Pane) {
-    const leaf = $leaves.find((l) => l.id === leafId)
+    const leaf = leaves.value.find((l) => l.id === leafId)
     if (!leaf) return
 
-    const note = $notes.find((n) => n.id === leaf.noteId)
+    const note = notes.value.find((n) => n.id === leaf.noteId)
     if (!note) return
 
     if (pane === 'left') {
-      $leftNote = note
-      $leftLeaf = leaf
-      $leftView = 'edit'
+      leftNote.value = note
+      leftLeaf.value = leaf
+      leftView.value = 'edit'
     } else {
-      $rightNote = note
-      $rightLeaf = leaf
-      $rightView = 'edit'
+      rightNote.value = note
+      rightLeaf.value = leaf
+      rightView.value = 'edit'
     }
   }
 
@@ -1060,27 +611,27 @@
     const note = paneNotes.find((n) => n.id === leaf.noteId)
     if (note) {
       if (pane === 'left') {
-        $leftNote = note
-        $leftLeaf = leaf
-        $leftView = 'edit'
+        leftNote.value = note
+        leftLeaf.value = leaf
+        leftView.value = 'edit'
       } else {
-        $rightNote = note
-        $rightLeaf = leaf
-        $rightView = 'edit'
+        rightNote.value = note
+        rightLeaf.value = leaf
+        rightView.value = 'edit'
       }
     }
   }
 
   async function handleSearchResultClick(result: SearchMatch) {
     // アーカイブからの検索結果の場合、ワールドを切り替える
-    const targetNotes = result.world === 'archive' ? $archiveNotes : $notes
-    const targetLeaves = result.world === 'archive' ? $archiveLeaves : $leaves
+    const targetNotes = result.world === 'archive' ? archiveNotes.value : notes.value
+    const targetLeaves = result.world === 'archive' ? archiveLeaves.value : leaves.value
 
     // ワールドを適切に設定
     if (result.world === 'archive') {
-      $leftWorld = 'archive'
+      leftWorld.value = 'archive'
     } else {
-      $leftWorld = 'home'
+      leftWorld.value = 'home'
     }
 
     if (result.matchType === 'note') {
@@ -1096,8 +647,8 @@
         openOfflineView('left')
         // DOM更新を待ってから行ジャンプ
         await tick()
-        if (leftEditorView && leftEditorView.scrollToLine) {
-          leftEditorView.scrollToLine(result.line)
+        if (appState.leftEditorView && appState.leftEditorView.scrollToLine) {
+          appState.leftEditorView.scrollToLine(result.line)
         }
       } else {
         const leaf = targetLeaves.find((l) => l.id === result.leafId)
@@ -1105,8 +656,8 @@
           selectLeaf(leaf, 'left')
           // DOM更新を待ってから行ジャンプ
           await tick()
-          if (leftEditorView && leftEditorView.scrollToLine) {
-            leftEditorView.scrollToLine(result.line)
+          if (appState.leftEditorView && appState.leftEditorView.scrollToLine) {
+            appState.leftEditorView.scrollToLine(result.line)
           }
         }
       }
@@ -1114,13 +665,13 @@
   }
 
   async function handlePriorityLinkClick(leafId: string, line: number, pane: Pane) {
-    const leaf = $leaves.find((l) => l.id === leafId)
+    const leaf = leaves.value.find((l) => l.id === leafId)
     if (leaf) {
       selectLeaf(leaf, pane)
       // エディタのマウント完了を待つ（tick()だけでは不十分）
       await tick()
       await new Promise((resolve) => setTimeout(resolve, 100))
-      const editorView = pane === 'left' ? leftEditorView : rightEditorView
+      const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
       if (editorView && editorView.scrollToLine) {
         editorView.scrollToLine(line)
       }
@@ -1140,37 +691,37 @@
   // ========================================
 
   async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
-    const currentPaneWorld = pane === 'left' ? $leftWorld : $rightWorld
+    const currentPaneWorld = pane === 'left' ? leftWorld.value : rightWorld.value
     if (world === currentPaneWorld) return
 
     // Pull/Push中またはアーカイブロード中はワールド切り替えを禁止
-    if ($isPulling || $isPushing || isArchiveLoading) return
+    if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
     // 先にワールドを切り替え（ペインごとに独立）
     if (pane === 'left') {
-      leftWorld.set(world)
+      leftWorld.value = world
     } else {
-      rightWorld.set(world)
+      rightWorld.value = world
     }
     // ホームに戻る
     goHome(pane)
     refreshBreadcrumbs()
 
     // アーカイブに切り替える場合、未ロード＆ロード中でなければPull（バックグラウンドで実行）
-    if (world === 'archive' && !$isArchiveLoaded && !isArchiveLoading) {
+    if (world === 'archive' && !isArchiveLoaded.value && !appState.isArchiveLoading) {
       // トークンが設定されている場合のみPullを試行
-      if ($settings.token && $settings.repoName) {
-        isArchiveLoading = true
+      if (settings.value.token && settings.value.repoName) {
+        appState.isArchiveLoading = true
         archiveLeafStatsStore.reset()
         try {
-          const result = await pullArchive($settings, {
+          const result = await pullArchive(settings.value, {
             onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
           })
           if (result.success) {
-            archiveNotes.set(result.notes)
-            archiveLeaves.set(result.leaves)
-            archiveMetadata.set(result.metadata)
-            isArchiveLoaded.set(true)
+            archiveNotes.value = result.notes
+            archiveLeaves.value = result.leaves
+            archiveMetadata.value = result.metadata
+            isArchiveLoaded.value = true
             // Archive部分のベースラインのみ更新（Home側に影響しない）
             setArchiveBaseline(result.notes, result.leaves)
           } else {
@@ -1180,14 +731,14 @@
           console.error('Archive pull failed:', e)
           showPullToast($_('toast.pullFailed'), 'error')
         } finally {
-          isArchiveLoading = false
+          appState.isArchiveLoading = false
         }
       }
     }
   }
 
   async function archiveNote(pane: Pane) {
-    const note = pane === 'left' ? $leftNote : $rightNote
+    const note = pane === 'left' ? leftNote.value : rightNote.value
     if (!note) return
 
     const position = getDialogPositionForPane(pane)
@@ -1198,7 +749,7 @@
   }
 
   async function archiveLeaf(pane: Pane) {
-    const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
+    const leaf = pane === 'left' ? leftLeaf.value : rightLeaf.value
     if (!leaf) return
 
     const position = getDialogPositionForPane(pane)
@@ -1209,7 +760,7 @@
   }
 
   async function restoreNote(pane: Pane) {
-    const note = pane === 'left' ? $leftNote : $rightNote
+    const note = pane === 'left' ? leftNote.value : rightNote.value
     if (!note) return
 
     const position = getDialogPositionForPane(pane)
@@ -1223,7 +774,7 @@
   }
 
   async function restoreLeaf(pane: Pane) {
-    const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
+    const leaf = pane === 'left' ? leftLeaf.value : rightLeaf.value
     if (!leaf) return
 
     const position = getDialogPositionForPane(pane)
@@ -1237,15 +788,15 @@
   }
 
   async function moveNoteToWorld(note: Note, targetWorld: WorldType, pane: Pane) {
-    return moveNoteToWorldAction(createMoveContext(), note, targetWorld, pane)
+    return moveNoteToWorldAction(note, targetWorld, pane)
   }
 
   async function moveLeafToWorld(leaf: Leaf, targetWorld: WorldType, pane: Pane) {
-    return moveLeafToWorldAction(createMoveContext(), leaf, targetWorld, pane)
+    return moveLeafToWorldAction(leaf, targetWorld, pane)
   }
 
   function closeLeaf(pane: Pane) {
-    const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
+    const leaf = pane === 'left' ? leftLeaf.value : rightLeaf.value
     if (!leaf) return
 
     // ペインのワールドに応じたノートを取得
@@ -1255,13 +806,13 @@
     if (parentNote) {
       // リーフから親ノートに戻る
       if (pane === 'left') {
-        $leftNote = parentNote
-        $leftLeaf = leaf
-        $leftView = 'note'
+        leftNote.value = parentNote
+        leftLeaf.value = leaf
+        leftView.value = 'note'
       } else {
-        $rightNote = parentNote
-        $rightLeaf = leaf
-        $rightView = 'note'
+        rightNote.value = parentNote
+        rightLeaf.value = leaf
+        rightView.value = 'note'
       }
     }
   }
@@ -1274,7 +825,7 @@
 
   function togglePreview(pane: Pane) {
     // プライオリティリーフは編集不可（プレビュー専用）
-    const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
+    const leaf = pane === 'left' ? leftLeaf.value : rightLeaf.value
     if (leaf && isPriorityLeaf(leaf.id)) return
 
     const state = getNavState()
@@ -1285,8 +836,8 @@
 
   // スワイプナビゲーション（ペインのワールドに対応）
   function goToNextSibling(pane: Pane): boolean {
-    const view = pane === 'left' ? $leftView : $rightView
-    const currentNote = pane === 'left' ? $leftNote : $rightNote
+    const view = pane === 'left' ? leftView.value : rightView.value
+    const currentNote = pane === 'left' ? leftNote.value : rightNote.value
 
     // ノートビューでのみ有効
     if (view !== 'note' || !currentNote) return false
@@ -1309,8 +860,8 @@
   }
 
   function goToPrevSibling(pane: Pane): boolean {
-    const view = pane === 'left' ? $leftView : $rightView
-    const currentNote = pane === 'left' ? $leftNote : $rightNote
+    const view = pane === 'left' ? leftView.value : rightView.value
+    const currentNote = pane === 'left' ? leftNote.value : rightNote.value
 
     // ノートビューでのみ有効
     if (view !== 'note' || !currentNote) return false
@@ -1353,59 +904,60 @@
 
   function swapPanes() {
     // 左右ペインの状態を入れ替える
-    const tempNote = $leftNote
-    const tempLeaf = $leftLeaf
-    const tempView = $leftView
+    const tempNote = leftNote.value
+    const tempLeaf = leftLeaf.value
+    const tempView = leftView.value
 
-    $leftNote = $rightNote
-    $leftLeaf = $rightLeaf
-    $leftView = $rightView
+    leftNote.value = rightNote.value
+    leftLeaf.value = rightLeaf.value
+    leftView.value = rightView.value
 
-    $rightNote = tempNote
-    $rightLeaf = tempLeaf
-    $rightView = tempView
+    rightNote.value = tempNote
+    rightLeaf.value = tempLeaf
+    rightView.value = tempView
 
     // 選択インデックスも入れ替え
-    const tempIndex = selectedIndexLeft
-    selectedIndexLeft = selectedIndexRight
-    selectedIndexRight = tempIndex
+    const tempIndex = appState.selectedIndexLeft
+    appState.selectedIndexLeft = appState.selectedIndexRight
+    appState.selectedIndexRight = tempIndex
 
     // ワールドも入れ替え
-    const tempWorld = $leftWorld
-    leftWorld.set($rightWorld)
-    rightWorld.set(tempWorld)
+    const tempWorld = leftWorld.value
+    leftWorld.value = rightWorld.value
+    rightWorld.value = tempWorld
   }
 
   function copyLeftToRight() {
     // 左ペインの状態を右ペインにコピー
-    $rightNote = $leftNote
-    $rightLeaf = $leftLeaf
-    $rightView = $leftView
-    selectedIndexRight = selectedIndexLeft
-    rightWorld.set($leftWorld)
+    rightNote.value = leftNote.value
+    rightLeaf.value = leftLeaf.value
+    rightView.value = leftView.value
+    appState.selectedIndexRight = appState.selectedIndexLeft
+    rightWorld.value = leftWorld.value
   }
 
   function copyRightToLeft() {
     // 右ペインの状態を左ペインにコピー
-    $leftNote = $rightNote
-    $leftLeaf = $rightLeaf
-    $leftView = $rightView
-    selectedIndexLeft = selectedIndexRight
-    leftWorld.set($rightWorld)
+    leftNote.value = rightNote.value
+    leftLeaf.value = rightLeaf.value
+    leftView.value = rightView.value
+    appState.selectedIndexLeft = appState.selectedIndexRight
+    leftWorld.value = rightWorld.value
   }
 
   // キーボードナビゲーション用ヘルパー（ペインのワールドに対応）
   function getCurrentItemsForPane(pane: Pane): (Note | Leaf)[] {
-    const view = pane === 'left' ? $leftView : $rightView
-    const note = pane === 'left' ? $leftNote : $rightNote
+    const view = pane === 'left' ? leftView.value : rightView.value
+    const note = pane === 'left' ? leftNote.value : rightNote.value
     const paneNotes = getNotesForPane(pane)
     const paneLeaves = getLeavesForPane(pane)
 
     if (view === 'home') {
       const specialLeaves: Leaf[] = []
       if (getWorldForPane(pane) !== 'archive') {
-        if (currentOfflineLeaf) specialLeaves.push(currentOfflineLeaf)
-        if (currentPriorityLeaf && isPullCompleted) specialLeaves.push(currentPriorityLeaf)
+        if (derivedState.currentOfflineLeaf) specialLeaves.push(derivedState.currentOfflineLeaf)
+        if (derivedState.currentPriorityLeaf && appState.isPullCompleted)
+          specialLeaves.push(derivedState.currentPriorityLeaf)
       }
       const rootNotes = paneNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
       return [...specialLeaves, ...rootNotes]
@@ -1423,9 +975,9 @@
   }
 
   function navigateGridForPane(direction: 'up' | 'down' | 'left' | 'right') {
-    const pane = $focusedPane
+    const pane = focusedPane.value
     const items = getCurrentItemsForPane(pane)
-    const currentIndex = pane === 'left' ? selectedIndexLeft : selectedIndexRight
+    const currentIndex = pane === 'left' ? appState.selectedIndexLeft : appState.selectedIndexRight
 
     if (items.length === 0) return
 
@@ -1452,16 +1004,16 @@
     }
 
     if (pane === 'left') {
-      selectedIndexLeft = newIndex
+      appState.selectedIndexLeft = newIndex
     } else {
-      selectedIndexRight = newIndex
+      appState.selectedIndexRight = newIndex
     }
   }
 
   function openSelectedItemForPane() {
-    const pane = $focusedPane
+    const pane = focusedPane.value
     const items = getCurrentItemsForPane(pane)
-    const index = pane === 'left' ? selectedIndexLeft : selectedIndexRight
+    const index = pane === 'left' ? appState.selectedIndexLeft : appState.selectedIndexRight
 
     if (index < 0 || index >= items.length) return
 
@@ -1481,9 +1033,9 @@
   }
 
   function goBackToParentForPane() {
-    const pane = $focusedPane
-    const view = pane === 'left' ? $leftView : $rightView
-    const note = pane === 'left' ? $leftNote : $rightNote
+    const pane = focusedPane.value
+    const view = pane === 'left' ? leftView.value : rightView.value
+    const note = pane === 'left' ? leftNote.value : rightNote.value
 
     if (view === 'note' && note) {
       const paneNotes = getNotesForPane(pane)
@@ -1498,9 +1050,9 @@
         const targetIndex = items.findIndex((item) => 'name' in item && item.id === note.id)
         if (targetIndex !== -1) {
           if (pane === 'left') {
-            selectedIndexLeft = targetIndex
+            appState.selectedIndexLeft = targetIndex
           } else {
-            selectedIndexRight = targetIndex
+            appState.selectedIndexRight = targetIndex
           }
         }
       } else {
@@ -1526,40 +1078,40 @@
   }
 
   function goSettings() {
-    showSettings = true
+    appState.showSettings = true
   }
 
   async function closeSettings() {
-    showSettings = false
+    appState.showSettings = false
     await handleCloseSettings()
   }
 
   function closeWelcome() {
-    showWelcome = false
+    appState.showWelcome = false
   }
 
   function openSettingsFromWelcome() {
-    showWelcome = false
-    showSettings = true
+    appState.showWelcome = false
+    appState.showSettings = true
   }
 
   // PWAインストールプロンプト
   async function handleInstall() {
-    if (!deferredPrompt) return // プロンプトを表示
-    ;(deferredPrompt as any).prompt()
+    if (!appState.deferredPrompt) return // プロンプトを表示
+    ;(appState.deferredPrompt as any).prompt()
     // ユーザーの選択を待つ
-    const { outcome } = await (deferredPrompt as any).userChoice
+    const { outcome } = await (appState.deferredPrompt as any).userChoice
     if (outcome === 'accepted') {
       console.log('PWA installed')
     }
     // 一度使ったらプロンプトは再利用できない
-    deferredPrompt = null
-    showInstallBanner = false
+    appState.deferredPrompt = null
+    appState.showInstallBanner = false
   }
 
   function dismissInstallBanner() {
-    showInstallBanner = false
-    deferredPrompt = null
+    appState.showInstallBanner = false
+    appState.deferredPrompt = null
     // 却下を記録（7日間のcooldown）
     setPwaInstallDismissedAt(Date.now())
   }
@@ -1568,30 +1120,30 @@
 
   function startEditingBreadcrumb(crumb: Breadcrumb) {
     if (crumb.type === 'home' || crumb.type === 'settings') return
-    editingBreadcrumb = crumb.id
+    appState.editingBreadcrumb = crumb.id
   }
 
   function refreshBreadcrumbs() {
     // ワールドに応じたデータを使用
-    const leftNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
-    const leftLeaves = _getLeavesForWorld($leftWorld, $leaves, $archiveLeaves)
-    const rightNotes = _getNotesForWorld($rightWorld, $notes, $archiveNotes)
-    const rightLeaves = _getLeavesForWorld($rightWorld, $leaves, $archiveLeaves)
+    const leftNotes = _getNotesForWorld(leftWorld.value, notes.value, archiveNotes.value)
+    const leftLeaves = _getLeavesForWorld(leftWorld.value, leaves.value, archiveLeaves.value)
+    const rightNotes = _getNotesForWorld(rightWorld.value, notes.value, archiveNotes.value)
+    const rightLeaves = _getLeavesForWorld(rightWorld.value, leaves.value, archiveLeaves.value)
 
-    breadcrumbs = buildBreadcrumbs(
-      $leftView,
-      $leftNote,
-      $leftLeaf,
+    appState.breadcrumbs = buildBreadcrumbs(
+      leftView.value,
+      leftNote.value,
+      leftLeaf.value,
       leftNotes,
       'left',
       goHome,
       selectNote,
       leftLeaves
     )
-    breadcrumbsRight = buildBreadcrumbs(
-      $rightView,
-      $rightNote,
-      $rightLeaf,
+    appState.breadcrumbsRight = buildBreadcrumbs(
+      rightView.value,
+      rightNote.value,
+      rightLeaf.value,
       rightNotes,
       'right',
       goHome,
@@ -1601,25 +1153,25 @@
   }
 
   async function saveEditBreadcrumb(id: string, newName: string, type: Breadcrumb['type']) {
-    return saveEditBreadcrumbAction(createCrudContext(), id, newName, type)
+    return saveEditBreadcrumbAction(id, newName, type)
   }
 
   function cancelEditBreadcrumb() {
-    editingBreadcrumb = null
+    appState.editingBreadcrumb = null
   }
 
   // ノート管理（crud.tsに委譲）
   function createNote(parentId: string | undefined, pane: Pane, name?: string) {
-    createNoteAction(createCrudContext(), parentId, pane, name)
+    createNoteAction(parentId, pane, name)
   }
 
   function deleteNote(pane: Pane) {
-    deleteNoteAction(createCrudContext(), pane)
+    deleteNoteAction(pane)
   }
 
   // ノートバッジ更新
   function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
-    updateNoteBadgeAction(createCrudContext(), noteId, badgeIcon, badgeColor, pane)
+    updateNoteBadgeAction(noteId, badgeIcon, badgeColor, pane)
   }
 
   // ドラッグ&ドロップ（ノート）
@@ -1632,22 +1184,24 @@
   }
 
   function handleDragOverNote(e: DragEvent, note: Note) {
-    if (!draggedNote || draggedNote.id === note.id) return
-    if (draggedNote.parentId !== note.parentId) return
+    if (!derivedState.draggedNote || derivedState.draggedNote.id === note.id) return
+    if (derivedState.draggedNote.parentId !== note.parentId) return
     e.preventDefault()
     dragStore.setDragOverNote(note.id)
   }
 
   function handleDropNote(targetNote: Note) {
     dragStore.setDragOverNote(null)
-    if (!draggedNote || draggedNote.id === targetNote.id) return
-    if (draggedNote.parentId !== targetNote.parentId) return
+    if (!derivedState.draggedNote || derivedState.draggedNote.id === targetNote.id) return
+    if (derivedState.draggedNote.parentId !== targetNote.parentId) return
 
     // ドラッグ元のノートからワールドを判定
-    const world = getWorldForNote(draggedNote)
+    const world = getWorldForNote(derivedState.draggedNote)
     const worldNotes = getNotesForWorld(world)
-    const updatedNotes = reorderItems(draggedNote, targetNote, worldNotes, (n) =>
-      draggedNote!.parentId ? n.parentId === draggedNote!.parentId : !n.parentId
+    const updatedNotes = reorderItems(derivedState.draggedNote, targetNote, worldNotes, (n) =>
+      derivedState.draggedNote!.parentId
+        ? n.parentId === derivedState.draggedNote!.parentId
+        : !n.parentId
     )
     setNotesForWorld(world, updatedNotes)
     dragStore.endDragNote()
@@ -1655,19 +1209,19 @@
 
   // リーフ管理（crud.tsに委譲）
   function createLeaf(pane: Pane, title?: string) {
-    createLeafAction(createCrudContext(), pane, title)
+    createLeafAction(pane, title)
   }
 
   function deleteLeaf(leafId: string, pane: Pane) {
-    deleteLeafAction(createCrudContext(), leafId, pane)
+    deleteLeafAction(leafId, pane)
   }
 
   async function updateLeafContent(content: string, leafId: string, pane: Pane) {
-    return updateLeafContentAction(createCrudContext(), content, leafId, pane)
+    return updateLeafContentAction(content, leafId, pane)
   }
 
   function updateLeafBadge(leafId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
-    updateLeafBadgeAction(createCrudContext(), leafId, badgeIcon, badgeColor, pane)
+    updateLeafBadgeAction(leafId, badgeIcon, badgeColor, pane)
   }
 
   // Priorityリーフのバッジ更新（metadataに直接保存）
@@ -1685,25 +1239,25 @@
   }
 
   function handleDragOverLeaf(e: DragEvent, leaf: Leaf) {
-    if (!draggedLeaf || draggedLeaf.id === leaf.id) return
-    if (draggedLeaf.noteId !== leaf.noteId) return
+    if (!derivedState.draggedLeaf || derivedState.draggedLeaf.id === leaf.id) return
+    if (derivedState.draggedLeaf.noteId !== leaf.noteId) return
     e.preventDefault()
     dragStore.setDragOverLeaf(leaf.id)
   }
 
   function handleDropLeaf(targetLeaf: Leaf) {
     dragStore.setDragOverLeaf(null)
-    if (!draggedLeaf || draggedLeaf.id === targetLeaf.id) return
-    if (draggedLeaf.noteId !== targetLeaf.noteId) return
+    if (!derivedState.draggedLeaf || derivedState.draggedLeaf.id === targetLeaf.id) return
+    if (derivedState.draggedLeaf.noteId !== targetLeaf.noteId) return
 
     // ドラッグ元のリーフからワールドを判定
-    const world = getWorldForLeaf(draggedLeaf)
+    const world = getWorldForLeaf(derivedState.draggedLeaf)
     const worldLeaves = getLeavesForWorld(world)
     const updatedLeaves = reorderItems(
-      draggedLeaf,
+      derivedState.draggedLeaf,
       targetLeaf,
       worldLeaves,
-      (l) => l.noteId === draggedLeaf!.noteId
+      (l) => l.noteId === derivedState.draggedLeaf!.noteId
     )
     setLeavesForWorld(world, updatedLeaves)
     dragStore.endDragLeaf()
@@ -1711,15 +1265,15 @@
 
   // 移動モーダル
   function openMoveModalForLeaf(pane: Pane) {
-    if (!isFirstPriorityFetched) return
-    const leaf = pane === 'left' ? $leftLeaf : $rightLeaf
+    if (!appState.isFirstPriorityFetched) return
+    const leaf = pane === 'left' ? leftLeaf.value : rightLeaf.value
     if (!leaf) return
     moveModalStore.openForLeaf(leaf, pane)
   }
 
   function openMoveModalForNote(pane: Pane) {
-    if (!isFirstPriorityFetched) return
-    const note = pane === 'left' ? $leftNote : $rightNote
+    if (!appState.isFirstPriorityFetched) return
+    const note = pane === 'left' ? leftNote.value : rightNote.value
     if (!note) return
     moveModalStore.openForNote(note, pane)
   }
@@ -1738,11 +1292,11 @@
   }
 
   async function moveLeafTo(destNoteId: string | null, targetLeaf: Leaf, pane: Pane) {
-    return moveLeafToAction(createMoveContext(), destNoteId, targetLeaf, pane)
+    return moveLeafToAction(destNoteId, targetLeaf, pane)
   }
 
   async function moveNoteTo(destNoteId: string | null, targetNote: Note, pane: Pane) {
-    return moveNoteToAction(createMoveContext(), destNoteId, targetNote, pane)
+    return moveNoteToAction(destNoteId, targetNote, pane)
   }
 
   // ヘルパー関数（notes.ts, leaves.ts, stats.tsからインポート）
@@ -1756,122 +1310,47 @@
 
   // GitHub同期
 
-  function createGitContext(): GitActionContext {
-    return {
-      getIsArchiveLoading: () => isArchiveLoading,
-      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
-      getIsPullCompleted: () => isPullCompleted,
-      setIsArchiveLoading: (v) => (isArchiveLoading = v),
-      setIsFirstPriorityFetched: (v) => (isFirstPriorityFetched = v),
-      setIsPullCompleted: (v) => (isPullCompleted = v),
-      setIsLoadingUI: (v) => (isLoadingUI = v),
-      setSelectedIndexLeft: (v) => (selectedIndexLeft = v),
-      setSelectedIndexRight: (v) => (selectedIndexRight = v),
-      setLoadingLeafIds: (v) => (loadingLeafIds = v),
-      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
-      setIsRestoringFromUrl: (v) => (isRestoringFromUrl = v),
-      getLoadingLeafIds: () => loadingLeafIds,
-      restoreStateFromUrl,
-      rebuildLeafStats,
-      resetLeafStats,
-      confirmAsync,
-      choiceAsync,
-      pushToGitHub,
-    }
-  }
-
-  function createMoveContext(): MoveActionContext {
-    return {
-      getIsArchiveLoading: () => isArchiveLoading,
-      setIsArchiveLoading: (v) => (isArchiveLoading = v),
-      getLeafSkeletonMap: () => leafSkeletonMap,
-      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
-      selectNote,
-      goHome,
-      refreshBreadcrumbs,
-      rebuildLeafStats,
-      closeMoveModal,
-      getWorldForPane,
-    }
-  }
-
-  function createCrudContext(): CrudActionContext {
-    return {
-      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
-      getLeafSkeletonMap: () => leafSkeletonMap,
-      setEditingBreadcrumb: (v) => (editingBreadcrumb = v),
-      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
-      selectNote,
-      selectLeaf,
-      goHome,
-      refreshBreadcrumbs,
-      rebuildLeafStats,
-      getWorldForPane,
-      getNotesForWorld,
-      getLeavesForWorld,
-      setNotesForWorld,
-      setLeavesForWorld,
-      getLeavesForPane,
-      showPrompt,
-      showConfirm,
-      getDialogPositionForPane,
-      updateOfflineContent,
-    }
-  }
-
-  function createIoContext(): IoActionContext {
-    return {
-      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
-      getIsExportingZip: () => isExportingZip,
-      getIsImporting: () => isImporting,
-      setIsExportingZip: (v) => (isExportingZip = v),
-      setIsImporting: (v) => (isImporting = v),
-      setImportOccurredInSettings: (v) => (importOccurredInSettings = v),
-      getLeavesForPane,
-      getEditorView: (pane: Pane) => (pane === 'left' ? leftEditorView : rightEditorView),
-      getPreviewView: (pane: Pane) => (pane === 'left' ? leftPreviewView : rightPreviewView),
-    }
-  }
-
   /**
    * GitHubにPush（統合版）
    * すべてのPush処理がこの1つの関数を通る
    */
   async function pushToGitHub() {
-    return pushToGitHubAction(createGitContext())
+    return pushToGitHubAction()
   }
 
   // Git clone相当のZIPエクスポート
   async function exportNotesAsZip() {
-    return exportNotesAsZipAction(createIoContext())
+    return exportNotesAsZipAction()
   }
 
   async function handleImportFromOtherApps() {
-    return handleImportFromOtherAppsAction(createIoContext())
+    return handleImportFromOtherAppsAction()
   }
 
   async function handleAgasteerImport(file: File) {
-    return handleAgasteerImportAction(createIoContext(), file)
+    return handleAgasteerImportAction(file)
   }
 
   // Markdownダウンロード（選択範囲があれば選択範囲をダウンロード）
   function downloadLeafAsMarkdown(leafId: string, pane: Pane) {
-    downloadLeafAsMarkdownAction(createIoContext(), leafId, pane)
+    downloadLeafAsMarkdownAction(leafId, pane)
   }
 
   // プレビューを画像としてダウンロード
   async function downloadLeafAsImage(leafId: string, pane: Pane) {
-    return downloadLeafAsImageAction(createIoContext(), leafId, pane)
+    return downloadLeafAsImageAction(leafId, pane)
   }
 
   // シェア機能（share.tsからインポート）
   function getShareHandlers() {
     return {
       translate: $_,
-      getLeaf: (pane: Pane) => (pane === 'left' ? $leftLeaf : $rightLeaf),
-      getView: (pane: Pane) => (pane === 'left' ? $leftView : $rightView),
-      getPreviewView: (pane: Pane) => (pane === 'left' ? leftPreviewView : rightPreviewView),
-      getEditorView: (pane: Pane) => (pane === 'left' ? leftEditorView : rightEditorView),
+      getLeaf: (pane: Pane) => (pane === 'left' ? leftLeaf.value : rightLeaf.value),
+      getView: (pane: Pane) => (pane === 'left' ? leftView.value : rightView.value),
+      getPreviewView: (pane: Pane) =>
+        pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
+      getEditorView: (pane: Pane) =>
+        pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
     }
   }
 
@@ -1896,13 +1375,13 @@
   }
 
   function getHasSelection(pane: Pane): boolean {
-    const editorView = pane === 'left' ? leftEditorView : rightEditorView
+    const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
     if (!editorView || !editorView.getSelectedText) return false
     return editorView.getSelectedText() !== ''
   }
 
   function getSelectedText(pane: Pane): string {
-    const editorView = pane === 'left' ? leftEditorView : rightEditorView
+    const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
     if (!editorView || !editorView.getSelectedText) return ''
     return editorView.getSelectedText()
   }
@@ -1910,6 +1389,27 @@
   // ========================================
   // paneActions Context 設定
   // ========================================
+  // Phase 3: action modules が App.svelte の関数を呼べるように登録
+  registerAppActions({
+    selectNote,
+    selectLeaf,
+    goHome,
+    refreshBreadcrumbs,
+    restoreStateFromUrl,
+    rebuildLeafStats,
+    resetLeafStats,
+    closeMoveModal,
+    updateOfflineContent,
+    pushToGitHub,
+    showPrompt,
+    showConfirm,
+    getDialogPositionForPane,
+    getEditorView: (pane: Pane) =>
+      pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
+    getPreviewView: (pane: Pane) =>
+      pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
+  })
+
   const paneActions: PaneActions = {
     // ナビゲーション
     selectNote,
@@ -1993,15 +1493,16 @@
   setContext('paneActions', paneActions)
 
   // 設定
-  function handleThemeChange(theme: typeof $settings.theme) {
-    const next = { ...$settings, theme }
+  function handleThemeChange(theme: typeof settings.value.theme) {
+    const next = { ...settings.value, theme }
     updateSettings(next)
     applyTheme(theme, next)
   }
 
-  function handleSettingsChange(payload: Partial<typeof $settings>) {
-    const repoChanged = payload.repoName !== undefined && payload.repoName !== $settings.repoName
-    const next = { ...$settings, ...payload }
+  function handleSettingsChange(payload: Partial<typeof settings.value>) {
+    const repoChanged =
+      payload.repoName !== undefined && payload.repoName !== settings.value.repoName
+    const next = { ...settings.value, ...payload }
     updateSettings(next)
     if (payload.theme) {
       applyTheme(payload.theme, next)
@@ -2012,31 +1513,29 @@
     // リポジトリが変更された場合、全リポ固有状態をリセット
     if (repoChanged) {
       repoChangedInSettings = true
-      isPullCompleted = false
-      isFirstPriorityFetched = false
+      appState.isPullCompleted = false
+      appState.isFirstPriorityFetched = false
       resetForRepoSwitch()
       archiveLeafStatsStore.reset()
     }
   }
   async function handleCloseSettings() {
     // リポ変更またはインポートがあった場合のみPull実行
-    if (repoChangedInSettings || importOccurredInSettings) {
+    if (repoChangedInSettings || appState.importOccurredInSettings) {
       // Pull/Push/アーカイブロード中の場合は完了を待たずにリセット済み状態で閉じる
       // （resetForRepoSwitchで既にデータクリア済み、次回操作時に新リポからPullされる）
-      if (!$isPulling && !$isPushing && !isArchiveLoading) {
+      if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
         isClosingSettingsPull = true
         await pullFromGitHub(false)
         isClosingSettingsPull = false
       }
     }
     repoChangedInSettings = false
-    importOccurredInSettings = false
+    appState.importOccurredInSettings = false
   }
 
   async function handleTestConnection() {
-    return handleTestConnectionAction({
-      setIsTesting: (v) => (isTesting = v),
-    })
+    return handleTestConnectionAction()
   }
 
   /**
@@ -2044,7 +1543,7 @@
    * すべてのPull処理がこの1つの関数を通る
    */
   async function pullFromGitHub(isInitialStartup = false, onCancel?: () => void | Promise<void>) {
-    return pullFromGitHubAction(createGitContext(), isInitialStartup, onCancel)
+    return pullFromGitHubAction(isInitialStartup, onCancel)
   }
 
   // HMR用の一時保存キー
@@ -2054,7 +1553,7 @@
   function flushOfflineSaveSync() {
     // 保留中の自動保存をキャンセルして同期的にlocalStorageへ保存
     // IndexedDBは非同期なのでHMRに間に合わないため
-    const current = get(offlineLeafStore)
+    const current = offlineLeafStore.value
     if (current.content || current.badgeIcon || current.badgeColor) {
       localStorage.setItem(HMR_OFFLINE_KEY, JSON.stringify(current))
       console.log('[HMR] Saved offline leaf to localStorage:', current)
@@ -2068,7 +1567,7 @@
       try {
         const data = JSON.parse(stored)
         console.log('[HMR] Restoring offline leaf from localStorage:', data)
-        offlineLeafStore.set(data)
+        offlineLeafStore.value = data
         // IndexedDBにも保存
         const leaf = createOfflineLeaf(data.content, data.badgeIcon, data.badgeColor)
         leaf.updatedAt = data.updatedAt
@@ -2095,7 +1594,7 @@
   }
 </script>
 
-{#if !i18nReady}
+{#if !appState.i18nReady}
   <!-- i18n読み込み中 -->
   <div class="i18n-loading">
     <div class="loading-spinner">
@@ -2108,11 +1607,11 @@
   <!-- メインアプリケーション -->
   <div class="app-container">
     <Header
-      githubConfigured={isGitHubConfigured}
-      title={$settings.toolName}
+      githubConfigured={derivedState.isGitHubConfigured}
+      title={settings.value.toolName}
       onTitleClick={() => {
-        leftWorld.set('home')
-        rightWorld.set('home')
+        leftWorld.value = 'home'
+        rightWorld.value = 'home'
         goHome('left')
         goHome('right')
       }}
@@ -2120,22 +1619,25 @@
         goSettings()
       }}
       onPull={() => pullFromGitHub(false)}
-      pullDisabled={!canPull}
-      isStale={$isStale}
-      pullProgress={$pullProgressInfo}
+      pullDisabled={!derivedState.canPull}
+      isStale={isStale.value}
+      pullProgress={pullProgressInfo.value}
       onPullProgressClick={() => {
-        if ($pullProgressInfo) {
+        if (pullProgressInfo.value) {
           showPullToast(
             $_('home.leafFetched', {
-              values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
+              values: {
+                fetched: pullProgressInfo.value.fetched,
+                total: pullProgressInfo.value.total,
+              },
             })
           )
         }
       }}
       onSearchClick={toggleSearch}
       onHelpClick={openUserGuide}
-      {isDualPane}
-      isOperationsLocked={!isFirstPriorityFetched}
+      isDualPane={appState.isDualPane}
+      isOperationsLocked={!appState.isFirstPriorityFetched}
       onSwapPanes={swapPanes}
       onCopyLeftToRight={copyLeftToRight}
       onCopyRightToLeft={copyRightToLeft}
@@ -2143,56 +1645,56 @@
     <!-- 検索ドロップダウン（ヘッダー右上、検索ボタンの下） -->
     <SearchBar onResultClick={handleSearchResultClick} />
 
-    <div class="content-wrapper" class:single-pane={!isDualPane}>
-      <div class="pane-divider" class:hidden={!isDualPane}></div>
+    <div class="content-wrapper" class:single-pane={!appState.isDualPane}>
+      <div class="pane-divider" class:hidden={!appState.isDualPane}></div>
       <div class="left-column">
         <PaneView
           pane="left"
-          bind:editorViewRef={leftEditorView}
-          bind:previewViewRef={leftPreviewView}
+          bind:editorViewRef={appState.leftEditorView}
+          bind:previewViewRef={appState.leftPreviewView}
         />
       </div>
 
-      <div class="right-column" class:hidden={!isDualPane}>
+      <div class="right-column" class:hidden={!appState.isDualPane}>
         <PaneView
           pane="right"
-          bind:editorViewRef={rightEditorView}
-          bind:previewViewRef={rightPreviewView}
+          bind:editorViewRef={appState.rightEditorView}
+          bind:previewViewRef={appState.rightPreviewView}
         />
       </div>
     </div>
 
     <MoveModal
-      show={moveModalOpen}
-      notes={moveTargetNotes}
-      targetNote={moveTargetNote}
-      targetLeaf={moveTargetLeaf}
-      pane={moveTargetPane}
-      currentWorld={moveTargetWorld}
+      show={derivedState.moveModalOpen}
+      notes={derivedState.moveTargetNotes}
+      targetNote={derivedState.moveTargetNote}
+      targetLeaf={derivedState.moveTargetLeaf}
+      pane={derivedState.moveTargetPane}
+      currentWorld={derivedState.moveTargetWorld}
       onConfirm={handleMoveConfirm}
       onClose={closeMoveModal}
     />
 
     <Modal
-      show={$modalState.show}
-      message={$modalState.message}
-      type={$modalState.type}
-      position={$modalState.position}
-      onConfirm={$modalState.callback}
-      onCancel={$modalState.cancelCallback}
-      onPromptSubmit={$modalState.promptCallback}
-      onChoiceSelect={$modalState.choiceCallback}
-      choiceOptions={$modalState.choiceOptions || []}
-      placeholder={$modalState.placeholder || ''}
+      show={modalState.value.show}
+      message={modalState.value.message}
+      type={modalState.value.type}
+      position={modalState.value.position}
+      onConfirm={modalState.value.callback}
+      onCancel={modalState.value.cancelCallback}
+      onPromptSubmit={modalState.value.promptCallback}
+      onChoiceSelect={modalState.value.choiceCallback}
+      choiceOptions={modalState.value.choiceOptions || []}
+      placeholder={modalState.value.placeholder || ''}
       onClose={closeModal}
     />
 
     <SettingsModal
-      show={showSettings}
-      settings={$settings}
-      {isTesting}
-      exporting={isExportingZip}
-      importing={isImporting}
+      show={appState.showSettings}
+      settings={settings.value}
+      isTesting={appState.isTesting}
+      exporting={appState.isExportingZip}
+      importing={appState.isImporting}
       onThemeChange={handleThemeChange}
       onSettingsChange={handleSettingsChange}
       onTestConnection={handleTestConnection}
@@ -2202,19 +1704,19 @@
     />
 
     <WelcomeModal
-      show={showWelcome}
+      show={appState.showWelcome}
       onOpenSettings={openSettingsFromWelcome}
       onClose={closeWelcome}
     />
 
     <Toast
-      pullMessage={$pullToastState.message}
-      pullVariant={$pullToastState.variant}
-      pushMessage={$pushToastState.message}
-      pushVariant={$pushToastState.variant}
+      pullMessage={pullToastState.value.message}
+      pullVariant={pullToastState.value.variant}
+      pushMessage={pushToastState.value.message}
+      pushVariant={pushToastState.value.variant}
     />
 
-    {#if showInstallBanner}
+    {#if appState.showInstallBanner}
       <InstallBanner onInstall={handleInstall} onDismiss={dismissInstallBanner} />
     {/if}
   </div>

@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import type { Leaf, Note, Metadata } from '../types'
-import { get } from 'svelte/store'
+
 import { leaves } from '../stores'
 import { showPushToast } from '../ui'
 
@@ -17,7 +17,7 @@ export function downloadLeafAsMarkdown(
     return
   }
 
-  const allLeaves = get(leaves)
+  const allLeaves = leaves.value
   const targetLeaf = allLeaves.find((l) => l.id === leafId)
   if (!targetLeaf) return
 

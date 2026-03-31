@@ -1,7 +1,7 @@
 /**
  * ノートのCRUD操作とビジネスロジック
  */
-import { get } from 'svelte/store'
+
 import type { Note, Leaf } from '../types'
 import type { Pane } from '../navigation'
 import { notes, leaves, updateNotes, updateLeaves } from '../stores'
@@ -34,7 +34,7 @@ export function createNote(options: CreateNoteOptions): Note | null {
 
   if (isOperationsLocked) return null
 
-  const allNotes = get(notes)
+  const allNotes = notes.value
 
   // 階層制限チェック: サブノートの下にはサブノートを作成できない
   if (parentId) {
@@ -84,8 +84,8 @@ export function deleteNote(options: DeleteNoteOptions): void {
 
   if (!targetNote) return
 
-  const allNotes = get(notes)
-  const allLeaves = get(leaves)
+  const allNotes = notes.value
+  const allLeaves = leaves.value
 
   const deleteNoteAndDescendants = () => {
     const targetId = targetNote.id
@@ -130,7 +130,7 @@ export function updateNoteName(
   newName: string,
   translate?: (key: string) => string
 ): boolean {
-  const allNotes = get(notes)
+  const allNotes = notes.value
   const target = allNotes.find((n) => n.id === noteId)
   if (!target) return false
 
@@ -154,7 +154,7 @@ export function updateNoteName(
  * ノートのバッジを更新
  */
 export function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string): void {
-  const allNotes = get(notes)
+  const allNotes = notes.value
   const current = allNotes.find((n) => n.id === noteId)
   if (!current) return
 
@@ -203,7 +203,7 @@ export function moveNoteTo(
     return { success: false }
   }
 
-  const allNotes = get(notes)
+  const allNotes = notes.value
 
   if (nextParent) {
     const dest = allNotes.find((n) => n.id === nextParent)
@@ -245,8 +245,8 @@ export function moveNoteTo(
  * ノート配下のアイテム数を取得
  */
 export function getItemCount(noteId: string): number {
-  const allNotes = get(notes)
-  const allLeaves = get(leaves)
+  const allNotes = notes.value
+  const allLeaves = leaves.value
   const subNotesCount = allNotes.filter((f) => f.parentId === noteId).length
   const leavesCount = allLeaves.filter((n) => n.noteId === noteId).length
   return subNotesCount + leavesCount
@@ -256,8 +256,8 @@ export function getItemCount(noteId: string): number {
  * ノート配下のアイテム名リストを取得（表示用）
  */
 export function getNoteItems(noteId: string): string[] {
-  const allNotes = get(notes)
-  const allLeaves = get(leaves)
+  const allNotes = notes.value
+  const allLeaves = leaves.value
 
   const subNotesNames = allNotes
     .filter((f) => f.parentId === noteId)

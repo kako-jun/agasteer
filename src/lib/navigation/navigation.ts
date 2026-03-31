@@ -1,5 +1,4 @@
 import type { Note, Leaf, View } from '../types'
-import type { Writable, Readable } from 'svelte/store'
 
 // ナビゲーション状態の型定義
 export type Pane = 'left' | 'right'
@@ -27,9 +26,9 @@ export interface NavigationState {
 }
 
 export interface NavigationDependencies {
-  notes: Writable<Note[]>
-  leaves: Writable<Leaf[]>
-  rootNotes: Readable<Note[]>
+  notes: { value: Note[] }
+  leaves: { value: Leaf[] }
+  rootNotes: { readonly value: Note[] }
 }
 
 // ========================================
@@ -174,8 +173,7 @@ export function selectLeaf(
   leaf: Leaf,
   pane: Pane
 ): void {
-  let notes: Note[] = []
-  deps.notes.subscribe((n) => (notes = n))()
+  const notes: Note[] = deps.notes.value
 
   const note = notes.find((n) => n.id === leaf.noteId)
   if (note) {
@@ -187,8 +185,7 @@ export function closeLeaf(state: NavigationState, deps: NavigationDependencies, 
   const leaf = pane === 'left' ? state.leftLeaf : state.rightLeaf
   if (!leaf) return
 
-  let notes: Note[] = []
-  deps.notes.subscribe((n) => (notes = n))()
+  const notes: Note[] = deps.notes.value
 
   const parentNote = notes.find((n) => n.id === leaf.noteId)
   if (parentNote) {
@@ -318,13 +315,9 @@ export function getCurrentItems(
   const view = pane === 'left' ? state.leftView : state.rightView
   const note = pane === 'left' ? state.leftNote : state.rightNote
 
-  let notes: Note[] = []
-  let leaves: Leaf[] = []
-  let rootNotes: Note[] = []
-
-  deps.notes.subscribe((n) => (notes = n))()
-  deps.leaves.subscribe((l) => (leaves = l))()
-  deps.rootNotes.subscribe((r) => (rootNotes = r))()
+  const notes: Note[] = deps.notes.value
+  const leaves: Leaf[] = deps.leaves.value
+  const rootNotes: Note[] = deps.rootNotes.value
 
   if (view === 'home') {
     return rootNotes
@@ -446,8 +439,7 @@ export function goBackToParent(state: NavigationState, deps: NavigationDependenc
   const note = pane === 'left' ? state.leftNote : state.rightNote
 
   if (view === 'note' && note) {
-    let notes: Note[] = []
-    deps.notes.subscribe((n) => (notes = n))()
+    const notes: Note[] = deps.notes.value
 
     const parentNote = notes.find((n) => n.id === note.parentId)
     if (parentNote) {
@@ -491,8 +483,7 @@ export function goToNextSibling(
   // ノートビューでのみ有効
   if (view !== 'note' || !currentNote) return false
 
-  let notes: Note[] = []
-  deps.notes.subscribe((n) => (notes = n))()
+  const notes: Note[] = deps.notes.value
 
   // 同じ親を持つノート（兄弟ノート）を取得
   const siblings = notes
@@ -522,8 +513,7 @@ export function goToPrevSibling(
   // ノートビューでのみ有効
   if (view !== 'note' || !currentNote) return false
 
-  let notes: Note[] = []
-  deps.notes.subscribe((n) => (notes = n))()
+  const notes: Note[] = deps.notes.value
 
   // 同じ親を持つノート（兄弟ノート）を取得
   const siblings = notes

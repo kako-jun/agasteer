@@ -41,8 +41,8 @@
     } else if (e.key === 'Enter') {
       e.preventDefault()
       let result = getSelectedResult()
-      if (!result && $searchResults.length > 0) {
-        result = $searchResults[0]
+      if (!result && searchResults.value.length > 0) {
+        result = searchResults.value[0]
       }
       if (result) {
         onResultClick(result)
@@ -87,7 +87,7 @@
 
   // isSearchOpenの変化を監視してイベントリスナーを管理
   $effect(() => {
-    if ($isSearchOpen) {
+    if (isSearchOpen.value) {
       if (!listenerRegistered) {
         setTimeout(() => {
           document.addEventListener('click', handleClickOutside)
@@ -110,7 +110,7 @@
   })
 </script>
 
-{#if $isSearchOpen}
+{#if isSearchOpen.value}
   <div class="search-dropdown" bind:this={containerElement} role="search">
     <!-- 検索ボックス -->
     <div class="search-input-wrapper">
@@ -131,12 +131,12 @@
         bind:this={inputElement}
         type="text"
         placeholder={$_('search.placeholder')}
-        value={$searchQuery}
+        value={searchQuery.value}
         oninput={handleInput}
         onkeydown={handleKeydown}
         aria-label={$_('search.placeholder')}
       />
-      {#if $searchQuery}
+      {#if searchQuery.value}
         <button
           class="clear-button"
           onclick={(e) => {
@@ -163,17 +163,17 @@
     </div>
 
     <!-- 検索結果 -->
-    {#if $searchQuery}
+    {#if searchQuery.value}
       <div class="search-results" role="listbox">
-        {#if $searchResults.length > 0}
-          {#each $searchResults as result, index}
+        {#if searchResults.value.length > 0}
+          {#each searchResults.value as result, index}
             <button
               class="result-item"
-              class:selected={index === $selectedResultIndex}
+              class:selected={index === selectedResultIndex.value}
               role="option"
-              aria-selected={index === $selectedResultIndex}
+              aria-selected={index === selectedResultIndex.value}
               onclick={() => handleResultClick(result)}
-              onmouseenter={() => selectedResultIndex.set(index)}
+              onmouseenter={() => (selectedResultIndex.value = index)}
             >
               <div class="result-path">{result.path}</div>
               <div class="result-snippet">

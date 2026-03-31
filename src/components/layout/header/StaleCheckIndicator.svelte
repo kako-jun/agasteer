@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { staleCheckProgress } from '../../../lib/stores/stale-checker'
+  import { staleCheckProgress } from '../../../lib/stores/stale-checker.svelte'
 
   // ヘッダー高さに合わせて高さを計算（フッターと同様にpx指定）
-  let height = $derived(Math.round($staleCheckProgress * 40))
+  let height = $derived(Math.round(staleCheckProgress.value * 40))
 </script>
 
 <div class="wrapper">
-  {#if $staleCheckProgress > 0}
+  {#if staleCheckProgress.value > 0}
     <div class="indicator" style="height: {height}px"></div>
   {/if}
 </div>

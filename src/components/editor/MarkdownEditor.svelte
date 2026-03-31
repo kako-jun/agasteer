@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { get } from 'svelte/store'
+
   import type { ThemeType } from '../../lib/types'
   import type { Pane } from '../../lib/navigation'
   import { createDirtyLineExtension } from '../../lib/editor/dirty-lines'
@@ -484,7 +484,7 @@
       // 基準コンテンツを動的に取得する関数（Push後の更新を反映）
       const getBaseContent = () => getLastPushedContent(leafId)
       // リーフがダーティかどうかをチェックする関数
-      const isLeafDirty = () => get(dirtyLeafIds).has(leafId)
+      const isLeafDirty = () => dirtyLeafIds.value.has(leafId)
 
       const { extension, updateDirtyLines, cleanup } = createDirtyLineExtension(
         { StateEffect, StateField, GutterMarker, gutter, EditorView },
@@ -500,11 +500,15 @@
       if (dirtyLeafIdsUnsubscribe) {
         dirtyLeafIdsUnsubscribe()
       }
-      dirtyLeafIdsUnsubscribe = dirtyLeafIds.subscribe(() => {
-        // editorViewが存在する場合のみダーティ行を更新
-        if (editorView && updateDirtyLinesFnRef) {
-          updateDirtyLinesFnRef(editorView)
-        }
+      dirtyLeafIdsUnsubscribe = $effect.root(() => {
+        $effect(() => {
+          // dirtyLeafIds.valueへのアクセスでリアクティブ追跡
+          dirtyLeafIds.value
+          // editorViewが存在する場合のみダーティ行を更新
+          if (editorView && updateDirtyLinesFnRef) {
+            updateDirtyLinesFnRef(editorView)
+          }
+        })
       })
     }
 

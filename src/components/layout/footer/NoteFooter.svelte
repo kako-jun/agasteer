@@ -1,7 +1,7 @@
 <script lang="ts">
   import { _ } from '../../../lib/i18n'
   import type { WorldType } from '../../../lib/types'
-  import { leaves } from '../../../lib/stores/stores'
+  import { leaves } from '../../../lib/stores/stores.svelte'
   import { isTourShown, dismissTour } from '../../../lib/tour'
   import Footer from '../Footer.svelte'
   import IconButton from '../../buttons/IconButton.svelte'
@@ -50,7 +50,7 @@
   }: Props = $props()
 
   // このノート配下のリーフが0個かつガイド未表示なら吹き出しを表示
-  let noteLeaves = $derived($leaves.filter((l) => l.noteId === noteId))
+  let noteLeaves = $derived(leaves.value.filter((l) => l.noteId === noteId))
   let showGuide = $derived(noteLeaves.length === 0 && !isTourShown())
 
   function handleCreateLeaf() {

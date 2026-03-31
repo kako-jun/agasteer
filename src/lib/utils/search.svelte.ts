@@ -3,7 +3,6 @@
  * ノート名・リーフ名・本文を横断検索するロジック・ストア・ハンドラー
  */
 
-import { writable, derived, get } from 'svelte/store'
 import type { Leaf, Note, SearchMatch, SearchMatchType, WorldType } from '../types'
 import {
   leaves,
@@ -14,6 +13,7 @@ import {
   isArchiveLoaded,
 } from '../stores'
 import { createOfflineLeaf } from './offline'
+import { get } from 'svelte/store'
 import { _ } from '../i18n'
 
 // ========== 定数 ==========
@@ -28,50 +28,69 @@ const MATCH_TYPE_PRIORITY: Record<SearchMatchType, number> = {
 }
 
 // ========== ストア ==========
-export const searchQuery = writable<string>('')
-export const isSearchOpen = writable<boolean>(false)
-export const selectedResultIndex = writable<number>(-1)
+let _searchQuery = $state<string>('')
+export const searchQuery = {
+  get value() {
+    return _searchQuery
+  },
+  set value(v: string) {
+    _searchQuery = v
+  },
+}
+
+let _isSearchOpen = $state<boolean>(false)
+export const isSearchOpen = {
+  get value() {
+    return _isSearchOpen
+  },
+  set value(v: boolean) {
+    _isSearchOpen = v
+  },
+}
+
+let _selectedResultIndex = $state<number>(-1)
+export const selectedResultIndex = {
+  get value() {
+    return _selectedResultIndex
+  },
+  set value(v: number) {
+    _selectedResultIndex = v
+  },
+}
 
 // 派生ストア: 検索結果（クエリ変更時に自動計算）
-export const searchResults = derived(
-  [searchQuery, leaves, notes, offlineLeafStore, archiveLeaves, archiveNotes, isArchiveLoaded, _],
-  ([
-    $query,
-    $leaves,
-    $notes,
-    $offlineLeaf,
-    $archiveLeaves,
-    $archiveNotes,
-    $isArchiveLoaded,
-    $t,
-  ]) => {
-    if (!$query.trim()) return []
+export const searchResults = {
+  get value(): SearchMatch[] {
+    const query = searchQuery.value
+    const currentLeaves = leaves.value
+    const currentNotes = notes.value
+    const offlineData = offlineLeafStore.value
+    const archLeaves = archiveLeaves.value
+    const archNotes = archiveNotes.value
+    const archiveLoaded = isArchiveLoaded.value
+    const t = get(_)
+
+    if (!query.trim()) return []
 
     // オフラインリーフをLeaf形式に変換して追加
     const offlineLeaf = createOfflineLeaf(
-      $offlineLeaf.content,
-      $offlineLeaf.badgeIcon,
-      $offlineLeaf.badgeColor
+      offlineData.content,
+      offlineData.badgeIcon,
+      offlineData.badgeColor
     )
 
     // 通常のリーフ + オフラインリーフ
-    const allHomeLeaves = [...$leaves, offlineLeaf]
+    const allHomeLeaves = [...currentLeaves, offlineLeaf]
 
     // アーカイブのパスプレフィックス（翻訳済み）
-    const archivePrefix = $t('search.archivePrefix') + '/'
+    const archivePrefix = t('search.archivePrefix') + '/'
 
     // Home検索
-    const homeResults = searchAll($query, allHomeLeaves, $notes, 'home', '')
+    const homeResults = searchAll(query, allHomeLeaves, currentNotes, 'home', '')
 
     // アーカイブがロード済みの場合のみ、アーカイブも検索
-    if ($isArchiveLoaded) {
-      const archiveResults = searchAll(
-        $query,
-        $archiveLeaves,
-        $archiveNotes,
-        'archive',
-        archivePrefix
-      )
+    if (archiveLoaded) {
+      const archiveResults = searchAll(query, archLeaves, archNotes, 'archive', archivePrefix)
       // 結合後に優先順位でソートし、MAX_RESULTSで制限
       const combined = [...homeResults, ...archiveResults]
       combined.sort((a, b) => MATCH_TYPE_PRIORITY[a.matchType] - MATCH_TYPE_PRIORITY[b.matchType])
@@ -79,8 +98,8 @@ export const searchResults = derived(
     }
 
     return homeResults
-  }
-)
+  },
+}
 
 // ========== 検索ロジック ==========
 
@@ -308,17 +327,17 @@ export function getLineNumber(content: string, charIndex: number): number {
 // ========== ハンドラー ==========
 
 export function openSearch(): void {
-  isSearchOpen.set(true)
+  isSearchOpen.value = true
 }
 
 export function closeSearch(): void {
-  isSearchOpen.set(false)
+  isSearchOpen.value = false
   // 検索クエリはクリアしない（ユーザーが明示的にクリアするまで保持）
-  selectedResultIndex.set(-1)
+  selectedResultIndex.value = -1
 }
 
 export function toggleSearch(): void {
-  if (get(isSearchOpen)) {
+  if (isSearchOpen.value) {
     closeSearch()
   } else {
     openSearch()
@@ -326,36 +345,36 @@ export function toggleSearch(): void {
 }
 
 export function clearSearch(): void {
-  searchQuery.set('')
-  selectedResultIndex.set(-1)
+  searchQuery.value = ''
+  selectedResultIndex.value = -1
 }
 
 export function handleSearchInput(query: string): void {
-  searchQuery.set(query)
-  selectedResultIndex.set(-1)
+  searchQuery.value = query
+  selectedResultIndex.value = -1
 }
 
 export function selectNextResult(): void {
-  const results = get(searchResults)
-  const currentIndex = get(selectedResultIndex)
+  const results = searchResults.value
+  const currentIndex = selectedResultIndex.value
   if (results.length === 0) return
 
   const nextIndex = currentIndex < results.length - 1 ? currentIndex + 1 : 0
-  selectedResultIndex.set(nextIndex)
+  selectedResultIndex.value = nextIndex
 }
 
 export function selectPrevResult(): void {
-  const results = get(searchResults)
-  const currentIndex = get(selectedResultIndex)
+  const results = searchResults.value
+  const currentIndex = selectedResultIndex.value
   if (results.length === 0) return
 
   const prevIndex = currentIndex > 0 ? currentIndex - 1 : results.length - 1
-  selectedResultIndex.set(prevIndex)
+  selectedResultIndex.value = prevIndex
 }
 
 export function getSelectedResult(): SearchMatch | null {
-  const results = get(searchResults)
-  const index = get(selectedResultIndex)
+  const results = searchResults.value
+  const index = selectedResultIndex.value
   if (index < 0 || index >= results.length) return null
   return results[index]
 }

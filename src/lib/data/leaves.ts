@@ -1,7 +1,7 @@
 /**
  * リーフのCRUD操作とビジネスロジック
  */
-import { get } from 'svelte/store'
+
 import type { Note, Leaf } from '../types'
 import type { Pane } from '../navigation'
 import { notes, leaves, updateLeaves } from '../stores'
@@ -46,7 +46,7 @@ export function createLeaf(options: CreateLeafOptions): Leaf | null {
   if (isOperationsLocked) return null
   if (!targetNote) return null
 
-  const allLeaves = get(leaves)
+  const allLeaves = leaves.value
   const noteLeaves = allLeaves.filter((n) => n.noteId === targetNote.id)
 
   const existingTitles = noteLeaves.map((l) => l.title)
@@ -92,8 +92,8 @@ export function deleteLeaf(options: DeleteLeafOptions): void {
     return
   }
 
-  const allLeaves = get(leaves)
-  const allNotes = get(notes)
+  const allLeaves = leaves.value
+  const allNotes = notes.value
   const targetLeaf = allLeaves.find((l) => l.id === leafId)
   if (!targetLeaf) return
 
@@ -134,7 +134,7 @@ export function updateLeafContent(options: UpdateLeafContentOptions): {
 
   if (isOperationsLocked) return { updatedLeaf: null, titleChanged: false }
 
-  const allLeaves = get(leaves)
+  const allLeaves = leaves.value
   const targetLeaf = allLeaves.find((l) => l.id === leafId)
   if (!targetLeaf) return { updatedLeaf: null, titleChanged: false }
 
@@ -177,7 +177,7 @@ export function updateLeafBadge(
   badgeIcon: string,
   badgeColor: string
 ): Leaf | null {
-  const allLeaves = get(leaves)
+  const allLeaves = leaves.value
   const current = allLeaves.find((l) => l.id === leafId)
   if (!current) return null
 
@@ -222,8 +222,8 @@ export function moveLeafTo(
   if (!destNoteId) return { success: false }
   if (leaf.noteId === destNoteId) return { success: false }
 
-  const allLeaves = get(leaves)
-  const allNotes = get(notes)
+  const allLeaves = leaves.value
+  const allNotes = notes.value
   const destinationNote = allNotes.find((n) => n.id === destNoteId)
   if (!destinationNote) return { success: false }
 
@@ -256,5 +256,5 @@ export function moveLeafTo(
  * ノート配下のリーフ数を取得
  */
 export function getLeafCount(noteId: string): number {
-  return get(leaves).filter((n) => n.noteId === noteId).length
+  return leaves.value.filter((n) => n.noteId === noteId).length
 }

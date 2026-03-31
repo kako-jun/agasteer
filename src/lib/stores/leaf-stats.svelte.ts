@@ -3,7 +3,6 @@
  * リーフの総数と文字数をトラッキング
  */
 
-import { writable, get } from 'svelte/store'
 import type { Leaf, Note } from '../types'
 import { computeLeafCharCount } from '../utils/stats'
 import { isPriorityLeaf } from '../utils/priority'
@@ -15,24 +14,28 @@ export interface LeafStatsState {
 }
 
 function createLeafStatsStore() {
-  const { subscribe, set, update } = writable<LeafStatsState>({
-    totalLeafCount: 0,
-    totalLeafChars: 0,
-    leafCharCounts: new Map(),
-  })
+  let _totalLeafCount = $state(0)
+  let _totalLeafChars = $state(0)
+  let _leafCharCounts = $state(new Map<string, number>())
 
   return {
-    subscribe,
+    get totalLeafCount() {
+      return _totalLeafCount
+    },
+    get totalLeafChars() {
+      return _totalLeafChars
+    },
+    get leafCharCounts() {
+      return _leafCharCounts
+    },
 
     /**
      * 統計をリセット
      */
     reset() {
-      set({
-        totalLeafCount: 0,
-        totalLeafChars: 0,
-        leafCharCounts: new Map(),
-      })
+      _totalLeafCount = 0
+      _totalLeafChars = 0
+      _leafCharCounts = new Map()
     },
 
     /**
@@ -53,72 +56,64 @@ function createLeafStatsStore() {
         totalLeafChars += chars
       }
 
-      set({ totalLeafCount, totalLeafChars, leafCharCounts })
+      _totalLeafCount = totalLeafCount
+      _totalLeafChars = totalLeafChars
+      _leafCharCounts = leafCharCounts
     },
 
     /**
      * リーフを追加
      */
     addLeaf(leafId: string, content: string) {
-      update((state) => {
-        const chars = computeLeafCharCount(content)
-        const newMap = new Map(state.leafCharCounts)
-        newMap.set(leafId, chars)
-        return {
-          totalLeafCount: state.totalLeafCount + 1,
-          totalLeafChars: state.totalLeafChars + chars,
-          leafCharCounts: newMap,
-        }
-      })
+      const chars = computeLeafCharCount(content)
+      const newMap = new Map(_leafCharCounts)
+      newMap.set(leafId, chars)
+      _totalLeafCount = _totalLeafCount + 1
+      _totalLeafChars = _totalLeafChars + chars
+      _leafCharCounts = newMap
     },
 
     /**
      * リーフを削除
      */
     removeLeaf(leafId: string, content?: string) {
-      update((state) => {
-        const chars =
-          state.leafCharCounts.get(leafId) ?? (content ? computeLeafCharCount(content) : 0)
-        const newMap = new Map(state.leafCharCounts)
-        newMap.delete(leafId)
-        return {
-          totalLeafCount: Math.max(0, state.totalLeafCount - 1),
-          totalLeafChars: Math.max(0, state.totalLeafChars - chars),
-          leafCharCounts: newMap,
-        }
-      })
+      const chars = _leafCharCounts.get(leafId) ?? (content ? computeLeafCharCount(content) : 0)
+      const newMap = new Map(_leafCharCounts)
+      newMap.delete(leafId)
+      _totalLeafCount = Math.max(0, _totalLeafCount - 1)
+      _totalLeafChars = Math.max(0, _totalLeafChars - chars)
+      _leafCharCounts = newMap
     },
 
     /**
      * リーフのコンテンツを更新
      */
     updateLeafContent(leafId: string, newContent: string, prevContent?: string) {
-      update((state) => {
-        const prevChars =
-          state.leafCharCounts.get(leafId) ?? (prevContent ? computeLeafCharCount(prevContent) : 0)
-        const nextChars = computeLeafCharCount(newContent)
-        const newMap = new Map(state.leafCharCounts)
-        newMap.set(leafId, nextChars)
-        return {
-          totalLeafCount: state.totalLeafCount,
-          totalLeafChars: state.totalLeafChars + (nextChars - prevChars),
-          leafCharCounts: newMap,
-        }
-      })
+      const prevChars =
+        _leafCharCounts.get(leafId) ?? (prevContent ? computeLeafCharCount(prevContent) : 0)
+      const nextChars = computeLeafCharCount(newContent)
+      const newMap = new Map(_leafCharCounts)
+      newMap.set(leafId, nextChars)
+      _totalLeafChars = _totalLeafChars + (nextChars - prevChars)
+      _leafCharCounts = newMap
     },
 
     /**
      * 現在の状態を取得（リアクティブでない）
      */
     getState(): LeafStatsState {
-      return get({ subscribe })
+      return {
+        totalLeafCount: _totalLeafCount,
+        totalLeafChars: _totalLeafChars,
+        leafCharCounts: _leafCharCounts,
+      }
     },
 
     /**
      * 特定リーフの文字数を取得
      */
     getLeafChars(leafId: string): number {
-      return get({ subscribe }).leafCharCounts.get(leafId) ?? 0
+      return _leafCharCounts.get(leafId) ?? 0
     },
   }
 }
