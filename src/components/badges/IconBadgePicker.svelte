@@ -116,9 +116,13 @@
 
   const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#c7a443', '#ef4444']
 
-  export let icon: string = ''
-  export let color: string = ''
-  export let onChange: (icon: string, color: string) => void
+  interface Props {
+    icon?: string
+    color?: string
+    onChange: (icon: string, color: string) => void
+  }
+
+  let { icon = '', color = '', onChange }: Props = $props()
 
   let open = false
   const instanceId =
@@ -127,11 +131,12 @@
   let containerEl: HTMLElement | null = null
   let panelTop = 0
   let panelLeft = 0
-  $: resolvedIcon = (legacyIconMap[icon] ?? icon) as IconId | string
-  $: currentIconComponent =
+  let resolvedIcon = $derived((legacyIconMap[icon] ?? icon) as IconId | string)
+  let currentIconComponent = $derived(
     typeof resolvedIcon === 'string' && resolvedIcon in iconComponents
       ? iconComponents[resolvedIcon as IconId]
       : null
+  )
 
   function computePanelPosition() {
     const paneEl = containerEl?.closest('.left-column') || containerEl?.closest('.right-column')
@@ -166,7 +171,7 @@
     onChange(nextIcon, newColor)
   }
 
-  $: computedColor = color || 'var(--text-muted)'
+  let computedColor = $derived(color || 'var(--text-muted)')
 
   function handleGlobalOpen(e: Event) {
     const detail = (e as CustomEvent<string>).detail

@@ -9,28 +9,47 @@
   import { isOfflineLeaf, isPriorityLeaf } from '../../lib/utils'
   import { portal } from '../../lib/actions'
 
-  export let breadcrumbs: Breadcrumb[]
-  export let editingId: string | null = null
-  export let onStartEdit: (crumb: Breadcrumb) => void
-  export let onSaveEdit: (id: string, newName: string, type: Breadcrumb['type']) => void
-  export let onCancelEdit: () => void
-  export let onCopyUrl: (() => void) | null = null
-  export let onCopyMarkdown: (() => void) | null = null
-  export let onShareImage: (() => void) | null = null
-  export let onShareSelectionImage: (() => void) | null = null
-  export let isPreview: boolean = false
-  export let getHasSelection: (() => boolean) | null = null
-  export let getSelectedText: (() => string) | null = null
-  export let getMarkdownContent: (() => string) | null = null
-  export let onSelectSibling: ((id: string, type: 'note' | 'leaf') => void) | null = null
-  /** 現在のワールド */
-  export let currentWorld: WorldType = 'home'
-  /** ワールド切り替え時のコールバック */
-  export let onWorldChange: ((world: WorldType) => void) | null = null
-  /** アーカイブがロード中かどうか */
-  export let isArchiveLoading: boolean = false
-  /** Pull/Push中かどうか（ワールド切り替えを無効化） */
-  export let isSyncing: boolean = false
+  interface Props {
+    breadcrumbs: Breadcrumb[]
+    editingId?: string | null
+    onStartEdit: (crumb: Breadcrumb) => void
+    onSaveEdit: (id: string, newName: string, type: Breadcrumb['type']) => void
+    onCancelEdit: () => void
+    onCopyUrl?: (() => void) | null
+    onCopyMarkdown?: (() => void) | null
+    onShareImage?: (() => void) | null
+    onShareSelectionImage?: (() => void) | null
+    isPreview?: boolean
+    getHasSelection?: (() => boolean) | null
+    getSelectedText?: (() => string) | null
+    getMarkdownContent?: (() => string) | null
+    onSelectSibling?: ((id: string, type: 'note' | 'leaf') => void) | null
+    currentWorld?: WorldType
+    onWorldChange?: ((world: WorldType) => void) | null
+    isArchiveLoading?: boolean
+    isSyncing?: boolean
+  }
+
+  let {
+    breadcrumbs,
+    editingId = null,
+    onStartEdit,
+    onSaveEdit,
+    onCancelEdit,
+    onCopyUrl = null,
+    onCopyMarkdown = null,
+    onShareImage = null,
+    onShareSelectionImage = null,
+    isPreview = false,
+    getHasSelection = null,
+    getSelectedText = null,
+    getMarkdownContent = null,
+    onSelectSibling = null,
+    currentWorld = 'home',
+    onWorldChange = null,
+    isArchiveLoading = false,
+    isSyncing = false,
+  }: Props = $props()
 
   let inputValue = ''
   let inputElement: HTMLInputElement | null = null
@@ -130,7 +149,7 @@
   }
 
   // リーフ表示かどうかを判定
-  $: isLeafView = breadcrumbs.some((crumb) => crumb.type === 'leaf')
+  let isLeafView = $derived(breadcrumbs.some((crumb) => crumb.type === 'leaf'))
 </script>
 
 <svelte:window on:click={handleWindowClick} />

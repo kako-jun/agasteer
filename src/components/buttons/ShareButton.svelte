@@ -8,14 +8,27 @@
   import UploadIcon from '../icons/UploadIcon.svelte'
   import QRCodeDisplay from '../QRCodeDisplay.svelte'
 
-  export let onCopyUrl: () => void
-  export let onCopyMarkdown: () => void
-  export let onShareImage: (() => void) | null = null
-  export let onShareSelectionImage: (() => void) | null = null
-  export let getHasSelection: (() => boolean) | null = null
-  export let getSelectedText: (() => string) | null = null
-  export let getMarkdownContent: (() => string) | null = null
-  export let isPreview: boolean = false
+  interface Props {
+    onCopyUrl: () => void
+    onCopyMarkdown: () => void
+    onShareImage?: (() => void) | null
+    onShareSelectionImage?: (() => void) | null
+    getHasSelection?: (() => boolean) | null
+    getSelectedText?: (() => string) | null
+    getMarkdownContent?: (() => string) | null
+    isPreview?: boolean
+  }
+
+  let {
+    onCopyUrl,
+    onCopyMarkdown,
+    onShareImage = null,
+    onShareSelectionImage = null,
+    getHasSelection = null,
+    getSelectedText = null,
+    getMarkdownContent = null,
+    isPreview = false,
+  }: Props = $props()
 
   let showMenu = false
   let menuElement: HTMLDivElement

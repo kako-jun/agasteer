@@ -3,18 +3,35 @@
   import type { Leaf, ThemeType } from '../../lib/types'
   import type { Pane } from '../../lib/navigation'
 
-  export let leaf: Leaf
-  export let theme: ThemeType
-  export let vimMode: boolean = false
-  export let linedMode: boolean = false
-  export let pane: Pane
-  export let onContentChange: (content: string, leafId: string) => void
-  export let onPush: () => void
-  export let onClose: (() => void) | null = null
-  export let onSwitchPane: (() => void) | null = null
-  export let onDownload: (leafId: string) => void
-  export let onDelete: (leafId: string) => void
-  export let onScroll: ((scrollTop: number, scrollHeight: number) => void) | null = null
+  interface Props {
+    leaf: Leaf
+    theme: ThemeType
+    vimMode?: boolean
+    linedMode?: boolean
+    pane: Pane
+    onContentChange: (content: string, leafId: string) => void
+    onPush: () => void
+    onClose?: (() => void) | null
+    onSwitchPane?: (() => void) | null
+    onDownload: (leafId: string) => void
+    onDelete: (leafId: string) => void
+    onScroll?: ((scrollTop: number, scrollHeight: number) => void) | null
+  }
+
+  let {
+    leaf,
+    theme,
+    vimMode = false,
+    linedMode = false,
+    pane,
+    onContentChange,
+    onPush,
+    onClose = null,
+    onSwitchPane = null,
+    onDownload,
+    onDelete,
+    onScroll = null,
+  }: Props = $props()
 
   let markdownEditor: any = null
 

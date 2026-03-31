@@ -2,9 +2,13 @@
   import { _ } from '../../lib/i18n'
   import SettingsIcon from '../icons/SettingsIcon.svelte'
 
-  export let show: boolean
-  export let onOpenSettings: () => void
-  export let onClose: () => void
+  interface Props {
+    show: boolean
+    onOpenSettings: () => void
+    onClose: () => void
+  }
+
+  let { show, onOpenSettings, onClose }: Props = $props()
 </script>
 
 {#if show}

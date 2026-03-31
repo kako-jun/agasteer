@@ -4,19 +4,33 @@
   import type { Pane } from '../../lib/navigation'
   import MoveIcon from '../icons/MoveIcon.svelte'
 
-  export let show: boolean
-  export let notes: Note[]
-  export let targetNote: Note | null = null
-  export let targetLeaf: Leaf | null = null
-  export let pane: Pane = 'left'
-  export let currentWorld: WorldType = 'home'
-  export let onConfirm: (destNoteId: string | null) => void
-  export let onClose: () => void
+  interface Props {
+    show: boolean
+    notes: Note[]
+    targetNote?: Note | null
+    targetLeaf?: Leaf | null
+    pane?: Pane
+    currentWorld?: WorldType
+    onConfirm: (destNoteId: string | null) => void
+    onClose: () => void
+  }
+
+  let {
+    show,
+    notes,
+    targetNote = null,
+    targetLeaf = null,
+    pane = 'left',
+    currentWorld = 'home',
+    onConfirm,
+    onClose,
+  }: Props = $props()
 
   // アーカイブ内では「アーカイブ直下」、ホームでは「ホーム直下」
-  $: rootLabel = currentWorld === 'archive' ? $_('move.archive') : $_('move.home')
-  $: currentlyAtRootLabel =
+  let rootLabel = $derived(currentWorld === 'archive' ? $_('move.archive') : $_('move.home'))
+  let currentlyAtRootLabel = $derived(
     currentWorld === 'archive' ? $_('move.currentlyAtArchive') : $_('move.currentlyAtHome')
+  )
 
   const sortedRoots = () => notes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
 
@@ -48,8 +62,9 @@
   }
 
   // リーフはルート直下に置けない理由のラベル
-  $: cannotPlaceAtRootLabel =
+  let cannotPlaceAtRootLabel = $derived(
     currentWorld === 'archive' ? $_('move.cannotPlaceAtArchive') : $_('move.cannotPlaceAtHome')
+  )
 
   function canSelect(dest: Note | null): { selectable: boolean; reason?: string } {
     if (isLeafMode()) {
@@ -86,15 +101,17 @@
 
   let selected: string | null = null
 
-  $: if (show) {
-    if (isLeafMode()) {
-      selected = null
-    } else if (targetNote) {
-      selected = targetNote.parentId || null
-    } else {
-      selected = null
+  $effect(() => {
+    if (show) {
+      if (isLeafMode()) {
+        selected = null
+      } else if (targetNote) {
+        selected = targetNote.parentId || null
+      } else {
+        selected = null
+      }
     }
-  }
+  })
 
   function handleSelect(destId: string | null) {
     selected = destId

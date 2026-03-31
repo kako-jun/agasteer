@@ -11,23 +11,41 @@
   import ArchiveIcon from '../../icons/ArchiveIcon.svelte'
   import RestoreIcon from '../../icons/RestoreIcon.svelte'
 
-  export let onDelete: () => void
-  export let onMove: () => void
-  export let onDownload: () => void
-  export let onTogglePreview: () => void
-  export let onPush: () => void
-  export let disabled: boolean
-  export let isDirty: boolean
-  export let pushDisabled: boolean = false
-  export let pushDisabledReason: string = ''
-  export let onDisabledPushClick: ((reason: string) => void) | null = null
-  export let hideDeleteMove: boolean = false
-  export let getHasSelection: (() => boolean) | null = null
-  /** 現在のワールド */
-  export let currentWorld: WorldType = 'home'
-  /** アーカイブ/リストアのコールバック */
-  export let onArchive: (() => void) | null = null
-  export let onRestore: (() => void) | null = null
+  interface Props {
+    onDelete: () => void
+    onMove: () => void
+    onDownload: () => void
+    onTogglePreview: () => void
+    onPush: () => void
+    disabled: boolean
+    isDirty: boolean
+    pushDisabled?: boolean
+    pushDisabledReason?: string
+    onDisabledPushClick?: ((reason: string) => void) | null
+    hideDeleteMove?: boolean
+    getHasSelection?: (() => boolean) | null
+    currentWorld?: WorldType
+    onArchive?: (() => void) | null
+    onRestore?: (() => void) | null
+  }
+
+  let {
+    onDelete,
+    onMove,
+    onDownload,
+    onTogglePreview,
+    onPush,
+    disabled,
+    isDirty,
+    pushDisabled = false,
+    pushDisabledReason = '',
+    onDisabledPushClick = null,
+    hideDeleteMove = false,
+    getHasSelection = null,
+    currentWorld = 'home',
+    onArchive = null,
+    onRestore = null,
+  }: Props = $props()
 
   let downloadTitle = $_('footer.download')
 
@@ -44,7 +62,7 @@
 </script>
 
 <Footer>
-  <svelte:fragment slot="left">
+  {#snippet left()}
     {#if !hideDeleteMove}
       <IconButton
         onClick={onDelete}
@@ -95,8 +113,8 @@
     >
       <DownloadIcon />
     </IconButton>
-  </svelte:fragment>
-  <svelte:fragment slot="right">
+  {/snippet}
+  {#snippet right()}
     <IconButton
       onClick={onTogglePreview}
       title={$_('footer.preview')}
@@ -112,5 +130,5 @@
       disabledReason={pushDisabledReason}
       onDisabledClick={onDisabledPushClick}
     />
-  </svelte:fragment>
+  {/snippet}
 </Footer>

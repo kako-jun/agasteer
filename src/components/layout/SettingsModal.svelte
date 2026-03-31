@@ -3,17 +3,33 @@
   import type { Settings } from '../../lib/types'
   import SettingsView from '../views/SettingsView.svelte'
 
-  export let show: boolean
-  export let settings: Settings
-  export let isTesting: boolean
-  export let exporting: boolean
-  export let importing: boolean
-  export let onThemeChange: (theme: string) => void
-  export let onSettingsChange: (payload: Partial<Settings>) => void
-  export let onTestConnection: () => void
-  export let onExportZip: () => void
-  export let onImport: () => void
-  export let onClose: () => void
+  interface Props {
+    show: boolean
+    settings: Settings
+    isTesting: boolean
+    exporting: boolean
+    importing: boolean
+    onThemeChange: (theme: string) => void
+    onSettingsChange: (payload: Partial<Settings>) => void
+    onTestConnection: () => void
+    onExportZip: () => void
+    onImport: () => void
+    onClose: () => void
+  }
+
+  let {
+    show,
+    settings,
+    isTesting,
+    exporting,
+    importing,
+    onThemeChange,
+    onSettingsChange,
+    onTestConnection,
+    onExportZip,
+    onImport,
+    onClose,
+  }: Props = $props()
 
   let pointerFromContent = false
 

@@ -2,7 +2,7 @@
   import { autoPushProgress } from '../../../lib/stores/auto-save'
 
   // フッター高さに合わせて高さを計算
-  $: height = Math.round($autoPushProgress * 40)
+  let height = $derived(Math.round($autoPushProgress * 40))
 </script>
 
 {#if $autoPushProgress > 0}

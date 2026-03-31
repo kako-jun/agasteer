@@ -2,23 +2,27 @@
   import QRCode from 'qrcode'
   import { _ } from '../lib/i18n'
 
-  export let getContent: () => string
-  export let hasSelection: boolean = false
+  interface Props {
+    getContent: () => string
+    hasSelection?: boolean
+  }
+
+  let { getContent, hasSelection = false }: Props = $props()
 
   // QRコードの最大容量（誤り訂正レベルL、バイナリモード）
   const QR_MAX_BYTES = 2953
 
-  let showModal = false
-  let qrDataUrl: string | null = null
+  let showModal = $state(false)
+  let qrDataUrl: string | null = $state(null)
 
   function getByteLength(str: string): number {
     return new TextEncoder().encode(str).length
   }
 
   // 同期的にバイト数をチェック
-  $: content = getContent()
-  $: byteLength = getByteLength(content)
-  $: qrExceeded = byteLength > QR_MAX_BYTES
+  let content = $derived(getContent())
+  let byteLength = $derived(getByteLength(content))
+  let qrExceeded = $derived(byteLength > QR_MAX_BYTES)
 
   // QRコードのバージョンに応じた最小モジュール数を取得
   function getModuleCount(dataLength: number): number {

@@ -4,8 +4,12 @@
   import { uploadAndApplyFont, removeAndDeleteCustomFont } from '../../lib/ui'
   import { showAlert } from '../../lib/ui'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onSettingsChange }: Props = $props()
 
   let fileInput: HTMLInputElement
   let fontUploading = false

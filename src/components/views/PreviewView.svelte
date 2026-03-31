@@ -3,10 +3,14 @@
   import type { Leaf } from '../../lib/types'
   import { openExternalUrl } from '../../lib/utils'
 
-  export let leaf: Leaf
-  export let onScroll: ((scrollTop: number, scrollHeight: number) => void) | null = null
-  /** Priorityリンククリック時のコールバック（leafId, line） */
-  export let onPriorityLinkClick: ((leafId: string, line: number) => void) | null = null
+  interface Props {
+    leaf: Leaf
+    onScroll?: ((scrollTop: number, scrollHeight: number) => void) | null
+    /** Priorityリンククリック時のコールバック（leafId, line） */
+    onPriorityLinkClick?: ((leafId: string, line: number) => void) | null
+  }
+
+  let { leaf, onScroll = null, onPriorityLinkClick = null }: Props = $props()
 
   let previewSection: HTMLElement
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
@@ -15,11 +19,13 @@
   let DOMPurify: any
 
   // マークダウンをHTMLに変換してサニタイズ
-  $: htmlContent = isLoading
-    ? ''
-    : DOMPurify.sanitize(marked(leaf.content) as string, {
-        ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|#):/i,
-      })
+  let htmlContent = $derived(
+    isLoading
+      ? ''
+      : DOMPurify.sanitize(marked(leaf.content) as string, {
+          ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|#):/i,
+        })
+  )
 
   // marked/DOMPurifyを動的ロード
   async function loadMarkdownTools() {

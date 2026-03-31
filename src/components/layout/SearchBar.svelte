@@ -16,7 +16,11 @@
   import type { SearchMatch } from '../../lib/types'
 
   // マッチタイプに応じたジャンプ処理
-  export let onResultClick: (result: SearchMatch) => void
+  interface Props {
+    onResultClick: (result: SearchMatch) => void
+  }
+
+  let { onResultClick }: Props = $props()
 
   let inputElement: HTMLInputElement
   let containerElement: HTMLDivElement
@@ -82,20 +86,22 @@
   }
 
   // isSearchOpenの変化を監視してイベントリスナーを管理
-  $: if ($isSearchOpen) {
-    if (!listenerRegistered) {
-      setTimeout(() => {
-        document.addEventListener('click', handleClickOutside)
-        listenerRegistered = true
-      }, 0)
+  $effect(() => {
+    if ($isSearchOpen) {
+      if (!listenerRegistered) {
+        setTimeout(() => {
+          document.addEventListener('click', handleClickOutside)
+          listenerRegistered = true
+        }, 0)
+      }
+      setTimeout(() => inputElement?.focus(), 50)
+    } else {
+      if (listenerRegistered) {
+        document.removeEventListener('click', handleClickOutside)
+        listenerRegistered = false
+      }
     }
-    setTimeout(() => inputElement?.focus(), 50)
-  } else {
-    if (listenerRegistered) {
-      document.removeEventListener('click', handleClickOutside)
-      listenerRegistered = false
-    }
-  }
+  })
 
   onDestroy(() => {
     if (listenerRegistered) {

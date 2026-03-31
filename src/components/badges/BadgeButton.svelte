@@ -1,9 +1,13 @@
 <script lang="ts">
   import IconBadgePicker from './IconBadgePicker.svelte'
 
-  export let icon: string = ''
-  export let color: string = ''
-  export let onChange: (icon: string, color: string) => void
+  interface Props {
+    icon?: string
+    color?: string
+    onChange: (icon: string, color: string) => void
+  }
+
+  let { icon = '', color = '', onChange }: Props = $props()
 </script>
 
 <IconBadgePicker {icon} {color} {onChange} />

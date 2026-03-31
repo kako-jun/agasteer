@@ -1,11 +1,18 @@
 <script lang="ts">
   import AutoSaveIndicator from './footer/AutoSaveIndicator.svelte'
+
+  interface Props {
+    left?: import('svelte').Snippet
+    right?: import('svelte').Snippet
+  }
+
+  let { left, right }: Props = $props()
 </script>
 
 <div class="footer-fixed">
-  <slot name="left" />
+  {@render left?.()}
   <div class="spacer"></div>
-  <slot name="right" />
+  {@render right?.()}
   <AutoSaveIndicator />
 </div>
 

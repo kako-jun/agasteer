@@ -1,9 +1,13 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
 
-  export let onImport: () => void
-  export let importing: boolean = false
-  export let supportedLabel: string = ''
+  interface Props {
+    onImport: () => void
+    importing?: boolean
+    supportedLabel?: string
+  }
+
+  let { onImport, importing = false, supportedLabel = '' }: Props = $props()
 </script>
 
 <div class="import-section">

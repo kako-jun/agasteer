@@ -1,8 +1,12 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
 
-  export let onExportZip: () => void
-  export let exporting: boolean = false
+  interface Props {
+    onExportZip: () => void
+    exporting?: boolean
+  }
+
+  let { onExportZip, exporting = false }: Props = $props()
 </script>
 
 <div class="export-section">

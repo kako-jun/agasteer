@@ -2,7 +2,7 @@
   import { staleCheckProgress } from '../../../lib/stores/stale-checker'
 
   // ヘッダー高さに合わせて高さを計算（フッターと同様にpx指定）
-  $: height = Math.round($staleCheckProgress * 40)
+  let height = $derived(Math.round($staleCheckProgress * 40))
 </script>
 
 <div class="wrapper">

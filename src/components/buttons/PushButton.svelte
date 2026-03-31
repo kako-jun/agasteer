@@ -3,18 +3,26 @@
   import { isSaveGuideShown, dismissSaveGuide } from '../../lib/tour'
   import OctocatPushIcon from '../icons/OctocatPushIcon.svelte'
 
-  export let onPush: () => void
-  export let isDirty: boolean
-  export let disabled: boolean = false
-  /** 無効時の理由（クリックしたらトースト表示） */
-  export let disabledReason: string = ''
-  /** 無効時のクリックハンドラ */
-  export let onDisabledClick: ((reason: string) => void) | null = null
-  /** DOM ID（ツアー用） */
-  export let id: string = ''
+  interface Props {
+    onPush: () => void
+    isDirty: boolean
+    disabled?: boolean
+    disabledReason?: string
+    onDisabledClick?: ((reason: string) => void) | null
+    id?: string
+  }
+
+  let {
+    onPush,
+    isDirty,
+    disabled = false,
+    disabledReason = '',
+    onDisabledClick = null,
+    id = '',
+  }: Props = $props()
 
   // 初めてダーティになった時かつガイド未表示かつボタンが有効なら吹き出しを表示
-  $: showGuide = isDirty && !isSaveGuideShown() && !disabled
+  let showGuide = $derived(isDirty && !isSaveGuideShown() && !disabled)
 
   function handleClick() {
     if (disabled) {

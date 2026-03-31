@@ -3,10 +3,14 @@
   import { _, locale } from '../../lib/i18n'
   import type { Settings } from '../../lib/types'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
-  export let isTesting: boolean = false
-  export let onTestConnection: () => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+    isTesting?: boolean
+    onTestConnection: () => void
+  }
+
+  let { settings, onSettingsChange, isTesting = false, onTestConnection }: Props = $props()
 
   type TextSettingKey = 'repoName' | 'token'
 
@@ -18,28 +22,31 @@
     onSettingsChange({ [key]: value } as Partial<Settings>)
   }
 
-  $: setupGuideUrl = (() => {
-    const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
-    return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md`
-  })()
+  let setupGuideUrl = $derived(
+    (() => {
+      const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
+      return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md`
+    })()
+  )
 
-  $: tokenGuideUrl = (() => {
-    const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
-    const anchor =
-      lang === 'ja' ? '#2-personal-access-tokenを取得する' : '#2-obtain-a-personal-access-token'
-    return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
-  })()
+  let tokenGuideUrl = $derived(
+    (() => {
+      const lang = $locale?.startsWith('ja') ? 'ja' : 'en'
+      const anchor =
+        lang === 'ja' ? '#2-personal-access-tokenを取得する' : '#2-obtain-a-personal-access-token'
+      return `${SETUP_GUIDE_BASE}/${lang}/github-setup.md${anchor}`
+    })()
+  )
 
   let tokenCopied = false
 
   let initialRepoName = ''
-  let repoChanged = false
 
   // Combo-box state
   let dropdownOpen = false
   let comboBoxRef: HTMLDivElement
 
-  $: repoHistory = settings.repoHistory || []
+  let repoHistory = $derived(settings.repoHistory || [])
 
   onMount(() => {
     initialRepoName = settings.repoName || ''
@@ -52,7 +59,7 @@
     }
   })
 
-  $: repoChanged = initialRepoName !== '' && settings.repoName !== initialRepoName
+  let repoChanged = $derived(initialRepoName !== '' && settings.repoName !== initialRepoName)
 
   function handleRepoInput(event: Event) {
     const value = (event.target as HTMLInputElement).value

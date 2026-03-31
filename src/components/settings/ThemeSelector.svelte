@@ -2,9 +2,13 @@
   import { _ } from '../../lib/i18n'
   import type { Settings, ThemeType } from '../../lib/types'
 
-  export let settings: Settings
-  export let onThemeChange: (theme: ThemeType) => void
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onThemeChange: (theme: ThemeType) => void
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onThemeChange, onSettingsChange }: Props = $props()
 
   function handleThemeSelect(theme: ThemeType) {
     settings.theme = theme
