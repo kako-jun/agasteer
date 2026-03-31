@@ -40,16 +40,16 @@ graph TB
 
 ### フレームワーク & ライブラリ
 
-| 技術                | バージョン | 役割                                |
-| ------------------- | ---------- | ----------------------------------- |
-| **Svelte**          | 4.2.19     | リアクティブUIフレームワーク        |
-| **TypeScript**      | 5.7.2      | 型安全性の提供                      |
-| **Vite**            | 5.4.10     | ビルドツール & 開発サーバー         |
-| **vite-plugin-pwa** | 1.1.0      | PWA（Service Worker）自動生成       |
-| **CodeMirror**      | 6.0.1      | 高機能エディタ                      |
-| **marked**          | 17+        | マークダウン→HTML変換（プレビュー） |
-| **DOMPurify**       | 3+         | XSSサニタイゼーション               |
-| **svelte-i18n**     | 4+         | 国際化（i18n）対応                  |
+| 技術                | バージョン | 役割                                      |
+| ------------------- | ---------- | ----------------------------------------- |
+| **Svelte**          | 5.55+      | リアクティブUIフレームワーク（runes構文） |
+| **TypeScript**      | 5.7.2      | 型安全性の提供                            |
+| **Vite**            | 5.4+       | ビルドツール & 開発サーバー               |
+| **vite-plugin-pwa** | 1.2.0      | PWA（Service Worker）自動生成             |
+| **CodeMirror**      | 6.0.1      | 高機能エディタ                            |
+| **marked**          | 17+        | マークダウン→HTML変換（プレビュー）       |
+| **DOMPurify**       | 3+         | XSSサニタイゼーション                     |
+| **svelte-i18n**     | 4+         | 国際化（i18n）対応                        |
 
 ### CodeMirrorエコシステム
 
@@ -64,7 +64,7 @@ graph TB
 
 - **Prettier** (3.3.3): コード整形
 - **prettier-plugin-svelte**: Svelteファイル対応
-- **svelte-check** (3.8.6): 型チェック
+- **svelte-check** (4+): 型チェック
 - **Husky** (9.1.6): Gitフック管理
 
 ---
@@ -173,6 +173,14 @@ agasteer/
 │   │   ├── github.ts                    # GitHub API統合
 │   │   ├── routing.ts                   # URLルーティング
 │   │   ├── storage.ts                   # IndexedDB/LocalStorage操作
+│   │   ├── actions/                      # App.svelteから抽出したビジネスロジック
+│   │   │   ├── git.ts                   # Push/Pull/接続テスト
+│   │   │   ├── move.ts                  # ノート/リーフのワールド間移動
+│   │   │   ├── crud.ts                  # ノート/リーフのCRUD操作
+│   │   │   ├── io.ts                    # インポート/エクスポート
+│   │   │   ├── swipe.ts                # スワイプナビゲーション（Svelte action）
+│   │   │   └── portal.ts               # ポータル（Svelte action）
+│   │   ├── app-state.svelte.ts          # 共有リアクティブ状態（Svelte 5 runes）
 │   │   ├── stores/                      # 状態管理モジュール
 │   │   │   ├── stores.ts                # Svelte Store状態管理
 │   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
@@ -298,6 +306,14 @@ agasteer/
 **状態管理:**
 
 - `stores.ts`: Svelteストアによる状態管理（notes, leaves, settings, isDirty, toast等）
+- `app-state.svelte.ts`: 共有リアクティブ状態（Svelte 5 runes、ワールドヘルパー）
+
+**アクションモジュール（App.svelteから抽出）:**
+
+- `actions/git.ts`: Push/Pull/接続テスト
+- `actions/move.ts`: ノート/リーフのワールド間移動（アーカイブ↔ホーム）
+- `actions/crud.ts`: ノート/リーフのCRUD操作、バッジ更新
+- `actions/io.ts`: ZIPエクスポート、他アプリからのインポート、Markdown/画像ダウンロード
 
 **GitHub同期:**
 

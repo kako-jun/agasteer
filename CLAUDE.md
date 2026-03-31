@@ -35,14 +35,14 @@ npm run preview      # ビルド結果確認
 
 ### 主要技術
 
-| 技術         | 役割              |
-| ------------ | ----------------- |
-| Svelte 4     | UIフレームワーク  |
-| TypeScript 5 | 型安全性          |
-| Vite 5       | ビルドツール      |
-| CodeMirror 6 | エディタ          |
-| marked       | Markdown→HTML変換 |
-| svelte-i18n  | 国際化            |
+| 技術         | 役割                          |
+| ------------ | ----------------------------- |
+| Svelte 5     | UIフレームワーク（runes構文） |
+| TypeScript 5 | 型安全性                      |
+| Vite 5       | ビルドツール                  |
+| CodeMirror 6 | エディタ                      |
+| marked       | Markdown→HTML変換             |
+| svelte-i18n  | 国際化                        |
 
 ---
 
