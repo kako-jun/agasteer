@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { Note, Leaf, Breadcrumb, WorldType, Metadata } from '../types'
+import type { Note, Leaf, Breadcrumb, WorldType } from '../types'
 import type { Pane } from '../navigation'
 import type { LeafSkeleton } from '../api'
 import type { ModalPosition } from '../ui'
