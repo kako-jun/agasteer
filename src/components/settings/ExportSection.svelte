@@ -1,8 +1,12 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
 
-  export let onExportZip: () => void
-  export let exporting: boolean = false
+  interface Props {
+    onExportZip: () => void
+    exporting?: boolean
+  }
+
+  let { onExportZip, exporting = false }: Props = $props()
 </script>
 
 <div class="export-section">
@@ -10,7 +14,7 @@
   <p class="description">{$_('settings.importExport.description')}</p>
 
   <div class="actions">
-    <button class="primary" type="button" on:click={onExportZip} disabled={exporting}>
+    <button class="primary" type="button" onclick={onExportZip} disabled={exporting}>
       {exporting ? $_('settings.importExport.exporting') : $_('settings.importExport.exportZip')}
     </button>
   </div>

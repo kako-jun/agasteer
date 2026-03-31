@@ -3,18 +3,26 @@
   import { isSaveGuideShown, dismissSaveGuide } from '../../lib/tour'
   import OctocatPushIcon from '../icons/OctocatPushIcon.svelte'
 
-  export let onPush: () => void
-  export let isDirty: boolean
-  export let disabled: boolean = false
-  /** 無効時の理由（クリックしたらトースト表示） */
-  export let disabledReason: string = ''
-  /** 無効時のクリックハンドラ */
-  export let onDisabledClick: ((reason: string) => void) | null = null
-  /** DOM ID（ツアー用） */
-  export let id: string = ''
+  interface Props {
+    onPush: () => void
+    isDirty: boolean
+    disabled?: boolean
+    disabledReason?: string
+    onDisabledClick?: ((reason: string) => void) | null
+    id?: string
+  }
+
+  let {
+    onPush,
+    isDirty,
+    disabled = false,
+    disabledReason = '',
+    onDisabledClick = null,
+    id = '',
+  }: Props = $props()
 
   // 初めてダーティになった時かつガイド未表示かつボタンが有効なら吹き出しを表示
-  $: showGuide = isDirty && !isSaveGuideShown() && !disabled
+  let showGuide = $derived(isDirty && !isSaveGuideShown() && !disabled)
 
   function handleClick() {
     if (disabled) {
@@ -32,9 +40,9 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="push-button-wrapper" id={id || undefined} on:click={handleClick}>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="push-button-wrapper" id={id || undefined} onclick={handleClick}>
   <button
     type="button"
     class="push-button"
@@ -48,9 +56,15 @@
     <span class="notification-badge"></span>
   {/if}
   {#if showGuide}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="guide-tooltip" on:click|stopPropagation={handleDismiss}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="guide-tooltip"
+      onclick={(e) => {
+        e.stopPropagation()
+        handleDismiss()
+      }}
+    >
       <span class="guide-text">{$_('guide.saveToGitHub')}</span>
       <span class="guide-close">×</span>
     </div>

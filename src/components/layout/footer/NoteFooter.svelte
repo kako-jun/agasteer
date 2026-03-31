@@ -13,28 +13,45 @@
   import ArchiveIcon from '../../icons/ArchiveIcon.svelte'
   import RestoreIcon from '../../icons/RestoreIcon.svelte'
 
-  export let onDeleteNote: () => void
-  export let onMove: () => void
-  export let onCreateSubNote: (name: string) => void
-  export let onCreateLeaf: (name: string) => void
-  export let onPush: () => void
-  export let disabled: boolean
-  export let isDirty: boolean
-  export let canHaveSubNote: boolean
-  export let pushDisabled: boolean = false
-  export let pushDisabledReason: string = ''
-  export let onDisabledPushClick: ((reason: string) => void) | null = null
-  /** 現在のワールド */
-  export let currentWorld: WorldType = 'home'
-  /** アーカイブ/リストアのコールバック */
-  export let onArchive: (() => void) | null = null
-  export let onRestore: (() => void) | null = null
-  /** 現在のノートID（ガイド表示用） */
-  export let noteId: string = ''
+  interface Props {
+    onDeleteNote: () => void
+    onMove: () => void
+    onCreateSubNote: (name: string) => void
+    onCreateLeaf: (name: string) => void
+    onPush: () => void
+    disabled: boolean
+    isDirty: boolean
+    canHaveSubNote: boolean
+    pushDisabled?: boolean
+    pushDisabledReason?: string
+    onDisabledPushClick?: ((reason: string) => void) | null
+    currentWorld?: WorldType
+    onArchive?: (() => void) | null
+    onRestore?: (() => void) | null
+    noteId?: string
+  }
+
+  let {
+    onDeleteNote,
+    onMove,
+    onCreateSubNote,
+    onCreateLeaf,
+    onPush,
+    disabled,
+    isDirty,
+    canHaveSubNote,
+    pushDisabled = false,
+    pushDisabledReason = '',
+    onDisabledPushClick = null,
+    currentWorld = 'home',
+    onArchive = null,
+    onRestore = null,
+    noteId = '',
+  }: Props = $props()
 
   // このノート配下のリーフが0個かつガイド未表示なら吹き出しを表示
-  $: noteLeaves = $leaves.filter((l) => l.noteId === noteId)
-  $: showGuide = noteLeaves.length === 0 && !isTourShown()
+  let noteLeaves = $derived($leaves.filter((l) => l.noteId === noteId))
+  let showGuide = $derived(noteLeaves.length === 0 && !isTourShown())
 
   function handleCreateLeaf() {
     dismissTour()
@@ -47,7 +64,7 @@
 </script>
 
 <Footer>
-  <svelte:fragment slot="left">
+  {#snippet left()}
     <IconButton
       onClick={onDeleteNote}
       title={$_('footer.deleteNote')}
@@ -105,17 +122,17 @@
           <FilePlusIcon />
         </IconButton>
         {#if showGuide}
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div class="guide-tooltip" on:click={handleDismiss}>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="guide-tooltip" onclick={handleDismiss}>
             <span class="guide-text">{$_('guide.createLeaf')}</span>
             <span class="guide-close">×</span>
           </div>
         {/if}
       </span>
     {/if}
-  </svelte:fragment>
-  <svelte:fragment slot="right">
+  {/snippet}
+  {#snippet right()}
     <PushButton
       {onPush}
       {isDirty}
@@ -123,7 +140,7 @@
       disabledReason={pushDisabledReason}
       onDisabledClick={onDisabledPushClick}
     />
-  </svelte:fragment>
+  {/snippet}
 </Footer>
 
 <style>

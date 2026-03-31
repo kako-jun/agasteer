@@ -8,19 +8,32 @@
   import UploadIcon from '../icons/UploadIcon.svelte'
   import QRCodeDisplay from '../QRCodeDisplay.svelte'
 
-  export let onCopyUrl: () => void
-  export let onCopyMarkdown: () => void
-  export let onShareImage: (() => void) | null = null
-  export let onShareSelectionImage: (() => void) | null = null
-  export let getHasSelection: (() => boolean) | null = null
-  export let getSelectedText: (() => string) | null = null
-  export let getMarkdownContent: (() => string) | null = null
-  export let isPreview: boolean = false
+  interface Props {
+    onCopyUrl: () => void
+    onCopyMarkdown: () => void
+    onShareImage?: (() => void) | null
+    onShareSelectionImage?: (() => void) | null
+    getHasSelection?: (() => boolean) | null
+    getSelectedText?: (() => string) | null
+    getMarkdownContent?: (() => string) | null
+    isPreview?: boolean
+  }
 
-  let showMenu = false
+  let {
+    onCopyUrl,
+    onCopyMarkdown,
+    onShareImage = null,
+    onShareSelectionImage = null,
+    getHasSelection = null,
+    getSelectedText = null,
+    getMarkdownContent = null,
+    isPreview = false,
+  }: Props = $props()
+
+  let showMenu = $state(false)
   let menuElement: HTMLDivElement
-  let supportsWebShare = false
-  let currentHasSelection = false
+  let supportsWebShare = $state(false)
+  let currentHasSelection = $state(false)
 
   function toggleMenu() {
     // メニューを開く時に選択状態をチェック
@@ -78,12 +91,12 @@
 
   {#if showMenu}
     <div class="share-menu">
-      <button class="menu-item" on:click={handleCopyUrl}>
+      <button class="menu-item" onclick={handleCopyUrl}>
         <LinkIcon />
         <span>{$_('share.copyUrl')}</span>
       </button>
 
-      <button class="menu-item" on:click={handleCopyMarkdown}>
+      <button class="menu-item" onclick={handleCopyMarkdown}>
         <CopyIcon />
         <span
           >{isPreview
@@ -108,18 +121,18 @@
       {/if}
 
       {#if (isPreview && supportsWebShare && onShareImage) || (!isPreview && supportsWebShare && onShareSelectionImage)}
-        <div class="menu-divider" />
+        <div class="menu-divider"></div>
       {/if}
 
       {#if isPreview && supportsWebShare && onShareImage}
-        <button class="menu-item" on:click={handleShareImage}>
+        <button class="menu-item" onclick={handleShareImage}>
           <UploadIcon />
           <span>{$_('share.shareImage')}</span>
         </button>
       {/if}
 
       {#if !isPreview && supportsWebShare && onShareSelectionImage}
-        <button class="menu-item" on:click={handleShareSelectionImage}>
+        <button class="menu-item" onclick={handleShareSelectionImage}>
           <UploadIcon />
           <span
             >{currentHasSelection ? $_('share.shareSelectionImage') : $_('share.shareImage')}</span

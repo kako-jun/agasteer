@@ -2,8 +2,12 @@
   import { _, locale } from '../../lib/i18n'
   import type { Settings, Locale } from '../../lib/types'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onSettingsChange }: Props = $props()
 
   function handleLocaleChange(event: Event) {
     const value = (event.target as HTMLSelectElement).value as Locale
@@ -16,7 +20,7 @@
 <div class="language-selector">
   <label for="language">{$_('settings.appearance.language')}</label>
   <div class="select-wrapper">
-    <select id="language" bind:value={settings.locale} on:change={handleLocaleChange}>
+    <select id="language" bind:value={settings.locale} onchange={handleLocaleChange}>
       <option value="en">English</option>
       <option value="ja">日本語</option>
     </select>

@@ -3,8 +3,12 @@
   import { defaultSettings } from '../../lib/data'
   import type { Settings } from '../../lib/types'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onSettingsChange }: Props = $props()
 
   function handleToolNameInput(event: Event) {
     const value = (event.target as HTMLInputElement).value
@@ -17,7 +21,7 @@
     onSettingsChange({ toolName: defaultSettings.toolName })
   }
 
-  $: isDefaultToolName = settings.toolName === defaultSettings.toolName
+  let isDefaultToolName = $derived(settings.toolName === defaultSettings.toolName)
 </script>
 
 <div class="tool-name-field">
@@ -28,10 +32,10 @@
       type="text"
       bind:value={settings.toolName}
       placeholder={$_('settings.appearance.toolName.placeholder')}
-      on:input={handleToolNameInput}
+      oninput={handleToolNameInput}
     />
     {#if !isDefaultToolName}
-      <button type="button" class="reset-button" on:click={handleResetToolName}>
+      <button type="button" class="reset-button" onclick={handleResetToolName}>
         {$_('settings.appearance.toolName.reset')}
       </button>
     {/if}

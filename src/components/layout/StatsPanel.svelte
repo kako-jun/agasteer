@@ -1,9 +1,13 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
 
-  export let leafCount = 0
-  export let leafCharCount = 0
-  export let pushCount = 0
+  interface Props {
+    leafCount?: number
+    leafCharCount?: number
+    pushCount?: number
+  }
+
+  let { leafCount = 0, leafCharCount = 0, pushCount = 0 }: Props = $props()
 </script>
 
 <div class="stats-overlay"></div>

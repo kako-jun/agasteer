@@ -3,17 +3,33 @@
   import type { ModalType } from '../../lib/types'
   import type { ModalPosition, ChoiceOption } from '../../lib/ui'
 
-  export let show: boolean
-  export let message: string
-  export let type: ModalType
-  export let position: ModalPosition = 'center'
-  export let onConfirm: (() => void) | null
-  export let onCancel: (() => void) | null = null
-  export let onPromptSubmit: ((value: string) => void) | null = null
-  export let onChoiceSelect: ((value: string) => void) | null = null
-  export let choiceOptions: ChoiceOption[] = []
-  export let placeholder: string = ''
-  export let onClose: () => void
+  interface Props {
+    show: boolean
+    message: string
+    type: ModalType
+    position?: ModalPosition
+    onConfirm: (() => void) | null
+    onCancel?: (() => void) | null
+    onPromptSubmit?: ((value: string) => void) | null
+    onChoiceSelect?: ((value: string) => void) | null
+    choiceOptions?: ChoiceOption[]
+    placeholder?: string
+    onClose: () => void
+  }
+
+  let {
+    show,
+    message,
+    type,
+    position = 'center',
+    onConfirm,
+    onCancel = null,
+    onPromptSubmit = null,
+    onChoiceSelect = null,
+    choiceOptions = [],
+    placeholder = '',
+    onClose,
+  }: Props = $props()
 
   function handleClose() {
     if (onCancel) {
@@ -26,18 +42,22 @@
     onClose()
   }
 
-  let inputValue = ''
-  let inputElement: HTMLInputElement | null = null
+  let inputValue = $state('')
+  let inputElement: HTMLInputElement | null = $state(null)
 
   // モーダルが表示されたらフォーカス
-  $: if (show && type === 'prompt') {
-    setTimeout(() => inputElement?.focus(), 0)
-  }
+  $effect(() => {
+    if (show && type === 'prompt') {
+      setTimeout(() => inputElement?.focus(), 0)
+    }
+  })
 
   // モーダルが閉じたら入力値をリセット
-  $: if (!show) {
-    inputValue = ''
-  }
+  $effect(() => {
+    if (!show) {
+      inputValue = ''
+    }
+  })
 
   function handleConfirm() {
     if (onConfirm) {
@@ -75,19 +95,21 @@
 </script>
 
 {#if show}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="modal-overlay"
     class:bottom-left={position === 'bottom-left'}
     class:bottom-right={position === 'bottom-right'}
-    on:click={handleClose}
+    onclick={handleClose}
     role="presentation"
   >
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="modal-content"
-      on:click|stopPropagation
+      onclick={(e) => {
+        e.stopPropagation()
+      }}
       role="dialog"
       aria-modal="true"
       tabindex="-1"
@@ -102,16 +124,16 @@
           type="text"
           class="prompt-input"
           {placeholder}
-          on:keydown={handleKeydown}
+          onkeydown={handleKeydown}
         />
       {/if}
       <div class="modal-buttons">
         {#if type === 'confirm'}
-          <button class="secondary" on:click={handleClose}>{$_('common.cancel')}</button>
-          <button class="primary" on:click={handleConfirm}>{$_('common.ok')}</button>
+          <button class="secondary" onclick={handleClose}>{$_('common.cancel')}</button>
+          <button class="primary" onclick={handleConfirm}>{$_('common.ok')}</button>
         {:else if type === 'prompt'}
-          <button class="secondary" on:click={handleClose}>{$_('common.cancel')}</button>
-          <button class="primary" on:click={handlePromptSubmit} disabled={!inputValue.trim()}
+          <button class="secondary" onclick={handleClose}>{$_('common.cancel')}</button>
+          <button class="primary" onclick={handlePromptSubmit} disabled={!inputValue.trim()}
             >{$_('common.ok')}</button
           >
         {:else if type === 'choice'}
@@ -123,14 +145,14 @@
                   : option.variant === 'cancel'
                     ? 'cancel'
                     : 'secondary'}
-                on:click={() => handleChoiceSelect(option.value)}
+                onclick={() => handleChoiceSelect(option.value)}
               >
                 {option.label}
               </button>
             {/each}
           </div>
         {:else}
-          <button class="primary" on:click={handleConfirm}>{$_('common.ok')}</button>
+          <button class="primary" onclick={handleConfirm}>{$_('common.ok')}</button>
         {/if}
       </div>
     </div>

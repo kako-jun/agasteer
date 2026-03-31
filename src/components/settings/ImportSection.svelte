@@ -1,9 +1,13 @@
 <script lang="ts">
   import { _ } from '../../lib/i18n'
 
-  export let onImport: () => void
-  export let importing: boolean = false
-  export let supportedLabel: string = ''
+  interface Props {
+    onImport: () => void
+    importing?: boolean
+    supportedLabel?: string
+  }
+
+  let { onImport, importing = false, supportedLabel = '' }: Props = $props()
 </script>
 
 <div class="import-section">
@@ -11,7 +15,7 @@
   <p class="description">{$_('settings.importExport.importDescription')}</p>
 
   <div class="actions">
-    <button class="secondary" type="button" on:click={onImport} disabled={importing}>
+    <button class="secondary" type="button" onclick={onImport} disabled={importing}>
       {importing ? $_('settings.importExport.importing') : $_('settings.importExport.import')}
     </button>
     {#if supportedLabel}

@@ -4,11 +4,15 @@
   import { uploadAndApplyFont, removeAndDeleteCustomFont } from '../../lib/ui'
   import { showAlert } from '../../lib/ui'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onSettingsChange }: Props = $props()
 
   let fileInput: HTMLInputElement
-  let fontUploading = false
+  let fontUploading = $state(false)
 
   function handleFontButtonClick() {
     fileInput?.click()
@@ -61,13 +65,13 @@
       type="file"
       accept=".ttf,.otf,.woff,.woff2"
       bind:this={fileInput}
-      on:change={handleFontFileChange}
+      onchange={handleFontFileChange}
       style="display: none;"
     />
     <button
       type="button"
       class="test-button"
-      on:click={handleFontButtonClick}
+      onclick={handleFontButtonClick}
       disabled={fontUploading}
     >
       <svg
@@ -92,7 +96,7 @@
         : $_('settings.appearance.font.select')}
     </button>
     {#if settings.hasCustomFont}
-      <button type="button" class="test-button" on:click={handleResetFont}>
+      <button type="button" class="test-button" onclick={handleResetFont}>
         {$_('settings.appearance.font.reset')}
       </button>
     {/if}

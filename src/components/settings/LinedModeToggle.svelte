@@ -2,8 +2,12 @@
   import { _ } from '../../lib/i18n'
   import type { Settings } from '../../lib/types'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onSettingsChange }: Props = $props()
 
   function handleLinedModeChange(event: Event) {
     const value = (event.target as HTMLInputElement).checked
@@ -18,7 +22,7 @@
       id="lined-mode"
       type="checkbox"
       checked={settings.linedMode ?? false}
-      on:change={handleLinedModeChange}
+      onchange={handleLinedModeChange}
     />
     <span>{$_('settings.editor.linedMode')}</span>
   </label>

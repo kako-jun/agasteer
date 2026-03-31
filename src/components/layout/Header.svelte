@@ -12,31 +12,51 @@
   import ArrowLeftIcon from '../icons/ArrowLeftIcon.svelte'
   import StaleCheckIndicator from './header/StaleCheckIndicator.svelte'
 
-  export let githubConfigured: boolean
-  export let title: string = 'Agasteer'
-  export let onTitleClick: () => void
-  export let onSettingsClick: () => void
-  export let onPull: () => void
-  export let pullDisabled: boolean = false
-  export let isStale: boolean = false
-  /** Pull進捗情報、nullなら非表示 */
-  export let pullProgress: { percent: number; fetched: number; total: number } | null = null
-  export let onPullProgressClick: () => void = () => {}
-  export let onSearchClick: () => void
-  export let onHelpClick: () => void
-  export let isDualPane: boolean = false
-  export let isOperationsLocked: boolean = false
-  export let onSwapPanes: () => void = () => {}
-  export let onCopyLeftToRight: () => void = () => {}
-  export let onCopyRightToLeft: () => void = () => {}
+  interface Props {
+    githubConfigured: boolean
+    title?: string
+    onTitleClick: () => void
+    onSettingsClick: () => void
+    onPull: () => void
+    pullDisabled?: boolean
+    isStale?: boolean
+    pullProgress?: { percent: number; fetched: number; total: number } | null
+    onPullProgressClick?: () => void
+    onSearchClick: () => void
+    onHelpClick: () => void
+    isDualPane?: boolean
+    isOperationsLocked?: boolean
+    onSwapPanes?: () => void
+    onCopyLeftToRight?: () => void
+    onCopyRightToLeft?: () => void
+  }
 
-  $: hasTitle = title.trim().length > 0
-  $: showAppIcon = hasTitle && title.trim() === defaultSettings.toolName
+  let {
+    githubConfigured,
+    title = 'Agasteer',
+    onTitleClick,
+    onSettingsClick,
+    onPull,
+    pullDisabled = false,
+    isStale = false,
+    pullProgress = null,
+    onPullProgressClick = () => {},
+    onSearchClick,
+    onHelpClick,
+    isDualPane = false,
+    isOperationsLocked = false,
+    onSwapPanes = () => {},
+    onCopyLeftToRight = () => {},
+    onCopyRightToLeft = () => {},
+  }: Props = $props()
 
-  let showPaneMenu = false
-  let menuX = 0
-  let menuY = 0
-  let swapButtonRef: HTMLElement
+  let hasTitle = $derived(title.trim().length > 0)
+  let showAppIcon = $derived(hasTitle && title.trim() === defaultSettings.toolName)
+
+  let showPaneMenu = $state(false)
+  let menuX = $state(0)
+  let menuY = $state(0)
+  let swapButtonRef: HTMLElement = $state(null!)
 
   function togglePaneMenu() {
     if (!showPaneMenu && swapButtonRef) {
@@ -60,17 +80,17 @@
   }
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} />
 
 {#if showPaneMenu}
   <div class="pane-menu" style="left: {menuX}px; top: {menuY}px;">
-    <button on:click={() => handleMenuAction(onCopyRightToLeft)}>
+    <button onclick={() => handleMenuAction(onCopyRightToLeft)}>
       <ArrowLeftIcon />
     </button>
-    <button on:click={() => handleMenuAction(onSwapPanes)}>
+    <button onclick={() => handleMenuAction(onSwapPanes)}>
       <SwapIcon />
     </button>
-    <button on:click={() => handleMenuAction(onCopyLeftToRight)}>
+    <button onclick={() => handleMenuAction(onCopyLeftToRight)}>
       <ArrowRightIcon />
     </button>
   </div>
@@ -87,7 +107,7 @@
     <a
       class="title-button"
       href="/"
-      on:click={(e) => {
+      onclick={(e) => {
         if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
           e.preventDefault()
           onTitleClick()

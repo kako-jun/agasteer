@@ -1,10 +1,21 @@
 <script lang="ts">
-  export let size = 100
-  export let animate = false
-  export let ariaLabel = 'Agasteer'
-  export let className = ''
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { class: restClass = '', ...restProps }: any = $$restProps
+  interface Props {
+    size?: number
+    animate?: boolean
+    ariaLabel?: string
+    className?: string
+    class?: string
+    [key: string]: any
+  }
+
+  let {
+    size = 100,
+    animate = false,
+    ariaLabel = 'Agasteer',
+    className = '',
+    class: restClass = '',
+    ...restProps
+  }: Props = $props()
 </script>
 
 <div

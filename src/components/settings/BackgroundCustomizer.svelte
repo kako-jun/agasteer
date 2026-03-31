@@ -8,13 +8,17 @@
   } from '../../lib/ui'
   import { showAlert } from '../../lib/ui'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+  }
+
+  let { settings, onSettingsChange }: Props = $props()
 
   let backgroundLeftFileInput: HTMLInputElement
   let backgroundRightFileInput: HTMLInputElement
-  let backgroundLeftUploading = false
-  let backgroundRightUploading = false
+  let backgroundLeftUploading = $state(false)
+  let backgroundRightUploading = $state(false)
 
   const DEFAULT_OPACITY = 0.1
   const MIN_OPACITY = 0.1
@@ -145,7 +149,8 @@
             max={MAX_OPACITY}
             step={OPACITY_STEP}
             value={settings.backgroundOpacityLeft ?? DEFAULT_OPACITY}
-            on:input={(e) => handleOpacityChange('left', parseFloat(e.currentTarget.value))}
+            oninput={(e) =>
+              handleOpacityChange('left', parseFloat((e.currentTarget as HTMLInputElement).value))}
           />
         </label>
       {/if}
@@ -154,13 +159,13 @@
           type="file"
           accept=".jpg,.jpeg,.png,.webp,.gif"
           bind:this={backgroundLeftFileInput}
-          on:change={(e) => handleBackgroundFileChange(e, 'left')}
+          onchange={(e) => handleBackgroundFileChange(e, 'left')}
           style="display: none;"
         />
         <button
           type="button"
           class="test-button"
-          on:click={() => handleBackgroundButtonClick('left')}
+          onclick={() => handleBackgroundButtonClick('left')}
           disabled={backgroundLeftUploading}
         >
           <svg
@@ -184,7 +189,7 @@
             : $_('settings.appearance.background.select')}
         </button>
         {#if settings.hasCustomBackgroundLeft}
-          <button type="button" class="test-button" on:click={() => handleResetBackground('left')}>
+          <button type="button" class="test-button" onclick={() => handleResetBackground('left')}>
             {$_('settings.appearance.background.reset')}
           </button>
         {/if}
@@ -212,7 +217,8 @@
             max={MAX_OPACITY}
             step={OPACITY_STEP}
             value={settings.backgroundOpacityRight ?? DEFAULT_OPACITY}
-            on:input={(e) => handleOpacityChange('right', parseFloat(e.currentTarget.value))}
+            oninput={(e) =>
+              handleOpacityChange('right', parseFloat((e.currentTarget as HTMLInputElement).value))}
           />
         </label>
       {/if}
@@ -221,13 +227,13 @@
           type="file"
           accept=".jpg,.jpeg,.png,.webp,.gif"
           bind:this={backgroundRightFileInput}
-          on:change={(e) => handleBackgroundFileChange(e, 'right')}
+          onchange={(e) => handleBackgroundFileChange(e, 'right')}
           style="display: none;"
         />
         <button
           type="button"
           class="test-button"
-          on:click={() => handleBackgroundButtonClick('right')}
+          onclick={() => handleBackgroundButtonClick('right')}
           disabled={backgroundRightUploading}
         >
           <svg
@@ -251,7 +257,7 @@
             : $_('settings.appearance.background.select')}
         </button>
         {#if settings.hasCustomBackgroundRight}
-          <button type="button" class="test-button" on:click={() => handleResetBackground('right')}>
+          <button type="button" class="test-button" onclick={() => handleResetBackground('right')}>
             {$_('settings.appearance.background.reset')}
           </button>
         {/if}

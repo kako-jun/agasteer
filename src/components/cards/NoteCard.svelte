@@ -3,25 +3,45 @@
   import type { Note } from '../../lib/types'
   import BadgeButton from '../badges/BadgeButton.svelte'
 
-  export let note: Note
-  export let dragOver: boolean = false
-  export let isSelected: boolean = false
-  export let isDirty: boolean = false // ノート配下にダーティなリーフがあるか
-  export let onSelect: () => void
-  export let onDragStart: () => void
-  export let onDragEnd: () => void
-  export let onDragOver: (e: DragEvent) => void
-  export let onDrop: () => void
-  export let items: string[] = []
-  export let isGroup: boolean = false
-  export let vimMode: boolean = false
-  export let badgeIcon: string = ''
-  export let badgeColor: string = ''
-  export let onBadgeChange: (icon: string, color: string) => void
+  interface Props {
+    note: Note
+    dragOver?: boolean
+    isSelected?: boolean
+    isDirty?: boolean
+    onSelect: () => void
+    onDragStart: () => void
+    onDragEnd: () => void
+    onDragOver: (e: DragEvent) => void
+    onDrop: () => void
+    items?: string[]
+    isGroup?: boolean
+    vimMode?: boolean
+    badgeIcon?: string
+    badgeColor?: string
+    onBadgeChange: (icon: string, color: string) => void
+  }
+
+  let {
+    note,
+    dragOver = false,
+    isSelected = false,
+    isDirty = false,
+    onSelect,
+    onDragStart,
+    onDragEnd,
+    onDragOver,
+    onDrop,
+    items = [],
+    isGroup = false,
+    vimMode = false,
+    badgeIcon = '',
+    badgeColor = '',
+    onBadgeChange,
+  }: Props = $props()
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="note-card"
   class:note-group-card={isGroup}
@@ -30,11 +50,14 @@
   draggable="true"
   role="button"
   tabindex="0"
-  on:dragstart={onDragStart}
-  on:dragend={onDragEnd}
-  on:dragover={onDragOver}
-  on:drop|preventDefault={onDrop}
-  on:click={onSelect}
+  ondragstart={onDragStart}
+  ondragend={onDragEnd}
+  ondragover={onDragOver}
+  ondrop={(e) => {
+    e.preventDefault()
+    onDrop()
+  }}
+  onclick={onSelect}
 >
   {#if isDirty}
     <span class="dirty-indicator" title={$_('note.hasUnsavedLeaves')}></span>

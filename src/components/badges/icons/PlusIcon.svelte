@@ -1,6 +1,11 @@
 <script lang="ts">
   import BaseIcon from './BaseIcon.svelte'
-  export let color = 'currentColor'
+
+  interface Props {
+    color?: string
+  }
+
+  let { color = 'currentColor' }: Props = $props()
 </script>
 
 <BaseIcon {color}>

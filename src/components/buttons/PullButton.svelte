@@ -2,14 +2,23 @@
   import { _ } from '../../lib/i18n'
   import OctocatPullIcon from '../icons/OctocatPullIcon.svelte'
 
-  export let onPull: () => void
-  export let disabled: boolean = false
-  export let isStale: boolean = false
-  /** Pull進捗情報 */
-  export let progress: { percent: number; fetched: number; total: number } | null = null
-  export let onProgressClick: () => void = () => {}
-  /** DOM ID（ツアー用） */
-  export let id: string = ''
+  interface Props {
+    onPull: () => void
+    disabled?: boolean
+    isStale?: boolean
+    progress?: { percent: number; fetched: number; total: number } | null
+    onProgressClick?: () => void
+    id?: string
+  }
+
+  let {
+    onPull,
+    disabled = false,
+    isStale = false,
+    progress = null,
+    onProgressClick = () => {},
+    id = '',
+  }: Props = $props()
 </script>
 
 <div class="pull-button-wrapper" id={id || undefined}>
@@ -17,7 +26,7 @@
     <button
       type="button"
       class="pull-button"
-      on:click={onPull}
+      onclick={onPull}
       {disabled}
       title={$_('header.pull')}
       aria-label={$_('header.pull')}
@@ -25,7 +34,7 @@
       <OctocatPullIcon />
     </button>
     {#if progress !== null}
-      <button class="pull-progress" on:click={onProgressClick}>{progress.percent}%</button>
+      <button class="pull-progress" onclick={onProgressClick}>{progress.percent}%</button>
     {/if}
   </div>
   {#if isStale}

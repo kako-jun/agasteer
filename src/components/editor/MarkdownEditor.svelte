@@ -6,23 +6,39 @@
   import { createDirtyLineExtension } from '../../lib/editor/dirty-lines'
   import { getLastPushedContent, dirtyLeafIds } from '../../lib/stores'
 
-  export let content: string
-  export let theme: ThemeType
-  export let vimMode: boolean = false
-  export let linedMode: boolean = false
-  export let leafId: string = ''
-  export let pane: Pane
-  export let onChange: (newContent: string) => void
-  export let onPush: (() => void) | null = null
-  export let onClose: (() => void) | null = null
-  export let onSwitchPane: (() => void) | null = null
-  export let onScroll: ((scrollTop: number, scrollHeight: number) => void) | null = null
+  interface Props {
+    content: string
+    theme: ThemeType
+    vimMode?: boolean
+    linedMode?: boolean
+    leafId?: string
+    pane: Pane
+    onChange: (newContent: string) => void
+    onPush?: (() => void) | null
+    onClose?: (() => void) | null
+    onSwitchPane?: (() => void) | null
+    onScroll?: ((scrollTop: number, scrollHeight: number) => void) | null
+  }
 
-  let editorContainer: HTMLDivElement
+  let {
+    content,
+    theme,
+    vimMode = false,
+    linedMode = false,
+    leafId = '',
+    pane,
+    onChange,
+    onPush = null,
+    onClose = null,
+    onSwitchPane = null,
+    onScroll = null,
+  }: Props = $props()
+
+  let editorContainer: HTMLDivElement = $state(undefined as unknown as HTMLDivElement)
   let editorView: any = null
   let currentExtensions: any[] = []
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
-  let isLoading = true // CodeMirrorローディング中フラグ
+  let isLoading = $state(true) // CodeMirrorローディング中フラグ
   let dirtyLineCleanup: (() => void) | null = null // ダーティラインマーカーのクリーンアップ関数
   let updateDirtyLinesFnRef: ((view: any) => void) | null = null // ダーティライン更新関数の参照
   let dirtyLeafIdsUnsubscribe: (() => void) | null = null // dirtyLeafIdsストアのアンサブスクライブ関数
@@ -539,26 +555,30 @@
   }
 
   // テーマまたはVimモード変更時にエディタを再初期化
-  $: if (editorView && (theme || vimMode !== undefined || linedMode !== undefined)) {
-    // dirtyLeafIdsストアの購読解除
-    if (dirtyLeafIdsUnsubscribe) {
-      dirtyLeafIdsUnsubscribe()
-      dirtyLeafIdsUnsubscribe = null
+  $effect(() => {
+    if (editorView && (theme || vimMode !== undefined || linedMode !== undefined)) {
+      // dirtyLeafIdsストアの購読解除
+      if (dirtyLeafIdsUnsubscribe) {
+        dirtyLeafIdsUnsubscribe()
+        dirtyLeafIdsUnsubscribe = null
+      }
+      // ダーティラインマーカーのクリーンアップ
+      if (dirtyLineCleanup) {
+        dirtyLineCleanup()
+        dirtyLineCleanup = null
+      }
+      editorView.destroy()
+      editorView = null
+      initializeEditor()
     }
-    // ダーティラインマーカーのクリーンアップ
-    if (dirtyLineCleanup) {
-      dirtyLineCleanup()
-      dirtyLineCleanup = null
-    }
-    editorView.destroy()
-    editorView = null
-    initializeEditor()
-  }
+  })
 
   // contentが外部から変更された時にエディタを更新
-  $: if (editorView && content !== undefined) {
-    updateEditorContent(content)
-  }
+  $effect(() => {
+    if (editorView && content !== undefined) {
+      updateEditorContent(content)
+    }
+  })
 
   onMount(async () => {
     await loadCodeMirror()

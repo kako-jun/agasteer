@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { afterUpdate } from 'svelte'
   import { _, locale } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
   import { dirtyNoteIds, dirtyLeafIds } from '../../lib/stores'
@@ -7,27 +6,53 @@
   import BadgeButton from '../badges/BadgeButton.svelte'
   import HelpIcon from '../icons/HelpIcon.svelte'
 
-  export let notes: Note[]
-  export let allLeaves: Leaf[] = []
-  export let onSelectNote: (note: Note) => void
-  export let onDragStart: (note: Note) => void
-  export let onDragEnd: () => void
-  export let onDragOver: (e: DragEvent, note: Note) => void
-  export let onDrop: (note: Note) => void
-  export let dragOverNoteId: string | null = null
-  export let isFirstPriorityFetched: boolean = false
-  export let isPullCompleted: boolean = false
-  export let selectedIndex: number = 0
-  export let isActive: boolean = true
-  export let vimMode: boolean = false
-  export let onUpdateNoteBadge: (noteId: string, icon: string, color: string) => void
-  export let priorityLeaf: Leaf | null = null
-  export let onSelectPriority: () => void
-  export let onUpdatePriorityBadge: (icon: string, color: string) => void
-  export let offlineLeaf: Leaf | null = null
-  export let onSelectOffline: () => void
-  export let onUpdateOfflineBadge: (icon: string, color: string) => void
-  export let isArchive: boolean = false
+  interface Props {
+    notes: Note[]
+    allLeaves?: Leaf[]
+    onSelectNote: (note: Note) => void
+    onDragStart: (note: Note) => void
+    onDragEnd: () => void
+    onDragOver: (e: DragEvent, note: Note) => void
+    onDrop: (note: Note) => void
+    dragOverNoteId?: string | null
+    isFirstPriorityFetched?: boolean
+    isPullCompleted?: boolean
+    selectedIndex?: number
+    isActive?: boolean
+    vimMode?: boolean
+    onUpdateNoteBadge: (noteId: string, icon: string, color: string) => void
+    priorityLeaf?: Leaf | null
+    onSelectPriority: () => void
+    onUpdatePriorityBadge: (icon: string, color: string) => void
+    offlineLeaf?: Leaf | null
+    onSelectOffline: () => void
+    onUpdateOfflineBadge: (icon: string, color: string) => void
+    isArchive?: boolean
+  }
+
+  let {
+    notes,
+    allLeaves = [],
+    onSelectNote,
+    onDragStart,
+    onDragEnd,
+    onDragOver,
+    onDrop,
+    dragOverNoteId = null,
+    isFirstPriorityFetched = false,
+    isPullCompleted = false,
+    selectedIndex = 0,
+    isActive = true,
+    vimMode = false,
+    onUpdateNoteBadge,
+    priorityLeaf = null,
+    onSelectPriority,
+    onUpdatePriorityBadge,
+    offlineLeaf = null,
+    onSelectOffline,
+    onUpdateOfflineBadge,
+    isArchive = false,
+  }: Props = $props()
 
   // リアクティブにノートアイテムを計算（leavesが更新されるたびに再計算）
   function computeNoteItems(noteId: string, allNotes: Note[], leaves: Leaf[]): string[] {
@@ -53,16 +78,16 @@
   }
 
   // notesとallLeavesが変わるたびに再計算
-  $: noteItemsMap = new Map(
-    notes.map((note) => [note.id, computeNoteItems(note.id, notes, allLeaves)])
+  let noteItemsMap = $derived(
+    new Map(notes.map((note) => [note.id, computeNoteItems(note.id, notes, allLeaves)]))
   )
 
   // 特殊リーフ（Offline, Priority）のカウント（Vimナビゲーション用）
   // Priorityは全リーフPull完了後のみ表示されるのでカウントに含める
-  $: specialLeafCount = (offlineLeaf ? 1 : 0) + (priorityLeaf && isPullCompleted ? 1 : 0)
+  let specialLeafCount = $derived((offlineLeaf ? 1 : 0) + (priorityLeaf && isPullCompleted ? 1 : 0))
 
   // Vimモードで選択が変わったら選択中のカードが見えるようにスクロール
-  afterUpdate(() => {
+  $effect(() => {
     if (vimMode && isActive) {
       const selectedCard = document.querySelector(
         '.note-card.selected, .leaf-card.selected'
@@ -116,14 +141,14 @@
   <div class="card-grid" class:loading={!isFirstPriorityFetched}>
     <!-- Offline リーフ: 常に最初に表示、Pull中もクリック可能 -->
     {#if offlineLeaf}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="leaf-card offline-leaf"
         class:selected={vimMode && isActive && selectedIndex === 0}
         role="button"
         tabindex="0"
-        on:click={onSelectOffline}
+        onclick={onSelectOffline}
       >
         <BadgeButton
           icon={offlineLeaf.badgeIcon || ''}
@@ -139,7 +164,9 @@
             rel="noopener noreferrer"
             title={$_('header.help')}
             aria-label={$_('header.help')}
-            on:click|stopPropagation
+            onclick={(e) => {
+              e.stopPropagation()
+            }}
           >
             <HelpIcon />
           </a>
@@ -163,14 +190,14 @@
 
     <!-- Priority リーフ: Offlineの次に表示（全リーフPull完了後のみ） -->
     {#if priorityLeaf && isPullCompleted}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="leaf-card"
         class:selected={vimMode && isActive && selectedIndex === (offlineLeaf ? 1 : 0)}
         role="button"
         tabindex="0"
-        on:click={onSelectPriority}
+        onclick={onSelectPriority}
       >
         <BadgeButton
           icon={priorityLeaf.badgeIcon || ''}
@@ -186,7 +213,9 @@
             rel="noopener noreferrer"
             title={$_('header.help')}
             aria-label={$_('header.help')}
-            on:click|stopPropagation
+            onclick={(e) => {
+              e.stopPropagation()
+            }}
           >
             <HelpIcon />
           </a>

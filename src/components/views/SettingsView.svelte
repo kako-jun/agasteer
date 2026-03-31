@@ -16,15 +16,29 @@
   import VersionDisplay from '../settings/VersionDisplay.svelte'
   import VisitorCounter from '../settings/VisitorCounter.svelte'
 
-  export let settings: Settings
-  export let onSettingsChange: (payload: Partial<Settings>) => void
-  export let onThemeChange: (theme: ThemeType) => void
-  export let isTesting: boolean = false
-  export let onTestConnection: () => void
-  export let onExportZip: () => void
-  export let onImport: () => void
-  export let exporting: boolean = false
-  export let importing: boolean = false
+  interface Props {
+    settings: Settings
+    onSettingsChange: (payload: Partial<Settings>) => void
+    onThemeChange: (theme: ThemeType) => void
+    isTesting?: boolean
+    onTestConnection: () => void
+    onExportZip: () => void
+    onImport: () => void
+    exporting?: boolean
+    importing?: boolean
+  }
+
+  let {
+    settings,
+    onSettingsChange,
+    onThemeChange,
+    isTesting = false,
+    onTestConnection,
+    onExportZip,
+    onImport,
+    exporting = false,
+    importing = false,
+  }: Props = $props()
 </script>
 
 <section class="settings-container">

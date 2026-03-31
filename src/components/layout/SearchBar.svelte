@@ -16,10 +16,14 @@
   import type { SearchMatch } from '../../lib/types'
 
   // マッチタイプに応じたジャンプ処理
-  export let onResultClick: (result: SearchMatch) => void
+  interface Props {
+    onResultClick: (result: SearchMatch) => void
+  }
 
-  let inputElement: HTMLInputElement
-  let containerElement: HTMLDivElement
+  let { onResultClick }: Props = $props()
+
+  let inputElement: HTMLInputElement | undefined = $state(undefined)
+  let containerElement: HTMLDivElement | undefined = $state(undefined)
   let listenerRegistered = false
 
   function handleKeydown(e: KeyboardEvent) {
@@ -82,20 +86,22 @@
   }
 
   // isSearchOpenの変化を監視してイベントリスナーを管理
-  $: if ($isSearchOpen) {
-    if (!listenerRegistered) {
-      setTimeout(() => {
-        document.addEventListener('click', handleClickOutside)
-        listenerRegistered = true
-      }, 0)
+  $effect(() => {
+    if ($isSearchOpen) {
+      if (!listenerRegistered) {
+        setTimeout(() => {
+          document.addEventListener('click', handleClickOutside)
+          listenerRegistered = true
+        }, 0)
+      }
+      setTimeout(() => inputElement?.focus(), 50)
+    } else {
+      if (listenerRegistered) {
+        document.removeEventListener('click', handleClickOutside)
+        listenerRegistered = false
+      }
     }
-    setTimeout(() => inputElement?.focus(), 50)
-  } else {
-    if (listenerRegistered) {
-      document.removeEventListener('click', handleClickOutside)
-      listenerRegistered = false
-    }
-  }
+  })
 
   onDestroy(() => {
     if (listenerRegistered) {
@@ -126,14 +132,17 @@
         type="text"
         placeholder={$_('search.placeholder')}
         value={$searchQuery}
-        on:input={handleInput}
-        on:keydown={handleKeydown}
+        oninput={handleInput}
+        onkeydown={handleKeydown}
         aria-label={$_('search.placeholder')}
       />
       {#if $searchQuery}
         <button
           class="clear-button"
-          on:click|stopPropagation={handleClear}
+          onclick={(e) => {
+            e.stopPropagation()
+            handleClear()
+          }}
           title={$_('search.clear')}
           aria-label={$_('search.clear')}
         >
@@ -163,8 +172,8 @@
               class:selected={index === $selectedResultIndex}
               role="option"
               aria-selected={index === $selectedResultIndex}
-              on:click={() => handleResultClick(result)}
-              on:mouseenter={() => selectedResultIndex.set(index)}
+              onclick={() => handleResultClick(result)}
+              onmouseenter={() => selectedResultIndex.set(index)}
             >
               <div class="result-path">{result.path}</div>
               <div class="result-snippet">

@@ -116,22 +116,28 @@
 
   const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#c7a443', '#ef4444']
 
-  export let icon: string = ''
-  export let color: string = ''
-  export let onChange: (icon: string, color: string) => void
+  interface Props {
+    icon?: string
+    color?: string
+    onChange: (icon: string, color: string) => void
+  }
 
-  let open = false
+  let { icon = '', color = '', onChange }: Props = $props()
+
+  let open = $state(false)
   const instanceId =
     (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
     `badge-${Math.random().toString(36).slice(2)}`
   let containerEl: HTMLElement | null = null
-  let panelTop = 0
-  let panelLeft = 0
-  $: resolvedIcon = (legacyIconMap[icon] ?? icon) as IconId | string
-  $: currentIconComponent =
+  let panelTop = $state(0)
+  let panelLeft = $state(0)
+  let resolvedIcon = $derived((legacyIconMap[icon] ?? icon) as IconId | string)
+  let currentIconComponent = $derived(
     typeof resolvedIcon === 'string' && resolvedIcon in iconComponents
       ? iconComponents[resolvedIcon as IconId]
       : null
+  )
+  let CurrentIconComponent = $derived(currentIconComponent)
 
   function computePanelPosition() {
     const paneEl = containerEl?.closest('.left-column') || containerEl?.closest('.right-column')
@@ -166,7 +172,7 @@
     onChange(nextIcon, newColor)
   }
 
-  $: computedColor = color || 'var(--text-muted)'
+  let computedColor = $derived(color || 'var(--text-muted)')
 
   function handleGlobalOpen(e: Event) {
     const detail = (e as CustomEvent<string>).detail
@@ -198,8 +204,12 @@
   class="badge-container"
   class:has-icon={!!icon}
   role="presentation"
-  on:click|stopPropagation
-  on:keydown|stopPropagation
+  onclick={(e) => {
+    e.stopPropagation()
+  }}
+  onkeydown={(e) => {
+    e.stopPropagation()
+  }}
   tabindex="-1"
   bind:this={containerEl}
 >
@@ -207,11 +217,14 @@
     class="badge"
     aria-label="badge"
     style={`color: ${computedColor}`}
-    on:click|stopPropagation={toggleOpen}
+    onclick={(e) => {
+      e.stopPropagation()
+      toggleOpen(e)
+    }}
     type="button"
   >
-    {#if currentIconComponent}
-      <svelte:component this={currentIconComponent} color={computedColor} />
+    {#if CurrentIconComponent}
+      <CurrentIconComponent color={computedColor} />
     {:else}
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill={computedColor} />
@@ -224,12 +237,13 @@
         <button
           type="button"
           class:active={!icon}
-          on:click={() => onChange('', '')}
+          onclick={() => onChange('', '')}
           aria-label="clear badge"
         ></button>
         {#each icons as ic}
-          <button type="button" class:active={resolvedIcon === ic} on:click={() => selectIcon(ic)}>
-            <svelte:component this={iconComponents[ic]} color={computedColor} />
+          {@const IconComp = iconComponents[ic]}
+          <button type="button" class:active={resolvedIcon === ic} onclick={() => selectIcon(ic)}>
+            <IconComp color={computedColor} />
           </button>
         {/each}
       </div>
@@ -241,7 +255,7 @@
             class:active={c === color}
             style={`background:${c}`}
             aria-label={`color ${c}`}
-            on:click={() => selectColor(c)}
+            onclick={() => selectColor(c)}
           ></button>
         {/each}
       </div>

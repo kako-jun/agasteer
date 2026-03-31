@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
-  import { afterUpdate } from 'svelte'
+
   import { _ } from '../../lib/i18n'
   import type { Note, Leaf } from '../../lib/types'
   import type { LeafSkeleton } from '../../lib/api'
@@ -9,33 +9,65 @@
   import NoteCard from '../cards/NoteCard.svelte'
   import BadgeButton from '../badges/BadgeButton.svelte'
 
-  export let currentNote: Note
-  export let subNotes: Note[]
-  export let allNotes: Note[] = []
-  export let leaves: Leaf[]
-  export let allLeaves: Leaf[] = []
-  export let onSelectNote: (note: Note) => void
-  export let onSelectLeaf: (leaf: Leaf) => void
-  export let onDragStartNote: (note: Note) => void
-  export let onDragStartLeaf: (leaf: Leaf) => void
-  export let onDragEndNote: () => void
-  export let onDragEndLeaf: () => void
-  export let onDragOverNote: (e: DragEvent, note: Note) => void
-  export let onDragOverLeaf: (e: DragEvent, leaf: Leaf) => void
-  export let onDropNote: (note: Note) => void
-  export let onDropLeaf: (leaf: Leaf) => void
-  export let dragOverNoteId: string | null = null
-  export let dragOverLeafId: string | null = null
-  export let isFirstPriorityFetched: boolean = false
-  export let selectedIndex: number = 0
-  export let isActive: boolean = true
-  export let vimMode: boolean = false
-  export let onUpdateNoteBadge: (noteId: string, icon: string, color: string) => void
-  export let onUpdateLeafBadge: (leafId: string, icon: string, color: string) => void
-  export let leafSkeletonMap: Map<string, LeafSkeleton> = new Map()
-  export let onSwipeLeft: (() => void) | undefined = undefined
-  export let onSwipeRight: (() => void) | undefined = undefined
-  export let isArchive: boolean = false
+  interface Props {
+    currentNote: Note
+    subNotes: Note[]
+    allNotes?: Note[]
+    leaves: Leaf[]
+    allLeaves?: Leaf[]
+    onSelectNote: (note: Note) => void
+    onSelectLeaf: (leaf: Leaf) => void
+    onDragStartNote: (note: Note) => void
+    onDragStartLeaf: (leaf: Leaf) => void
+    onDragEndNote: () => void
+    onDragEndLeaf: () => void
+    onDragOverNote: (e: DragEvent, note: Note) => void
+    onDragOverLeaf: (e: DragEvent, leaf: Leaf) => void
+    onDropNote: (note: Note) => void
+    onDropLeaf: (leaf: Leaf) => void
+    dragOverNoteId?: string | null
+    dragOverLeafId?: string | null
+    isFirstPriorityFetched?: boolean
+    selectedIndex?: number
+    isActive?: boolean
+    vimMode?: boolean
+    onUpdateNoteBadge: (noteId: string, icon: string, color: string) => void
+    onUpdateLeafBadge: (leafId: string, icon: string, color: string) => void
+    leafSkeletonMap?: Map<string, LeafSkeleton>
+    onSwipeLeft?: (() => void) | undefined
+    onSwipeRight?: (() => void) | undefined
+    isArchive?: boolean
+  }
+
+  let {
+    currentNote,
+    subNotes,
+    allNotes = [],
+    leaves,
+    allLeaves = [],
+    onSelectNote,
+    onSelectLeaf,
+    onDragStartNote,
+    onDragStartLeaf,
+    onDragEndNote,
+    onDragEndLeaf,
+    onDragOverNote,
+    onDragOverLeaf,
+    onDropNote,
+    onDropLeaf,
+    dragOverNoteId = null,
+    dragOverLeafId = null,
+    isFirstPriorityFetched = false,
+    selectedIndex = 0,
+    isActive = true,
+    vimMode = false,
+    onUpdateNoteBadge,
+    onUpdateLeafBadge,
+    leafSkeletonMap = new Map(),
+    onSwipeLeft = undefined,
+    onSwipeRight = undefined,
+    isArchive = false,
+  }: Props = $props()
 
   // リアクティブにノートアイテムを計算（leavesが更新されるたびに再計算）
   function computeNoteItems(noteId: string, notes: Note[], leaves: Leaf[]): string[] {
@@ -61,12 +93,12 @@
   }
 
   // subNotesとallLeavesが変わるたびに再計算
-  $: noteItemsMap = new Map(
-    subNotes.map((note) => [note.id, computeNoteItems(note.id, allNotes, allLeaves)])
+  let noteItemsMap = $derived(
+    new Map(subNotes.map((note) => [note.id, computeNoteItems(note.id, allNotes, allLeaves)]))
   )
 
   // Vimモードで選択が変わったら選択中のカードが見えるようにスクロール
-  afterUpdate(() => {
+  $effect(() => {
     if (vimMode && isActive) {
       const selectedCard = document.querySelector('.note-card.selected') as HTMLElement
       if (selectedCard) {
@@ -76,23 +108,27 @@
   })
 
   // このノートに属するスケルトン（まだleavesに存在しないもの）
-  $: skeletons = Array.from(leafSkeletonMap.values())
-    .filter((s) => s.noteId === currentNote.id && !leaves.some((l) => l.id === s.id))
-    .sort((a, b) => a.order - b.order)
+  let skeletons = $derived(
+    Array.from(leafSkeletonMap.values())
+      .filter((s) => s.noteId === currentNote.id && !leaves.some((l) => l.id === s.id))
+      .sort((a, b) => a.order - b.order)
+  )
 
   // 表示用: 実リーフ + スケルトンを統合してorder順にソート
   type DisplayItem = { type: 'leaf'; leaf: Leaf } | { type: 'skeleton'; skeleton: LeafSkeleton }
-  $: displayItems = [
-    ...leaves.map((leaf): DisplayItem => ({ type: 'leaf', leaf })),
-    ...skeletons.map((skeleton): DisplayItem => ({ type: 'skeleton', skeleton })),
-  ].sort((a, b) => {
-    const orderA = a.type === 'leaf' ? a.leaf.order : a.skeleton.order
-    const orderB = b.type === 'leaf' ? b.leaf.order : b.skeleton.order
-    return orderA - orderB
-  })
+  let displayItems = $derived(
+    [
+      ...leaves.map((leaf): DisplayItem => ({ type: 'leaf', leaf })),
+      ...skeletons.map((skeleton): DisplayItem => ({ type: 'skeleton', skeleton })),
+    ].sort((a, b) => {
+      const orderA = a.type === 'leaf' ? a.leaf.order : a.skeleton.order
+      const orderB = b.type === 'leaf' ? b.leaf.order : b.skeleton.order
+      return orderA - orderB
+    })
+  )
 
   // リアクティブ宣言: ノートが変わるたびに再計算
-  $: canHaveSubNote = !currentNote.parentId
+  let canHaveSubNote = $derived(!currentNote.parentId)
 
   function formatDateTime(timestamp: number, variant: 'short' | 'long' = 'long'): string {
     const date = new Date(timestamp)
@@ -172,7 +208,7 @@
       {/each}
       {#each displayItems as item, itemIndex (item.type === 'leaf' ? item.leaf.id : item.skeleton.id)}
         <!-- tabindexは条件付きrole="button"と連動、スケルトン時は-1 -->
-        <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class="note-card leaf-card"
           class:loading={item.type === 'skeleton'}
@@ -185,12 +221,15 @@
           draggable={item.type === 'leaf'}
           role={item.type === 'leaf' ? 'button' : undefined}
           tabindex={item.type === 'leaf' ? 0 : -1}
-          on:dragstart={() => item.type === 'leaf' && onDragStartLeaf(item.leaf)}
-          on:dragend={onDragEndLeaf}
-          on:dragover={(e) => item.type === 'leaf' && onDragOverLeaf(e, item.leaf)}
-          on:drop|preventDefault={() => item.type === 'leaf' && onDropLeaf(item.leaf)}
-          on:click={() => item.type === 'leaf' && onSelectLeaf(item.leaf)}
-          on:keydown={(e) => item.type === 'leaf' && handleLeafKeydown(e, item.leaf)}
+          ondragstart={() => item.type === 'leaf' && onDragStartLeaf(item.leaf)}
+          ondragend={onDragEndLeaf}
+          ondragover={(e) => item.type === 'leaf' && onDragOverLeaf(e, item.leaf)}
+          ondrop={(e) => {
+            e.preventDefault()
+            item.type === 'leaf' && onDropLeaf(item.leaf)
+          }}
+          onclick={() => item.type === 'leaf' && onSelectLeaf(item.leaf)}
+          onkeydown={(e) => item.type === 'leaf' && handleLeafKeydown(e, item.leaf)}
           animate:flip={{ duration: 300 }}
         >
           {#if item.type === 'skeleton'}

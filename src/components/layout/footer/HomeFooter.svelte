@@ -8,18 +8,30 @@
   import PushButton from '../../buttons/PushButton.svelte'
   import FolderPlusIcon from '../../icons/FolderPlusIcon.svelte'
 
-  export let onCreateNote: (name: string) => void
-  export let onPush: () => void
-  export let disabled: boolean
-  export let isDirty: boolean
-  export let pushDisabled: boolean = false
-  export let pushDisabledReason: string = ''
-  export let onDisabledPushClick: ((reason: string) => void) | null = null
-  /** 現在のワールド */
-  export let currentWorld: WorldType = 'home'
+  interface Props {
+    onCreateNote: (name: string) => void
+    onPush: () => void
+    disabled: boolean
+    isDirty: boolean
+    pushDisabled?: boolean
+    pushDisabledReason?: string
+    onDisabledPushClick?: ((reason: string) => void) | null
+    currentWorld?: WorldType
+  }
+
+  let {
+    onCreateNote,
+    onPush,
+    disabled,
+    isDirty,
+    pushDisabled = false,
+    pushDisabledReason = '',
+    onDisabledPushClick = null,
+    currentWorld = 'home',
+  }: Props = $props()
 
   // ノートが0個かつガイド未表示かつボタンが有効（=初回Pull完了）なら吹き出しを表示
-  $: showGuide = $notes.length === 0 && !isTourShown() && !pushDisabled
+  let showGuide = $derived($notes.length === 0 && !isTourShown() && !pushDisabled)
 
   function handleCreateNote() {
     dismissTour()
@@ -32,7 +44,7 @@
 </script>
 
 <Footer>
-  <svelte:fragment slot="left">
+  {#snippet left()}
     <!-- アーカイブ内では新規作成不可 -->
     {#if currentWorld === 'home'}
       <span class="guide-container">
@@ -45,17 +57,17 @@
           <FolderPlusIcon />
         </IconButton>
         {#if showGuide}
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div class="guide-tooltip" on:click={handleDismiss}>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="guide-tooltip" onclick={handleDismiss}>
             <span class="guide-text">{$_('guide.createNote')}</span>
             <span class="guide-close">×</span>
           </div>
         {/if}
       </span>
     {/if}
-  </svelte:fragment>
-  <svelte:fragment slot="right">
+  {/snippet}
+  {#snippet right()}
     <PushButton
       {onPush}
       {isDirty}
@@ -63,7 +75,7 @@
       disabledReason={pushDisabledReason}
       onDisabledClick={onDisabledPushClick}
     />
-  </svelte:fragment>
+  {/snippet}
 </Footer>
 
 <style>

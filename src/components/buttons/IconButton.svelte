@@ -1,19 +1,35 @@
 <script lang="ts">
-  export let onClick: () => void
-  export let title = ''
-  export let ariaLabel = ''
-  export let disabled = false
-  export let variant: 'default' | 'primary' = 'default'
-  export let iconSize = 18
-  export let iconWidth: number | null = null
-  export let iconHeight: number | null = null
-  export let onMouseEnter: (() => void) | null = null
+  interface Props {
+    onClick: () => void
+    title?: string
+    ariaLabel?: string
+    disabled?: boolean
+    variant?: 'default' | 'primary'
+    iconSize?: number
+    iconWidth?: number | null
+    iconHeight?: number | null
+    onMouseEnter?: (() => void) | null
+    children?: import('svelte').Snippet
+  }
+
+  let {
+    onClick,
+    title = '',
+    ariaLabel = '',
+    disabled = false,
+    variant = 'default',
+    iconSize = 18,
+    iconWidth = null,
+    iconHeight = null,
+    onMouseEnter = null,
+    children,
+  }: Props = $props()
 </script>
 
 <button
   type="button"
-  on:click={onClick}
-  on:mouseenter={() => onMouseEnter?.()}
+  onclick={onClick}
+  onmouseenter={() => onMouseEnter?.()}
   {title}
   aria-label={ariaLabel}
   {disabled}
@@ -21,7 +37,7 @@
   class:primary={variant === 'primary'}
   style={`--icon-width: ${iconWidth ?? iconSize}px; --icon-height: ${iconHeight ?? iconSize}px;`}
 >
-  <slot />
+  {@render children?.()}
 </button>
 
 <style>

@@ -51,50 +51,66 @@
   import StatsPanel from './StatsPanel.svelte'
 
   // Props
-  export let pane: Pane
-  export let editorViewRef: any = null
-  export let previewViewRef: any = null
+  interface Props {
+    pane: Pane
+    editorViewRef?: any
+    previewViewRef?: any
+  }
+
+  let { pane, editorViewRef = $bindable(null), previewViewRef = $bindable(null) }: Props = $props()
 
   // Context から取得
   const actions = getContext<PaneActions>('paneActions')
   const state = getContext<Writable<PaneState>>('paneState')
 
   // pane に応じてストアを選択
-  $: currentView = pane === 'left' ? $leftView : $rightView
-  $: currentNote = pane === 'left' ? $leftNote : $rightNote
+  let currentView = $derived(pane === 'left' ? $leftView : $rightView)
+  let currentNote = $derived(pane === 'left' ? $leftNote : $rightNote)
   // Priority/OfflineリーフはPaneStateの常に最新のものを使う
-  $: storeLeaf = pane === 'left' ? $leftLeaf : $rightLeaf
-  $: currentLeaf = storeLeaf
-    ? isPriorityLeaf(storeLeaf.id)
-      ? $state.currentPriorityLeaf
-      : isOfflineLeaf(storeLeaf.id)
-        ? $state.currentOfflineLeaf
-        : storeLeaf
-    : null
-  $: selectedIndex = pane === 'left' ? $state.selectedIndexLeft : $state.selectedIndexRight
-  $: breadcrumbs = pane === 'left' ? $state.breadcrumbs : $state.breadcrumbsRight
-  $: isActive = $focusedPane === pane
+  let storeLeaf = $derived(pane === 'left' ? $leftLeaf : $rightLeaf)
+  let currentLeaf = $derived(
+    storeLeaf
+      ? isPriorityLeaf(storeLeaf.id)
+        ? $state.currentPriorityLeaf
+        : isOfflineLeaf(storeLeaf.id)
+          ? $state.currentOfflineLeaf
+          : storeLeaf
+      : null
+  )
+  let selectedIndex = $derived(
+    pane === 'left' ? $state.selectedIndexLeft : $state.selectedIndexRight
+  )
+  let breadcrumbs = $derived(pane === 'left' ? $state.breadcrumbs : $state.breadcrumbsRight)
+  let isActive = $derived($focusedPane === pane)
 
   // ペインのワールドに応じてノート・リーフストアを切り替え
-  $: paneWorld = pane === 'left' ? $state.leftWorld : $state.rightWorld
-  $: isArchiveWorld = paneWorld === 'archive'
-  $: activeNotes = isArchiveWorld ? $archiveNotes : $notes
-  $: activeLeaves = isArchiveWorld ? $archiveLeaves : $leaves
-  $: activeRootNotes = isArchiveWorld
-    ? $archiveNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
-    : $rootNotes
-  $: activeMetadata = isArchiveWorld ? $archiveMetadata : $metadata
+  let paneWorld = $derived(pane === 'left' ? $state.leftWorld : $state.rightWorld)
+  let isArchiveWorld = $derived(paneWorld === 'archive')
+  let activeNotes = $derived(isArchiveWorld ? $archiveNotes : $notes)
+  let activeLeaves = $derived(isArchiveWorld ? $archiveLeaves : $leaves)
+  let activeRootNotes = $derived(
+    isArchiveWorld
+      ? $archiveNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
+      : $rootNotes
+  )
+  let activeMetadata = $derived(isArchiveWorld ? $archiveMetadata : $metadata)
 
   // サブノート・リーフのフィルタリング
-  $: subNotes = currentNote
-    ? activeNotes.filter((n) => n.parentId === currentNote.id).sort((a, b) => a.order - b.order)
-    : []
-  $: currentLeaves = currentNote
-    ? activeLeaves.filter((l) => l.noteId === currentNote.id).sort((a, b) => a.order - b.order)
-    : []
+  let subNotes = $derived(
+    currentNote
+      ? activeNotes.filter((n) => n.parentId === currentNote.id).sort((a, b) => a.order - b.order)
+      : []
+  )
+  let currentLeaves = $derived(
+    currentNote
+      ? activeLeaves.filter((l) => l.noteId === currentNote.id).sort((a, b) => a.order - b.order)
+      : []
+  )
 
   // スクロールハンドラー
-  $: handleScroll = pane === 'left' ? actions.handleLeftScroll : actions.handleRightScroll
+  let handleScroll = $derived(
+    pane === 'left' ? actions.handleLeftScroll : actions.handleRightScroll
+  )
 </script>
 
 <Breadcrumbs

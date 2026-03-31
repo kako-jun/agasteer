@@ -2,8 +2,12 @@
   import { _ } from 'svelte-i18n'
   import AppIcon from '../icons/AppIcon.svelte'
 
-  export let onInstall: () => void
-  export let onDismiss: () => void
+  interface Props {
+    onInstall: () => void
+    onDismiss: () => void
+  }
+
+  let { onInstall, onDismiss }: Props = $props()
 </script>
 
 <div class="install-banner">
@@ -11,10 +15,10 @@
     <AppIcon size={24} />
     <span class="install-message">{$_('install.message')}</span>
     <div class="install-actions">
-      <button class="install-button" on:click={onInstall}>
+      <button class="install-button" onclick={onInstall}>
         {$_('install.install')}
       </button>
-      <button class="dismiss-button" on:click={onDismiss}>
+      <button class="dismiss-button" onclick={onDismiss}>
         {$_('install.dismiss')}
       </button>
     </div>

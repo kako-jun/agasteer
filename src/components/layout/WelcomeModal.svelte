@@ -2,9 +2,13 @@
   import { _ } from '../../lib/i18n'
   import SettingsIcon from '../icons/SettingsIcon.svelte'
 
-  export let show: boolean
-  export let onOpenSettings: () => void
-  export let onClose: () => void
+  interface Props {
+    show: boolean
+    onOpenSettings: () => void
+    onClose: () => void
+  }
+
+  let { show, onOpenSettings, onClose }: Props = $props()
 </script>
 
 {#if show}
@@ -20,13 +24,13 @@
         {$_('welcome.message2')}
       </p>
       <div class="welcome-buttons">
-        <button class="welcome-button primary" on:click={onOpenSettings}>
+        <button class="welcome-button primary" onclick={onOpenSettings}>
           <span class="button-icon">
             <SettingsIcon />
           </span>
           {$_('welcome.openSettings')}
         </button>
-        <button class="welcome-button secondary" on:click={onClose}>
+        <button class="welcome-button secondary" onclick={onClose}>
           {$_('welcome.later')}
         </button>
       </div>

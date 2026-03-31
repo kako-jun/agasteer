@@ -10,26 +10,43 @@
   import ArchiveIcon from '../../icons/ArchiveIcon.svelte'
   import RestoreIcon from '../../icons/RestoreIcon.svelte'
 
-  export let onMove: () => void
-  export let onDownload: () => void
-  export let onToggleEdit: () => void
-  export let onPush: () => void
-  export let disabled: boolean
-  export let isDirty: boolean
-  export let pushDisabled: boolean = false
-  export let pushDisabledReason: string = ''
-  export let onDisabledPushClick: ((reason: string) => void) | null = null
-  export let hideEditButton: boolean = false
-  export let hideMoveButton: boolean = false
-  /** 現在のワールド */
-  export let currentWorld: WorldType = 'home'
-  /** アーカイブ/リストアのコールバック */
-  export let onArchive: (() => void) | null = null
-  export let onRestore: (() => void) | null = null
+  interface Props {
+    onMove: () => void
+    onDownload: () => void
+    onToggleEdit: () => void
+    onPush: () => void
+    disabled: boolean
+    isDirty: boolean
+    pushDisabled?: boolean
+    pushDisabledReason?: string
+    onDisabledPushClick?: ((reason: string) => void) | null
+    hideEditButton?: boolean
+    hideMoveButton?: boolean
+    currentWorld?: WorldType
+    onArchive?: (() => void) | null
+    onRestore?: (() => void) | null
+  }
+
+  let {
+    onMove,
+    onDownload,
+    onToggleEdit,
+    onPush,
+    disabled,
+    isDirty,
+    pushDisabled = false,
+    pushDisabledReason = '',
+    onDisabledPushClick = null,
+    hideEditButton = false,
+    hideMoveButton = false,
+    currentWorld = 'home',
+    onArchive = null,
+    onRestore = null,
+  }: Props = $props()
 </script>
 
 <Footer>
-  <svelte:fragment slot="left">
+  {#snippet left()}
     {#if !hideMoveButton}
       <IconButton
         onClick={onMove}
@@ -70,8 +87,8 @@
     >
       <DownloadIcon />
     </IconButton>
-  </svelte:fragment>
-  <svelte:fragment slot="right">
+  {/snippet}
+  {#snippet right()}
     {#if !hideEditButton}
       <IconButton onClick={onToggleEdit} title={$_('footer.edit')} ariaLabel={$_('footer.edit')}>
         <FileEditIcon />
@@ -85,5 +102,5 @@
       disabledReason={pushDisabledReason}
       onDisabledClick={onDisabledPushClick}
     />
-  </svelte:fragment>
+  {/snippet}
 </Footer>

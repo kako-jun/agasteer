@@ -1,8 +1,12 @@
 <script lang="ts">
-  export let pullMessage: string = ''
-  export let pullVariant: 'success' | 'error' | '' = ''
-  export let pushMessage: string = ''
-  export let pushVariant: 'success' | 'error' | '' = ''
+  interface Props {
+    pullMessage?: string
+    pullVariant?: 'success' | 'error' | ''
+    pushMessage?: string
+    pushVariant?: 'success' | 'error' | ''
+  }
+
+  let { pullMessage = '', pullVariant = '', pushMessage = '', pushVariant = '' }: Props = $props()
 </script>
 
 {#if pullMessage || pushMessage}
