@@ -91,12 +91,12 @@
 
   {#if showMenu}
     <div class="share-menu">
-      <button class="menu-item" on:click={handleCopyUrl}>
+      <button class="menu-item" onclick={handleCopyUrl}>
         <LinkIcon />
         <span>{$_('share.copyUrl')}</span>
       </button>
 
-      <button class="menu-item" on:click={handleCopyMarkdown}>
+      <button class="menu-item" onclick={handleCopyMarkdown}>
         <CopyIcon />
         <span
           >{isPreview
@@ -125,14 +125,14 @@
       {/if}
 
       {#if isPreview && supportsWebShare && onShareImage}
-        <button class="menu-item" on:click={handleShareImage}>
+        <button class="menu-item" onclick={handleShareImage}>
           <UploadIcon />
           <span>{$_('share.shareImage')}</span>
         </button>
       {/if}
 
       {#if !isPreview && supportsWebShare && onShareSelectionImage}
-        <button class="menu-item" on:click={handleShareSelectionImage}>
+        <button class="menu-item" onclick={handleShareSelectionImage}>
           <UploadIcon />
           <span
             >{currentHasSelection ? $_('share.shareSelectionImage') : $_('share.shareImage')}</span

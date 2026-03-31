@@ -20,7 +20,7 @@
 <div class="language-selector">
   <label for="language">{$_('settings.appearance.language')}</label>
   <div class="select-wrapper">
-    <select id="language" bind:value={settings.locale} on:change={handleLocaleChange}>
+    <select id="language" bind:value={settings.locale} onchange={handleLocaleChange}>
       <option value="en">English</option>
       <option value="ja">日本語</option>
     </select>

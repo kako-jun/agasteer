@@ -28,8 +28,8 @@
 
 <button
   type="button"
-  on:click={onClick}
-  on:mouseenter={() => onMouseEnter?.()}
+  onclick={onClick}
+  onmouseenter={() => onMouseEnter?.()}
   {title}
   aria-label={ariaLabel}
   {disabled}

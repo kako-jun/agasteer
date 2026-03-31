@@ -141,14 +141,14 @@
   <div class="card-grid" class:loading={!isFirstPriorityFetched}>
     <!-- Offline リーフ: 常に最初に表示、Pull中もクリック可能 -->
     {#if offlineLeaf}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="leaf-card offline-leaf"
         class:selected={vimMode && isActive && selectedIndex === 0}
         role="button"
         tabindex="0"
-        on:click={onSelectOffline}
+        onclick={onSelectOffline}
       >
         <BadgeButton
           icon={offlineLeaf.badgeIcon || ''}
@@ -164,7 +164,9 @@
             rel="noopener noreferrer"
             title={$_('header.help')}
             aria-label={$_('header.help')}
-            on:click|stopPropagation
+            onclick={(e) => {
+              e.stopPropagation()
+            }}
           >
             <HelpIcon />
           </a>
@@ -188,14 +190,14 @@
 
     <!-- Priority リーフ: Offlineの次に表示（全リーフPull完了後のみ） -->
     {#if priorityLeaf && isPullCompleted}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="leaf-card"
         class:selected={vimMode && isActive && selectedIndex === (offlineLeaf ? 1 : 0)}
         role="button"
         tabindex="0"
-        on:click={onSelectPriority}
+        onclick={onSelectPriority}
       >
         <BadgeButton
           icon={priorityLeaf.badgeIcon || ''}
@@ -211,7 +213,9 @@
             rel="noopener noreferrer"
             title={$_('header.help')}
             aria-label={$_('header.help')}
-            on:click|stopPropagation
+            onclick={(e) => {
+              e.stopPropagation()
+            }}
           >
             <HelpIcon />
           </a>

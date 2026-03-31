@@ -65,13 +65,13 @@
       type="file"
       accept=".ttf,.otf,.woff,.woff2"
       bind:this={fileInput}
-      on:change={handleFontFileChange}
+      onchange={handleFontFileChange}
       style="display: none;"
     />
     <button
       type="button"
       class="test-button"
-      on:click={handleFontButtonClick}
+      onclick={handleFontButtonClick}
       disabled={fontUploading}
     >
       <svg
@@ -96,7 +96,7 @@
         : $_('settings.appearance.font.select')}
     </button>
     {#if settings.hasCustomFont}
-      <button type="button" class="test-button" on:click={handleResetFont}>
+      <button type="button" class="test-button" onclick={handleResetFont}>
         {$_('settings.appearance.font.reset')}
       </button>
     {/if}

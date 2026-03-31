@@ -14,7 +14,7 @@
   <p class="description">{$_('settings.importExport.description')}</p>
 
   <div class="actions">
-    <button class="primary" type="button" on:click={onExportZip} disabled={exporting}>
+    <button class="primary" type="button" onclick={onExportZip} disabled={exporting}>
       {exporting ? $_('settings.importExport.exporting') : $_('settings.importExport.exportZip')}
     </button>
   </div>

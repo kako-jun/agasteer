@@ -101,10 +101,10 @@
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 {#if !qrExceeded}
-  <button class="menu-item qr-button" on:click={openModal}>
+  <button class="menu-item qr-button" onclick={openModal}>
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="18"
@@ -126,9 +126,9 @@
 {/if}
 
 {#if showModal}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="qr-modal-backdrop" use:portal on:click={handleBackdropClick}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="qr-modal-backdrop" use:portal onclick={handleBackdropClick}>
     <div class="qr-modal">
       {#if qrDataUrl}
         <img src={qrDataUrl} alt="QR Code" class="qr-image" />

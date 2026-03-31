@@ -203,8 +203,12 @@
   class="badge-container"
   class:has-icon={!!icon}
   role="presentation"
-  on:click|stopPropagation
-  on:keydown|stopPropagation
+  onclick={(e) => {
+    e.stopPropagation()
+  }}
+  onkeydown={(e) => {
+    e.stopPropagation()
+  }}
   tabindex="-1"
   bind:this={containerEl}
 >
@@ -212,7 +216,10 @@
     class="badge"
     aria-label="badge"
     style={`color: ${computedColor}`}
-    on:click|stopPropagation={toggleOpen}
+    onclick={(e) => {
+      e.stopPropagation()
+      toggleOpen(e)
+    }}
     type="button"
   >
     {#if currentIconComponent}
@@ -229,11 +236,11 @@
         <button
           type="button"
           class:active={!icon}
-          on:click={() => onChange('', '')}
+          onclick={() => onChange('', '')}
           aria-label="clear badge"
         ></button>
         {#each icons as ic}
-          <button type="button" class:active={resolvedIcon === ic} on:click={() => selectIcon(ic)}>
+          <button type="button" class:active={resolvedIcon === ic} onclick={() => selectIcon(ic)}>
             <svelte:component this={iconComponents[ic]} color={computedColor} />
           </button>
         {/each}
@@ -246,7 +253,7 @@
             class:active={c === color}
             style={`background:${c}`}
             aria-label={`color ${c}`}
-            on:click={() => selectColor(c)}
+            onclick={() => selectColor(c)}
           ></button>
         {/each}
       </div>

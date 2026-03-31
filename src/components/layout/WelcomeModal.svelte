@@ -24,13 +24,13 @@
         {$_('welcome.message2')}
       </p>
       <div class="welcome-buttons">
-        <button class="welcome-button primary" on:click={onOpenSettings}>
+        <button class="welcome-button primary" onclick={onOpenSettings}>
           <span class="button-icon">
             <SettingsIcon />
           </span>
           {$_('welcome.openSettings')}
         </button>
-        <button class="welcome-button secondary" on:click={onClose}>
+        <button class="welcome-button secondary" onclick={onClose}>
           {$_('welcome.later')}
         </button>
       </div>

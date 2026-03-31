@@ -233,7 +233,7 @@
   })
 </script>
 
-<section class="preview-section" bind:this={previewSection} on:scroll={handleScroll}>
+<section class="preview-section" bind:this={previewSection} onscroll={handleScroll}>
   {#if isLoading}
     <div class="loading-container">
       <div class="loading-dots">

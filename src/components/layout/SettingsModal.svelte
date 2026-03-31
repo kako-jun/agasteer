@@ -66,24 +66,24 @@
     class="settings-modal-overlay"
     role="button"
     tabindex="0"
-    on:click={handleOverlayClick}
-    on:keydown={handleOverlayKeydown}
+    onclick={handleOverlayClick}
+    onkeydown={handleOverlayKeydown}
     aria-label={$_('common.closeSettings')}
   >
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="settings-modal-content"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
       tabindex="-1"
-      on:pointerdown={handleContentPointerDown}
-      on:pointerup={handleContentPointerUp}
-      on:click={handleContentClick}
+      onpointerdown={handleContentPointerDown}
+      onpointerup={handleContentPointerUp}
+      onclick={handleContentClick}
     >
-      <button class="settings-close-button" on:click={onClose} aria-label={$_('common.close')}>
+      <button class="settings-close-button" onclick={onClose} aria-label={$_('common.close')}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"

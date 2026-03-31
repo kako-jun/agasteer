@@ -80,17 +80,17 @@
   }
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} />
 
 {#if showPaneMenu}
   <div class="pane-menu" style="left: {menuX}px; top: {menuY}px;">
-    <button on:click={() => handleMenuAction(onCopyRightToLeft)}>
+    <button onclick={() => handleMenuAction(onCopyRightToLeft)}>
       <ArrowLeftIcon />
     </button>
-    <button on:click={() => handleMenuAction(onSwapPanes)}>
+    <button onclick={() => handleMenuAction(onSwapPanes)}>
       <SwapIcon />
     </button>
-    <button on:click={() => handleMenuAction(onCopyLeftToRight)}>
+    <button onclick={() => handleMenuAction(onCopyLeftToRight)}>
       <ArrowRightIcon />
     </button>
   </div>
@@ -107,7 +107,7 @@
     <a
       class="title-button"
       href="/"
-      on:click={(e) => {
+      onclick={(e) => {
         if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
           e.preventDefault()
           onTitleClick()

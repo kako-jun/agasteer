@@ -22,7 +22,7 @@
       id="lined-mode"
       type="checkbox"
       checked={settings.linedMode ?? false}
-      on:change={handleLinedModeChange}
+      onchange={handleLinedModeChange}
     />
     <span>{$_('settings.editor.linedMode')}</span>
   </label>

@@ -15,7 +15,7 @@
   <p class="description">{$_('settings.importExport.importDescription')}</p>
 
   <div class="actions">
-    <button class="secondary" type="button" on:click={onImport} disabled={importing}>
+    <button class="secondary" type="button" onclick={onImport} disabled={importing}>
       {importing ? $_('settings.importExport.importing') : $_('settings.importExport.import')}
     </button>
     {#if supportedLabel}

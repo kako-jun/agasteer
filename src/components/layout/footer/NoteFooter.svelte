@@ -122,9 +122,9 @@
           <FilePlusIcon />
         </IconButton>
         {#if showGuide}
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div class="guide-tooltip" on:click={handleDismiss}>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="guide-tooltip" onclick={handleDismiss}>
             <span class="guide-text">{$_('guide.createLeaf')}</span>
             <span class="guide-close">×</span>
           </div>

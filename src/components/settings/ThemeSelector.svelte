@@ -24,21 +24,21 @@
       <button
         type="button"
         class:active={settings.theme === 'yomi'}
-        on:click={() => handleThemeSelect('yomi')}
+        onclick={() => handleThemeSelect('yomi')}
       >
         {$_('settings.appearance.theme.yomi')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'campus'}
-        on:click={() => handleThemeSelect('campus')}
+        onclick={() => handleThemeSelect('campus')}
       >
         {$_('settings.appearance.theme.campus')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'greenboard'}
-        on:click={() => handleThemeSelect('greenboard')}
+        onclick={() => handleThemeSelect('greenboard')}
       >
         {$_('settings.appearance.theme.greenboard')}
       </button>
@@ -47,21 +47,21 @@
       <button
         type="button"
         class:active={settings.theme === 'whiteboard'}
-        on:click={() => handleThemeSelect('whiteboard')}
+        onclick={() => handleThemeSelect('whiteboard')}
       >
         {$_('settings.appearance.theme.whiteboard')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'dotsD'}
-        on:click={() => handleThemeSelect('dotsD')}
+        onclick={() => handleThemeSelect('dotsD')}
       >
         {$_('settings.appearance.theme.dotsD')}
       </button>
       <button
         type="button"
         class:active={settings.theme === 'dotsF'}
-        on:click={() => handleThemeSelect('dotsF')}
+        onclick={() => handleThemeSelect('dotsF')}
       >
         {$_('settings.appearance.theme.dotsF')}
       </button>

@@ -40,9 +40,9 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="push-button-wrapper" id={id || undefined} on:click={handleClick}>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="push-button-wrapper" id={id || undefined} onclick={handleClick}>
   <button
     type="button"
     class="push-button"
@@ -56,9 +56,15 @@
     <span class="notification-badge"></span>
   {/if}
   {#if showGuide}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="guide-tooltip" on:click|stopPropagation={handleDismiss}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="guide-tooltip"
+      onclick={(e) => {
+        e.stopPropagation()
+        handleDismiss()
+      }}
+    >
       <span class="guide-text">{$_('guide.saveToGitHub')}</span>
       <span class="guide-close">×</span>
     </div>

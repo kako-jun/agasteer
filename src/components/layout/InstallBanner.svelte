@@ -15,10 +15,10 @@
     <AppIcon size={24} />
     <span class="install-message">{$_('install.message')}</span>
     <div class="install-actions">
-      <button class="install-button" on:click={onInstall}>
+      <button class="install-button" onclick={onInstall}>
         {$_('install.install')}
       </button>
-      <button class="dismiss-button" on:click={onDismiss}>
+      <button class="dismiss-button" onclick={onDismiss}>
         {$_('install.dismiss')}
       </button>
     </div>

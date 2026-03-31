@@ -152,7 +152,7 @@
   let isLeafView = $derived(breadcrumbs.some((crumb) => crumb.type === 'leaf'))
 </script>
 
-<svelte:window on:click={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} />
 
 <div class="breadcrumbs">
   <div class="breadcrumbs-left">
@@ -163,7 +163,10 @@
           <div class="separator-dropdown">
             <button
               class="separator clickable"
-              on:click|stopPropagation={() => toggleDropdown(index)}
+              onclick={(e) => {
+                e.stopPropagation()
+                toggleDropdown(index)
+              }}
               title={$_('breadcrumbs.showSiblings')}
               aria-label={$_('breadcrumbs.showSiblings')}
               aria-expanded={openDropdownIndex === index}
@@ -175,14 +178,18 @@
                 class="dropdown-menu"
                 role="menu"
                 tabindex="-1"
-                on:click|stopPropagation
-                on:keydown|stopPropagation
+                onclick={(e) => {
+                  e.stopPropagation()
+                }}
+                onkeydown={(e) => {
+                  e.stopPropagation()
+                }}
               >
                 {#each crumb.siblings as sibling}
                   <button
                     class="dropdown-item"
                     class:current={sibling.isCurrent}
-                    on:click={() => handleSiblingClick(sibling, crumb)}
+                    onclick={() => handleSiblingClick(sibling, crumb)}
                   >
                     {sibling.label}
                   </button>
@@ -201,7 +208,7 @@
           <button
             bind:this={worldSeparatorButton}
             class="world-separator clickable"
-            on:click={toggleWorldDropdown}
+            onclick={toggleWorldDropdown}
             title={$_('breadcrumbs.goArchive')}
             aria-label={$_('breadcrumbs.goArchive')}
             aria-expanded={worldDropdownOpen}
@@ -215,13 +222,17 @@
               tabindex="-1"
               style="top: {menuPosition.top}px; left: {menuPosition.left}px;"
               use:portal
-              on:click|stopPropagation
-              on:keydown|stopPropagation
+              onclick={(e) => {
+                e.stopPropagation()
+              }}
+              onkeydown={(e) => {
+                e.stopPropagation()
+              }}
             >
               <button
                 class="world-item"
                 class:current={currentWorld === 'home'}
-                on:click={() => handleWorldSelect('home')}
+                onclick={() => handleWorldSelect('home')}
               >
                 <span class="world-icon"><HomeIcon /></span>
                 {$_('breadcrumbs.worldHome')}
@@ -230,7 +241,7 @@
                 class="world-item"
                 class:current={currentWorld === 'archive'}
                 class:loading={isArchiveLoading}
-                on:click={() => handleWorldSelect('archive')}
+                onclick={() => handleWorldSelect('archive')}
               >
                 <span class="world-icon"><ArchiveIcon /></span>
                 {$_('breadcrumbs.worldArchive')}
@@ -248,8 +259,8 @@
           <input
             bind:this={inputElement}
             bind:value={inputValue}
-            on:keydown={(e) => handleKeydown(e, crumb)}
-            on:blur={() => handleBlur(crumb)}
+            onkeydown={(e) => handleKeydown(e, crumb)}
+            onblur={() => handleBlur(crumb)}
             class="breadcrumb-input"
           />
         {:else}
@@ -284,7 +295,7 @@
             <button
               class="breadcrumb-button text-ellipsis"
               class:current={index === breadcrumbs.length - 1}
-              on:click={crumb.action}
+              onclick={crumb.action}
             >
               {crumb.label}
             </button>

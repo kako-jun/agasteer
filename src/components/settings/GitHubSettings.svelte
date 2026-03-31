@@ -114,7 +114,7 @@
   }
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} />
 
 <div class="github-settings">
   <h3>{$_('settings.github.title')}</h3>
@@ -154,7 +154,7 @@
           id="github-token"
           type="password"
           bind:value={settings.token}
-          on:input={(e) => handleTextInput('token', e)}
+          oninput={(e) => handleTextInput('token', e)}
           placeholder={$_('settings.github.tokenPlaceholder')}
         />
         {#if settings.token}
@@ -162,7 +162,7 @@
             type="button"
             class="copy-button"
             class:copied={tokenCopied}
-            on:click={copyToken}
+            onclick={copyToken}
             title={tokenCopied ? 'Copied!' : 'Copy token'}
           >
             {#if tokenCopied}
@@ -236,15 +236,15 @@
             id="repo-name"
             type="text"
             bind:value={settings.repoName}
-            on:input={handleRepoInput}
-            on:blur={handleRepoBlur}
+            oninput={handleRepoInput}
+            onblur={handleRepoBlur}
             placeholder={$_('settings.github.repoPlaceholder')}
           />
           {#if repoHistory.length > 0}
             <button
               type="button"
               class="dropdown-toggle"
-              on:click={toggleDropdown}
+              onclick={toggleDropdown}
               title="Recent repositories"
             >
               <svg
@@ -293,17 +293,13 @@
           <ul class="dropdown-list">
             {#each repoHistory as repo}
               <li class="dropdown-item" class:active={repo === settings.repoName}>
-                <button
-                  type="button"
-                  class="dropdown-item-select"
-                  on:click={() => selectRepo(repo)}
-                >
+                <button type="button" class="dropdown-item-select" onclick={() => selectRepo(repo)}>
                   {repo}
                 </button>
                 <button
                   type="button"
                   class="dropdown-item-remove"
-                  on:click={(e) => removeRepo(repo, e)}
+                  onclick={(e) => removeRepo(repo, e)}
                   title={$_('settings.github.removeRepo')}
                 >
                   <svg
@@ -358,7 +354,7 @@
     </a>
   </div>
   <div class="test-actions">
-    <button type="button" class="test-button" on:click={onTestConnection} disabled={isTesting}>
+    <button type="button" class="test-button" onclick={onTestConnection} disabled={isTesting}>
       <svg class="test-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path
           d="M22 11.08V12a10 10 0 1 1-5.93-9.14"

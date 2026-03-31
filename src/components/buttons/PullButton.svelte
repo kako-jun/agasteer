@@ -26,7 +26,7 @@
     <button
       type="button"
       class="pull-button"
-      on:click={onPull}
+      onclick={onPull}
       {disabled}
       title={$_('header.pull')}
       aria-label={$_('header.pull')}
@@ -34,7 +34,7 @@
       <OctocatPullIcon />
     </button>
     {#if progress !== null}
-      <button class="pull-progress" on:click={onProgressClick}>{progress.percent}%</button>
+      <button class="pull-progress" onclick={onProgressClick}>{progress.percent}%</button>
     {/if}
   </div>
   {#if isStale}

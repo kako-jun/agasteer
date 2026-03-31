@@ -208,7 +208,7 @@
       {/each}
       {#each displayItems as item, itemIndex (item.type === 'leaf' ? item.leaf.id : item.skeleton.id)}
         <!-- tabindexは条件付きrole="button"と連動、スケルトン時は-1 -->
-        <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class="note-card leaf-card"
           class:loading={item.type === 'skeleton'}
@@ -221,12 +221,15 @@
           draggable={item.type === 'leaf'}
           role={item.type === 'leaf' ? 'button' : undefined}
           tabindex={item.type === 'leaf' ? 0 : -1}
-          on:dragstart={() => item.type === 'leaf' && onDragStartLeaf(item.leaf)}
-          on:dragend={onDragEndLeaf}
-          on:dragover={(e) => item.type === 'leaf' && onDragOverLeaf(e, item.leaf)}
-          on:drop|preventDefault={() => item.type === 'leaf' && onDropLeaf(item.leaf)}
-          on:click={() => item.type === 'leaf' && onSelectLeaf(item.leaf)}
-          on:keydown={(e) => item.type === 'leaf' && handleLeafKeydown(e, item.leaf)}
+          ondragstart={() => item.type === 'leaf' && onDragStartLeaf(item.leaf)}
+          ondragend={onDragEndLeaf}
+          ondragover={(e) => item.type === 'leaf' && onDragOverLeaf(e, item.leaf)}
+          ondrop={(e) => {
+            e.preventDefault()
+            item.type === 'leaf' && onDropLeaf(item.leaf)
+          }}
+          onclick={() => item.type === 'leaf' && onSelectLeaf(item.leaf)}
+          onkeydown={(e) => item.type === 'leaf' && handleLeafKeydown(e, item.leaf)}
           animate:flip={{ duration: 300 }}
         >
           {#if item.type === 'skeleton'}

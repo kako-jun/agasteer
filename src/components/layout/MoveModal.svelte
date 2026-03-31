@@ -143,18 +143,22 @@
   <div
     class="move-overlay"
     class:right-pane={pane === 'right'}
-    on:click={close}
-    on:keydown={handleOverlayKeydown}
+    onclick={close}
+    onkeydown={handleOverlayKeydown}
     role="button"
     tabindex="-1"
     aria-label={$_('move.cancel')}
   >
     <!-- イベント伝播停止はオーバーレイクリック時にモーダルが閉じないようにするため -->
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="move-modal"
-      on:click|stopPropagation
-      on:keydown|stopPropagation
+      onclick={(e) => {
+        e.stopPropagation()
+      }}
+      onkeydown={(e) => {
+        e.stopPropagation()
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="move-modal-title"
@@ -172,7 +176,7 @@
                 type="button"
                 class="row"
                 aria-pressed={selected === null}
-                on:click={() => handleSelect(null)}
+                onclick={() => handleSelect(null)}
               >
                 <span class="bullet" class:checked={selected === null}></span>
                 <span class="row-body">
@@ -197,7 +201,7 @@
               class:disabled={!canSelect(root).selectable}
               disabled={!canSelect(root).selectable}
               aria-pressed={selected === root.id}
-              on:click={() => canSelect(root).selectable && handleSelect(root.id)}
+              onclick={() => canSelect(root).selectable && handleSelect(root.id)}
             >
               <span class="bullet" class:checked={selected === root.id}></span>
               <span class="row-body">
@@ -217,7 +221,7 @@
                     class:disabled={!canSelect(child).selectable}
                     disabled={!canSelect(child).selectable}
                     aria-pressed={selected === child.id}
-                    on:click={() => canSelect(child).selectable && handleSelect(child.id)}
+                    onclick={() => canSelect(child).selectable && handleSelect(child.id)}
                   >
                     <span class="bullet" class:checked={selected === child.id}></span>
                     <span class="row-body">
@@ -235,8 +239,8 @@
       </div>
 
       <div class="actions">
-        <button class="ghost" on:click={close}>{$_('move.cancel')}</button>
-        <button class="primary" disabled={selected === null && isLeafMode()} on:click={confirm}>
+        <button class="ghost" onclick={close}>{$_('move.cancel')}</button>
+        <button class="primary" disabled={selected === null && isLeafMode()} onclick={confirm}>
           <MoveIcon />
           {$_('move.confirm')}
         </button>

@@ -32,10 +32,10 @@
       type="text"
       bind:value={settings.toolName}
       placeholder={$_('settings.appearance.toolName.placeholder')}
-      on:input={handleToolNameInput}
+      oninput={handleToolNameInput}
     />
     {#if !isDefaultToolName}
-      <button type="button" class="reset-button" on:click={handleResetToolName}>
+      <button type="button" class="reset-button" onclick={handleResetToolName}>
         {$_('settings.appearance.toolName.reset')}
       </button>
     {/if}

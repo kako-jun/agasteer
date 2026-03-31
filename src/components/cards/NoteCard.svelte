@@ -40,8 +40,8 @@
   }: Props = $props()
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="note-card"
   class:note-group-card={isGroup}
@@ -50,11 +50,14 @@
   draggable="true"
   role="button"
   tabindex="0"
-  on:dragstart={onDragStart}
-  on:dragend={onDragEnd}
-  on:dragover={onDragOver}
-  on:drop|preventDefault={onDrop}
-  on:click={onSelect}
+  ondragstart={onDragStart}
+  ondragend={onDragEnd}
+  ondragover={onDragOver}
+  ondrop={(e) => {
+    e.preventDefault()
+    onDrop()
+  }}
+  onclick={onSelect}
 >
   {#if isDirty}
     <span class="dirty-indicator" title={$_('note.hasUnsavedLeaves')}></span>

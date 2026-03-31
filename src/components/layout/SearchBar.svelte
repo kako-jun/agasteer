@@ -132,14 +132,17 @@
         type="text"
         placeholder={$_('search.placeholder')}
         value={$searchQuery}
-        on:input={handleInput}
-        on:keydown={handleKeydown}
+        oninput={handleInput}
+        onkeydown={handleKeydown}
         aria-label={$_('search.placeholder')}
       />
       {#if $searchQuery}
         <button
           class="clear-button"
-          on:click|stopPropagation={handleClear}
+          onclick={(e) => {
+            e.stopPropagation()
+            handleClear()
+          }}
           title={$_('search.clear')}
           aria-label={$_('search.clear')}
         >
@@ -169,8 +172,8 @@
               class:selected={index === $selectedResultIndex}
               role="option"
               aria-selected={index === $selectedResultIndex}
-              on:click={() => handleResultClick(result)}
-              on:mouseenter={() => selectedResultIndex.set(index)}
+              onclick={() => handleResultClick(result)}
+              onmouseenter={() => selectedResultIndex.set(index)}
             >
               <div class="result-path">{result.path}</div>
               <div class="result-snippet">

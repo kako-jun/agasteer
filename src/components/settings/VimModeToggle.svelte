@@ -22,7 +22,7 @@
       id="vim-mode"
       type="checkbox"
       checked={settings.vimMode ?? false}
-      on:change={handleVimModeChange}
+      onchange={handleVimModeChange}
     />
     <span>{$_('settings.editor.vimMode')}</span>
   </label>
