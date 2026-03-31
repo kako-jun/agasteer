@@ -2,8 +2,8 @@
   import './App.css'
   import { waitForSwCheck } from './main'
   import { onMount, tick, setContext } from 'svelte'
-  import { writable, get } from 'svelte/store'
-  import type { Note, Leaf, Breadcrumb, View, Metadata, WorldType, SearchMatch } from './lib/types'
+  import { get } from 'svelte/store'
+  import type { Note, Leaf, Breadcrumb, WorldType, SearchMatch } from './lib/types'
   import * as nav from './lib/navigation'
   import type { Pane } from './lib/navigation'
 
@@ -22,8 +22,6 @@
     lastKnownCommitSha,
     isStale,
     updateSettings,
-    updateNotes,
-    updateLeaves,
     leftNote,
     rightNote,
     leftLeaf,
@@ -37,14 +35,11 @@
     archiveLeafStatsStore,
     dragStore,
     moveModalStore,
-    pullProgressStore,
     pullProgressInfo,
     offlineLeafStore,
     archiveNotes,
     archiveLeaves,
     archiveMetadata,
-    updateArchiveNotes,
-    updateArchiveLeaves,
     isArchiveLoaded,
     leftWorld,
     rightWorld,
@@ -167,7 +162,7 @@
   import InstallBanner from './components/layout/InstallBanner.svelte'
   import { toggleSearch } from './lib/utils'
   import PaneView from './components/layout/PaneView.svelte'
-  import type { PaneActions, PaneState } from './lib/stores'
+  import type { PaneActions } from './lib/stores'
   import {
     priorityItems,
     createPriorityLeaf,
@@ -177,17 +172,32 @@
     isOfflineLeaf,
     OFFLINE_LEAF_ID,
   } from './lib/utils'
+  import {
+    // Constants
+    isPWAStandalone,
+    PWA_EXIT_GUARD_KEY,
+    // World helpers
+    getNotesForWorld,
+    getLeavesForWorld,
+    getWorldForPane,
+    getNotesForPane,
+    getLeavesForPane,
+    getWorldForNote,
+    getWorldForLeaf,
+    setCurrentNotes,
+    setCurrentLeaves,
+    setNotesForWorld,
+    setLeavesForWorld,
+    // Pane state store
+    paneStateStore,
+  } from './lib/app-state.svelte'
 
-  // ローカル状態
+  // ========================================
+  // Local state ($state) — Phase 2で app-state.svelte.ts に移動予定
+  // ========================================
   let breadcrumbs: Breadcrumb[] = $state([])
   let breadcrumbsRight: Breadcrumb[] = $state([])
   let editingBreadcrumb: string | null = $state(null)
-
-  // dragStoreへのリアクティブアクセス
-  let draggedNote = $derived($dragStore.draggedNote)
-  let draggedLeaf = $derived($dragStore.draggedLeaf)
-  let dragOverNoteId = $derived($dragStore.dragOverNoteId)
-  let dragOverLeafId = $derived($dragStore.dragOverLeafId)
 
   let isLoadingUI = $state(false) // ガラス効果（Pull中のみ）
   let isFirstPriorityFetched = $state(false) // 第1優先リーフの取得が完了したか
@@ -204,6 +214,41 @@
   let isClosingSettingsPull = false
   let repoChangedInSettings = false // 設定画面でリポが変更された
   let isArchiveLoading = $state(false) // アーカイブをロード中
+
+  // 左右ペイン用の状態
+  let isDualPane = $state(false) // 画面幅で切り替え
+
+  // PWA終了ガードにいるかどうかのフラグ
+  let atGuardEntry = false
+
+  // キーボードナビゲーション用の状態
+  let selectedIndexLeft = $state(0) // 左ペインで選択中のアイテムインデックス
+  let selectedIndexRight = $state(0) // 右ペインで選択中のアイテムインデックス
+
+  // スクロール同期用のコンポーネント参照
+  let leftEditorView: any = $state(null)
+  let leftPreviewView: any = $state(null)
+  let rightEditorView: any = $state(null)
+  let rightPreviewView: any = $state(null)
+
+  // 未取得リーフのID（ローディング表示用）
+  let loadingLeafIds = $state(new Set<string>())
+
+  // スケルトン表示用のリーフメタ情報（Pull中のみ使用）
+  let leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
+
+  // URLルーティング
+  let isRestoringFromUrl = false
+
+  // Pull/Push中はボタンを無効化（リアクティブに追跡）
+  let canPull = $derived(!$isPulling && !$isPushing && !isArchiveLoading)
+  let canPush = $derived(!$isPulling && !$isPushing && !isArchiveLoading && isFirstPriorityFetched)
+
+  // dragStoreへのリアクティブアクセス
+  let draggedNote = $derived($dragStore.draggedNote)
+  let draggedLeaf = $derived($dragStore.draggedLeaf)
+  let dragOverNoteId = $derived($dragStore.dragOverNoteId)
+  let dragOverLeafId = $derived($dragStore.dragOverLeafId)
 
   // leafStatsStoreとmoveModalStoreへのリアクティブアクセス
   // 左ペインのワールドとビューに応じて統計を切り替え
@@ -224,22 +269,41 @@
   let moveTargetWorld = $derived(_getWorldForPane(moveTargetPane, $leftWorld, $rightWorld))
   let moveTargetNotes = $derived(_getNotesForWorld(moveTargetWorld, $notes, $archiveNotes))
 
-  // 左右ペイン用の状態
-  let isDualPane = $state(false) // 画面幅で切り替え
+  // リアクティブ宣言（ワールドに応じたデータを使用）
+  let leftBreadcrumbNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
+  let leftBreadcrumbLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
+  let rightBreadcrumbNotes = $derived(_getNotesForWorld($rightWorld, $notes, $archiveNotes))
+  let rightBreadcrumbLeaves = $derived(_getLeavesForWorld($rightWorld, $leaves, $archiveLeaves))
 
-  // PWAスタンドアロンモード検出（Android戻るスワイプ対策）
-  const isPWAStandalone =
-    typeof window !== 'undefined' &&
-    (window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true)
+  let isGitHubConfigured = $derived($githubConfigured)
 
-  // PWA終了ガード用のセンチネルキー
-  const PWA_EXIT_GUARD_KEY = 'pwa-exit-guard'
+  // Priorityリーフをリアクティブに生成（metadataからバッジ情報を復元）
+  let priorityBadgeMeta = $derived($metadata.leaves?.[PRIORITY_LEAF_ID])
+  let currentPriorityLeaf = $derived(
+    createPriorityLeaf($priorityItems, priorityBadgeMeta?.badgeIcon, priorityBadgeMeta?.badgeColor)
+  )
 
-  // PWA終了ガードにいるかどうかのフラグ
-  // popstateのe.stateは遷移先のstateであるため、ガードが履歴の最後にある場合
-  // 戻るスワイプでe.stateにガードキーが含まれない。このフラグで補完する。
-  let atGuardEntry = false
+  // オフラインリーフをリアクティブに生成（ストアから）
+  let currentOfflineLeaf = $derived(
+    createOfflineLeaf(
+      $offlineLeafStore.content,
+      $offlineLeafStore.badgeIcon,
+      $offlineLeafStore.badgeColor
+    )
+  )
+
+  // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
+  let currentNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
+  let currentLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
+
+  // Pushボタン無効理由を計算
+  let pushDisabledReason = $derived(
+    $pullProgressInfo
+      ? $_('home.leafFetched', {
+          values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
+        })
+      : ''
+  )
 
   // PWA終了ガード用のダミーエントリを追加
   function pushExitGuard() {
@@ -256,16 +320,6 @@
     const url = `${USER_GUIDE_BASE}/${lang}/index.md`
     window.open(url, '_blank', 'noopener,noreferrer')
   }
-
-  // キーボードナビゲーション用の状態
-  let selectedIndexLeft = $state(0) // 左ペインで選択中のアイテムインデックス
-  let selectedIndexRight = $state(0) // 右ペインで選択中のアイテムインデックス
-
-  // スクロール同期用のコンポーネント参照
-  let leftEditorView: any = $state(null)
-  let leftPreviewView: any = $state(null)
-  let rightEditorView: any = $state(null)
-  let rightPreviewView: any = $state(null)
 
   // スクロール同期関数（scroll-sync.tsに移行）
   function getScrollSyncState(): ScrollSyncState {
@@ -294,12 +348,6 @@
     handlePaneScroll('right', scrollTop, scrollHeight)
   }
 
-  // リアクティブ宣言（ワールドに応じたデータを使用）
-  let leftBreadcrumbNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
-  let leftBreadcrumbLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
-  let rightBreadcrumbNotes = $derived(_getNotesForWorld($rightWorld, $notes, $archiveNotes))
-  let rightBreadcrumbLeaves = $derived(_getLeavesForWorld($rightWorld, $leaves, $archiveLeaves))
-
   $effect(() => {
     breadcrumbs = buildBreadcrumbs(
       $leftView,
@@ -324,130 +372,13 @@
       rightBreadcrumbLeaves
     )
   })
-  let isGitHubConfigured = $derived($githubConfigured)
   $effect(() => {
     document.title = $settings.toolName
   })
 
-  // Priorityリーフをリアクティブに生成（metadataからバッジ情報を復元）
-  let priorityBadgeMeta = $derived($metadata.leaves?.[PRIORITY_LEAF_ID])
-  let currentPriorityLeaf = $derived(
-    createPriorityLeaf($priorityItems, priorityBadgeMeta?.badgeIcon, priorityBadgeMeta?.badgeColor)
-  )
-
-  // オフラインリーフをリアクティブに生成（ストアから）
-  let currentOfflineLeaf = $derived(
-    createOfflineLeaf(
-      $offlineLeafStore.content,
-      $offlineLeafStore.badgeIcon,
-      $offlineLeafStore.badgeColor
-    )
-  )
-
-  // Pull/Push中はボタンを無効化（リアクティブに追跡）
-  let canPull = $derived(!$isPulling && !$isPushing && !isArchiveLoading)
-  let canPush = $derived(!$isPulling && !$isPushing && !isArchiveLoading && isFirstPriorityFetched)
-
-  // ペインごとのワールドに応じたノート・リーフを取得するヘルパー
-  // （純粋関数のラッパー：ストアから値を取得して渡す）
-  function getNotesForWorld(world: WorldType): Note[] {
-    return _getNotesForWorld(world, get(notes), get(archiveNotes))
-  }
-
-  function getLeavesForWorld(world: WorldType): Leaf[] {
-    return _getLeavesForWorld(world, get(leaves), get(archiveLeaves))
-  }
-
-  function getWorldForPane(pane: Pane): WorldType {
-    return _getWorldForPane(pane, get(leftWorld), get(rightWorld))
-  }
-
-  function getNotesForPane(pane: Pane): Note[] {
-    return _getNotesForPane(pane, get(leftWorld), get(rightWorld), get(notes), get(archiveNotes))
-  }
-
-  function getLeavesForPane(pane: Pane): Leaf[] {
-    return _getLeavesForPane(pane, get(leftWorld), get(rightWorld), get(leaves), get(archiveLeaves))
-  }
-
-  // ノート・リーフがどのワールドに属するかを判定
-  function getWorldForNote(note: Note): WorldType {
-    return _getWorldForNote(note, get(notes), get(archiveNotes))
-  }
-
-  function getWorldForLeaf(leaf: Leaf): WorldType {
-    return _getWorldForLeaf(leaf, get(leaves), get(archiveLeaves))
-  }
-
-  // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
-  let currentNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
-  let currentLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
-
-  // 現在のワールドに応じたノート・リーフ更新ヘルパー
-  function setCurrentNotes(newNotes: Note[]): void {
-    setNotesForWorld(get(leftWorld), newNotes)
-  }
-
-  function setCurrentLeaves(newLeaves: Leaf[]): void {
-    setLeavesForWorld(get(leftWorld), newLeaves)
-  }
-
-  // ペインのワールドに応じたノート・リーフ更新ヘルパー
-  function setNotesForWorld(world: WorldType, newNotes: Note[]): void {
-    if (world === 'archive') {
-      updateArchiveNotes(newNotes)
-    } else {
-      updateNotes(newNotes)
-    }
-  }
-
-  function setLeavesForWorld(world: WorldType, newLeaves: Leaf[]): void {
-    if (world === 'archive') {
-      updateArchiveLeaves(newLeaves)
-    } else {
-      updateLeaves(newLeaves)
-    }
-  }
-
   // ========================================
   // Context API によるペイン間の状態共有
   // ========================================
-
-  // paneState ストア（リアクティブな状態を子コンポーネントに渡す）
-  const paneStateStore = writable<PaneState>({
-    isFirstPriorityFetched: false,
-    isPullCompleted: false,
-    canPush: false,
-    pushDisabledReason: '',
-    selectedIndexLeft: 0,
-    selectedIndexRight: 0,
-    editingBreadcrumb: null,
-    dragOverNoteId: null,
-    dragOverLeafId: null,
-    loadingLeafIds: new Set(),
-    leafSkeletonMap: new Map(),
-    totalLeafCount: 0,
-    totalLeafChars: 0,
-    lastPulledPushCount: 0,
-    currentPriorityLeaf: null,
-    currentOfflineLeaf: null,
-    breadcrumbs: [],
-    breadcrumbsRight: [],
-    showWelcome: false,
-    isLoadingUI: false,
-    leftWorld: 'home',
-    rightWorld: 'home',
-    isArchiveLoading: false,
-  })
-
-  // Pushボタン無効理由を計算
-  let pushDisabledReason = $derived(
-    $pullProgressInfo
-      ? $_('home.leafFetched', {
-          values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
-        })
-      : ''
-  )
 
   // paneState をリアクティブに更新
   $effect(() => {
@@ -480,9 +411,6 @@
 
   // Context に設定
   setContext('paneState', paneStateStore)
-
-  // URLルーティング
-  let isRestoringFromUrl = false
 
   function updateUrlFromState() {
     // 初期化完了まで、URL更新をスキップ
@@ -642,12 +570,6 @@
       isRestoringFromUrl = false
     }
   }
-
-  // 未取得リーフのID（ローディング表示用）
-  let loadingLeafIds = $state(new Set<string>())
-
-  // スケルトン表示用のリーフメタ情報（Pull中のみ使用）
-  let leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
 
   // ペインの状態変更をURLに反映
   $effect(() => {
