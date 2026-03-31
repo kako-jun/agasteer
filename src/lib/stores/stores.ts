@@ -277,8 +277,15 @@ export function getLastPushedContent(leafId: string): string | null {
 }
 
 /**
- * Push成功時に呼び出し、現在の状態をスナップショットとして保存
+ * Push/Pull成功時に呼び出し、現在の状態をスナップショットとして保存
  * 次回以降の差分検出のベースラインとなる
+ *
+ * 注意: この関数はベースラインの設定のみを行い、ダーティフラグのクリアは行わない。
+ * 呼び出し元で clearAllChanges() または refreshDirtyState() を適切に呼ぶこと。
+ * - Push成功時: clearAllChanges()（全変更をクリア）
+ * - Pull成功時: refreshDirtyState()（Pull中の編集を再検出）
+ * - Pull cancel時: clearAllChanges()（IndexedDBと同期済み）
+ * - Archive load時: 呼び出し不要（Home側のダーティに影響しない）
  */
 export function setLastPushedSnapshot(
   homeNotes: Note[],
@@ -295,9 +302,64 @@ export function setLastPushedSnapshot(
   if (archiveLeavesData) {
     lastPushedArchiveLeaves = JSON.parse(JSON.stringify(archiveLeavesData))
   }
-  // スナップショット更新後はdirtyをクリア
-  dirtyNoteIds.set(new Set())
-  dirtyLeafIds.set(new Set())
+}
+
+/**
+ * Archive部分のベースラインのみを更新する。
+ * Archive pull完了時に使用。Home側のベースラインに影響を与えない。
+ */
+export function setArchiveBaseline(archiveNotesData: Note[], archiveLeavesData: Leaf[]): void {
+  lastPushedArchiveNotes = JSON.parse(JSON.stringify(archiveNotesData))
+  lastPushedArchiveLeaves = JSON.parse(JSON.stringify(archiveLeavesData))
+}
+
+/**
+ * Pull中に到着したリーフをベースラインに追加（行ダーティの誤検出防止）
+ * Pull完了前でも、到着済みリーフの編集で全行がダーティになることを防ぐ。
+ * Pull完了時の setLastPushedSnapshot で全上書きされるため、一時的なベースライン。
+ * 同一IDのリーフが既に存在する場合は上書きする（重複防止）。
+ */
+export function addLeafToBaseline(leaf: Leaf): void {
+  const copy = JSON.parse(JSON.stringify(leaf))
+  const idx = lastPushedLeaves.findIndex((l) => l.id === leaf.id)
+  if (idx >= 0) {
+    lastPushedLeaves[idx] = copy
+  } else {
+    lastPushedLeaves.push(copy)
+  }
+}
+
+/**
+ * 現在の状態とベースラインを比較し、ダーティフラグを再設定する。
+ * Pull完了後に呼び出すことで、Pull中にユーザーが編集した変更を正しく検出する。
+ */
+export function refreshDirtyState(): void {
+  const currentNotes = get(notes)
+  const currentLeaves = get(leaves)
+  const archiveNotesList = get(archiveNotes)
+  const archiveLeavesList = get(archiveLeaves)
+
+  const homeDirty = detectDirtyIds(currentNotes, lastPushedNotes, currentLeaves, lastPushedLeaves)
+  const archiveDirty = detectDirtyIds(
+    archiveNotesList,
+    lastPushedArchiveNotes,
+    archiveLeavesList,
+    lastPushedArchiveLeaves
+  )
+
+  const combinedNotes = new Set<string>()
+  const combinedLeaves = new Set<string>()
+  homeDirty.noteIds.forEach((id) => combinedNotes.add(id))
+  archiveDirty.noteIds.forEach((id) => combinedNotes.add(id))
+  homeDirty.leafIds.forEach((id) => combinedLeaves.add(id))
+  archiveDirty.leafIds.forEach((id) => combinedLeaves.add(id))
+
+  dirtyNoteIds.set(combinedNotes)
+  dirtyLeafIds.set(combinedLeaves)
+  // Pull中の編集がなければ isStructureDirty もクリア
+  if (combinedNotes.size === 0 && combinedLeaves.size === 0) {
+    isStructureDirty.set(false)
+  }
 }
 
 // 全変更をクリア

@@ -66,6 +66,7 @@ export interface AppState {
   saveGuideShown: boolean
   pwaInstallDismissedAt?: number // PWAインストールバナー却下時刻（7日間cooldown用）
   lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
+  pushInFlightAt?: number // Push API呼び出し中のタイムスタンプ（スリープによるレスポンス消失検出用）
 }
 
 const defaultState: AppState = {
@@ -286,6 +287,20 @@ export function getPwaInstallDismissedAt(): number | undefined {
  */
 export function setPwaInstallDismissedAt(timestamp: number | undefined): void {
   updateAppState({ pwaInstallDismissedAt: timestamp })
+}
+
+/**
+ * Push飛行中フラグを取得（スリープによるレスポンス消失検出用）
+ */
+export function getPushInFlightAt(): number | undefined {
+  return loadStorageData().state.pushInFlightAt
+}
+
+/**
+ * Push飛行中フラグを設定
+ */
+export function setPushInFlightAt(timestamp: number | undefined): void {
+  updateAppState({ pushInFlightAt: timestamp })
 }
 
 /**

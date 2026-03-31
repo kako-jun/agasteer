@@ -26,6 +26,7 @@ import {
   githubConfigured,
 } from './stores'
 import { checkStaleStatus as checkStaleStatusRaw } from '../api/sync'
+import { getPushInFlightAt, setPushInFlightAt } from '../data/storage'
 
 /**
  * staleチェックを実行し、時刻を更新する共通関数
@@ -75,16 +76,35 @@ async function checkIfNeeded(): Promise<void> {
   try {
     const result = await executeStaleCheck(get(settings), get(lastKnownCommitSha))
     if (result.status === 'stale') {
-      // ローカルがダーティかどうかで分岐
-      if (get(isDirty)) {
-        // ダーティ → 従来通り赤バッジ表示
-        isStale.set(true)
+      // Push飛行中フラグがある場合、スリープでPushレスポンスが消失した可能性がある
+      const pushInFlight = getPushInFlightAt()
+      const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000 // 1時間
+      if (pushInFlight && Date.now() - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
+        // Pushは成功していたとみなし、SHAのみ更新してstaleを回避
+        // スナップショットとダーティは変更しない（push後の追加編集を保護）
+        console.log('Periodic stale check: push-in-flight detected, updating SHA')
+        lastKnownCommitSha.set(result.remoteCommitSha)
+        setPushInFlightAt(undefined)
+        isStale.set(false)
       } else {
-        // クリーン → 自動Pullをトリガー
-        shouldAutoPull.set(true)
+        // フラグが期限切れの場合はクリア
+        if (pushInFlight) {
+          setPushInFlightAt(undefined)
+        }
+        if (get(isDirty)) {
+          // ダーティ → 従来通り赤バッジ表示
+          isStale.set(true)
+        } else {
+          // クリーン → 自動Pullをトリガー
+          shouldAutoPull.set(true)
+        }
       }
     } else if (result.status === 'up_to_date') {
       // リモートに変更なし → stale状態を解除
+      // PushがGitHubに届かなかった場合も安全にフラグをクリア
+      if (getPushInFlightAt()) {
+        setPushInFlightAt(undefined)
+      }
       isStale.set(false)
     }
     // check_failed の場合は現状を維持（エラー通知もしない）

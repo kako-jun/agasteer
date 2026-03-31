@@ -60,6 +60,9 @@
     executeStaleCheck,
     shouldAutoPull,
     setLastPushedSnapshot,
+    addLeafToBaseline,
+    refreshDirtyState,
+    setArchiveBaseline,
     resetForRepoSwitch,
     // ワールドヘルパー（純粋関数）
     getNotesForWorld as _getNotesForWorld,
@@ -84,6 +87,8 @@
     restoreFromBackup,
     shouldShowPwaInstallBanner,
     setPwaInstallDismissedAt,
+    setPushInFlightAt,
+    getPushInFlightAt,
     type IndexedDBBackup,
   } from './lib/data'
   import { applyTheme } from './lib/ui'
@@ -567,7 +572,8 @@
           archiveLeaves.set(result.leaves)
           archiveMetadata.set(result.metadata)
           isArchiveLoaded.set(true)
-          setLastPushedSnapshot(get(notes), get(leaves), result.notes, result.leaves)
+          // Archive部分のベースラインのみ更新（Home側に影響しない）
+          setArchiveBaseline(result.notes, result.leaves)
         }
       } catch (e) {
         console.error('Archive pull failed during URL restore:', e)
@@ -753,8 +759,10 @@
             leaves.set(savedLeaves)
             // IndexedDBのデータをベースラインとして記録（dirty誤検出を防止）
             setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
+            // ベースラインとローカルが同じなのでダーティをクリア
+            clearAllChanges()
             // リーフのisDirtyでは検出できない構造変更があった場合、isStructureDirtyを復元
-            if (wasDirty && !get(isDirty)) {
+            if (wasDirty) {
               isStructureDirty.set(true)
             }
             isFirstPriorityFetched = true
@@ -842,8 +850,31 @@
           // staleチェックを実行
           const staleResult = await executeStaleCheck($settings, get(lastKnownCommitSha))
           if (staleResult.status === 'stale') {
-            isStale.set(true)
+            // Push飛行中フラグがある場合、スリープでPushレスポンスが消失した可能性がある
+            // （GitHub側ではPushが成功しているが、レスポンスが届かずSHAが未更新）
+            const pushInFlight = getPushInFlightAt()
+            const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000 // 1時間
+            if (pushInFlight && now - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
+              console.log('Stale detected with push-in-flight flag: resolving as interrupted push')
+              // SHAのみ更新し、スナップショットとダーティは変更しない。
+              // push後〜sleep前にユーザーが追加編集した場合、その編集がダーティとして残り、
+              // 次回pushで正しく送信される。既にpush済みの内容との差分がなければno-op pushになる。
+              lastKnownCommitSha.set(staleResult.remoteCommitSha)
+              setPushInFlightAt(undefined)
+              isStale.set(false)
+            } else {
+              // フラグが期限切れの場合はクリアして通常のstale処理
+              if (pushInFlight) {
+                setPushInFlightAt(undefined)
+              }
+              isStale.set(true)
+            }
           } else if (staleResult.status === 'up_to_date') {
+            // PushがGitHubに届かなかった場合もここに来る（SHAが変わっていない）
+            // 飛行中フラグがあれば安全にクリア
+            if (getPushInFlightAt()) {
+              setPushInFlightAt(undefined)
+            }
             isStale.set(false)
           }
         }
@@ -1211,8 +1242,8 @@
             archiveLeaves.set(result.leaves)
             archiveMetadata.set(result.metadata)
             isArchiveLoaded.set(true)
-            // アーカイブPull完了時にスナップショットを更新
-            setLastPushedSnapshot(get(notes), get(leaves), result.notes, result.leaves)
+            // Archive部分のベースラインのみ更新（Home側に影響しない）
+            setArchiveBaseline(result.notes, result.leaves)
           } else {
             showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
           }
@@ -1301,8 +1332,8 @@
             // Pull直後のデータを保持（リアクティブ更新を待たずに使用）
             freshArchiveNotes = result.notes
             freshArchiveLeaves = result.leaves
-            // アーカイブPull完了時にスナップショットを更新
-            setLastPushedSnapshot(get(notes), get(leaves), result.notes, result.leaves)
+            // Archive部分のベースラインのみ更新（Home側に影響しない）
+            setArchiveBaseline(result.notes, result.leaves)
           } else {
             // Pull失敗時はアーカイブ操作を中止（データ損失防止）
             showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
@@ -1550,8 +1581,8 @@
             // Pull直後のデータを保持（リアクティブ更新を待たずに使用）
             freshArchiveNotes = result.notes
             freshArchiveLeaves = result.leaves
-            // アーカイブPull完了時にスナップショットを更新
-            setLastPushedSnapshot(get(notes), get(leaves), result.notes, result.leaves)
+            // Archive部分のベースラインのみ更新（Home側に影響しない）
+            setArchiveBaseline(result.notes, result.leaves)
           } else {
             // Pull失敗時はアーカイブ操作を中止（データ損失防止）
             showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
@@ -2804,6 +2835,9 @@
       // Push開始を通知
       showPushToast($_('loading.pushing'))
 
+      // Push飛行中フラグを設定（スリープによるレスポンス消失検出用）
+      setPushInFlightAt(Date.now())
+
       // ホーム直下のリーフ・仮想ノートを除外してからPush
       const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
       const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
@@ -2828,6 +2862,9 @@
         result.changedLeafCount
       )
       showPushToast(translatedMessage, result.variant)
+
+      // Push飛行中フラグをクリア（レスポンスを受信できた）
+      setPushInFlightAt(undefined)
 
       // Push成功時にダーティフラグをクリアし、pushCountを更新
       if (result.variant === 'success') {
@@ -3425,10 +3462,12 @@
           return nav.getPriorityFromUrl(notesFromGitHub)
         },
 
-        // 各リーフ取得完了時: leavesストアに追加、統計を更新
+        // 各リーフ取得完了時: leavesストアに追加、統計を更新、ベースラインに追加
         onLeaf: (leaf) => {
           leaves.update((current) => [...current, leaf])
           leafStatsStore.addLeaf(leaf.id, leaf.content)
+          // Pull完了前でも到着済みリーフの行ダーティが正しく計算されるよう、ベースラインに追加
+          addLeafToBaseline(leaf)
           loadingLeafIds.delete(leaf.id)
           loadingLeafIds = loadingLeafIds // リアクティブ更新
           // Pull進捗: カウントアップ
@@ -3486,18 +3525,18 @@
 
         // Pull完了時の状態をスナップショットとして保存（差分検出のベースライン）
         // アーカイブはまだPull完了していない可能性があるので、その時点の状態を使用
-        setLastPushedSnapshot(result.notes, sortedLeaves, get(archiveNotes), get(archiveLeaves))
+        // 注意: setLastPushedSnapshot のベースラインは result（リモート）の内容。
+        // sortedLeaves にはPull中のユーザー編集が保持されているため、
+        // refreshDirtyState で差分を再検出する。
+        setLastPushedSnapshot(result.notes, result.leaves, get(archiveNotes), get(archiveLeaves))
 
         // IndexedDBに保存
         saveNotes(result.notes).catch((err) => console.error('Failed to persist notes:', err))
         saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
 
-        // Pull成功時はGitHubと同期したのでダーティフラグをクリア
-        // ただし、Pull中にユーザーが編集した場合はクリアしない
+        // ダーティフラグを再検出（Pull中のユーザー編集があれば残る、なければクリア）
         await tick()
-        if (!get(isDirty)) {
-          clearAllChanges()
-        }
+        refreshDirtyState()
         isStale.set(false) // Pullしたのでstale状態を解除
       } else {
         // Pull失敗時の処理
