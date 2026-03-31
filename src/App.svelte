@@ -85,7 +85,7 @@
   import { loadAndApplyCustomFont, loadAndApplySystemMonoFont } from './lib/ui'
   import { loadAndApplyCustomBackgrounds } from './lib/ui'
   import { pullArchive, translateGitHubMessage } from './lib/api'
-  import type { LeafSkeleton } from './lib/api'
+  // LeafSkeleton type moved to app-state.svelte.ts
   import { initI18n, _, locale } from './lib/i18n'
 
   import {
@@ -191,137 +191,32 @@
     setLeavesForWorld,
     // Pane state store
     paneStateStore,
+    // Phase 2: App state & derived state
+    appState,
+    derivedState,
   } from './lib/app-state.svelte'
 
   // ========================================
-  // Local state ($state) — Phase 2で app-state.svelte.ts に移動予定
+  // Non-reactive local variables (not $state)
   // ========================================
-  let breadcrumbs: Breadcrumb[] = $state([])
-  let breadcrumbsRight: Breadcrumb[] = $state([])
-  let editingBreadcrumb: string | null = $state(null)
-
-  let isLoadingUI = $state(false) // ガラス効果（Pull中のみ）
-  let isFirstPriorityFetched = $state(false) // 第1優先リーフの取得が完了したか
-  let isPullCompleted = $state(false) // 全リーフのPullが完了したか
-  let showSettings = $state(false)
-  let i18nReady = $state(false) // i18n初期化完了フラグ
-  let showWelcome = $state(false) // ウェルカムモーダル表示フラグ
-  let showInstallBanner = $state(false) // PWAインストールバナー表示フラグ
-  let deferredPrompt: Event | null = $state(null) // BeforeInstallPromptEvent
-  let isExportingZip = $state(false)
-  let isImporting = $state(false)
-  let isTesting = $state(false)
   let importOccurredInSettings = false
   let isClosingSettingsPull = false
   let repoChangedInSettings = false // 設定画面でリポが変更された
-  let isArchiveLoading = $state(false) // アーカイブをロード中
-
-  // 左右ペイン用の状態
-  let isDualPane = $state(false) // 画面幅で切り替え
 
   // PWA終了ガードにいるかどうかのフラグ
   let atGuardEntry = false
 
-  // キーボードナビゲーション用の状態
-  let selectedIndexLeft = $state(0) // 左ペインで選択中のアイテムインデックス
-  let selectedIndexRight = $state(0) // 右ペインで選択中のアイテムインデックス
-
-  // スクロール同期用のコンポーネント参照
-  let leftEditorView: any = $state(null)
-  let leftPreviewView: any = $state(null)
-  let rightEditorView: any = $state(null)
-  let rightPreviewView: any = $state(null)
-
-  // 未取得リーフのID（ローディング表示用）
-  let loadingLeafIds = $state(new Set<string>())
-
-  // スケルトン表示用のリーフメタ情報（Pull中のみ使用）
-  let leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
-
   // URLルーティング
   let isRestoringFromUrl = false
 
-  // Pull/Push中はボタンを無効化（リアクティブに追跡）
-  let canPull = $derived(!isPulling.value && !isPushing.value && !isArchiveLoading)
-  let canPush = $derived(
-    !isPulling.value && !isPushing.value && !isArchiveLoading && isFirstPriorityFetched
-  )
-
-  // dragStoreへのリアクティブアクセス
-  let draggedNote = $derived(dragStore.draggedNote)
-  let draggedLeaf = $derived(dragStore.draggedLeaf)
-  let dragOverNoteId = $derived(dragStore.dragOverNoteId)
-  let dragOverLeafId = $derived(dragStore.dragOverLeafId)
-
-  // leafStatsStoreとmoveModalStoreへのリアクティブアクセス
-  // 左ペインのワールドとビューに応じて統計を切り替え
-  let totalLeafCount = $derived(
-    leftWorld.value === 'archive' && leftView.value === 'home'
-      ? archiveLeafStatsStore.totalLeafCount
-      : leafStatsStore.totalLeafCount
-  )
-  let totalLeafChars = $derived(
-    leftWorld.value === 'archive' && leftView.value === 'home'
-      ? archiveLeafStatsStore.totalLeafChars
-      : leafStatsStore.totalLeafChars
-  )
-  let moveModalOpen = $derived(moveModalStore.isOpen)
-  let moveTargetLeaf = $derived(moveModalStore.targetLeaf)
-  let moveTargetNote = $derived(moveModalStore.targetNote)
-  let moveTargetPane = $derived(moveModalStore.targetPane)
-  let moveTargetWorld = $derived(
-    _getWorldForPane(moveTargetPane, leftWorld.value, rightWorld.value)
-  )
-  let moveTargetNotes = $derived(
-    _getNotesForWorld(moveTargetWorld, notes.value, archiveNotes.value)
-  )
-
-  // リアクティブ宣言（ワールドに応じたデータを使用）
-  let leftBreadcrumbNotes = $derived(
-    _getNotesForWorld(leftWorld.value, notes.value, archiveNotes.value)
-  )
-  let leftBreadcrumbLeaves = $derived(
-    _getLeavesForWorld(leftWorld.value, leaves.value, archiveLeaves.value)
-  )
-  let rightBreadcrumbNotes = $derived(
-    _getNotesForWorld(rightWorld.value, notes.value, archiveNotes.value)
-  )
-  let rightBreadcrumbLeaves = $derived(
-    _getLeavesForWorld(rightWorld.value, leaves.value, archiveLeaves.value)
-  )
-
-  let isGitHubConfigured = $derived(githubConfigured.value)
-
-  // Priorityリーフをリアクティブに生成（metadataからバッジ情報を復元）
-  let priorityBadgeMeta = $derived(metadata.value.leaves?.[PRIORITY_LEAF_ID])
-  let currentPriorityLeaf = $derived(
-    createPriorityLeaf(
-      priorityItems.value,
-      priorityBadgeMeta?.badgeIcon,
-      priorityBadgeMeta?.badgeColor
-    )
-  )
-
-  // オフラインリーフをリアクティブに生成（ストアから）
-  let currentOfflineLeaf = $derived(
-    createOfflineLeaf(
-      offlineLeafStore.value.content,
-      offlineLeafStore.value.badgeIcon,
-      offlineLeafStore.value.badgeColor
-    )
-  )
-
-  // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
-  let currentNotes = $derived(_getNotesForWorld(leftWorld.value, notes.value, archiveNotes.value))
-  let currentLeaves = $derived(
-    _getLeavesForWorld(leftWorld.value, leaves.value, archiveLeaves.value)
-  )
-
-  // Pushボタン無効理由を計算
+  // Pushボタン無効理由を計算（$_はsvelte-i18nストアで.svelte内でのみ使用可能）
   let pushDisabledReason = $derived(
-    pullProgressInfo.value
+    derivedState.pullProgressData
       ? $_('home.leafFetched', {
-          values: { fetched: pullProgressInfo.value.fetched, total: pullProgressInfo.value.total },
+          values: {
+            fetched: derivedState.pullProgressData.fetched,
+            total: derivedState.pullProgressData.total,
+          },
         })
       : ''
   )
@@ -345,7 +240,7 @@
   // スクロール同期関数（scroll-sync.tsに移行）
   function getScrollSyncState(): ScrollSyncState {
     return {
-      isDualPane,
+      isDualPane: appState.isDualPane,
       leftLeaf: leftLeaf.value,
       rightLeaf: rightLeaf.value,
       leftView: leftView.value,
@@ -354,7 +249,12 @@
   }
 
   function getScrollSyncViews(): ScrollSyncViews {
-    return { leftEditorView, leftPreviewView, rightEditorView, rightPreviewView }
+    return {
+      leftEditorView: appState.leftEditorView,
+      leftPreviewView: appState.leftPreviewView,
+      rightEditorView: appState.rightEditorView,
+      rightPreviewView: appState.rightPreviewView,
+    }
   }
 
   function handlePaneScroll(pane: Pane, scrollTop: number, scrollHeight: number) {
@@ -370,27 +270,27 @@
   }
 
   $effect(() => {
-    breadcrumbs = buildBreadcrumbs(
+    appState.breadcrumbs = buildBreadcrumbs(
       leftView.value,
       leftNote.value,
       leftLeaf.value,
-      leftBreadcrumbNotes,
+      derivedState.leftBreadcrumbNotes,
       'left',
       goHome,
       selectNote,
-      leftBreadcrumbLeaves
+      derivedState.leftBreadcrumbLeaves
     )
   })
   $effect(() => {
-    breadcrumbsRight = buildBreadcrumbs(
+    appState.breadcrumbsRight = buildBreadcrumbs(
       rightView.value,
       rightNote.value,
       rightLeaf.value,
-      rightBreadcrumbNotes,
+      derivedState.rightBreadcrumbNotes,
       'right',
       goHome,
       selectNote,
-      rightBreadcrumbLeaves
+      derivedState.rightBreadcrumbLeaves
     )
   })
   $effect(() => {
@@ -404,29 +304,29 @@
   // paneState をリアクティブに更新
   $effect(() => {
     paneStateStore.value = {
-      isFirstPriorityFetched,
-      isPullCompleted,
-      canPush,
+      isFirstPriorityFetched: appState.isFirstPriorityFetched,
+      isPullCompleted: appState.isPullCompleted,
+      canPush: derivedState.canPush,
       pushDisabledReason,
-      selectedIndexLeft,
-      selectedIndexRight,
-      editingBreadcrumb,
-      dragOverNoteId,
-      dragOverLeafId,
-      loadingLeafIds,
-      leafSkeletonMap,
-      totalLeafCount,
-      totalLeafChars,
+      selectedIndexLeft: appState.selectedIndexLeft,
+      selectedIndexRight: appState.selectedIndexRight,
+      editingBreadcrumb: appState.editingBreadcrumb,
+      dragOverNoteId: derivedState.dragOverNoteId,
+      dragOverLeafId: derivedState.dragOverLeafId,
+      loadingLeafIds: appState.loadingLeafIds,
+      leafSkeletonMap: appState.leafSkeletonMap,
+      totalLeafCount: derivedState.totalLeafCount,
+      totalLeafChars: derivedState.totalLeafChars,
       lastPulledPushCount: lastPulledPushCount.value,
-      currentPriorityLeaf,
-      currentOfflineLeaf,
-      breadcrumbs,
-      breadcrumbsRight,
-      showWelcome,
-      isLoadingUI,
+      currentPriorityLeaf: derivedState.currentPriorityLeaf,
+      currentOfflineLeaf: derivedState.currentOfflineLeaf,
+      breadcrumbs: appState.breadcrumbs,
+      breadcrumbsRight: appState.breadcrumbsRight,
+      showWelcome: appState.showWelcome,
+      isLoadingUI: appState.isLoadingUI,
       leftWorld: leftWorld.value,
       rightWorld: rightWorld.value,
-      isArchiveLoading,
+      isArchiveLoading: appState.isArchiveLoading,
     }
   })
 
@@ -435,7 +335,7 @@
 
   function updateUrlFromState() {
     // 初期化完了まで、URL更新をスキップ
-    if (isRestoringFromUrl || isPulling.value || !isFirstPriorityFetched) {
+    if (isRestoringFromUrl || isPulling.value || !appState.isFirstPriorityFetched) {
       return
     }
 
@@ -457,7 +357,7 @@
     params.set('left', leftPath)
 
     // 右ペイン（2ペイン表示時は独立した状態、1ペイン時は左と同じ）
-    const rightPath = isDualPane
+    const rightPath = appState.isDualPane
       ? buildPath(rightNote.value, rightLeaf.value, rightNotes, rightView.value, rightWorld.value)
       : leftPath
     params.set('right', rightPath)
@@ -521,7 +421,7 @@
     // アーカイブが必要だが未ロードの場合、先にPullする
     const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
     if (needsArchive && !isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
-      isArchiveLoading = true
+      appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
         const result = await pullArchive(settings.value, {
@@ -538,7 +438,7 @@
       } catch (e) {
         console.error('Archive pull failed during URL restore:', e)
       } finally {
-        isArchiveLoading = false
+        appState.isArchiveLoading = false
       }
     }
 
@@ -568,7 +468,7 @@
     }
 
     // 右ペインの復元（2ペイン表示時のみ）
-    if (rightPath && isDualPane) {
+    if (rightPath && appState.isDualPane) {
       // 右ペインのデータ（アーカイブのPull後のデータを使用）
       const rightNotesData = _getNotesForWorld(
         rightWorldInfo.world,
@@ -647,16 +547,16 @@
       // デフォルトのミニインフォバーを抑制
       e.preventDefault()
       // プロンプトを保存して後で使用
-      deferredPrompt = e
+      appState.deferredPrompt = e
       // バナーを表示
-      showInstallBanner = true
+      appState.showInstallBanner = true
     }
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
 
     // PWAがインストールされた時
     const handleAppInstalled = () => {
-      showInstallBanner = false
-      deferredPrompt = null
+      appState.showInstallBanner = false
+      appState.deferredPrompt = null
     }
     window.addEventListener('appinstalled', handleAppInstalled)
 
@@ -667,7 +567,7 @@
 
       // i18n初期化（翻訳読み込み完了を待機）
       await initI18n(loadedSettings.locale)
-      i18nReady = true
+      appState.i18nReady = true
 
       applyTheme(loadedSettings.theme, loadedSettings)
       document.title = loadedSettings.toolName
@@ -736,7 +636,7 @@
             if (wasDirty) {
               isStructureDirty.value = true
             }
-            isFirstPriorityFetched = true
+            appState.isFirstPriorityFetched = true
             restoreStateFromUrl(false)
           } catch (error) {
             console.error('Failed to load from IndexedDB:', error)
@@ -746,7 +646,7 @@
         })
       } else {
         // 未設定の場合はウェルカムモーダルを表示
-        showWelcome = true
+        appState.showWelcome = true
         // GitHub設定が未完了の間は操作をロックしたまま
       }
 
@@ -756,7 +656,7 @@
 
     // アスペクト比を監視して isDualPane を更新（横 > 縦で2ペイン表示）
     const updateDualPane = () => {
-      isDualPane = window.innerWidth > window.innerHeight
+      appState.isDualPane = window.innerWidth > window.innerHeight
     }
     updateDualPane()
 
@@ -894,10 +794,10 @@
         if (!githubConfigured.value) return
 
         // Push/Pull中またはアーカイブロード中はスキップ
-        if (isPulling.value || isPushing.value || isArchiveLoading) return
+        if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
         // 初回Pullが完了していなければスキップ
-        if (!isFirstPriorityFetched) return
+        if (!appState.isFirstPriorityFetched) return
 
         console.log('Auto-push triggered')
         ;(async () => {
@@ -956,10 +856,10 @@
         if (!githubConfigured.value) return
 
         // Push/Pull中またはアーカイブロード中はスキップ
-        if (isPulling.value || isPushing.value || isArchiveLoading) return
+        if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
         // 初回Pullが完了していなければスキップ
-        if (!isFirstPriorityFetched) return
+        if (!appState.isFirstPriorityFetched) return
 
         console.log('Auto-pull triggered (stale detected, local is clean)')
 
@@ -999,14 +899,14 @@
       rightView: rightView.value,
       rightNote: rightNote.value,
       rightLeaf: rightLeaf.value,
-      isDualPane,
+      isDualPane: appState.isDualPane,
       focusedPane: focusedPane.value,
-      selectedIndexLeft,
-      selectedIndexRight,
-      showSettings,
-      isFirstPriorityFetched,
-      leftEditorView,
-      rightEditorView,
+      selectedIndexLeft: appState.selectedIndexLeft,
+      selectedIndexRight: appState.selectedIndexRight,
+      showSettings: appState.showSettings,
+      isFirstPriorityFetched: appState.isFirstPriorityFetched,
+      leftEditorView: appState.leftEditorView,
+      rightEditorView: appState.rightEditorView,
     }
   }
 
@@ -1028,8 +928,8 @@
     rightNote.value = state.rightNote
     rightLeaf.value = state.rightLeaf
     focusedPane.value = state.focusedPane
-    selectedIndexLeft = state.selectedIndexLeft
-    selectedIndexRight = state.selectedIndexRight
+    appState.selectedIndexLeft = state.selectedIndexLeft
+    appState.selectedIndexRight = state.selectedIndexRight
   }
 
   // 公開ナビゲーション関数（navigation.tsのラッパー）
@@ -1059,11 +959,11 @@
     // オフラインリーフを開く（編集可能）
     if (pane === 'left') {
       leftNote.value = null
-      leftLeaf.value = currentOfflineLeaf
+      leftLeaf.value = derivedState.currentOfflineLeaf
       leftView.value = 'edit'
     } else {
       rightNote.value = null
-      rightLeaf.value = currentOfflineLeaf
+      rightLeaf.value = derivedState.currentOfflineLeaf
       rightView.value = 'edit'
     }
   }
@@ -1148,8 +1048,8 @@
         openOfflineView('left')
         // DOM更新を待ってから行ジャンプ
         await tick()
-        if (leftEditorView && leftEditorView.scrollToLine) {
-          leftEditorView.scrollToLine(result.line)
+        if (appState.leftEditorView && appState.leftEditorView.scrollToLine) {
+          appState.leftEditorView.scrollToLine(result.line)
         }
       } else {
         const leaf = targetLeaves.find((l) => l.id === result.leafId)
@@ -1157,8 +1057,8 @@
           selectLeaf(leaf, 'left')
           // DOM更新を待ってから行ジャンプ
           await tick()
-          if (leftEditorView && leftEditorView.scrollToLine) {
-            leftEditorView.scrollToLine(result.line)
+          if (appState.leftEditorView && appState.leftEditorView.scrollToLine) {
+            appState.leftEditorView.scrollToLine(result.line)
           }
         }
       }
@@ -1172,7 +1072,7 @@
       // エディタのマウント完了を待つ（tick()だけでは不十分）
       await tick()
       await new Promise((resolve) => setTimeout(resolve, 100))
-      const editorView = pane === 'left' ? leftEditorView : rightEditorView
+      const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
       if (editorView && editorView.scrollToLine) {
         editorView.scrollToLine(line)
       }
@@ -1196,7 +1096,7 @@
     if (world === currentPaneWorld) return
 
     // Pull/Push中またはアーカイブロード中はワールド切り替えを禁止
-    if (isPulling.value || isPushing.value || isArchiveLoading) return
+    if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
     // 先にワールドを切り替え（ペインごとに独立）
     if (pane === 'left') {
@@ -1209,10 +1109,10 @@
     refreshBreadcrumbs()
 
     // アーカイブに切り替える場合、未ロード＆ロード中でなければPull（バックグラウンドで実行）
-    if (world === 'archive' && !isArchiveLoaded.value && !isArchiveLoading) {
+    if (world === 'archive' && !isArchiveLoaded.value && !appState.isArchiveLoading) {
       // トークンが設定されている場合のみPullを試行
       if (settings.value.token && settings.value.repoName) {
-        isArchiveLoading = true
+        appState.isArchiveLoading = true
         archiveLeafStatsStore.reset()
         try {
           const result = await pullArchive(settings.value, {
@@ -1232,7 +1132,7 @@
           console.error('Archive pull failed:', e)
           showPullToast($_('toast.pullFailed'), 'error')
         } finally {
-          isArchiveLoading = false
+          appState.isArchiveLoading = false
         }
       }
     }
@@ -1418,9 +1318,9 @@
     rightView.value = tempView
 
     // 選択インデックスも入れ替え
-    const tempIndex = selectedIndexLeft
-    selectedIndexLeft = selectedIndexRight
-    selectedIndexRight = tempIndex
+    const tempIndex = appState.selectedIndexLeft
+    appState.selectedIndexLeft = appState.selectedIndexRight
+    appState.selectedIndexRight = tempIndex
 
     // ワールドも入れ替え
     const tempWorld = leftWorld.value
@@ -1433,7 +1333,7 @@
     rightNote.value = leftNote.value
     rightLeaf.value = leftLeaf.value
     rightView.value = leftView.value
-    selectedIndexRight = selectedIndexLeft
+    appState.selectedIndexRight = appState.selectedIndexLeft
     rightWorld.value = leftWorld.value
   }
 
@@ -1442,7 +1342,7 @@
     leftNote.value = rightNote.value
     leftLeaf.value = rightLeaf.value
     leftView.value = rightView.value
-    selectedIndexLeft = selectedIndexRight
+    appState.selectedIndexLeft = appState.selectedIndexRight
     leftWorld.value = rightWorld.value
   }
 
@@ -1456,8 +1356,9 @@
     if (view === 'home') {
       const specialLeaves: Leaf[] = []
       if (getWorldForPane(pane) !== 'archive') {
-        if (currentOfflineLeaf) specialLeaves.push(currentOfflineLeaf)
-        if (currentPriorityLeaf && isPullCompleted) specialLeaves.push(currentPriorityLeaf)
+        if (derivedState.currentOfflineLeaf) specialLeaves.push(derivedState.currentOfflineLeaf)
+        if (derivedState.currentPriorityLeaf && appState.isPullCompleted)
+          specialLeaves.push(derivedState.currentPriorityLeaf)
       }
       const rootNotes = paneNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
       return [...specialLeaves, ...rootNotes]
@@ -1477,7 +1378,7 @@
   function navigateGridForPane(direction: 'up' | 'down' | 'left' | 'right') {
     const pane = focusedPane.value
     const items = getCurrentItemsForPane(pane)
-    const currentIndex = pane === 'left' ? selectedIndexLeft : selectedIndexRight
+    const currentIndex = pane === 'left' ? appState.selectedIndexLeft : appState.selectedIndexRight
 
     if (items.length === 0) return
 
@@ -1504,16 +1405,16 @@
     }
 
     if (pane === 'left') {
-      selectedIndexLeft = newIndex
+      appState.selectedIndexLeft = newIndex
     } else {
-      selectedIndexRight = newIndex
+      appState.selectedIndexRight = newIndex
     }
   }
 
   function openSelectedItemForPane() {
     const pane = focusedPane.value
     const items = getCurrentItemsForPane(pane)
-    const index = pane === 'left' ? selectedIndexLeft : selectedIndexRight
+    const index = pane === 'left' ? appState.selectedIndexLeft : appState.selectedIndexRight
 
     if (index < 0 || index >= items.length) return
 
@@ -1550,9 +1451,9 @@
         const targetIndex = items.findIndex((item) => 'name' in item && item.id === note.id)
         if (targetIndex !== -1) {
           if (pane === 'left') {
-            selectedIndexLeft = targetIndex
+            appState.selectedIndexLeft = targetIndex
           } else {
-            selectedIndexRight = targetIndex
+            appState.selectedIndexRight = targetIndex
           }
         }
       } else {
@@ -1578,40 +1479,40 @@
   }
 
   function goSettings() {
-    showSettings = true
+    appState.showSettings = true
   }
 
   async function closeSettings() {
-    showSettings = false
+    appState.showSettings = false
     await handleCloseSettings()
   }
 
   function closeWelcome() {
-    showWelcome = false
+    appState.showWelcome = false
   }
 
   function openSettingsFromWelcome() {
-    showWelcome = false
-    showSettings = true
+    appState.showWelcome = false
+    appState.showSettings = true
   }
 
   // PWAインストールプロンプト
   async function handleInstall() {
-    if (!deferredPrompt) return // プロンプトを表示
-    ;(deferredPrompt as any).prompt()
+    if (!appState.deferredPrompt) return // プロンプトを表示
+    ;(appState.deferredPrompt as any).prompt()
     // ユーザーの選択を待つ
-    const { outcome } = await (deferredPrompt as any).userChoice
+    const { outcome } = await (appState.deferredPrompt as any).userChoice
     if (outcome === 'accepted') {
       console.log('PWA installed')
     }
     // 一度使ったらプロンプトは再利用できない
-    deferredPrompt = null
-    showInstallBanner = false
+    appState.deferredPrompt = null
+    appState.showInstallBanner = false
   }
 
   function dismissInstallBanner() {
-    showInstallBanner = false
-    deferredPrompt = null
+    appState.showInstallBanner = false
+    appState.deferredPrompt = null
     // 却下を記録（7日間のcooldown）
     setPwaInstallDismissedAt(Date.now())
   }
@@ -1620,7 +1521,7 @@
 
   function startEditingBreadcrumb(crumb: Breadcrumb) {
     if (crumb.type === 'home' || crumb.type === 'settings') return
-    editingBreadcrumb = crumb.id
+    appState.editingBreadcrumb = crumb.id
   }
 
   function refreshBreadcrumbs() {
@@ -1630,7 +1531,7 @@
     const rightNotes = _getNotesForWorld(rightWorld.value, notes.value, archiveNotes.value)
     const rightLeaves = _getLeavesForWorld(rightWorld.value, leaves.value, archiveLeaves.value)
 
-    breadcrumbs = buildBreadcrumbs(
+    appState.breadcrumbs = buildBreadcrumbs(
       leftView.value,
       leftNote.value,
       leftLeaf.value,
@@ -1640,7 +1541,7 @@
       selectNote,
       leftLeaves
     )
-    breadcrumbsRight = buildBreadcrumbs(
+    appState.breadcrumbsRight = buildBreadcrumbs(
       rightView.value,
       rightNote.value,
       rightLeaf.value,
@@ -1657,7 +1558,7 @@
   }
 
   function cancelEditBreadcrumb() {
-    editingBreadcrumb = null
+    appState.editingBreadcrumb = null
   }
 
   // ノート管理（crud.tsに委譲）
@@ -1684,22 +1585,24 @@
   }
 
   function handleDragOverNote(e: DragEvent, note: Note) {
-    if (!draggedNote || draggedNote.id === note.id) return
-    if (draggedNote.parentId !== note.parentId) return
+    if (!derivedState.draggedNote || derivedState.draggedNote.id === note.id) return
+    if (derivedState.draggedNote.parentId !== note.parentId) return
     e.preventDefault()
     dragStore.setDragOverNote(note.id)
   }
 
   function handleDropNote(targetNote: Note) {
     dragStore.setDragOverNote(null)
-    if (!draggedNote || draggedNote.id === targetNote.id) return
-    if (draggedNote.parentId !== targetNote.parentId) return
+    if (!derivedState.draggedNote || derivedState.draggedNote.id === targetNote.id) return
+    if (derivedState.draggedNote.parentId !== targetNote.parentId) return
 
     // ドラッグ元のノートからワールドを判定
-    const world = getWorldForNote(draggedNote)
+    const world = getWorldForNote(derivedState.draggedNote)
     const worldNotes = getNotesForWorld(world)
-    const updatedNotes = reorderItems(draggedNote, targetNote, worldNotes, (n) =>
-      draggedNote!.parentId ? n.parentId === draggedNote!.parentId : !n.parentId
+    const updatedNotes = reorderItems(derivedState.draggedNote, targetNote, worldNotes, (n) =>
+      derivedState.draggedNote!.parentId
+        ? n.parentId === derivedState.draggedNote!.parentId
+        : !n.parentId
     )
     setNotesForWorld(world, updatedNotes)
     dragStore.endDragNote()
@@ -1737,25 +1640,25 @@
   }
 
   function handleDragOverLeaf(e: DragEvent, leaf: Leaf) {
-    if (!draggedLeaf || draggedLeaf.id === leaf.id) return
-    if (draggedLeaf.noteId !== leaf.noteId) return
+    if (!derivedState.draggedLeaf || derivedState.draggedLeaf.id === leaf.id) return
+    if (derivedState.draggedLeaf.noteId !== leaf.noteId) return
     e.preventDefault()
     dragStore.setDragOverLeaf(leaf.id)
   }
 
   function handleDropLeaf(targetLeaf: Leaf) {
     dragStore.setDragOverLeaf(null)
-    if (!draggedLeaf || draggedLeaf.id === targetLeaf.id) return
-    if (draggedLeaf.noteId !== targetLeaf.noteId) return
+    if (!derivedState.draggedLeaf || derivedState.draggedLeaf.id === targetLeaf.id) return
+    if (derivedState.draggedLeaf.noteId !== targetLeaf.noteId) return
 
     // ドラッグ元のリーフからワールドを判定
-    const world = getWorldForLeaf(draggedLeaf)
+    const world = getWorldForLeaf(derivedState.draggedLeaf)
     const worldLeaves = getLeavesForWorld(world)
     const updatedLeaves = reorderItems(
-      draggedLeaf,
+      derivedState.draggedLeaf,
       targetLeaf,
       worldLeaves,
-      (l) => l.noteId === draggedLeaf!.noteId
+      (l) => l.noteId === derivedState.draggedLeaf!.noteId
     )
     setLeavesForWorld(world, updatedLeaves)
     dragStore.endDragLeaf()
@@ -1763,14 +1666,14 @@
 
   // 移動モーダル
   function openMoveModalForLeaf(pane: Pane) {
-    if (!isFirstPriorityFetched) return
+    if (!appState.isFirstPriorityFetched) return
     const leaf = pane === 'left' ? leftLeaf.value : rightLeaf.value
     if (!leaf) return
     moveModalStore.openForLeaf(leaf, pane)
   }
 
   function openMoveModalForNote(pane: Pane) {
-    if (!isFirstPriorityFetched) return
+    if (!appState.isFirstPriorityFetched) return
     const note = pane === 'left' ? leftNote.value : rightNote.value
     if (!note) return
     moveModalStore.openForNote(note, pane)
@@ -1810,19 +1713,19 @@
 
   function createGitContext(): GitActionContext {
     return {
-      getIsArchiveLoading: () => isArchiveLoading,
-      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
-      getIsPullCompleted: () => isPullCompleted,
-      setIsArchiveLoading: (v) => (isArchiveLoading = v),
-      setIsFirstPriorityFetched: (v) => (isFirstPriorityFetched = v),
-      setIsPullCompleted: (v) => (isPullCompleted = v),
-      setIsLoadingUI: (v) => (isLoadingUI = v),
-      setSelectedIndexLeft: (v) => (selectedIndexLeft = v),
-      setSelectedIndexRight: (v) => (selectedIndexRight = v),
-      setLoadingLeafIds: (v) => (loadingLeafIds = v),
-      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
+      getIsArchiveLoading: () => appState.isArchiveLoading,
+      getIsFirstPriorityFetched: () => appState.isFirstPriorityFetched,
+      getIsPullCompleted: () => appState.isPullCompleted,
+      setIsArchiveLoading: (v) => (appState.isArchiveLoading = v),
+      setIsFirstPriorityFetched: (v) => (appState.isFirstPriorityFetched = v),
+      setIsPullCompleted: (v) => (appState.isPullCompleted = v),
+      setIsLoadingUI: (v) => (appState.isLoadingUI = v),
+      setSelectedIndexLeft: (v) => (appState.selectedIndexLeft = v),
+      setSelectedIndexRight: (v) => (appState.selectedIndexRight = v),
+      setLoadingLeafIds: (v) => (appState.loadingLeafIds = v),
+      setLeafSkeletonMap: (v) => (appState.leafSkeletonMap = v),
       setIsRestoringFromUrl: (v) => (isRestoringFromUrl = v),
-      getLoadingLeafIds: () => loadingLeafIds,
+      getLoadingLeafIds: () => appState.loadingLeafIds,
       restoreStateFromUrl,
       rebuildLeafStats,
       resetLeafStats,
@@ -1834,10 +1737,10 @@
 
   function createMoveContext(): MoveActionContext {
     return {
-      getIsArchiveLoading: () => isArchiveLoading,
-      setIsArchiveLoading: (v) => (isArchiveLoading = v),
-      getLeafSkeletonMap: () => leafSkeletonMap,
-      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
+      getIsArchiveLoading: () => appState.isArchiveLoading,
+      setIsArchiveLoading: (v) => (appState.isArchiveLoading = v),
+      getLeafSkeletonMap: () => appState.leafSkeletonMap,
+      setLeafSkeletonMap: (v) => (appState.leafSkeletonMap = v),
       selectNote,
       goHome,
       refreshBreadcrumbs,
@@ -1849,10 +1752,10 @@
 
   function createCrudContext(): CrudActionContext {
     return {
-      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
-      getLeafSkeletonMap: () => leafSkeletonMap,
-      setEditingBreadcrumb: (v) => (editingBreadcrumb = v),
-      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
+      getIsFirstPriorityFetched: () => appState.isFirstPriorityFetched,
+      getLeafSkeletonMap: () => appState.leafSkeletonMap,
+      setEditingBreadcrumb: (v) => (appState.editingBreadcrumb = v),
+      setLeafSkeletonMap: (v) => (appState.leafSkeletonMap = v),
       selectNote,
       selectLeaf,
       goHome,
@@ -1873,15 +1776,17 @@
 
   function createIoContext(): IoActionContext {
     return {
-      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
-      getIsExportingZip: () => isExportingZip,
-      getIsImporting: () => isImporting,
-      setIsExportingZip: (v) => (isExportingZip = v),
-      setIsImporting: (v) => (isImporting = v),
+      getIsFirstPriorityFetched: () => appState.isFirstPriorityFetched,
+      getIsExportingZip: () => appState.isExportingZip,
+      getIsImporting: () => appState.isImporting,
+      setIsExportingZip: (v) => (appState.isExportingZip = v),
+      setIsImporting: (v) => (appState.isImporting = v),
       setImportOccurredInSettings: (v) => (importOccurredInSettings = v),
       getLeavesForPane,
-      getEditorView: (pane: Pane) => (pane === 'left' ? leftEditorView : rightEditorView),
-      getPreviewView: (pane: Pane) => (pane === 'left' ? leftPreviewView : rightPreviewView),
+      getEditorView: (pane: Pane) =>
+        pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
+      getPreviewView: (pane: Pane) =>
+        pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
     }
   }
 
@@ -1922,8 +1827,10 @@
       translate: $_,
       getLeaf: (pane: Pane) => (pane === 'left' ? leftLeaf.value : rightLeaf.value),
       getView: (pane: Pane) => (pane === 'left' ? leftView.value : rightView.value),
-      getPreviewView: (pane: Pane) => (pane === 'left' ? leftPreviewView : rightPreviewView),
-      getEditorView: (pane: Pane) => (pane === 'left' ? leftEditorView : rightEditorView),
+      getPreviewView: (pane: Pane) =>
+        pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
+      getEditorView: (pane: Pane) =>
+        pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
     }
   }
 
@@ -1948,13 +1855,13 @@
   }
 
   function getHasSelection(pane: Pane): boolean {
-    const editorView = pane === 'left' ? leftEditorView : rightEditorView
+    const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
     if (!editorView || !editorView.getSelectedText) return false
     return editorView.getSelectedText() !== ''
   }
 
   function getSelectedText(pane: Pane): string {
-    const editorView = pane === 'left' ? leftEditorView : rightEditorView
+    const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
     if (!editorView || !editorView.getSelectedText) return ''
     return editorView.getSelectedText()
   }
@@ -2065,8 +1972,8 @@
     // リポジトリが変更された場合、全リポ固有状態をリセット
     if (repoChanged) {
       repoChangedInSettings = true
-      isPullCompleted = false
-      isFirstPriorityFetched = false
+      appState.isPullCompleted = false
+      appState.isFirstPriorityFetched = false
       resetForRepoSwitch()
       archiveLeafStatsStore.reset()
     }
@@ -2076,7 +1983,7 @@
     if (repoChangedInSettings || importOccurredInSettings) {
       // Pull/Push/アーカイブロード中の場合は完了を待たずにリセット済み状態で閉じる
       // （resetForRepoSwitchで既にデータクリア済み、次回操作時に新リポからPullされる）
-      if (!isPulling.value && !isPushing.value && !isArchiveLoading) {
+      if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
         isClosingSettingsPull = true
         await pullFromGitHub(false)
         isClosingSettingsPull = false
@@ -2088,7 +1995,7 @@
 
   async function handleTestConnection() {
     return handleTestConnectionAction({
-      setIsTesting: (v) => (isTesting = v),
+      setIsTesting: (v) => (appState.isTesting = v),
     })
   }
 
@@ -2148,7 +2055,7 @@
   }
 </script>
 
-{#if !i18nReady}
+{#if !appState.i18nReady}
   <!-- i18n読み込み中 -->
   <div class="i18n-loading">
     <div class="loading-spinner">
@@ -2161,7 +2068,7 @@
   <!-- メインアプリケーション -->
   <div class="app-container">
     <Header
-      githubConfigured={isGitHubConfigured}
+      githubConfigured={derivedState.isGitHubConfigured}
       title={settings.value.toolName}
       onTitleClick={() => {
         leftWorld.value = 'home'
@@ -2173,7 +2080,7 @@
         goSettings()
       }}
       onPull={() => pullFromGitHub(false)}
-      pullDisabled={!canPull}
+      pullDisabled={!derivedState.canPull}
       isStale={isStale.value}
       pullProgress={pullProgressInfo.value}
       onPullProgressClick={() => {
@@ -2190,8 +2097,8 @@
       }}
       onSearchClick={toggleSearch}
       onHelpClick={openUserGuide}
-      {isDualPane}
-      isOperationsLocked={!isFirstPriorityFetched}
+      isDualPane={appState.isDualPane}
+      isOperationsLocked={!appState.isFirstPriorityFetched}
       onSwapPanes={swapPanes}
       onCopyLeftToRight={copyLeftToRight}
       onCopyRightToLeft={copyRightToLeft}
@@ -2199,32 +2106,32 @@
     <!-- 検索ドロップダウン（ヘッダー右上、検索ボタンの下） -->
     <SearchBar onResultClick={handleSearchResultClick} />
 
-    <div class="content-wrapper" class:single-pane={!isDualPane}>
-      <div class="pane-divider" class:hidden={!isDualPane}></div>
+    <div class="content-wrapper" class:single-pane={!appState.isDualPane}>
+      <div class="pane-divider" class:hidden={!appState.isDualPane}></div>
       <div class="left-column">
         <PaneView
           pane="left"
-          bind:editorViewRef={leftEditorView}
-          bind:previewViewRef={leftPreviewView}
+          bind:editorViewRef={appState.leftEditorView}
+          bind:previewViewRef={appState.leftPreviewView}
         />
       </div>
 
-      <div class="right-column" class:hidden={!isDualPane}>
+      <div class="right-column" class:hidden={!appState.isDualPane}>
         <PaneView
           pane="right"
-          bind:editorViewRef={rightEditorView}
-          bind:previewViewRef={rightPreviewView}
+          bind:editorViewRef={appState.rightEditorView}
+          bind:previewViewRef={appState.rightPreviewView}
         />
       </div>
     </div>
 
     <MoveModal
-      show={moveModalOpen}
-      notes={moveTargetNotes}
-      targetNote={moveTargetNote}
-      targetLeaf={moveTargetLeaf}
-      pane={moveTargetPane}
-      currentWorld={moveTargetWorld}
+      show={derivedState.moveModalOpen}
+      notes={derivedState.moveTargetNotes}
+      targetNote={derivedState.moveTargetNote}
+      targetLeaf={derivedState.moveTargetLeaf}
+      pane={derivedState.moveTargetPane}
+      currentWorld={derivedState.moveTargetWorld}
       onConfirm={handleMoveConfirm}
       onClose={closeMoveModal}
     />
@@ -2244,11 +2151,11 @@
     />
 
     <SettingsModal
-      show={showSettings}
+      show={appState.showSettings}
       settings={settings.value}
-      {isTesting}
-      exporting={isExportingZip}
-      importing={isImporting}
+      isTesting={appState.isTesting}
+      exporting={appState.isExportingZip}
+      importing={appState.isImporting}
       onThemeChange={handleThemeChange}
       onSettingsChange={handleSettingsChange}
       onTestConnection={handleTestConnection}
@@ -2258,7 +2165,7 @@
     />
 
     <WelcomeModal
-      show={showWelcome}
+      show={appState.showWelcome}
       onOpenSettings={openSettingsFromWelcome}
       onClose={closeWelcome}
     />
@@ -2270,7 +2177,7 @@
       pushVariant={pushToastState.value.variant}
     />
 
-    {#if showInstallBanner}
+    {#if appState.showInstallBanner}
       <InstallBanner onInstall={handleInstall} onDismiss={dismissInstallBanner} />
     {/if}
   </div>
