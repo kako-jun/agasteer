@@ -1,4 +1,4 @@
-import { get } from 'svelte/store'
+import { get } from 'svelte/store' // for svelte-i18n only
 import type { Note, Leaf, Metadata } from '../types'
 import type { Pane } from '../navigation'
 import { showPushToast, choiceAsync, alertAsync } from '../ui'
@@ -58,9 +58,9 @@ export async function exportNotesAsZip(ctx: IoActionContext): Promise<void> {
 
   ctx.setIsExportingZip(true)
   try {
-    const allNotes = get(notes)
-    const allLeaves = get(leaves)
-    const currentMetadata = get(metadata) as Metadata
+    const allNotes = notes.value
+    const allLeaves = leaves.value
+    const currentMetadata = metadata.value as Metadata
 
     const result = await buildNotesZip(allNotes, allLeaves, currentMetadata, {
       gitPolicyLine: $_('settings.importExport.gitPolicy'),
@@ -78,7 +78,7 @@ export async function exportNotesAsZip(ctx: IoActionContext): Promise<void> {
     }
 
     const url = URL.createObjectURL(result.blob)
-    const $settings = get(settings)
+    const $settings = settings.value
     const safeName =
       ($settings.toolName || 'notes')
         .replace(/[^a-z0-9_-]/gi, '-')
@@ -133,8 +133,8 @@ export async function handleImportFromOtherApps(ctx: IoActionContext): Promise<v
       }
 
       // SimpleNote形式などの他のインポート
-      const allNotes = get(notes)
-      const allLeaves = get(leaves)
+      const allNotes = notes.value
+      const allLeaves = leaves.value
 
       // まずファイルをパースして重複チェック
       const result = await processImportFile(file, {
@@ -231,16 +231,16 @@ export async function handleAgasteerImport(ctx: IoActionContext, file: File): Pr
     // 既存データを完全に置き換え
     updateNotes(result.notes)
     updateLeaves(result.leaves)
-    metadata.set(result.metadata)
+    metadata.value = result.metadata
 
     // アーカイブデータがあればストアに設定
     if (result.archiveNotes.length > 0 || result.archiveLeaves.length > 0) {
       updateArchiveNotes(result.archiveNotes)
       updateArchiveLeaves(result.archiveLeaves)
       if (result.archiveMetadata) {
-        archiveMetadata.set(result.archiveMetadata)
+        archiveMetadata.value = result.archiveMetadata
       }
-      isArchiveLoaded.set(true)
+      isArchiveLoaded.value = true
     }
 
     ctx.setImportOccurredInSettings(true)

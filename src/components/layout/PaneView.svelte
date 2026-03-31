@@ -1,8 +1,7 @@
 <script lang="ts">
   import { getContext } from 'svelte'
-  import type { Writable } from 'svelte/store'
   import type { Pane } from '../../lib/navigation'
-  import type { PaneActions, PaneState, PANE_ACTIONS_KEY, PANE_STATE_KEY } from '../../lib/stores'
+  import type { PaneActions, PaneState } from '../../lib/stores'
   import type { Note, Leaf, View } from '../../lib/types'
   import {
     isPriorityLeaf,
@@ -61,39 +60,41 @@
 
   // Context から取得
   const actions = getContext<PaneActions>('paneActions')
-  const state = getContext<Writable<PaneState>>('paneState')
+  const paneState = getContext<{ value: PaneState }>('paneState')
 
   // pane に応じてストアを選択
-  let currentView = $derived(pane === 'left' ? $leftView : $rightView)
-  let currentNote = $derived(pane === 'left' ? $leftNote : $rightNote)
+  let currentView = $derived(pane === 'left' ? leftView.value : rightView.value)
+  let currentNote = $derived(pane === 'left' ? leftNote.value : rightNote.value)
   // Priority/OfflineリーフはPaneStateの常に最新のものを使う
-  let storeLeaf = $derived(pane === 'left' ? $leftLeaf : $rightLeaf)
+  let storeLeaf = $derived(pane === 'left' ? leftLeaf.value : rightLeaf.value)
   let currentLeaf = $derived(
     storeLeaf
       ? isPriorityLeaf(storeLeaf.id)
-        ? $state.currentPriorityLeaf
+        ? paneState.value.currentPriorityLeaf
         : isOfflineLeaf(storeLeaf.id)
-          ? $state.currentOfflineLeaf
+          ? paneState.value.currentOfflineLeaf
           : storeLeaf
       : null
   )
   let selectedIndex = $derived(
-    pane === 'left' ? $state.selectedIndexLeft : $state.selectedIndexRight
+    pane === 'left' ? paneState.value.selectedIndexLeft : paneState.value.selectedIndexRight
   )
-  let breadcrumbs = $derived(pane === 'left' ? $state.breadcrumbs : $state.breadcrumbsRight)
-  let isActive = $derived($focusedPane === pane)
+  let breadcrumbs = $derived(
+    pane === 'left' ? paneState.value.breadcrumbs : paneState.value.breadcrumbsRight
+  )
+  let isActive = $derived(focusedPane.value === pane)
 
   // ペインのワールドに応じてノート・リーフストアを切り替え
-  let paneWorld = $derived(pane === 'left' ? $state.leftWorld : $state.rightWorld)
+  let paneWorld = $derived(pane === 'left' ? paneState.value.leftWorld : paneState.value.rightWorld)
   let isArchiveWorld = $derived(paneWorld === 'archive')
-  let activeNotes = $derived(isArchiveWorld ? $archiveNotes : $notes)
-  let activeLeaves = $derived(isArchiveWorld ? $archiveLeaves : $leaves)
+  let activeNotes = $derived(isArchiveWorld ? archiveNotes.value : notes.value)
+  let activeLeaves = $derived(isArchiveWorld ? archiveLeaves.value : leaves.value)
   let activeRootNotes = $derived(
     isArchiveWorld
-      ? $archiveNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
-      : $rootNotes
+      ? archiveNotes.value.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
+      : rootNotes.value
   )
-  let activeMetadata = $derived(isArchiveWorld ? $archiveMetadata : $metadata)
+  let activeMetadata = $derived(isArchiveWorld ? archiveMetadata.value : metadata.value)
 
   // サブノート・リーフのフィルタリング
   let subNotes = $derived(
@@ -115,7 +116,7 @@
 
 <Breadcrumbs
   {breadcrumbs}
-  editingId={$state.editingBreadcrumb}
+  editingId={paneState.value.editingBreadcrumb}
   onStartEdit={actions.startEditingBreadcrumb}
   onSaveEdit={actions.saveEditBreadcrumb}
   onCancelEdit={actions.cancelEditBreadcrumb}
@@ -129,14 +130,14 @@
   getMarkdownContent={currentLeaf
     ? () =>
         isPriorityLeaf(currentLeaf.id)
-          ? generatePriorityPlainText($priorityItems)
+          ? generatePriorityPlainText(priorityItems.value)
           : currentLeaf.content
     : null}
   onSelectSibling={(id, type) => actions.selectSiblingFromBreadcrumb(id, type, pane)}
   currentWorld={paneWorld}
   onWorldChange={(world) => actions.handleWorldChange(world, pane)}
-  isArchiveLoading={$state.isArchiveLoading}
-  isSyncing={$isPulling || $isPushing}
+  isArchiveLoading={paneState.value.isArchiveLoading}
+  isSyncing={isPulling.value || isPushing.value}
 />
 
 <main class="main-pane">
@@ -144,23 +145,23 @@
     <HomeView
       notes={activeRootNotes}
       allLeaves={activeLeaves}
-      isFirstPriorityFetched={isArchiveWorld || $state.isFirstPriorityFetched}
-      isPullCompleted={isArchiveWorld || $state.isPullCompleted}
+      isFirstPriorityFetched={isArchiveWorld || paneState.value.isFirstPriorityFetched}
+      isPullCompleted={isArchiveWorld || paneState.value.isPullCompleted}
       {selectedIndex}
       {isActive}
-      vimMode={$settings.vimMode ?? false}
+      vimMode={settings.value.vimMode ?? false}
       onSelectNote={(note) => actions.selectNote(note, pane)}
       onDragStart={actions.handleDragStartNote}
       onDragEnd={actions.handleDragEndNote}
       onDragOver={actions.handleDragOverNote}
       onDrop={actions.handleDropNote}
-      dragOverNoteId={$state.dragOverNoteId}
+      dragOverNoteId={paneState.value.dragOverNoteId}
       onUpdateNoteBadge={(noteId, icon, color) =>
         actions.updateNoteBadge(noteId, icon, color, pane)}
-      priorityLeaf={isArchiveWorld ? null : $state.currentPriorityLeaf}
+      priorityLeaf={isArchiveWorld ? null : paneState.value.currentPriorityLeaf}
       onSelectPriority={() => actions.openPriorityView(pane)}
       onUpdatePriorityBadge={actions.updatePriorityBadge}
-      offlineLeaf={isArchiveWorld ? null : $state.currentOfflineLeaf}
+      offlineLeaf={isArchiveWorld ? null : paneState.value.currentOfflineLeaf}
       onSelectOffline={() => actions.openOfflineView(pane)}
       onUpdateOfflineBadge={actions.updateOfflineBadge}
       isArchive={isArchiveWorld}
@@ -172,10 +173,10 @@
       allNotes={activeNotes}
       leaves={currentLeaves}
       allLeaves={activeLeaves}
-      isFirstPriorityFetched={isArchiveWorld || $state.isFirstPriorityFetched}
+      isFirstPriorityFetched={isArchiveWorld || paneState.value.isFirstPriorityFetched}
       {selectedIndex}
       {isActive}
-      vimMode={$settings.vimMode ?? false}
+      vimMode={settings.value.vimMode ?? false}
       onSelectNote={(note) => actions.selectNote(note, pane)}
       onSelectLeaf={(leaf) => actions.selectLeaf(leaf, pane)}
       onDragStartNote={actions.handleDragStartNote}
@@ -186,13 +187,13 @@
       onDragOverLeaf={actions.handleDragOverLeaf}
       onDropNote={actions.handleDropNote}
       onDropLeaf={actions.handleDropLeaf}
-      dragOverNoteId={$state.dragOverNoteId}
-      dragOverLeafId={$state.dragOverLeafId}
+      dragOverNoteId={paneState.value.dragOverNoteId}
+      dragOverLeafId={paneState.value.dragOverLeafId}
       onUpdateNoteBadge={(noteId, icon, color) =>
         actions.updateNoteBadge(noteId, icon, color, pane)}
       onUpdateLeafBadge={(leafId, icon, color) =>
         actions.updateLeafBadge(leafId, icon, color, pane)}
-      leafSkeletonMap={$state.leafSkeletonMap}
+      leafSkeletonMap={paneState.value.leafSkeletonMap}
       onSwipeLeft={() => actions.goToNextSibling(pane)}
       onSwipeRight={() => actions.goToPrevSibling(pane)}
       isArchive={isArchiveWorld}
@@ -201,9 +202,9 @@
     <EditorView
       bind:this={editorViewRef}
       leaf={currentLeaf}
-      theme={$settings.theme}
-      vimMode={$settings.vimMode ?? false}
-      linedMode={$settings.linedMode ?? false}
+      theme={settings.value.theme}
+      vimMode={settings.value.vimMode ?? false}
+      linedMode={settings.value.linedMode ?? false}
       {pane}
       onContentChange={(content, leafId) => actions.updateLeafContent(content, leafId, pane)}
       onPush={actions.handlePushToGitHub}
@@ -225,9 +226,9 @@
 
 {#if currentView === 'home'}
   <StatsPanel
-    leafCount={$state.totalLeafCount}
-    leafCharCount={$state.totalLeafChars}
-    pushCount={$state.lastPulledPushCount}
+    leafCount={paneState.value.totalLeafCount}
+    leafCharCount={paneState.value.totalLeafChars}
+    pushCount={paneState.value.lastPulledPushCount}
   />
 {/if}
 
@@ -235,10 +236,10 @@
   <HomeFooter
     onCreateNote={(name) => actions.createNote(undefined, pane, name)}
     onPush={actions.handlePushToGitHub}
-    disabled={!$state.isPullCompleted}
-    isDirty={$isDirty}
-    pushDisabled={!$state.canPush}
-    pushDisabledReason={$state.pushDisabledReason}
+    disabled={!paneState.value.isPullCompleted}
+    isDirty={isDirty.value}
+    pushDisabled={!paneState.value.canPush}
+    pushDisabledReason={paneState.value.pushDisabledReason}
     onDisabledPushClick={actions.handleDisabledPushClick}
     currentWorld={paneWorld}
   />
@@ -249,11 +250,11 @@
     onCreateSubNote={(name) => actions.createNote(currentNote.id, pane, name)}
     onCreateLeaf={(name) => actions.createLeaf(pane, name)}
     onPush={actions.handlePushToGitHub}
-    disabled={!$state.isPullCompleted}
-    isDirty={$isDirty}
+    disabled={!paneState.value.isPullCompleted}
+    isDirty={isDirty.value}
     canHaveSubNote={!currentNote.parentId}
-    pushDisabled={!$state.canPush}
-    pushDisabledReason={$state.pushDisabledReason}
+    pushDisabled={!paneState.value.canPush}
+    pushDisabledReason={paneState.value.pushDisabledReason}
     onDisabledPushClick={actions.handleDisabledPushClick}
     currentWorld={paneWorld}
     onArchive={() => actions.archiveNote(pane)}
@@ -267,10 +268,10 @@
     onDownload={() => actions.downloadLeafAsMarkdown(currentLeaf.id, pane)}
     onTogglePreview={() => actions.togglePreview(pane)}
     onPush={actions.handlePushToGitHub}
-    disabled={!$state.isPullCompleted && !isOfflineLeaf(currentLeaf.id)}
-    isDirty={$isDirty}
-    pushDisabled={!$state.canPush}
-    pushDisabledReason={$state.pushDisabledReason}
+    disabled={!paneState.value.isPullCompleted && !isOfflineLeaf(currentLeaf.id)}
+    isDirty={isDirty.value}
+    pushDisabled={!paneState.value.canPush}
+    pushDisabledReason={paneState.value.pushDisabledReason}
     onDisabledPushClick={actions.handleDisabledPushClick}
     hideDeleteMove={isOfflineLeaf(currentLeaf.id)}
     getHasSelection={() => actions.getHasSelection(pane)}
@@ -284,10 +285,10 @@
     onDownload={() => actions.downloadLeafAsImage(currentLeaf.id, pane)}
     onToggleEdit={() => actions.togglePreview(pane)}
     onPush={actions.handlePushToGitHub}
-    disabled={!$state.isPullCompleted && !isOfflineLeaf(currentLeaf.id)}
-    isDirty={$isDirty}
-    pushDisabled={!$state.canPush}
-    pushDisabledReason={$state.pushDisabledReason}
+    disabled={!paneState.value.isPullCompleted && !isOfflineLeaf(currentLeaf.id)}
+    isDirty={isDirty.value}
+    pushDisabled={!paneState.value.canPush}
+    pushDisabledReason={paneState.value.pushDisabledReason}
     onDisabledPushClick={actions.handleDisabledPushClick}
     hideEditButton={isPriorityLeaf(currentLeaf.id)}
     hideMoveButton={isPriorityLeaf(currentLeaf.id) || isOfflineLeaf(currentLeaf.id)}
@@ -298,6 +299,6 @@
 {/if}
 
 <!-- ガラス効果オーバーレイ（オフラインリーフ表示中は除外 - GitHub同期と無関係なため） -->
-{#if ($state.isLoadingUI || $isPushing) && !(currentLeaf && isOfflineLeaf(currentLeaf.id))}
+{#if (paneState.value.isLoadingUI || isPushing.value) && !(currentLeaf && isOfflineLeaf(currentLeaf.id))}
   <Loading />
 {/if}

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { autoPushProgress } from '../../../lib/stores/auto-save'
+  import { autoPushProgress } from '../../../lib/stores/auto-save.svelte'
 
   // フッター高さに合わせて高さを計算
-  let height = $derived(Math.round($autoPushProgress * 40))
+  let height = $derived(Math.round(autoPushProgress.value * 40))
 </script>
 
-{#if $autoPushProgress > 0}
+{#if autoPushProgress.value > 0}
   <div class="indicator" style="height: {height}px"></div>
 {/if}
 

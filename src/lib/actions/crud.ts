@@ -1,4 +1,3 @@
-import { get } from 'svelte/store'
 import type { Note, Leaf, Breadcrumb, WorldType } from '../types'
 import type { Pane } from '../navigation'
 import type { LeafSkeleton } from '../api'
@@ -38,11 +37,12 @@ import {
   updateLeafBadge as updateLeafBadgeLib,
 } from '../data'
 import { normalizeBadgeValue, PRIORITY_LEAF_ID, isOfflineLeaf } from '../utils'
+import { get } from 'svelte/store'
 import { _ } from '../i18n'
 
 /**
  * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして get()/.set() で操作するため、ここには含めない
+ * stores は直接インポートして .value で操作するため、ここには含めない
  */
 export interface CrudActionContext {
   // $state() getters
@@ -122,18 +122,18 @@ export async function saveEditBreadcrumb(
 
     const updatedNote = updatedNotes.find((f) => f.id === actualId)
     if (updatedNote) {
-      if (get(leftNote)?.id === actualId) {
-        leftNote.set(updatedNote)
+      if (leftNote.value?.id === actualId) {
+        leftNote.value = updatedNote
       }
-      if (isRight && get(rightNote)?.id === actualId) {
-        rightNote.set(updatedNote)
+      if (isRight && rightNote.value?.id === actualId) {
+        rightNote.value = updatedNote
       }
     }
-    if (!paneNotes.some((f) => f.id === get(leftNote)?.id)) {
-      leftNote.set(null)
+    if (!paneNotes.some((f) => f.id === leftNote.value?.id)) {
+      leftNote.value = null
     }
-    if (isRight && !paneNotes.some((f) => f.id === get(rightNote)?.id)) {
-      rightNote.set(null)
+    if (isRight && !paneNotes.some((f) => f.id === rightNote.value?.id)) {
+      rightNote.value = null
     }
   } else if (type === 'leaf') {
     const targetLeaf = paneLeaves.find((n) => n.id === actualId)
@@ -170,18 +170,18 @@ export async function saveEditBreadcrumb(
 
     const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
     if (updatedLeaf) {
-      if (get(leftLeaf)?.id === actualId) {
-        leftLeaf.set(updatedLeaf)
+      if (leftLeaf.value?.id === actualId) {
+        leftLeaf.value = updatedLeaf
       }
-      if (isRight && get(rightLeaf)?.id === actualId) {
-        rightLeaf.set(updatedLeaf)
+      if (isRight && rightLeaf.value?.id === actualId) {
+        rightLeaf.value = updatedLeaf
       }
     }
-    if (!paneLeaves.some((n) => n.id === get(leftLeaf)?.id)) {
-      leftLeaf.set(null)
+    if (!paneLeaves.some((n) => n.id === leftLeaf.value?.id)) {
+      leftLeaf.value = null
     }
-    if (isRight && !paneLeaves.some((n) => n.id === get(rightLeaf)?.id)) {
-      rightLeaf.set(null)
+    if (isRight && !paneLeaves.some((n) => n.id === rightLeaf.value?.id)) {
+      rightLeaf.value = null
     }
   }
 
@@ -239,10 +239,10 @@ export function createNote(
  */
 export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
   const $_ = get(_)
-  const $leftNote = get(leftNote)
-  const $rightNote = get(rightNote)
-  const $leftLeaf = get(leftLeaf)
-  const $rightLeaf = get(rightLeaf)
+  const $leftNote = leftNote.value
+  const $rightNote = rightNote.value
+  const $leftLeaf = leftLeaf.value
+  const $rightLeaf = rightLeaf.value
 
   const targetNote = pane === 'left' ? $leftNote : $rightNote
   if (!targetNote) return
@@ -250,8 +250,8 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
   const paneWorld = ctx.getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
-    const allNotes = get(archiveNotes)
-    const allLeaves = get(archiveLeaves)
+    const allNotes = archiveNotes.value
+    const allLeaves = archiveLeaves.value
 
     const position = ctx.getDialogPositionForPane(pane)
     const confirmMessage = targetNote.parentId
@@ -281,8 +281,8 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
           : null
 
         const checkPane = (paneToCheck: Pane) => {
-          const currentNote = paneToCheck === 'left' ? get(leftNote) : get(rightNote)
-          const currentLeaf = paneToCheck === 'left' ? get(leftLeaf) : get(rightLeaf)
+          const currentNote = paneToCheck === 'left' ? leftNote.value : rightNote.value
+          const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
           if (
             currentNote?.id === targetNote.id ||
             descendantIds.has(currentNote?.id ?? '') ||
@@ -311,8 +311,8 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
     onNavigate: (p, parentNote) => {
       // 両ペインのナビゲーション処理
       const checkPane = (paneToCheck: Pane) => {
-        const currentNote = paneToCheck === 'left' ? get(leftNote) : get(rightNote)
-        const currentLeaf = paneToCheck === 'left' ? get(leftLeaf) : get(rightLeaf)
+        const currentNote = paneToCheck === 'left' ? leftNote.value : rightNote.value
+        const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
         if (
           currentNote?.id === targetNote.id ||
           (currentLeaf && currentLeaf.noteId === targetNote.id)
@@ -344,7 +344,7 @@ export function updateNoteBadge(
   const paneWorld = ctx.getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
-    const allNotes = get(archiveNotes)
+    const allNotes = archiveNotes.value
     const current = allNotes.find((n) => n.id === noteId)
     if (!current) return
 
@@ -374,7 +374,7 @@ export function updateNoteBadge(
  */
 export function createLeaf(ctx: CrudActionContext, pane: Pane, title?: string): void {
   const $_ = get(_)
-  const targetNote = pane === 'left' ? get(leftNote) : get(rightNote)
+  const targetNote = pane === 'left' ? leftNote.value : rightNote.value
   if (!targetNote) return
 
   if (!title) {
@@ -420,13 +420,13 @@ export function createLeaf(ctx: CrudActionContext, pane: Pane, title?: string): 
  */
 export function deleteLeaf(ctx: CrudActionContext, leafId: string, pane: Pane): void {
   const $_ = get(_)
-  const otherLeaf = pane === 'left' ? get(rightLeaf) : get(leftLeaf)
+  const otherLeaf = pane === 'left' ? rightLeaf.value : leftLeaf.value
 
   const paneWorld = ctx.getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
-    const allLeaves = get(archiveLeaves)
-    const allNotes = get(archiveNotes)
+    const allLeaves = archiveLeaves.value
+    const allNotes = archiveNotes.value
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
@@ -497,7 +497,7 @@ export async function updateLeafContent(
   const paneWorld = ctx.getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
-    const allLeaves = get(archiveLeaves)
+    const allLeaves = archiveLeaves.value
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
@@ -527,8 +527,8 @@ export async function updateLeafContent(
     }
     updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
 
-    if (get(leftLeaf)?.id === leafId) leftLeaf.set(updatedLeaf)
-    if (get(rightLeaf)?.id === leafId) rightLeaf.set(updatedLeaf)
+    if (leftLeaf.value?.id === leafId) leftLeaf.value = updatedLeaf
+    if (rightLeaf.value?.id === leafId) rightLeaf.value = updatedLeaf
     if (titleChanged) ctx.refreshBreadcrumbs()
     return
   }
@@ -544,8 +544,8 @@ export async function updateLeafContent(
     },
   })
   if (result.updatedLeaf) {
-    if (get(leftLeaf)?.id === leafId) leftLeaf.set(result.updatedLeaf)
-    if (get(rightLeaf)?.id === leafId) rightLeaf.set(result.updatedLeaf)
+    if (leftLeaf.value?.id === leafId) leftLeaf.value = result.updatedLeaf
+    if (rightLeaf.value?.id === leafId) rightLeaf.value = result.updatedLeaf
     if (result.titleChanged) ctx.refreshBreadcrumbs()
   }
 }
@@ -563,7 +563,7 @@ export function updateLeafBadge(
   const paneWorld = ctx.getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
-    const allLeaves = get(archiveLeaves)
+    const allLeaves = archiveLeaves.value
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
@@ -575,16 +575,16 @@ export function updateLeafBadge(
     }
     updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
 
-    if (get(leftLeaf)?.id === leafId) leftLeaf.set(updatedLeaf)
-    if (get(rightLeaf)?.id === leafId) rightLeaf.set(updatedLeaf)
+    if (leftLeaf.value?.id === leafId) leftLeaf.value = updatedLeaf
+    if (rightLeaf.value?.id === leafId) rightLeaf.value = updatedLeaf
     return
   }
 
   // Home内の場合は既存処理
   const updated = updateLeafBadgeLib(leafId, badgeIcon, badgeColor)
   if (updated) {
-    if (get(leftLeaf)?.id === leafId) leftLeaf.set(updated)
-    if (get(rightLeaf)?.id === leafId) rightLeaf.set(updated)
+    if (leftLeaf.value?.id === leafId) leftLeaf.value = updated
+    if (rightLeaf.value?.id === leafId) rightLeaf.value = updated
   }
 }
 
@@ -592,22 +592,21 @@ export function updateLeafBadge(
  * Priorityリーフのバッジ更新（metadataに直接保存）
  */
 export function updatePriorityBadge(badgeIcon: string, badgeColor: string): void {
-  metadata.update((m) => {
-    const newLeaves = { ...m.leaves }
-    if (badgeIcon || badgeColor) {
-      newLeaves[PRIORITY_LEAF_ID] = {
-        id: PRIORITY_LEAF_ID,
-        updatedAt: Date.now(),
-        order: 0,
-        badgeIcon: badgeIcon || undefined,
-        badgeColor: badgeColor || undefined,
-      }
-    } else {
-      // バッジをクリアした場合はエントリを削除
-      delete newLeaves[PRIORITY_LEAF_ID]
+  const m = metadata.value
+  const newLeaves = { ...m.leaves }
+  if (badgeIcon || badgeColor) {
+    newLeaves[PRIORITY_LEAF_ID] = {
+      id: PRIORITY_LEAF_ID,
+      updatedAt: Date.now(),
+      order: 0,
+      badgeIcon: badgeIcon || undefined,
+      badgeColor: badgeColor || undefined,
     }
-    return { ...m, leaves: newLeaves }
-  })
+  } else {
+    // バッジをクリアした場合はエントリを削除
+    delete newLeaves[PRIORITY_LEAF_ID]
+  }
+  metadata.value = { ...m, leaves: newLeaves }
   // 構造変更フラグを立てて保存が必要な状態にする
-  isStructureDirty.set(true)
+  isStructureDirty.value = true
 }

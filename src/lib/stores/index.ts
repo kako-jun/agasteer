@@ -1,12 +1,12 @@
 /**
  * ストア関連のエクスポート
  */
-export * from './stores'
+export * from './stores.svelte'
 export * from './context'
-export * from './leaf-stats'
-export * from './drag-state'
-export * from './move-modal'
-export * from './pull-progress'
-export * from './auto-save'
-export * from './stale-checker'
+export * from './leaf-stats.svelte'
+export * from './drag-state.svelte'
+export * from './move-modal.svelte'
+export * from './pull-progress.svelte'
+export * from './auto-save.svelte'
+export * from './stale-checker.svelte'
 export * from './world-helpers'

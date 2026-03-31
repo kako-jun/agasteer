@@ -1,4 +1,3 @@
-import { writable } from 'svelte/store'
 import { tick } from 'svelte'
 
 /**
@@ -42,37 +41,61 @@ export interface ModalState {
 /**
  * Pushトーストの状態
  */
-export const pushToastState = writable<ToastState>({
+let _pushToastState = $state<ToastState>({
   message: '',
   variant: '',
 })
+export const pushToastState = {
+  get value() {
+    return _pushToastState
+  },
+  set value(v: ToastState) {
+    _pushToastState = v
+  },
+}
 
 /**
  * Pullトーストの状態
  */
-export const pullToastState = writable<ToastState>({
+let _pullToastState = $state<ToastState>({
   message: '',
   variant: '',
 })
+export const pullToastState = {
+  get value() {
+    return _pullToastState
+  },
+  set value(v: ToastState) {
+    _pullToastState = v
+  },
+}
 
 /**
  * モーダルの状態
  */
-export const modalState = writable<ModalState>({
+let _modalState = $state<ModalState>({
   show: false,
   message: '',
   type: 'confirm',
   callback: null,
   position: 'center',
 })
+export const modalState = {
+  get value() {
+    return _modalState
+  },
+  set value(v: ModalState) {
+    _modalState = v
+  },
+}
 
 /**
  * Pushトーストを表示
  */
 export function showPushToast(message: string, variant: 'success' | 'error' | '' = '') {
-  pushToastState.set({ message, variant })
+  pushToastState.value = { message, variant }
   setTimeout(() => {
-    pushToastState.set({ message: '', variant: '' })
+    pushToastState.value = { message: '', variant: '' }
   }, 2000)
 }
 
@@ -80,9 +103,9 @@ export function showPushToast(message: string, variant: 'success' | 'error' | ''
  * Pullトーストを表示
  */
 export function showPullToast(message: string, variant: 'success' | 'error' | '' = '') {
-  pullToastState.set({ message, variant })
+  pullToastState.value = { message, variant }
   setTimeout(() => {
-    pullToastState.set({ message: '', variant: '' })
+    pullToastState.value = { message: '', variant: '' }
   }, 2000)
 }
 
@@ -99,14 +122,14 @@ export function showConfirm(
   const onCancel = typeof positionOrOnCancel === 'function' ? positionOrOnCancel : undefined
   const actualPosition = typeof positionOrOnCancel === 'string' ? positionOrOnCancel : position
 
-  modalState.set({
+  modalState.value = {
     show: true,
     message,
     type: 'confirm',
     callback: onConfirm,
     cancelCallback: onCancel,
     position: actualPosition,
-  })
+  }
 }
 
 /**
@@ -118,14 +141,14 @@ export function confirmAsync(
   position: ModalPosition = 'center'
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    modalState.set({
+    modalState.value = {
       show: true,
       message,
       type: 'confirm',
       callback: () => resolve(true),
       cancelCallback: () => resolve(false),
       position,
-    })
+    }
   })
 }
 
@@ -138,13 +161,13 @@ export function showAlert(
   position: ModalPosition = 'center',
   onClose?: () => void
 ) {
-  modalState.set({
+  modalState.value = {
     show: true,
     message,
     type: 'alert',
     callback: onClose || null,
     position,
-  })
+  }
 }
 
 /**
@@ -156,25 +179,25 @@ export async function alertAsync(
   position: ModalPosition = 'center'
 ): Promise<void> {
   // 一度必ずモーダルを閉じる
-  modalState.set({
+  modalState.value = {
     show: false,
     message: '',
     type: 'alert',
     callback: null,
     position: 'center',
-  })
+  }
 
   // DOM更新を待つ
   await tick()
 
   return new Promise((resolve) => {
-    modalState.set({
+    modalState.value = {
       show: true,
       message,
       type: 'alert',
       callback: () => resolve(),
       position,
-    })
+    }
   })
 }
 
@@ -187,7 +210,7 @@ export function showPrompt(
   placeholder: string = '',
   position: ModalPosition = 'center'
 ) {
-  modalState.set({
+  modalState.value = {
     show: true,
     message,
     type: 'prompt',
@@ -195,7 +218,7 @@ export function showPrompt(
     promptCallback: onSubmit,
     placeholder,
     position,
-  })
+  }
 }
 
 /**
@@ -208,7 +231,7 @@ export function promptAsync(
   position: ModalPosition = 'center'
 ): Promise<string | null> {
   return new Promise((resolve) => {
-    modalState.set({
+    modalState.value = {
       show: true,
       message,
       type: 'prompt',
@@ -217,7 +240,7 @@ export function promptAsync(
       cancelCallback: () => resolve(null),
       placeholder,
       position,
-    })
+    }
   })
 }
 
@@ -231,7 +254,7 @@ export function choiceAsync(
   position: ModalPosition = 'center'
 ): Promise<string | null> {
   return new Promise((resolve) => {
-    modalState.set({
+    modalState.value = {
       show: true,
       message,
       type: 'choice',
@@ -240,7 +263,7 @@ export function choiceAsync(
       cancelCallback: () => resolve(null),
       choiceOptions: options,
       position,
-    })
+    }
   })
 }
 
@@ -248,7 +271,7 @@ export function choiceAsync(
  * モーダルを閉じる
  */
 export function closeModal() {
-  modalState.set({
+  modalState.value = {
     show: false,
     message: '',
     type: 'confirm',
@@ -258,5 +281,5 @@ export function closeModal() {
     choiceOptions: undefined,
     placeholder: '',
     position: 'center',
-  })
+  }
 }

@@ -1,4 +1,3 @@
-import { get } from 'svelte/store'
 import type { Note, Leaf } from '../types'
 import type { PullOptions, LeafSkeleton } from '../api'
 import type { ChoiceOption } from '../ui'
@@ -54,11 +53,12 @@ import {
 import { isNoteSaveable, isLeafSaveable } from '../utils'
 import * as nav from '../navigation'
 import { tick } from 'svelte'
+import { get } from 'svelte/store'
 import { _ } from '../i18n'
 
 /**
  * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして get()/.set() で操作するため、ここには含めない
+ * stores は直接インポートして .value で操作するため、ここには含めない
  */
 export interface GitActionContext {
   // $state() getters
@@ -107,7 +107,7 @@ export async function handleTestConnection(ctx: TestConnectionContext): Promise<
   const $_ = get(_)
   ctx.setIsTesting(true)
   try {
-    const result = await testGitHubConnection(get(settings))
+    const result = await testGitHubConnection(settings.value)
     const message = translateGitHubMessage(result.message, $_, result.rateLimitInfo)
 
     showPullToast(message, result.success ? 'success' : 'error')
@@ -126,16 +126,16 @@ export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
   const $_ = get(_)
 
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
-  if (!canSync(get(isPulling), get(isPushing)).canPush || ctx.getIsArchiveLoading()) return
+  if (!canSync(isPulling.value, isPushing.value).canPush || ctx.getIsArchiveLoading()) return
 
   // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
-  isPushing.set(true)
+  isPushing.value = true
   try {
     // 保留中の自動保存を即座に実行してからPush
     await flushPendingSaves()
 
     // Stale編集かどうかチェック（共通関数で時刻も更新）
-    const staleResult = await executeStaleCheck(get(settings), get(lastKnownCommitSha))
+    const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
 
     if (staleResult.status === 'stale') {
       // リモートに新しい変更あり → 確認ダイアログを表示
@@ -154,21 +154,21 @@ export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
     setPushInFlightAt(Date.now())
 
     // ホーム直下のリーフ・仮想ノートを除外してからPush
-    const $notes = get(notes)
-    const $leaves = get(leaves)
+    const $notes = notes.value
+    const $leaves = leaves.value
     const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
     const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
     const result = await executePush({
       leaves: saveableLeaves,
       notes: saveableNotes,
-      settings: get(settings),
+      settings: settings.value,
       isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
-      localMetadata: get(metadata),
+      localMetadata: metadata.value,
       // アーカイブがロード済みの場合のみアーカイブデータを渡す
-      archiveLeaves: get(isArchiveLoaded) ? get(archiveLeaves) : undefined,
-      archiveNotes: get(isArchiveLoaded) ? get(archiveNotes) : undefined,
-      archiveMetadata: get(isArchiveLoaded) ? get(archiveMetadata) : undefined,
-      isArchiveLoaded: get(isArchiveLoaded),
+      archiveLeaves: isArchiveLoaded.value ? archiveLeaves.value : undefined,
+      archiveNotes: isArchiveLoaded.value ? archiveNotes.value : undefined,
+      archiveMetadata: isArchiveLoaded.value ? archiveMetadata.value : undefined,
+      isArchiveLoaded: isArchiveLoaded.value,
     })
 
     // 結果を通知（GitHub APIのメッセージキーを翻訳、変更件数を含める）
@@ -186,33 +186,28 @@ export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
     // Push成功時にダーティフラグをクリアし、pushCountを更新
     if (result.variant === 'success') {
       // 現在の状態をスナップショットとして保存（次回以降の差分検出のベースライン）
-      setLastPushedSnapshot(get(notes), get(leaves), get(archiveNotes), get(archiveLeaves))
+      setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
       clearAllChanges()
-      lastPushTime.set(Date.now()) // 自動Push用に最終Push時刻を記録
+      lastPushTime.value = Date.now() // 自動Push用に最終Push時刻を記録
       // Push成功後のcommit SHAをストアに保存（stale検出用）
       if (result.commitSha) {
-        lastKnownCommitSha.set(result.commitSha)
+        lastKnownCommitSha.value = result.commitSha
       }
       // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
       if (result.message === 'github.pushOk') {
-        const remoteResult = await fetchRemotePushCount(get(settings))
+        const remoteResult = await fetchRemotePushCount(settings.value)
         if (remoteResult.status === 'success') {
-          lastPulledPushCount.set(remoteResult.pushCount)
+          lastPulledPushCount.value = remoteResult.pushCount
         }
       }
     }
   } finally {
-    isPushing.set(false)
+    isPushing.value = false
   }
 }
 
 /**
  * Pull処理の統合関数
- * - 交通整理（canSync）
- * - ダーティチェック（confirmAsync）
- * - Staleチェック（executeStaleCheck）
- * - Pull実行（executePull）
- * を1つの関数で実行し、自動的に排他制御を行う
  */
 export async function pullFromGitHub(
   ctx: GitActionContext,
@@ -222,13 +217,13 @@ export async function pullFromGitHub(
   const $_ = get(_)
 
   // 交通整理: Pull/Push中またはアーカイブロード中は不可
-  if (!canSync(get(isPulling), get(isPushing)).canPull || ctx.getIsArchiveLoading()) return
+  if (!canSync(isPulling.value, isPushing.value).canPull || ctx.getIsArchiveLoading()) return
 
   // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
-  isPulling.set(true)
+  isPulling.value = true
   try {
     // 未保存の変更がある場合は確認（PWA強制終了後の再起動も考慮）
-    if (get(isDirty) || getPersistedDirtyFlag()) {
+    if (isDirty.value || getPersistedDirtyFlag()) {
       if (isInitialStartup) {
         // 起動時: Push first は選べない（まだPullしていないため）ので従来通り
         const confirmed = await ctx.confirmAsync($_('modal.unsavedChangesOnStartup'))
@@ -246,7 +241,7 @@ export async function pullFromGitHub(
 
         if (choice === 'push') {
           // Push first: isPullingロックを解放してPush→Pull
-          isPulling.set(false)
+          isPulling.value = false
           await ctx.pushToGitHub()
           // Push後に再度Pull（再帰呼び出し）
           return pullFromGitHub(ctx, false, onCancel)
@@ -259,13 +254,11 @@ export async function pullFromGitHub(
     }
 
     // Staleチェック: リモートに変更があるか確認（共通関数で時刻も更新）
-    const staleResult = await executeStaleCheck(get(settings), get(lastKnownCommitSha))
+    const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
 
     switch (staleResult.status) {
       case 'up_to_date':
         // リモートに変更なし
-        // ただし初回Pull（isPullCompleted=false）の場合はPullを続行してUI状態を正常化
-        // 例: 空のリポジトリを新規に設定した場合
         if (ctx.getIsPullCompleted()) {
           showPullToast($_('github.noRemoteChanges'), 'success')
           return
@@ -304,57 +297,46 @@ export async function pullFromGitHub(
     }
 
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
-    // IndexedDBは単なるキャッシュであり、Pull成功時に全削除→全作成される
-    // オフラインリーフは専用storeに保存されているため影響なし
     await clearAllData()
-    notes.set([])
-    leaves.set([])
+    notes.value = []
+    leaves.value = []
     ctx.setLoadingLeafIds(new Set())
     ctx.resetLeafStats()
-    leftNote.set(null)
-    leftLeaf.set(null)
-    rightNote.set(null)
-    rightLeaf.set(null)
+    leftNote.value = null
+    leftLeaf.value = null
+    rightNote.value = null
+    rightLeaf.value = null
 
     const options: PullOptions = {
-      // ノート構造確定時: ノートを表示可能に、スケルトン情報を設定、優先情報を計算して返す
+      // ノート構造確定時
       onStructure: (notesFromGitHub, metadataFromGitHub, leafSkeletons) => {
-        // ノートを先に反映（ナビゲーション可能に）
-        notes.set(notesFromGitHub)
-        metadata.set(metadataFromGitHub)
+        notes.value = notesFromGitHub
+        metadata.value = metadataFromGitHub
 
-        // スケルトン情報を保存（NoteViewでスケルトン表示に使用）
         ctx.setLeafSkeletonMap(new Map(leafSkeletons.map((s) => [s.id, s])))
-
-        // 全リーフIDをローディング中として登録
         ctx.setLoadingLeafIds(new Set(leafSkeletons.map((s) => s.id)))
 
-        // Pull進捗: 総リーフ数をセット
         pullProgressStore.start(leafSkeletons.length)
 
-        // URLから優先情報を計算して返す
         return nav.getPriorityFromUrl(notesFromGitHub)
       },
 
-      // 各リーフ取得完了時: leavesストアに追加、統計を更新、ベースラインに追加
+      // 各リーフ取得完了時
       onLeaf: (leaf) => {
-        leaves.update((current) => [...current, leaf])
+        leaves.value = [...leaves.value, leaf]
         leafStatsStore.addLeaf(leaf.id, leaf.content)
-        // Pull完了前でも到着済みリーフの行ダーティが正しく計算されるよう、ベースラインに追加
         addLeafToBaseline(leaf)
         const currentLoadingIds = ctx.getLoadingLeafIds()
         currentLoadingIds.delete(leaf.id)
-        ctx.setLoadingLeafIds(new Set(currentLoadingIds)) // リアクティブ更新
-        // Pull進捗: カウントアップ
+        ctx.setLoadingLeafIds(new Set(currentLoadingIds))
         pullProgressStore.increment()
       },
 
-      // 第1優先リーフ取得完了時: 作成・削除許可、ガラス効果解除、URL復元
+      // 第1優先リーフ取得完了時
       onPriorityComplete: () => {
         ctx.setIsFirstPriorityFetched(true)
-        ctx.setIsLoadingUI(false) // ガラス効果を解除（残りのリーフはバックグラウンドで取得継続）
+        ctx.setIsLoadingUI(false)
 
-        // 初回Pull時のURL復元
         if (isInitialStartup) {
           ctx.setIsRestoringFromUrl(true)
           ctx.restoreStateFromUrl(true)
@@ -365,92 +347,67 @@ export async function pullFromGitHub(
       },
     }
 
-    const result = await executePull(get(settings), options)
+    const result = await executePull(settings.value, options)
 
     if (result.success) {
-      // 全リーフ取得完了
       ctx.setIsPullCompleted(true)
       ctx.setSelectedIndexLeft(0)
       ctx.setSelectedIndexRight(0)
 
-      // leavesストアはonLeafで逐次更新済みなので、最終的なソートのみ
-      // ただし、Pull中にユーザーが編集したリーフのcontentは保持する
-      const currentLeaves = get(leaves)
+      const currentLeaves = leaves.value
       const currentLeafMap = new Map(currentLeaves.map((l) => [l.id, l]))
       const sortedLeaves = result.leaves
         .sort((a, b) => a.order - b.order)
         .map((leaf) => {
           const currentLeaf = currentLeafMap.get(leaf.id)
-          // ユーザーがPull中に編集した場合、編集内容を保持
-          // （リモートのコンテンツと現在のコンテンツが異なる場合）
           if (currentLeaf && currentLeaf.content !== leaf.content) {
             return { ...leaf, content: currentLeaf.content }
           }
           return leaf
         })
-      leaves.set(sortedLeaves)
+      leaves.value = sortedLeaves
       ctx.rebuildLeafStats(sortedLeaves, result.notes)
 
-      // stale編集検出用にcommit SHAを記録
       if (result.commitSha) {
-        lastKnownCommitSha.set(result.commitSha)
+        lastKnownCommitSha.value = result.commitSha
       }
-      // 統計表示用にpushCountを記録
-      lastPulledPushCount.set(result.metadata.pushCount)
+      lastPulledPushCount.value = result.metadata.pushCount
 
-      // Pull完了時の状態をスナップショットとして保存（差分検出のベースライン）
-      // アーカイブはまだPull完了していない可能性があるので、その時点の状態を使用
-      // 注意: setLastPushedSnapshot のベースラインは result（リモート）の内容。
-      // sortedLeaves にはPull中のユーザー編集が保持されているため、
-      // refreshDirtyState で差分を再検出する。
-      setLastPushedSnapshot(result.notes, result.leaves, get(archiveNotes), get(archiveLeaves))
+      setLastPushedSnapshot(result.notes, result.leaves, archiveNotes.value, archiveLeaves.value)
 
-      // IndexedDBに保存
       saveNotes(result.notes).catch((err) => console.error('Failed to persist notes:', err))
       saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
 
-      // ダーティフラグを再検出（Pull中のユーザー編集があれば残る、なければクリア）
       await tick()
       refreshDirtyState()
-      isStale.set(false) // Pullしたのでstale状態を解除
+      isStale.value = false
     } else {
-      // Pull失敗時の処理
       if (result.message === 'github.pullIncomplete') {
-        // リーフ取得が不完全な場合は、UIをロック状態に戻す
-        // これにより、不完全なデータでのPushによるデータ消失を防ぐ
         console.error('Pull incomplete: some leaves failed to fetch. UI remains locked.')
         ctx.setIsFirstPriorityFetched(false)
         ctx.setIsPullCompleted(false)
-        // ストアをクリアして不完全なデータでのPushを防ぐ
-        notes.set([])
-        leaves.set([])
-        // バックアップからの復元はしない（不完全な状態でのPushを防ぐため）
+        notes.value = []
+        leaves.value = []
       } else if (hasBackupData) {
-        // その他のPull失敗（ネットワークエラー等）: バックアップからデータを復元
         console.log('Pull failed, restoring from backup...')
         try {
           await restoreFromBackup(backup)
-          // ストアにもバックアップデータを復元
-          notes.set(backup.notes)
-          leaves.set(backup.leaves)
+          notes.value = backup.notes
+          leaves.value = backup.leaves
           ctx.rebuildLeafStats(backup.leaves, backup.notes)
-          // URLから状態を復元
           ctx.restoreStateFromUrl(false)
-          ctx.setIsFirstPriorityFetched(true) // 操作可能にする
+          ctx.setIsFirstPriorityFetched(true)
         } catch (restoreError) {
           console.error('Failed to restore from backup:', restoreError)
         }
       }
-      // 初回Pull失敗時は静かに処理（設定未完了は正常な状態）
-      // 2回目以降のPull失敗はトーストで通知される
     }
 
-    // 結果を通知（GitHub APIのメッセージキーを翻訳）
     const translatedMessage = translateGitHubMessage(result.message, $_, result.rateLimitInfo)
     showPullToast(translatedMessage, result.variant)
     ctx.setIsLoadingUI(false)
-    pullProgressStore.reset() // Pull進捗リセット
+    pullProgressStore.reset()
   } finally {
-    isPulling.set(false)
+    isPulling.value = false
   }
 }

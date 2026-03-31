@@ -191,8 +191,8 @@
           note={subNote}
           dragOver={dragOverNoteId === subNote.id}
           isSelected={isActive && index === selectedIndex}
-          isDirty={allLeaves.some((l) => l.noteId === subNote.id && $dirtyLeafIds.has(l.id)) ||
-            $dirtyNoteIds.has(subNote.id)}
+          isDirty={allLeaves.some((l) => l.noteId === subNote.id && dirtyLeafIds.value.has(l.id)) ||
+            dirtyNoteIds.value.has(subNote.id)}
           onSelect={() => onSelectNote(subNote)}
           onDragStart={() => onDragStartNote(subNote)}
           onDragEnd={() => onDragEndNote()}
@@ -247,7 +247,7 @@
               color={item.leaf.badgeColor || ''}
               onChange={(icon, color) => onUpdateLeafBadge(item.leaf.id, icon, color)}
             />
-            {#if $dirtyLeafIds.has(item.leaf.id)}
+            {#if dirtyLeafIds.value.has(item.leaf.id)}
               <span class="dirty-indicator" title={$_('leaf.unsaved')}></span>
             {/if}
             <strong class="text-ellipsis">{item.leaf.title}</strong>

@@ -1,4 +1,4 @@
-import { get } from 'svelte/store'
+import { get } from 'svelte/store' // for svelte-i18n only
 import type { Note, Leaf, WorldType } from '../types'
 import type { Pane } from '../navigation'
 import type { LeafSkeleton } from '../api'
@@ -40,7 +40,7 @@ import { _ } from '../i18n'
 
 /**
  * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして get()/.set() で操作するため、ここには含めない
+ * stores は直接インポートして .value で操作するため、ここには含めない
  */
 export interface MoveActionContext {
   // $state() getters/setters
@@ -70,15 +70,15 @@ export async function moveNoteToWorld(
   const $_ = get(_)
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  if (get(isPulling) || get(isPushing) || ctx.getIsArchiveLoading()) return
+  if (isPulling.value || isPushing.value || ctx.getIsArchiveLoading()) return
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
   let freshArchiveNotes: Note[] | null = null
   let freshArchiveLeaves: Leaf[] | null = null
 
-  if (targetWorld === 'archive' && !get(isArchiveLoaded)) {
-    const $settings = get(settings)
+  if (targetWorld === 'archive' && !isArchiveLoaded.value) {
+    const $settings = settings.value
     if ($settings.token && $settings.repoName) {
       ctx.setIsArchiveLoading(true)
       archiveLeafStatsStore.reset()
@@ -87,10 +87,10 @@ export async function moveNoteToWorld(
           onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
         })
         if (result.success) {
-          archiveNotes.set(result.notes)
-          archiveLeaves.set(result.leaves)
-          archiveMetadata.set(result.metadata)
-          isArchiveLoaded.set(true)
+          archiveNotes.value = result.notes
+          archiveLeaves.value = result.leaves
+          archiveMetadata.value = result.metadata
+          isArchiveLoaded.value = true
           // Pull直後のデータを保持（リアクティブ更新を待たずに使用）
           freshArchiveNotes = result.notes
           freshArchiveLeaves = result.leaves
@@ -115,12 +115,12 @@ export async function moveNoteToWorld(
     }
   }
 
-  const $notes = get(notes)
-  const $leaves = get(leaves)
-  const $archiveNotes = get(archiveNotes)
-  const $archiveLeaves = get(archiveLeaves)
-  const $leftWorld = get(leftWorld)
-  const $rightWorld = get(rightWorld)
+  const $notes = notes.value
+  const $leaves = leaves.value
+  const $archiveNotes = archiveNotes.value
+  const $archiveLeaves = archiveLeaves.value
+  const $leftWorld = leftWorld.value
+  const $rightWorld = rightWorld.value
 
   const sourceWorld = pane === 'left' ? $leftWorld : $rightWorld
   const sourceNotes = sourceWorld === 'home' ? $notes : (freshArchiveNotes ?? $archiveNotes)
@@ -279,7 +279,7 @@ export async function moveNoteToWorld(
   // IndexedDBとdirtyフラグを更新
   await saveNotes(sourceWorld === 'home' ? newSourceNotes : $notes)
   await saveLeaves(sourceWorld === 'home' ? newSourceLeaves : $leaves)
-  isStructureDirty.set(true)
+  isStructureDirty.value = true
 
   // スケルトンマップから移動したリーフを削除（Homeからアーカイブ時のみ）
   if (sourceWorld === 'home') {
@@ -298,10 +298,10 @@ export async function moveNoteToWorld(
   }
 
   // 移動したノートを開いていた両ペインを親ノートに遷移（削除と同じ挙動）
-  const $leftNote = get(leftNote)
-  const $rightNote = get(rightNote)
-  const $leftLeaf = get(leftLeaf)
-  const $rightLeaf = get(rightLeaf)
+  const $leftNote = leftNote.value
+  const $rightNote = rightNote.value
+  const $leftLeaf = leftLeaf.value
+  const $rightLeaf = rightLeaf.value
 
   const checkPane = (paneToCheck: Pane) => {
     const currentNote = paneToCheck === 'left' ? $leftNote : $rightNote
@@ -322,7 +322,7 @@ export async function moveNoteToWorld(
   checkPane('left')
   checkPane('right')
   ctx.refreshBreadcrumbs()
-  ctx.rebuildLeafStats(get(leaves), get(notes))
+  ctx.rebuildLeafStats(leaves.value, notes.value)
 
   // トースト表示
   const toastKey = targetWorld === 'archive' ? 'toast.archived' : 'toast.restored'
@@ -341,15 +341,15 @@ export async function moveLeafToWorld(
   const $_ = get(_)
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  if (get(isPulling) || get(isPushing) || ctx.getIsArchiveLoading()) return
+  if (isPulling.value || isPushing.value || ctx.getIsArchiveLoading()) return
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
   let freshArchiveNotes: Note[] | null = null
   let freshArchiveLeaves: Leaf[] | null = null
 
-  if (targetWorld === 'archive' && !get(isArchiveLoaded)) {
-    const $settings = get(settings)
+  if (targetWorld === 'archive' && !isArchiveLoaded.value) {
+    const $settings = settings.value
     if ($settings.token && $settings.repoName) {
       ctx.setIsArchiveLoading(true)
       archiveLeafStatsStore.reset()
@@ -358,10 +358,10 @@ export async function moveLeafToWorld(
           onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
         })
         if (result.success) {
-          archiveNotes.set(result.notes)
-          archiveLeaves.set(result.leaves)
-          archiveMetadata.set(result.metadata)
-          isArchiveLoaded.set(true)
+          archiveNotes.value = result.notes
+          archiveLeaves.value = result.leaves
+          archiveMetadata.value = result.metadata
+          isArchiveLoaded.value = true
           // Pull直後のデータを保持（リアクティブ更新を待たずに使用）
           freshArchiveNotes = result.notes
           freshArchiveLeaves = result.leaves
@@ -386,12 +386,12 @@ export async function moveLeafToWorld(
     }
   }
 
-  const $notes = get(notes)
-  const $leaves = get(leaves)
-  const $archiveNotes = get(archiveNotes)
-  const $archiveLeaves = get(archiveLeaves)
-  const $leftWorld = get(leftWorld)
-  const $rightWorld = get(rightWorld)
+  const $notes = notes.value
+  const $leaves = leaves.value
+  const $archiveNotes = archiveNotes.value
+  const $archiveLeaves = archiveLeaves.value
+  const $leftWorld = leftWorld.value
+  const $rightWorld = rightWorld.value
 
   const sourceWorld = pane === 'left' ? $leftWorld : $rightWorld
   const sourceNotes = sourceWorld === 'home' ? $notes : (freshArchiveNotes ?? $archiveNotes)
@@ -506,7 +506,7 @@ export async function moveLeafToWorld(
   }
 
   // IndexedDBに保存
-  await saveLeaves(sourceWorld === 'home' ? newSourceLeaves : get(leaves))
+  await saveLeaves(sourceWorld === 'home' ? newSourceLeaves : leaves.value)
 
   // スケルトンマップから移動したリーフを削除（Homeからアーカイブ時のみ）
   if (sourceWorld === 'home') {
@@ -519,7 +519,7 @@ export async function moveLeafToWorld(
 
   // 移動したリーフを開いていた両ペインを親ノートに遷移（削除と同じ挙動）
   const checkPane = (paneToCheck: Pane) => {
-    const currentLeaf = paneToCheck === 'left' ? get(leftLeaf) : get(rightLeaf)
+    const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
     if (currentLeaf?.id === leaf.id) {
       ctx.selectNote(sourceNote, paneToCheck)
     }
@@ -527,7 +527,7 @@ export async function moveLeafToWorld(
   checkPane('left')
   checkPane('right')
   ctx.refreshBreadcrumbs()
-  ctx.rebuildLeafStats(get(leaves), get(notes))
+  ctx.rebuildLeafStats(leaves.value, notes.value)
 
   // トースト表示
   const toastKey = targetWorld === 'archive' ? 'toast.archived' : 'toast.restored'
@@ -553,8 +553,8 @@ export async function moveLeafTo(
       return
     }
 
-    const allLeaves = get(archiveLeaves)
-    const allNotes = get(archiveNotes)
+    const allLeaves = archiveLeaves.value
+    const allNotes = archiveNotes.value
     const destinationNote = allNotes.find((n) => n.id === destNoteId)
     if (!destinationNote) {
       ctx.closeMoveModal()
@@ -579,15 +579,15 @@ export async function moveLeafTo(
     }
     updateArchiveLeaves([...remaining, movedLeaf])
 
-    const $leftLeaf = get(leftLeaf)
-    const $rightLeaf = get(rightLeaf)
+    const $leftLeaf = leftLeaf.value
+    const $rightLeaf = rightLeaf.value
     if ($leftLeaf?.id === targetLeaf.id) {
-      leftLeaf.set(movedLeaf)
-      leftNote.set(destinationNote)
+      leftLeaf.value = movedLeaf
+      leftNote.value = destinationNote
     }
     if ($rightLeaf?.id === targetLeaf.id) {
-      rightLeaf.set(movedLeaf)
-      rightNote.set(destinationNote)
+      rightLeaf.value = movedLeaf
+      rightNote.value = destinationNote
     }
     showPushToast($_('toast.moved'), 'success')
     ctx.closeMoveModal()
@@ -597,15 +597,15 @@ export async function moveLeafTo(
   // Home内の場合は既存処理
   const result = moveLeafToLib(targetLeaf, destNoteId, $_)
   if (result.success && result.movedLeaf && result.destNote) {
-    const $leftLeaf = get(leftLeaf)
-    const $rightLeaf = get(rightLeaf)
+    const $leftLeaf = leftLeaf.value
+    const $rightLeaf = rightLeaf.value
     if ($leftLeaf?.id === targetLeaf.id) {
-      leftLeaf.set(result.movedLeaf)
-      leftNote.set(result.destNote)
+      leftLeaf.value = result.movedLeaf
+      leftNote.value = result.destNote
     }
     if ($rightLeaf?.id === targetLeaf.id) {
-      rightLeaf.set(result.movedLeaf)
-      rightNote.set(result.destNote)
+      rightLeaf.value = result.movedLeaf
+      rightNote.value = result.destNote
     }
     // スケルトンマップから移動したリーフを削除（noteIdが古いままになるため）
     const leafSkeletonMap = ctx.getLeafSkeletonMap()
@@ -640,7 +640,7 @@ export async function moveNoteTo(
       return
     }
 
-    const allNotes = get(archiveNotes)
+    const allNotes = archiveNotes.value
 
     // 移動先がサブノートの場合は不可
     if (nextParent) {
@@ -671,10 +671,10 @@ export async function moveNoteTo(
 
     const updatedNote = updated.find((n) => n.id === targetNote.id)
     if (updatedNote) {
-      const $leftNote = get(leftNote)
-      const $rightNote = get(rightNote)
-      if ($leftNote?.id === targetNote.id) leftNote.set(updatedNote)
-      if ($rightNote?.id === targetNote.id) rightNote.set(updatedNote)
+      const $leftNote = leftNote.value
+      const $rightNote = rightNote.value
+      if ($leftNote?.id === targetNote.id) leftNote.value = updatedNote
+      if ($rightNote?.id === targetNote.id) rightNote.value = updatedNote
       showPushToast($_('toast.moved'), 'success')
     }
     ctx.closeMoveModal()
@@ -684,10 +684,10 @@ export async function moveNoteTo(
   // Home内の場合は既存処理
   const result = moveNoteToLib(targetNote, destNoteId, $_)
   if (result.success && result.updatedNote) {
-    const $leftNote = get(leftNote)
-    const $rightNote = get(rightNote)
-    if ($leftNote?.id === targetNote.id) leftNote.set(result.updatedNote)
-    if ($rightNote?.id === targetNote.id) rightNote.set(result.updatedNote)
+    const $leftNote = leftNote.value
+    const $rightNote = rightNote.value
+    if ($leftNote?.id === targetNote.id) leftNote.value = result.updatedNote
+    if ($rightNote?.id === targetNote.id) rightNote.value = result.updatedNote
     showPushToast($_('toast.moved'), 'success')
   }
   ctx.closeMoveModal()

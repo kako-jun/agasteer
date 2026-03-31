@@ -3,8 +3,7 @@
  * ユーザー操作を検知し、無操作が一定時間続いたら自動保存・自動Pushを実行
  */
 
-import { get, writable, type Readable } from 'svelte/store'
-import { leaves, notes, offlineLeafStore } from './stores'
+import { leaves, notes, offlineLeafStore } from './stores.svelte'
 import { saveLeaves, saveNotes, saveOfflineLeaf } from '../data/storage'
 import { createOfflineLeaf } from '../utils/offline'
 
@@ -13,7 +12,15 @@ import { createOfflineLeaf } from '../utils/offline'
  * 最後のアクティビティから自動Pushまでの進捗を表示
  * 0 = 変更なし or Push完了直後、1 = 自動Push直前
  */
-export const autoPushProgress = writable<number>(0)
+let _autoPushProgress = $state<number>(0)
+export const autoPushProgress = {
+  get value() {
+    return _autoPushProgress
+  },
+  set value(v: number) {
+    _autoPushProgress = v
+  },
+}
 
 // デバウンス間隔（ミリ秒）
 const AUTO_SAVE_DELAY = 1000
@@ -38,24 +45,44 @@ let hasChangesValue = false
 let dirtyStartTime = 0 // 最後のアクティビティ時刻（変更がある状態で）
 
 // 自動Pushトリガー用ストア（5分経過時にtrueになる）
-export const shouldAutoPush = writable<boolean>(false)
+let _shouldAutoPush = $state<boolean>(false)
+export const shouldAutoPush = {
+  get value() {
+    return _shouldAutoPush
+  },
+  set value(v: boolean) {
+    _shouldAutoPush = v
+  },
+}
 
 /**
- * 進捗追跡を初期化（stores.tsからの参照を遅延設定）
+ * isDirty の型（getter-only オブジェクト）
  */
-export function initAutoPushProgress(isDirty: Readable<boolean>): void {
-  isDirty.subscribe((value) => {
-    // false → true になった瞬間に開始時刻を記録
-    if (value && !hasChangesValue) {
-      dirtyStartTime = Date.now()
-    }
-    // true → false になった瞬間にリセット
-    if (!value && hasChangesValue) {
-      dirtyStartTime = 0
-      autoPushProgress.set(0)
-      shouldAutoPush.set(false)
-    }
-    hasChangesValue = value
+interface ReadableValue<T> {
+  readonly value: T
+}
+
+/**
+ * 進捗追跡を初期化（stores.svelte.tsからの参照を遅延設定）
+ */
+export function initAutoPushProgress(isDirty: ReadableValue<boolean>): void {
+  // isDirtyの変化を監視して進捗を管理
+  // $effect.root() で非コンポーネントコンテキストでも動くようにする
+  $effect.root(() => {
+    $effect(() => {
+      const value = isDirty.value
+      // false → true になった瞬間に開始時刻を記録
+      if (value && !hasChangesValue) {
+        dirtyStartTime = Date.now()
+      }
+      // true → false になった瞬間にリセット
+      if (!value && hasChangesValue) {
+        dirtyStartTime = 0
+        autoPushProgress.value = 0
+        shouldAutoPush.value = false
+      }
+      hasChangesValue = value
+    })
   })
 
   // 進捗自動更新タイマー（1秒ごとに進捗計算と自動Push判定）
@@ -64,17 +91,17 @@ export function initAutoPushProgress(isDirty: Readable<boolean>): void {
   }
   progressUpdateIntervalId = setInterval(() => {
     if (!hasChangesValue || dirtyStartTime === 0) {
-      autoPushProgress.set(0)
-      shouldAutoPush.set(false)
+      autoPushProgress.value = 0
+      shouldAutoPush.value = false
       return
     }
     const elapsed = Date.now() - dirtyStartTime
     const progress = Math.min(elapsed / AUTO_PUSH_INTERVAL_MS, 1)
-    autoPushProgress.set(progress)
+    autoPushProgress.value = progress
 
     // 5分経過で自動Pushをトリガー
     if (elapsed >= AUTO_PUSH_INTERVAL_MS) {
-      shouldAutoPush.set(true)
+      shouldAutoPush.value = true
     }
   }, 1000)
 }
@@ -84,8 +111,8 @@ export function initAutoPushProgress(isDirty: Readable<boolean>): void {
  */
 export function resetAutoPushTimer(): void {
   dirtyStartTime = Date.now()
-  autoPushProgress.set(0)
-  shouldAutoPush.set(false)
+  autoPushProgress.value = 0
+  shouldAutoPush.value = false
 }
 
 /**
@@ -131,7 +158,7 @@ async function executePendingSaves(): Promise<void> {
 
   if (pendingLeavesSave) {
     pendingLeavesSave = false
-    const currentLeaves = get(leaves)
+    const currentLeaves = leaves.value
     promises.push(
       saveLeaves(currentLeaves).catch((err) => console.error('Failed to persist leaves:', err))
     )
@@ -139,7 +166,7 @@ async function executePendingSaves(): Promise<void> {
 
   if (pendingNotesSave) {
     pendingNotesSave = false
-    const currentNotes = get(notes)
+    const currentNotes = notes.value
     promises.push(
       saveNotes(currentNotes).catch((err) => console.error('Failed to persist notes:', err))
     )
@@ -147,7 +174,7 @@ async function executePendingSaves(): Promise<void> {
 
   if (pendingOfflineSave) {
     pendingOfflineSave = false
-    const current = get(offlineLeafStore)
+    const current = offlineLeafStore.value
     const leaf = createOfflineLeaf(current.content, current.badgeIcon, current.badgeColor)
     leaf.updatedAt = current.updatedAt
     promises.push(
@@ -186,7 +213,7 @@ function handleUserActivity(): void {
   if (hasChangesValue) {
     dirtyStartTime = Date.now()
     // 即座にバーを0にリセット
-    autoPushProgress.set(0)
+    autoPushProgress.value = 0
   }
 }
 

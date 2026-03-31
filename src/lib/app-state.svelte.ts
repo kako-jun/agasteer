@@ -2,14 +2,8 @@
  * アプリケーション状態の集約モジュール（Phase 1）
  *
  * App.svelte からワールドヘルパー関数、paneStateStore、定数を移動。
- *
- * 注意: .svelte.ts ファイルでは $store 短縮構文が使えないため、
- * $derived でストアを参照する宣言は .svelte ファイルに残す必要がある。
- * これらは Phase 2 以降でストアをルーン化した後に移動する。
  */
 
-import { get } from 'svelte/store'
-import { writable } from 'svelte/store'
 import type { Note, Leaf, WorldType } from './types'
 import type { Pane } from './navigation'
 import {
@@ -52,39 +46,45 @@ export const PWA_EXIT_GUARD_KEY = 'pwa-exit-guard'
 // ========================================
 
 export function getNotesForWorld(world: WorldType): Note[] {
-  return _getNotesForWorld(world, get(notes), get(archiveNotes))
+  return _getNotesForWorld(world, notes.value, archiveNotes.value)
 }
 
 export function getLeavesForWorld(world: WorldType): Leaf[] {
-  return _getLeavesForWorld(world, get(leaves), get(archiveLeaves))
+  return _getLeavesForWorld(world, leaves.value, archiveLeaves.value)
 }
 
 export function getWorldForPane(pane: Pane): WorldType {
-  return _getWorldForPane(pane, get(leftWorld), get(rightWorld))
+  return _getWorldForPane(pane, leftWorld.value, rightWorld.value)
 }
 
 export function getNotesForPane(pane: Pane): Note[] {
-  return _getNotesForPane(pane, get(leftWorld), get(rightWorld), get(notes), get(archiveNotes))
+  return _getNotesForPane(pane, leftWorld.value, rightWorld.value, notes.value, archiveNotes.value)
 }
 
 export function getLeavesForPane(pane: Pane): Leaf[] {
-  return _getLeavesForPane(pane, get(leftWorld), get(rightWorld), get(leaves), get(archiveLeaves))
+  return _getLeavesForPane(
+    pane,
+    leftWorld.value,
+    rightWorld.value,
+    leaves.value,
+    archiveLeaves.value
+  )
 }
 
 export function getWorldForNote(note: Note): WorldType {
-  return _getWorldForNote(note, get(notes), get(archiveNotes))
+  return _getWorldForNote(note, notes.value, archiveNotes.value)
 }
 
 export function getWorldForLeaf(leaf: Leaf): WorldType {
-  return _getWorldForLeaf(leaf, get(leaves), get(archiveLeaves))
+  return _getWorldForLeaf(leaf, leaves.value, archiveLeaves.value)
 }
 
 export function setCurrentNotes(newNotes: Note[]): void {
-  setNotesForWorld(get(leftWorld), newNotes)
+  setNotesForWorld(leftWorld.value, newNotes)
 }
 
 export function setCurrentLeaves(newLeaves: Leaf[]): void {
-  setLeavesForWorld(get(leftWorld), newLeaves)
+  setLeavesForWorld(leftWorld.value, newLeaves)
 }
 
 export function setNotesForWorld(world: WorldType, newNotes: Note[]): void {
@@ -107,7 +107,7 @@ export function setLeavesForWorld(world: WorldType, newLeaves: Leaf[]): void {
 // Pane State Store
 // ========================================
 
-export const paneStateStore = writable<PaneState>({
+let _paneState = $state<PaneState>({
   isFirstPriorityFetched: false,
   isPullCompleted: false,
   canPush: false,
@@ -132,3 +132,12 @@ export const paneStateStore = writable<PaneState>({
   rightWorld: 'home',
   isArchiveLoading: false,
 })
+
+export const paneStateStore = {
+  get value() {
+    return _paneState
+  },
+  set value(v: PaneState) {
+    _paneState = v
+  },
+}

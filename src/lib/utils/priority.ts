@@ -5,7 +5,6 @@
  * 優先度順にソートして表示するための機能
  */
 
-import { derived } from 'svelte/store'
 import { leaves, notes } from '../stores'
 import type { Leaf, Note } from '../types'
 
@@ -328,7 +327,11 @@ function buildPath(
  * 1. 優先度（数字昇順）
  * 2. 同じ優先度の場合は表示順（ノート順 + リーフ順）
  */
-export const priorityItems = derived([leaves, notes], ([$leaves, $notes]) => {
+/**
+ * 全リーフから優先段落を抽出し、ソートされた状態で返す
+ * 注意: この関数を呼ぶとリアクティブに値を取得する（getterアクセス）
+ */
+export function computePriorityItems($leaves: Leaf[], $notes: Note[]): PriorityItem[] {
   const items: PriorityItem[] = []
 
   // noteMapを作成（パス構築用）
@@ -358,7 +361,16 @@ export const priorityItems = derived([leaves, notes], ([$leaves, $notes]) => {
   })
 
   return items
-})
+}
+
+/**
+ * priorityItems の getter ラッパー（リアクティブ）
+ */
+export const priorityItems = {
+  get value(): PriorityItem[] {
+    return computePriorityItems(leaves.value, notes.value)
+  },
+}
 
 /**
  * 仮想リーフの固定名
