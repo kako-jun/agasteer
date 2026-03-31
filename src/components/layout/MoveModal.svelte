@@ -99,7 +99,7 @@
     return { selectable: true }
   }
 
-  let selected: string | null = null
+  let selected: string | null = $state(null)
 
   $effect(() => {
     if (show) {

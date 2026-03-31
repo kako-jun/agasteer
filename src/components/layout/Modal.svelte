@@ -42,8 +42,8 @@
     onClose()
   }
 
-  let inputValue = ''
-  let inputElement: HTMLInputElement | null = null
+  let inputValue = $state('')
+  let inputElement: HTMLInputElement | null = $state(null)
 
   // モーダルが表示されたらフォーカス
   $effect(() => {

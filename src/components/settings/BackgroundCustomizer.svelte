@@ -17,8 +17,8 @@
 
   let backgroundLeftFileInput: HTMLInputElement
   let backgroundRightFileInput: HTMLInputElement
-  let backgroundLeftUploading = false
-  let backgroundRightUploading = false
+  let backgroundLeftUploading = $state(false)
+  let backgroundRightUploading = $state(false)
 
   const DEFAULT_OPACITY = 0.1
   const MIN_OPACITY = 0.1

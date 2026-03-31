@@ -34,11 +34,11 @@
     onScroll = null,
   }: Props = $props()
 
-  let editorContainer: HTMLDivElement
+  let editorContainer: HTMLDivElement = $state(undefined as unknown as HTMLDivElement)
   let editorView: any = null
   let currentExtensions: any[] = []
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
-  let isLoading = true // CodeMirrorローディング中フラグ
+  let isLoading = $state(true) // CodeMirrorローディング中フラグ
   let dirtyLineCleanup: (() => void) | null = null // ダーティラインマーカーのクリーンアップ関数
   let updateDirtyLinesFnRef: ((view: any) => void) | null = null // ダーティライン更新関数の参照
   let dirtyLeafIdsUnsubscribe: (() => void) | null = null // dirtyLeafIdsストアのアンサブスクライブ関数

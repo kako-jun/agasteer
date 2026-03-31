@@ -124,19 +124,20 @@
 
   let { icon = '', color = '', onChange }: Props = $props()
 
-  let open = false
+  let open = $state(false)
   const instanceId =
     (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
     `badge-${Math.random().toString(36).slice(2)}`
   let containerEl: HTMLElement | null = null
-  let panelTop = 0
-  let panelLeft = 0
+  let panelTop = $state(0)
+  let panelLeft = $state(0)
   let resolvedIcon = $derived((legacyIconMap[icon] ?? icon) as IconId | string)
   let currentIconComponent = $derived(
     typeof resolvedIcon === 'string' && resolvedIcon in iconComponents
       ? iconComponents[resolvedIcon as IconId]
       : null
   )
+  let CurrentIconComponent = $derived(currentIconComponent)
 
   function computePanelPosition() {
     const paneEl = containerEl?.closest('.left-column') || containerEl?.closest('.right-column')
@@ -222,8 +223,8 @@
     }}
     type="button"
   >
-    {#if currentIconComponent}
-      <svelte:component this={currentIconComponent} color={computedColor} />
+    {#if CurrentIconComponent}
+      <CurrentIconComponent color={computedColor} />
     {:else}
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill={computedColor} />
@@ -240,8 +241,9 @@
           aria-label="clear badge"
         ></button>
         {#each icons as ic}
+          {@const IconComp = iconComponents[ic]}
           <button type="button" class:active={resolvedIcon === ic} onclick={() => selectIcon(ic)}>
-            <svelte:component this={iconComponents[ic]} color={computedColor} />
+            <IconComp color={computedColor} />
           </button>
         {/each}
       </div>

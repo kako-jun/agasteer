@@ -38,12 +38,12 @@
     })()
   )
 
-  let tokenCopied = false
+  let tokenCopied = $state(false)
 
   let initialRepoName = ''
 
   // Combo-box state
-  let dropdownOpen = false
+  let dropdownOpen = $state(false)
   let comboBoxRef: HTMLDivElement
 
   let repoHistory = $derived(settings.repoHistory || [])

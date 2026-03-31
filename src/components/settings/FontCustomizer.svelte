@@ -12,7 +12,7 @@
   let { settings, onSettingsChange }: Props = $props()
 
   let fileInput: HTMLInputElement
-  let fontUploading = false
+  let fontUploading = $state(false)
 
   function handleFontButtonClick() {
     fileInput?.click()

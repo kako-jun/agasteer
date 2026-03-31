@@ -51,12 +51,12 @@
     isSyncing = false,
   }: Props = $props()
 
-  let inputValue = ''
-  let inputElement: HTMLInputElement | null = null
-  let openDropdownIndex: number | null = null
-  let worldDropdownOpen = false
-  let worldSeparatorButton: HTMLButtonElement | null = null
-  let menuPosition = { top: 0, left: 0 }
+  let inputValue = $state('')
+  let inputElement: HTMLInputElement | null = $state(null)
+  let openDropdownIndex: number | null = $state(null)
+  let worldDropdownOpen = $state(false)
+  let worldSeparatorButton: HTMLButtonElement | null = $state(null)
+  let menuPosition = $state({ top: 0, left: 0 })
 
   function toggleWorldDropdown(e: MouseEvent) {
     e.stopPropagation()

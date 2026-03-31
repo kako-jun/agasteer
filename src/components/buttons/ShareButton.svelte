@@ -30,10 +30,10 @@
     isPreview = false,
   }: Props = $props()
 
-  let showMenu = false
+  let showMenu = $state(false)
   let menuElement: HTMLDivElement
-  let supportsWebShare = false
-  let currentHasSelection = false
+  let supportsWebShare = $state(false)
+  let currentHasSelection = $state(false)
 
   function toggleMenu() {
     // メニューを開く時に選択状態をチェック
@@ -121,7 +121,7 @@
       {/if}
 
       {#if (isPreview && supportsWebShare && onShareImage) || (!isPreview && supportsWebShare && onShareSelectionImage)}
-        <div class="menu-divider" />
+        <div class="menu-divider"></div>
       {/if}
 
       {#if isPreview && supportsWebShare && onShareImage}

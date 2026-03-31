@@ -47,7 +47,7 @@
     onRestore = null,
   }: Props = $props()
 
-  let downloadTitle = $_('footer.download')
+  let downloadTitle = $state($_('footer.download'))
 
   // マウスエンター時に選択状態をチェックしてtitleを更新
   function updateDownloadTitle() {

@@ -22,8 +22,8 @@
 
   let { onResultClick }: Props = $props()
 
-  let inputElement: HTMLInputElement
-  let containerElement: HTMLDivElement
+  let inputElement: HTMLInputElement | undefined = $state(undefined)
+  let containerElement: HTMLDivElement | undefined = $state(undefined)
   let listenerRegistered = false
 
   function handleKeydown(e: KeyboardEvent) {

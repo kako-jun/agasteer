@@ -14,7 +14,7 @@
 
   let previewSection: HTMLElement
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
-  let isLoading = true // marked/DOMPurifyローディング中フラグ
+  let isLoading = $state(true) // marked/DOMPurifyローディング中フラグ
   let marked: any
   let DOMPurify: any
 
