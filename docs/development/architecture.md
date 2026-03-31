@@ -182,9 +182,15 @@ agasteer/
 │   │   │   └── portal.ts               # ポータル（Svelte action）
 │   │   ├── app-state.svelte.ts          # 共有リアクティブ状態（Svelte 5 runes）
 │   │   ├── stores/                      # 状態管理モジュール
-│   │   │   ├── stores.ts                # Svelte Store状態管理
+│   │   │   ├── stores.svelte.ts         # Svelte 5 rune ベース状態管理
 │   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
-│   │   │   ├── context.ts               # Context API型定義
+│   │   │   ├── context.ts               # Context API型定義（PaneActions/PaneStateのみ残存）
+│   │   │   ├── auto-save.svelte.ts      # 自動保存タイマー
+│   │   │   ├── stale-checker.svelte.ts  # Stale検出
+│   │   │   ├── leaf-stats.svelte.ts     # リーフ統計
+│   │   │   ├── drag-state.svelte.ts     # ドラッグ状態
+│   │   │   ├── move-modal.svelte.ts     # 移動モーダル状態
+│   │   │   ├── pull-progress.svelte.ts  # Pull進捗状態
 │   │   │   └── ...                      # その他ストア関連
 │   │   ├── sync.ts                      # Push/Pull処理
 │   │   ├── theme.ts                     # テーマ管理
@@ -305,7 +311,7 @@ agasteer/
 
 **状態管理:**
 
-- `stores.ts`: Svelteストアによる状態管理（notes, leaves, settings, isDirty, toast等）
+- `stores.svelte.ts`: Svelte 5 rune ベースの状態管理（notes, leaves, settings, isDirty, toast等）
 - `app-state.svelte.ts`: 共有リアクティブ状態（Svelte 5 runes、ワールドヘルパー）
 
 **アクションモジュール（App.svelteから抽出）:**
@@ -328,7 +334,7 @@ agasteer/
 
 - `theme.ts`: テーマ適用ロジック
 - `routing.ts`: URLルーティング（パスベース、プレビュー対応）
-- `ui.ts`: トースト状態管理
+- `ui/ui.svelte.ts`: トースト状態管理
 - `font.ts`: カスタムフォント管理（IndexedDB保存、動的@font-face登録）
 
 **Svelteアクション（actions/）:**
@@ -403,17 +409,17 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 - `breadcrumbs.ts`: パンくずリスト生成（`getBreadcrumbs()`, `extractH1Title()`, `updateH1Title()`）
 - `drag-drop.ts`: ドラッグ&ドロップヘルパー（`handleDragStart<T>()`, `reorderItems<T>()`）
 
-#### 3. 状態管理層（lib/stores.ts）
+#### 3. 状態管理層（lib/stores/stores.svelte.ts）
 
 **責務**: アプリケーション全体の状態管理
 
-**Writableストア:**
+**$state() ベースのリアクティブ状態:**
 
 - settings, notes, leaves, isDirty, toast（Home用）
 - archiveNotes, archiveLeaves, isArchiveLoaded（Archive用）
 - currentWorld（現在のワールド）
 
-**Derivedストア:**
+**$derived() ベースの派生状態:**
 
 - allNotes（ソート済みノート）
 

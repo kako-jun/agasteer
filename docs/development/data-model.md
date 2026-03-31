@@ -100,7 +100,7 @@ graph TB
 
 ### Svelteストア
 
-Agasteerは、Svelteの`writable`と`derived`ストアを使用して状態を管理します。
+Agasteerは、Svelte 5の`$state()`と`$derived()` runeを使用して状態を管理します。
 
 #### 基本ストア（グローバル）
 
@@ -189,8 +189,8 @@ const position = getDialogPositionForPane(pane) // 'bottom-left' | 'bottom-right
 **ダーティフラグが立つタイミング:**
 
 - エディタでリーフの内容を編集したとき
-- ノートを作成・削除・名前変更・並び替えたとき（`updateNotes()`内で自動的に`isDirty.set(true)`）
-- リーフを作成・削除・名前変更・並び替えたとき（`updateLeaves()`内で自動的に`isDirty.set(true)`）
+- ノートを作成・削除・名前変更・並び替えたとき（`updateNotes()`内で自動的に`isDirty.value = true`）
+- リーフを作成・削除・名前変更・並び替えたとき（`updateLeaves()`内で自動的に`isDirty.value = true`）
 
 **ダーティフラグがクリアされるタイミング:**
 
@@ -297,7 +297,7 @@ State Update (notes = [...notes, newNote])
     ↓
 Persist to IndexedDB (updateNotes, updateLeaves)
     ↓
-Svelte Reactive System ($:)
+Svelte Reactive System ($state/$derived)
     ↓
 UI Re-render
 ```
@@ -313,7 +313,7 @@ State Update (settings = { ...settings, ...payload })
     ↓
 Persist to LocalStorage (updateSettings)
     ↓
-Svelte Reactive System ($:)
+Svelte Reactive System ($state/$derived)
     ↓
 UI Re-render
 ```

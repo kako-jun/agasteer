@@ -9,7 +9,7 @@
 | ファイル                                      | 役割                                        |
 | --------------------------------------------- | ------------------------------------------- |
 | `src/lib/editor/dirty-lines.ts`               | 差分計算とCodeMirror拡張のファクトリ        |
-| `src/lib/stores/stores.ts`                    | `getLastPushedContent()` 基準コンテンツ取得 |
+| `src/lib/stores/stores.svelte.ts`             | `getLastPushedContent()` 基準コンテンツ取得 |
 | `src/components/editor/MarkdownEditor.svelte` | 拡張機能の統合（常時有効）                  |
 | `src/App.css`                                 | テーマ別CSS変数とマーカースタイル           |
 
@@ -19,11 +19,11 @@
 
 Agasteerには既にリーフ単位のダーティチェック機能がある：
 
-| ストア/関数        | 役割                                 | 場所                       |
-| ------------------ | ------------------------------------ | -------------------------- |
-| `dirtyLeafIds`     | ダーティなリーフIDのSet              | `src/lib/stores/stores.ts` |
-| `lastPushedLeaves` | 最後にPushした時点のリーフ状態       | `src/lib/stores/stores.ts` |
-| `detectDirtyIds()` | スナップショット比較でダーティを検出 | `src/lib/stores/stores.ts` |
+| ストア/関数        | 役割                                 | 場所                              |
+| ------------------ | ------------------------------------ | --------------------------------- |
+| `dirtyLeafIds`     | ダーティなリーフIDのSet              | `src/lib/stores/stores.svelte.ts` |
+| `lastPushedLeaves` | 最後にPushした時点のリーフ状態       | `src/lib/stores/stores.svelte.ts` |
+| `detectDirtyIds()` | スナップショット比較でダーティを検出 | `src/lib/stores/stores.svelte.ts` |
 
 ### 行単位マーカーとの関係
 
@@ -108,7 +108,7 @@ function debouncedUpdate(view) {
 
 ```typescript
 // リーフがダーティでなければ計算スキップ
-const isLeafDirty = () => get(dirtyLeafIds).has(leafId)
+const isLeafDirty = () => dirtyLeafIds.value.has(leafId)
 
 function updateDirtyLines(view) {
   if (!isLeafDirty()) {

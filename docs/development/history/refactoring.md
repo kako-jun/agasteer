@@ -967,4 +967,44 @@ Agasteerは、継続的なリファクタリングにより以下を達成しま
 - **左右対称**: 完全に対等な2ペイン設計
 - **モジュール性**: 高い凝集度と低い結合度
 
-詳細なアーキテクチャについては、[architecture.md](./architecture.md)を参照してください。
+---
+
+## Phase 5: Svelte 5 rune 移行（PR #47）
+
+### 概要
+
+Svelte 4 の `writable()` / `derived()` ストアを Svelte 5 の `$state()` / `$derived()` rune に全面移行しました。
+
+### ファイル名の変更
+
+rune を使用するファイルは `.svelte.ts` 拡張子に変更されました：
+
+| 変更前                    | 変更後                           |
+| ------------------------- | -------------------------------- |
+| `stores/stores.ts`        | `stores/stores.svelte.ts`        |
+| `stores/auto-save.ts`     | `stores/auto-save.svelte.ts`     |
+| `stores/stale-checker.ts` | `stores/stale-checker.svelte.ts` |
+| `stores/leaf-stats.ts`    | `stores/leaf-stats.svelte.ts`    |
+| `stores/drag-state.ts`    | `stores/drag-state.svelte.ts`    |
+| `stores/move-modal.ts`    | `stores/move-modal.svelte.ts`    |
+| `stores/pull-progress.ts` | `stores/pull-progress.svelte.ts` |
+| `ui/ui.ts`                | `ui/ui.svelte.ts`                |
+| `utils/search.ts`         | `utils/search.svelte.ts`         |
+| `app-state.ts`            | `app-state.svelte.ts`            |
+
+### 構文の変更
+
+| 変更前（Svelte 4）                        | 変更後（Svelte 5）              |
+| ----------------------------------------- | ------------------------------- |
+| `writable<T>(initial)`                    | `$state<T>(initial)`            |
+| `derived(store, fn)`                      | `$derived(expression)`          |
+| `$store`（テンプレート/コンポーネント内） | `store.value`                   |
+| `get(store)`（.ts ファイル内）            | `store.value`                   |
+| `store.set(x)`                            | `store.value = x`               |
+| `store.update(fn)`                        | `store.value = fn(store.value)` |
+
+### Context API の変更
+
+`context.ts` は `PaneActions` / `PaneState` インターフェースの定義のみが残存しています。旧 Context interface は廃止されました。
+
+詳細なアーキテクチャについては、[architecture.md](../architecture.md)を参照してください。

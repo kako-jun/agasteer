@@ -191,7 +191,7 @@ onMount: LocalStorageからisDirty=trueを検出
 
 ### UI表示
 
-- **リーフカードの赤丸**: リーフタイトルの横に表示（`$dirtyLeafIds.has(leaf.id)`）
+- **リーフカードの赤丸**: リーフタイトルの横に表示（`dirtyLeafIds.value.has(leaf.id)`）
 - **ノートカードの赤丸**: 配下にダーティなリーフがある、または構造変更がある場合に表示
 
 ### ダーティ検出のタイミング
@@ -226,13 +226,13 @@ onMount: LocalStorageからisDirty=trueを検出
 
 スナップショットベースの差分検出により、これらの問題を解決しました：
 
-- **一元化**: 差分検出ロジックは`stores.ts`に集約
+- **一元化**: 差分検出ロジックは`stores.svelte.ts`に集約
 - **自動化**: ストア更新時（`updateNotes`、`updateLeaves`等）に自動実行
 - **確実性**: 手動呼び出し不要のため、抜け漏れなし
 
 ### スナップショット変数
 
-stores.tsにモジュールレベルの変数として、Home用とArchive用それぞれのノート・リーフの最終Push/Pull状態を保持します。
+stores.svelte.tsにモジュールレベルの変数として、Home用とArchive用それぞれのノート・リーフの最終Push/Pull状態を保持します。
 
 ### 差分検出のタイミング
 
@@ -281,12 +281,12 @@ stores.tsにモジュールレベルの変数として、Home用とArchive用そ
 
 ノートカードの赤丸表示は以下の2条件のいずれかで表示されます：
 
-- 配下のリーフに変更がある（`$dirtyLeafIds.has(leafId)`）
-- 構造的な変更がある（`$dirtyNoteIds.has(noteId)`）
+- 配下のリーフに変更がある（`dirtyLeafIds.value.has(leafId)`）
+- 構造的な変更がある（`dirtyNoteIds.value.has(noteId)`）
 
 リーフカードの赤丸表示：
 
-- リーフに変更がある（`$dirtyLeafIds.has(leafId)`）
+- リーフに変更がある（`dirtyLeafIds.value.has(leafId)`）
 
 ### パフォーマンス考慮
 
