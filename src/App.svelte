@@ -91,7 +91,7 @@
   import { pullArchive, translateGitHubMessage } from './lib/api'
   import type { LeafSkeleton } from './lib/api'
   import { initI18n, _, locale } from './lib/i18n'
-  import { processImportFile, isAgasteerZip, parseAgasteerZip } from './lib/data'
+
   import {
     pushToastState,
     pullToastState,
@@ -107,25 +107,10 @@
     closeModal,
   } from './lib/ui'
   import { resolvePath, buildPath, extractWorldPrefix } from './lib/navigation'
-  import { buildNotesZip, downloadLeafAsMarkdown as downloadLeafAsMarkdownLib } from './lib/utils'
-  import { getBreadcrumbs as buildBreadcrumbs, extractH1Title, updateH1Title } from './lib/ui'
+  import { getBreadcrumbs as buildBreadcrumbs } from './lib/ui'
   import { reorderItems } from './lib/navigation'
-  import {
-    createNote as createNoteLib,
-    deleteNote as deleteNoteLib,
-    updateNoteName as updateNoteNameLib,
-    updateNoteBadge as updateNoteBadgeLib,
-    normalizeNoteOrders,
-    getItemCount,
-  } from './lib/data'
-  import {
-    createLeaf as createLeafLib,
-    deleteLeaf as deleteLeafLib,
-    updateLeafContent as updateLeafContentLib,
-    updateLeafBadge as updateLeafBadgeLib,
-    normalizeLeafOrders,
-    getLeafCount,
-  } from './lib/data'
+  import { normalizeNoteOrders, getItemCount } from './lib/data'
+  import { normalizeLeafOrders, getLeafCount } from './lib/data'
   import { computeLeafCharCount } from './lib/utils'
   import {
     handleCopyUrl as handleCopyUrlLib,
@@ -148,11 +133,30 @@
     type MoveActionContext,
   } from './lib/actions/move'
   import {
+    saveEditBreadcrumb as saveEditBreadcrumbAction,
+    createNote as createNoteAction,
+    deleteNote as deleteNoteAction,
+    updateNoteBadge as updateNoteBadgeAction,
+    createLeaf as createLeafAction,
+    deleteLeaf as deleteLeafAction,
+    updateLeafContent as updateLeafContentAction,
+    updateLeafBadge as updateLeafBadgeAction,
+    updatePriorityBadge as updatePriorityBadgeAction,
+    type CrudActionContext,
+  } from './lib/actions/crud'
+  import {
+    exportNotesAsZip as exportNotesAsZipAction,
+    handleImportFromOtherApps as handleImportFromOtherAppsAction,
+    handleAgasteerImport as handleAgasteerImportAction,
+    downloadLeafAsMarkdown as downloadLeafAsMarkdownAction,
+    downloadLeafAsImage as downloadLeafAsImageAction,
+    type IoActionContext,
+  } from './lib/actions/io'
+  import {
     handlePaneScroll as handlePaneScrollLib,
     type ScrollSyncState,
     type ScrollSyncViews,
   } from './lib/ui'
-  import { generateUniqueName, normalizeBadgeValue } from './lib/utils'
   import Header from './components/layout/Header.svelte'
   import Modal from './components/layout/Modal.svelte'
   import Toast from './components/layout/Toast.svelte'
@@ -1675,265 +1679,25 @@
   }
 
   async function saveEditBreadcrumb(id: string, newName: string, type: Breadcrumb['type']) {
-    const trimmed = newName.trim()
-    if (!trimmed) return
-
-    // 右ペインのパンくずリストかどうかを判定
-    const isRight = id.endsWith('-right')
-    const actualId = isRight ? id.replace('-right', '') : id
-    // ペインのワールドに応じたノート・リーフを取得
-    const pane: Pane = isRight ? 'right' : 'left'
-    const world = getWorldForPane(pane)
-    const paneNotes = getNotesForWorld(world)
-    const paneLeaves = getLeavesForWorld(world)
-
-    if (type === 'note') {
-      const targetNote = paneNotes.find((f) => f.id === actualId)
-      const siblingWithSameName = paneNotes.find(
-        (n) =>
-          n.id !== actualId &&
-          (n.parentId || null) === (targetNote?.parentId || null) &&
-          n.name.trim() === trimmed
-      )
-      if (siblingWithSameName) {
-        await alertAsync($_('modal.duplicateNoteSameLevel'))
-        return
-      }
-      if (targetNote && targetNote.name === trimmed) {
-        refreshBreadcrumbs()
-        editingBreadcrumb = null
-        return
-      }
-
-      // ノート名を更新
-      const updatedNotes = paneNotes.map((n) => (n.id === actualId ? { ...n, name: trimmed } : n))
-      setNotesForWorld(world, updatedNotes)
-
-      const updatedNote = updatedNotes.find((f) => f.id === actualId)
-      if (updatedNote) {
-        if ($leftNote?.id === actualId) {
-          $leftNote = updatedNote
-        }
-        if (isRight && $rightNote?.id === actualId) {
-          $rightNote = updatedNote
-        }
-      }
-      if (!paneNotes.some((f) => f.id === $leftNote?.id)) {
-        $leftNote = null
-      }
-      if (isRight && !paneNotes.some((f) => f.id === $rightNote?.id)) {
-        $rightNote = null
-      }
-    } else if (type === 'leaf') {
-      const targetLeaf = paneLeaves.find((n) => n.id === actualId)
-      const siblingLeafWithSameName = paneLeaves.find(
-        (l) => l.id !== actualId && l.noteId === targetLeaf?.noteId && l.title.trim() === trimmed
-      )
-      if (siblingLeafWithSameName) {
-        await alertAsync($_('modal.duplicateLeafSameNote'))
-        return
-      }
-
-      if (targetLeaf && targetLeaf.title === trimmed) {
-        refreshBreadcrumbs()
-        editingBreadcrumb = null
-        return
-      }
-
-      // リーフのコンテンツの1行目が # 見出しの場合、見出しテキストも更新
-      let updatedContent = targetLeaf?.content || ''
-      if (targetLeaf && extractH1Title(targetLeaf.content)) {
-        updatedContent = updateH1Title(targetLeaf.content, trimmed)
-      }
-
-      const updatedLeaves = paneLeaves.map((n) =>
-        n.id === actualId
-          ? { ...n, title: trimmed, content: updatedContent, updatedAt: Date.now() }
-          : n
-      )
-      setLeavesForWorld(world, updatedLeaves)
-
-      if (targetLeaf) {
-        leafStatsStore.updateLeafContent(actualId, updatedContent, targetLeaf.content)
-      }
-
-      const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
-      if (updatedLeaf) {
-        if ($leftLeaf?.id === actualId) {
-          $leftLeaf = updatedLeaf
-        }
-        if (isRight && $rightLeaf?.id === actualId) {
-          $rightLeaf = updatedLeaf
-        }
-      }
-      if (!paneLeaves.some((n) => n.id === $leftLeaf?.id)) {
-        $leftLeaf = null
-      }
-      if (isRight && !paneLeaves.some((n) => n.id === $rightLeaf?.id)) {
-        $rightLeaf = null
-      }
-    }
-
-    refreshBreadcrumbs()
-    editingBreadcrumb = null
+    return saveEditBreadcrumbAction(createCrudContext(), id, newName, type)
   }
 
   function cancelEditBreadcrumb() {
     editingBreadcrumb = null
   }
 
-  // ノート管理（notes.tsに委譲）
+  // ノート管理（crud.tsに委譲）
   function createNote(parentId: string | undefined, pane: Pane, name?: string) {
-    if (!name) {
-      // 名前が指定されていない場合はモーダルで入力を求める
-      const position = getDialogPositionForPane(pane)
-      showPrompt(
-        $_('footer.newNote'),
-        (inputName) => {
-          const newNote = createNoteLib({
-            parentId,
-            pane,
-            isOperationsLocked: !isFirstPriorityFetched,
-            translate: $_,
-            name: inputName,
-          })
-          if (newNote) {
-            showPushToast($_('toast.noteCreated'), 'success')
-          }
-        },
-        '',
-        position
-      )
-    } else {
-      const newNote = createNoteLib({
-        parentId,
-        pane,
-        isOperationsLocked: !isFirstPriorityFetched,
-        translate: $_,
-        name,
-      })
-      if (newNote) {
-        showPushToast($_('toast.noteCreated'), 'success')
-      }
-    }
+    createNoteAction(createCrudContext(), parentId, pane, name)
   }
 
   function deleteNote(pane: Pane) {
-    const targetNote = pane === 'left' ? $leftNote : $rightNote
-    if (!targetNote) return
-
-    const paneWorld = getWorldForPane(pane)
-    // アーカイブ内の場合は専用処理
-    if (paneWorld === 'archive') {
-      const allNotes = $archiveNotes
-      const allLeaves = $archiveLeaves
-
-      const position = getDialogPositionForPane(pane)
-      const confirmMessage = targetNote.parentId
-        ? $_('modal.deleteSubNote')
-        : $_('modal.deleteRootNote')
-
-      showConfirm(
-        confirmMessage,
-        () => {
-          // 子孫ノートを収集
-          const descendantIds = new Set<string>()
-          const collectDescendants = (id: string) => {
-            descendantIds.add(id)
-            allNotes.filter((n) => n.parentId === id).forEach((n) => collectDescendants(n.id))
-          }
-          collectDescendants(targetNote.id)
-
-          const remainingNotes = allNotes.filter((n) => !descendantIds.has(n.id))
-          const remainingLeaves = allLeaves.filter((l) => !descendantIds.has(l.noteId))
-
-          updateArchiveNotes(remainingNotes)
-          updateArchiveLeaves(remainingLeaves)
-
-          // ナビゲーション処理
-          const parentNote = targetNote.parentId
-            ? remainingNotes.find((n) => n.id === targetNote.parentId)
-            : null
-
-          const checkPane = (paneToCheck: Pane) => {
-            const currentNote = paneToCheck === 'left' ? $leftNote : $rightNote
-            const currentLeaf = paneToCheck === 'left' ? $leftLeaf : $rightLeaf
-            if (
-              currentNote?.id === targetNote.id ||
-              descendantIds.has(currentNote?.id ?? '') ||
-              (currentLeaf && descendantIds.has(currentLeaf.noteId))
-            ) {
-              if (parentNote) selectNote(parentNote, paneToCheck)
-              else goHome(paneToCheck)
-            }
-          }
-          checkPane('left')
-          checkPane('right')
-
-          showPushToast($_('toast.deleted'), 'success')
-        },
-        position
-      )
-      return
-    }
-
-    // Home内の場合は既存処理
-    deleteNoteLib({
-      targetNote,
-      pane,
-      isOperationsLocked: !isFirstPriorityFetched,
-      translate: $_,
-      onNavigate: (p, parentNote) => {
-        // 両ペインのナビゲーション処理
-        const checkPane = (paneToCheck: Pane) => {
-          const currentNote = paneToCheck === 'left' ? $leftNote : $rightNote
-          const currentLeaf = paneToCheck === 'left' ? $leftLeaf : $rightLeaf
-          if (
-            currentNote?.id === targetNote.id ||
-            (currentLeaf && currentLeaf.noteId === targetNote.id)
-          ) {
-            if (parentNote) {
-              selectNote(parentNote, paneToCheck)
-            } else {
-              goHome(paneToCheck)
-            }
-          }
-        }
-        checkPane('left')
-        checkPane('right')
-      },
-      rebuildLeafStats,
-    })
+    deleteNoteAction(createCrudContext(), pane)
   }
 
   // ノートバッジ更新
   function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
-    const paneWorld = getWorldForPane(pane)
-    // アーカイブ内の場合は専用処理
-    if (paneWorld === 'archive') {
-      const allNotes = $archiveNotes
-      const current = allNotes.find((n) => n.id === noteId)
-      if (!current) return
-
-      const nextIcon = normalizeBadgeValue(badgeIcon)
-      const nextColor = normalizeBadgeValue(badgeColor)
-
-      if (
-        normalizeBadgeValue(current.badgeIcon) === nextIcon &&
-        normalizeBadgeValue(current.badgeColor) === nextColor
-      ) {
-        return
-      }
-
-      const updated = allNotes.map((n) =>
-        n.id === noteId ? { ...n, badgeIcon: nextIcon, badgeColor: nextColor } : n
-      )
-      updateArchiveNotes(updated)
-      return
-    }
-
-    // Home内の場合は既存処理
-    updateNoteBadgeLib(noteId, badgeIcon, badgeColor)
+    updateNoteBadgeAction(createCrudContext(), noteId, badgeIcon, badgeColor, pane)
   }
 
   // ドラッグ&ドロップ（ノート）
@@ -1967,218 +1731,26 @@
     dragStore.endDragNote()
   }
 
-  // リーフ管理（leaves.tsに委譲）
+  // リーフ管理（crud.tsに委譲）
   function createLeaf(pane: Pane, title?: string) {
-    const targetNote = pane === 'left' ? $leftNote : $rightNote
-    if (!targetNote) return
-
-    if (!title) {
-      // タイトルが指定されていない場合はモーダルで入力を求める
-      const position = getDialogPositionForPane(pane)
-      showPrompt(
-        $_('footer.newLeaf'),
-        (inputTitle) => {
-          const newLeaf = createLeafLib({
-            targetNote,
-            pane,
-            isOperationsLocked: !isFirstPriorityFetched,
-            translate: $_,
-            title: inputTitle,
-          })
-          if (newLeaf) {
-            leafStatsStore.addLeaf(newLeaf.id, newLeaf.content)
-            selectLeaf(newLeaf, pane)
-            showPushToast($_('toast.leafCreated'), 'success')
-          }
-        },
-        '',
-        position
-      )
-    } else {
-      const newLeaf = createLeafLib({
-        targetNote,
-        pane,
-        isOperationsLocked: !isFirstPriorityFetched,
-        translate: $_,
-        title,
-      })
-      if (newLeaf) {
-        leafStatsStore.addLeaf(newLeaf.id, newLeaf.content)
-        selectLeaf(newLeaf, pane)
-        showPushToast($_('toast.leafCreated'), 'success')
-      }
-    }
+    createLeafAction(createCrudContext(), pane, title)
   }
 
   function deleteLeaf(leafId: string, pane: Pane) {
-    const otherLeaf = pane === 'left' ? $rightLeaf : $leftLeaf
-
-    const paneWorld = getWorldForPane(pane)
-    // アーカイブ内の場合は専用処理
-    if (paneWorld === 'archive') {
-      const allLeaves = $archiveLeaves
-      const allNotes = $archiveNotes
-      const targetLeaf = allLeaves.find((l) => l.id === leafId)
-      if (!targetLeaf) return
-
-      const position = getDialogPositionForPane(pane)
-      showConfirm(
-        $_('modal.deleteLeaf'),
-        () => {
-          updateArchiveLeaves(allLeaves.filter((l) => l.id !== leafId))
-
-          const note = allNotes.find((n) => n.id === targetLeaf.noteId)
-          if (note) selectNote(note, pane)
-          else goHome(pane)
-
-          if (otherLeaf?.id === leafId) {
-            const otherPane = pane === 'left' ? 'right' : 'left'
-            if (note) selectNote(note, otherPane)
-            else goHome(otherPane)
-          }
-
-          showPushToast($_('toast.deleted'), 'success')
-        },
-        position
-      )
-      return
-    }
-
-    // Home内の場合は既存処理
-    deleteLeafLib({
-      leafId,
-      pane,
-      isOperationsLocked: !isFirstPriorityFetched,
-      translate: $_,
-      onNavigate: (p, note) => {
-        if (note) selectNote(note, p)
-        else goHome(p)
-      },
-      otherPaneLeafId: otherLeaf?.id,
-      onUpdateStats: (id, content) => {
-        leafStatsStore.removeLeaf(id, content)
-      },
-    })
-    // スケルトンマップからも削除（削除したリーフがスケルトンとして再表示されるのを防ぐ）
-    if (leafSkeletonMap.has(leafId)) {
-      leafSkeletonMap.delete(leafId)
-      leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
-    }
+    deleteLeafAction(createCrudContext(), leafId, pane)
   }
 
   async function updateLeafContent(content: string, leafId: string, pane: Pane) {
-    // オフラインリーフは専用の自動保存処理
-    if (isOfflineLeaf(leafId)) {
-      updateOfflineContent(content)
-      // 左右ペインのリーフはcurrentOfflineLeafから自動更新されるので不要
-      return
-    }
-
-    const paneWorld = getWorldForPane(pane)
-    // アーカイブ内の場合は専用処理
-    if (paneWorld === 'archive') {
-      const allLeaves = $archiveLeaves
-      const targetLeaf = allLeaves.find((l) => l.id === leafId)
-      if (!targetLeaf) return
-
-      // コンテンツの1行目が # 見出しの場合、リーフのタイトルも自動更新
-      const h1Title = extractH1Title(content)
-      let newTitle = h1Title || targetLeaf.title
-      let titleChanged = false
-
-      if (h1Title) {
-        const trimmed = h1Title.trim()
-        const hasDuplicate = allLeaves.some(
-          (l) => l.id !== leafId && l.noteId === targetLeaf.noteId && l.title.trim() === trimmed
-        )
-        if (hasDuplicate) {
-          await alertAsync($_('modal.duplicateLeafHeading'))
-          newTitle = targetLeaf.title
-        } else {
-          titleChanged = true
-        }
-      }
-
-      const updatedLeaf: Leaf = {
-        ...targetLeaf,
-        title: newTitle,
-        content,
-        updatedAt: Date.now(),
-      }
-      updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
-
-      if ($leftLeaf?.id === leafId) $leftLeaf = updatedLeaf
-      if ($rightLeaf?.id === leafId) $rightLeaf = updatedLeaf
-      if (titleChanged) refreshBreadcrumbs()
-      return
-    }
-
-    // Home内の場合は既存処理
-    const result = updateLeafContentLib({
-      content,
-      leafId,
-      isOperationsLocked: !isFirstPriorityFetched,
-      translate: $_,
-      onStatsUpdate: (id, prevContent, newContent) => {
-        leafStatsStore.updateLeafContent(id, newContent, prevContent)
-      },
-    })
-    if (result.updatedLeaf) {
-      if ($leftLeaf?.id === leafId) $leftLeaf = result.updatedLeaf
-      if ($rightLeaf?.id === leafId) $rightLeaf = result.updatedLeaf
-      if (result.titleChanged) refreshBreadcrumbs()
-    }
+    return updateLeafContentAction(createCrudContext(), content, leafId, pane)
   }
 
   function updateLeafBadge(leafId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
-    const paneWorld = getWorldForPane(pane)
-    // アーカイブ内の場合は専用処理
-    if (paneWorld === 'archive') {
-      const allLeaves = $archiveLeaves
-      const targetLeaf = allLeaves.find((l) => l.id === leafId)
-      if (!targetLeaf) return
-
-      const updatedLeaf: Leaf = {
-        ...targetLeaf,
-        badgeIcon: normalizeBadgeValue(badgeIcon),
-        badgeColor: normalizeBadgeValue(badgeColor),
-        updatedAt: Date.now(),
-      }
-      updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
-
-      if ($leftLeaf?.id === leafId) $leftLeaf = updatedLeaf
-      if ($rightLeaf?.id === leafId) $rightLeaf = updatedLeaf
-      return
-    }
-
-    // Home内の場合は既存処理
-    const updated = updateLeafBadgeLib(leafId, badgeIcon, badgeColor)
-    if (updated) {
-      if ($leftLeaf?.id === leafId) $leftLeaf = updated
-      if ($rightLeaf?.id === leafId) $rightLeaf = updated
-    }
+    updateLeafBadgeAction(createCrudContext(), leafId, badgeIcon, badgeColor, pane)
   }
 
   // Priorityリーフのバッジ更新（metadataに直接保存）
   function updatePriorityBadge(badgeIcon: string, badgeColor: string) {
-    metadata.update((m) => {
-      const newLeaves = { ...m.leaves }
-      if (badgeIcon || badgeColor) {
-        newLeaves[PRIORITY_LEAF_ID] = {
-          id: PRIORITY_LEAF_ID,
-          updatedAt: Date.now(),
-          order: 0,
-          badgeIcon: badgeIcon || undefined,
-          badgeColor: badgeColor || undefined,
-        }
-      } else {
-        // バッジをクリアした場合はエントリを削除
-        delete newLeaves[PRIORITY_LEAF_ID]
-      }
-      return { ...m, leaves: newLeaves }
-    })
-    // 構造変更フラグを立てて保存が必要な状態にする
-    isStructureDirty.set(true)
+    updatePriorityBadgeAction(badgeIcon, badgeColor)
   }
 
   // ドラッグ&ドロップ（リーフ）
@@ -2301,6 +1873,44 @@
     }
   }
 
+  function createCrudContext(): CrudActionContext {
+    return {
+      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
+      getLeafSkeletonMap: () => leafSkeletonMap,
+      setEditingBreadcrumb: (v) => (editingBreadcrumb = v),
+      setLeafSkeletonMap: (v) => (leafSkeletonMap = v),
+      selectNote,
+      selectLeaf,
+      goHome,
+      refreshBreadcrumbs,
+      rebuildLeafStats,
+      getWorldForPane,
+      getNotesForWorld,
+      getLeavesForWorld,
+      setNotesForWorld,
+      setLeavesForWorld,
+      getLeavesForPane,
+      showPrompt,
+      showConfirm,
+      getDialogPositionForPane,
+      updateOfflineContent,
+    }
+  }
+
+  function createIoContext(): IoActionContext {
+    return {
+      getIsFirstPriorityFetched: () => isFirstPriorityFetched,
+      getIsExportingZip: () => isExportingZip,
+      getIsImporting: () => isImporting,
+      setIsExportingZip: (v) => (isExportingZip = v),
+      setIsImporting: (v) => (isImporting = v),
+      setImportOccurredInSettings: (v) => (importOccurredInSettings = v),
+      getLeavesForPane,
+      getEditorView: (pane: Pane) => (pane === 'left' ? leftEditorView : rightEditorView),
+      getPreviewView: (pane: Pane) => (pane === 'left' ? leftPreviewView : rightPreviewView),
+    }
+  }
+
   /**
    * GitHubにPush（統合版）
    * すべてのPush処理がこの1つの関数を通る
@@ -2311,269 +1921,25 @@
 
   // Git clone相当のZIPエクスポート
   async function exportNotesAsZip() {
-    if (!isFirstPriorityFetched) {
-      showPushToast($_('settings.importExport.needInitialPull'), 'error')
-      return
-    }
-    if (isExportingZip) return
-
-    isExportingZip = true
-    try {
-      const allNotes = get(notes)
-      const allLeaves = get(leaves)
-      const currentMetadata = get(metadata) as Metadata
-
-      const result = await buildNotesZip(allNotes, allLeaves, currentMetadata, {
-        gitPolicyLine: $_('settings.importExport.gitPolicy'),
-        infoFooterLine: $_('settings.importExport.infoFileFooter'),
-      })
-
-      if (!result.success || !result.blob) {
-        if (result.reason === 'empty') {
-          showPushToast($_('settings.importExport.nothingToExport'), 'error')
-        } else {
-          console.error('ZIP export failed:', result.error)
-          showPushToast($_('settings.importExport.exportFailed'), 'error')
-        }
-        return
-      }
-
-      const url = URL.createObjectURL(result.blob)
-      const safeName =
-        ($settings.toolName || 'notes')
-          .replace(/[^a-z0-9_-]/gi, '-')
-          .replace(/-+/g, '-')
-          .replace(/^-|-$/g, '')
-          .toLowerCase() || 'notes'
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${safeName}-export.zip`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      showPushToast($_('settings.importExport.exportSuccess'), 'success')
-    } catch (error) {
-      console.error('ZIP export failed:', error)
-      showPushToast($_('settings.importExport.exportFailed'), 'error')
-    } finally {
-      isExportingZip = false
-    }
+    return exportNotesAsZipAction(createIoContext())
   }
 
   async function handleImportFromOtherApps() {
-    if (isImporting) return
-    if (!isFirstPriorityFetched) {
-      showPushToast($_('settings.importExport.needInitialPullImport'), 'error')
-      return
-    }
-
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json,.zip,.txt'
-    input.multiple = false
-
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-
-      isImporting = true
-      try {
-        showPushToast($_('settings.importExport.importStarting'), 'success')
-
-        // まずAgasteer形式かどうかをチェック
-        if (file.name.toLowerCase().endsWith('.zip') && (await isAgasteerZip(file))) {
-          await handleAgasteerImport(file)
-          return
-        }
-
-        // SimpleNote形式などの他のインポート
-        const allNotes = get(notes)
-        const allLeaves = get(leaves)
-
-        // まずファイルをパースして重複チェック
-        const result = await processImportFile(file, {
-          existingNotesCount: allNotes.length ? Math.max(...allNotes.map((n) => n.order)) + 1 : 0,
-          existingLeavesMaxOrder: allLeaves.length
-            ? Math.max(...allLeaves.map((l) => l.order))
-            : -1,
-          translate: $_,
-        })
-
-        if (!result.success) {
-          showPushToast($_('settings.importExport.unsupportedFile'), 'error')
-          return
-        }
-
-        const { newNote, reportLeaf, importedLeaves, errors } = result.result
-
-        // 同名のノートが存在するかチェック
-        const existingNote = allNotes.find((n) => n.name === newNote.name)
-        if (existingNote) {
-          // 重複がある場合は確認ダイアログを表示
-          const choice = await choiceAsync($_('modal.duplicateChoiceMessage'), [
-            { label: $_('modal.duplicateChoiceAdd'), value: 'add', variant: 'primary' },
-            { label: $_('modal.duplicateChoiceSkip'), value: 'skip', variant: 'secondary' },
-            { label: $_('common.cancel'), value: 'cancel', variant: 'cancel' },
-          ])
-
-          if (choice === 'cancel' || choice === null) {
-            return
-          }
-          if (choice === 'skip') {
-            showPushToast($_('settings.importExport.importSkipped'), 'success')
-            return
-          }
-
-          // choice === 'add': 既存ノートにリーフを追加
-          const existingLeafTitles = allLeaves
-            .filter((l) => l.noteId === existingNote.id)
-            .map((l) => l.title)
-
-          // レポートリーフと各インポートリーフのnoteIdを既存ノートに変更、重複はリネーム
-          const mergedReportLeaf = {
-            ...reportLeaf,
-            noteId: existingNote.id,
-            title: existingLeafTitles.includes(reportLeaf.title)
-              ? generateUniqueName(reportLeaf.title, existingLeafTitles)
-              : reportLeaf.title,
-          }
-
-          const updatedExistingTitles = [...existingLeafTitles, mergedReportLeaf.title]
-          const mergedLeaves = importedLeaves.map((l) => {
-            if (updatedExistingTitles.includes(l.title)) {
-              const newTitle = generateUniqueName(l.title, updatedExistingTitles)
-              updatedExistingTitles.push(newTitle)
-              return { ...l, noteId: existingNote.id, title: newTitle }
-            }
-            updatedExistingTitles.push(l.title)
-            return { ...l, noteId: existingNote.id }
-          })
-
-          // 既存ノートにリーフを追加（ノート自体は作成しない）
-          updateLeaves([...allLeaves, mergedReportLeaf, ...mergedLeaves])
-        } else {
-          // 重複なし：新規ノートを作成
-          updateNotes([...allNotes, newNote])
-          updateLeaves([...allLeaves, reportLeaf, ...importedLeaves])
-        }
-
-        if (errors?.length) console.warn('Import skipped items:', errors)
-        importOccurredInSettings = true
-        showPushToast($_('settings.importExport.importDone'), 'success')
-      } catch (error) {
-        console.error('Import failed:', error)
-        showPushToast($_('settings.importExport.importFailed'), 'error')
-      } finally {
-        isImporting = false
-      }
-    }
-
-    input.click()
+    return handleImportFromOtherAppsAction(createIoContext())
   }
 
-  /**
-   * Agasteer形式のzipをインポート（既存データを完全に置き換え）
-   */
   async function handleAgasteerImport(file: File) {
-    try {
-      const result = await parseAgasteerZip(file)
-      if (!result) {
-        showPushToast($_('settings.importExport.unsupportedFile'), 'error')
-        return
-      }
-
-      // 既存データを完全に置き換え
-      updateNotes(result.notes)
-      updateLeaves(result.leaves)
-      metadata.set(result.metadata)
-
-      // アーカイブデータがあればストアに設定
-      if (result.archiveNotes.length > 0 || result.archiveLeaves.length > 0) {
-        updateArchiveNotes(result.archiveNotes)
-        updateArchiveLeaves(result.archiveLeaves)
-        if (result.archiveMetadata) {
-          archiveMetadata.set(result.archiveMetadata)
-        }
-        isArchiveLoaded.set(true)
-      }
-
-      importOccurredInSettings = true
-      showPushToast($_('settings.importExport.importDone'), 'success')
-    } catch (error) {
-      console.error('Agasteer import failed:', error)
-      showPushToast($_('settings.importExport.importFailed'), 'error')
-    } finally {
-      isImporting = false
-    }
+    return handleAgasteerImportAction(createIoContext(), file)
   }
 
   // Markdownダウンロード（選択範囲があれば選択範囲をダウンロード）
   function downloadLeafAsMarkdown(leafId: string, pane: Pane) {
-    if (!isFirstPriorityFetched) {
-      showPushToast($_('toast.needInitialPullDownload'), 'error')
-      return
-    }
-
-    // ペインのワールドに応じたリーフを取得
-    const paneLeaves = getLeavesForPane(pane)
-
-    // 選択テキストがあればそれをダウンロード
-    const editorView = pane === 'left' ? leftEditorView : rightEditorView
-    if (editorView && editorView.getSelectedText) {
-      const selectedText = editorView.getSelectedText()
-      if (selectedText) {
-        const targetLeaf = paneLeaves.find((l) => l.id === leafId)
-        if (!targetLeaf) return
-        const blob = new Blob([selectedText], { type: 'text/markdown' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${targetLeaf.title}-selection.md`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        return
-      }
-    }
-
-    // 選択なしの場合は全文ダウンロード
-    const targetLeaf = paneLeaves.find((l) => l.id === leafId)
-    if (!targetLeaf) return
-    const blob = new Blob([targetLeaf.content], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${targetLeaf.title}.md`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    downloadLeafAsMarkdownAction(createIoContext(), leafId, pane)
   }
 
   // プレビューを画像としてダウンロード
   async function downloadLeafAsImage(leafId: string, pane: Pane) {
-    if (!isFirstPriorityFetched) {
-      showPushToast($_('toast.needInitialPullDownload'), 'error')
-      return
-    }
-
-    // ペインのワールドに応じたリーフを取得
-    const paneLeaves = getLeavesForPane(pane)
-    const targetLeaf = paneLeaves.find((l) => l.id === leafId)
-    if (!targetLeaf) return
-
-    try {
-      const previewView = pane === 'left' ? leftPreviewView : rightPreviewView
-      if (previewView && previewView.captureAsImage) {
-        await previewView.captureAsImage(targetLeaf.title)
-        showPushToast($_('toast.imageDownloaded'), 'success')
-      }
-    } catch (error) {
-      console.error('Failed to download image:', error)
-      showPushToast($_('toast.imageDownloadFailed'), 'error')
-    }
+    return downloadLeafAsImageAction(createIoContext(), leafId, pane)
   }
 
   // シェア機能（share.tsからインポート）
