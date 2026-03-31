@@ -186,51 +186,53 @@
   } from './lib/utils'
 
   // ローカル状態
-  let breadcrumbs: Breadcrumb[] = []
-  let breadcrumbsRight: Breadcrumb[] = []
-  let editingBreadcrumb: string | null = null
+  let breadcrumbs: Breadcrumb[] = $state([])
+  let breadcrumbsRight: Breadcrumb[] = $state([])
+  let editingBreadcrumb: string | null = $state(null)
 
   // dragStoreへのリアクティブアクセス
-  $: draggedNote = $dragStore.draggedNote
-  $: draggedLeaf = $dragStore.draggedLeaf
-  $: dragOverNoteId = $dragStore.dragOverNoteId
-  $: dragOverLeafId = $dragStore.dragOverLeafId
+  let draggedNote = $derived($dragStore.draggedNote)
+  let draggedLeaf = $derived($dragStore.draggedLeaf)
+  let dragOverNoteId = $derived($dragStore.dragOverNoteId)
+  let dragOverLeafId = $derived($dragStore.dragOverLeafId)
 
-  let isLoadingUI = false // ガラス効果（Pull中のみ）
-  let isFirstPriorityFetched = false // 第1優先リーフの取得が完了したか
-  let isPullCompleted = false // 全リーフのPullが完了したか
-  let showSettings = false
-  let i18nReady = false // i18n初期化完了フラグ
-  let showWelcome = false // ウェルカムモーダル表示フラグ
-  let showInstallBanner = false // PWAインストールバナー表示フラグ
-  let deferredPrompt: Event | null = null // BeforeInstallPromptEvent
-  let isExportingZip = false
-  let isImporting = false
-  let isTesting = false
+  let isLoadingUI = $state(false) // ガラス効果（Pull中のみ）
+  let isFirstPriorityFetched = $state(false) // 第1優先リーフの取得が完了したか
+  let isPullCompleted = $state(false) // 全リーフのPullが完了したか
+  let showSettings = $state(false)
+  let i18nReady = $state(false) // i18n初期化完了フラグ
+  let showWelcome = $state(false) // ウェルカムモーダル表示フラグ
+  let showInstallBanner = $state(false) // PWAインストールバナー表示フラグ
+  let deferredPrompt: Event | null = $state(null) // BeforeInstallPromptEvent
+  let isExportingZip = $state(false)
+  let isImporting = $state(false)
+  let isTesting = $state(false)
   let importOccurredInSettings = false
   let isClosingSettingsPull = false
   let repoChangedInSettings = false // 設定画面でリポが変更された
-  let isArchiveLoading = false // アーカイブをロード中
+  let isArchiveLoading = $state(false) // アーカイブをロード中
 
   // leafStatsStoreとmoveModalStoreへのリアクティブアクセス
   // 左ペインのワールドとビューに応じて統計を切り替え
-  $: totalLeafCount =
+  let totalLeafCount = $derived(
     $leftWorld === 'archive' && $leftView === 'home'
       ? $archiveLeafStatsStore.totalLeafCount
       : $leafStatsStore.totalLeafCount
-  $: totalLeafChars =
+  )
+  let totalLeafChars = $derived(
     $leftWorld === 'archive' && $leftView === 'home'
       ? $archiveLeafStatsStore.totalLeafChars
       : $leafStatsStore.totalLeafChars
-  $: moveModalOpen = $moveModalStore.isOpen
-  $: moveTargetLeaf = $moveModalStore.targetLeaf
-  $: moveTargetNote = $moveModalStore.targetNote
-  $: moveTargetPane = $moveModalStore.targetPane
-  $: moveTargetWorld = _getWorldForPane(moveTargetPane, $leftWorld, $rightWorld)
-  $: moveTargetNotes = _getNotesForWorld(moveTargetWorld, $notes, $archiveNotes)
+  )
+  let moveModalOpen = $derived($moveModalStore.isOpen)
+  let moveTargetLeaf = $derived($moveModalStore.targetLeaf)
+  let moveTargetNote = $derived($moveModalStore.targetNote)
+  let moveTargetPane = $derived($moveModalStore.targetPane)
+  let moveTargetWorld = $derived(_getWorldForPane(moveTargetPane, $leftWorld, $rightWorld))
+  let moveTargetNotes = $derived(_getNotesForWorld(moveTargetWorld, $notes, $archiveNotes))
 
   // 左右ペイン用の状態
-  let isDualPane = false // 画面幅で切り替え
+  let isDualPane = $state(false) // 画面幅で切り替え
 
   // PWAスタンドアロンモード検出（Android戻るスワイプ対策）
   const isPWAStandalone =
@@ -263,14 +265,14 @@
   }
 
   // キーボードナビゲーション用の状態
-  let selectedIndexLeft = 0 // 左ペインで選択中のアイテムインデックス
-  let selectedIndexRight = 0 // 右ペインで選択中のアイテムインデックス
+  let selectedIndexLeft = $state(0) // 左ペインで選択中のアイテムインデックス
+  let selectedIndexRight = $state(0) // 右ペインで選択中のアイテムインデックス
 
   // スクロール同期用のコンポーネント参照
-  let leftEditorView: any = null
-  let leftPreviewView: any = null
-  let rightEditorView: any = null
-  let rightPreviewView: any = null
+  let leftEditorView: any = $state(null)
+  let leftPreviewView: any = $state(null)
+  let rightEditorView: any = $state(null)
+  let rightPreviewView: any = $state(null)
 
   // スクロール同期関数（scroll-sync.tsに移行）
   function getScrollSyncState(): ScrollSyncState {
@@ -300,52 +302,58 @@
   }
 
   // リアクティブ宣言（ワールドに応じたデータを使用）
-  $: leftBreadcrumbNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
-  $: leftBreadcrumbLeaves = _getLeavesForWorld($leftWorld, $leaves, $archiveLeaves)
-  $: rightBreadcrumbNotes = _getNotesForWorld($rightWorld, $notes, $archiveNotes)
-  $: rightBreadcrumbLeaves = _getLeavesForWorld($rightWorld, $leaves, $archiveLeaves)
+  let leftBreadcrumbNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
+  let leftBreadcrumbLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
+  let rightBreadcrumbNotes = $derived(_getNotesForWorld($rightWorld, $notes, $archiveNotes))
+  let rightBreadcrumbLeaves = $derived(_getLeavesForWorld($rightWorld, $leaves, $archiveLeaves))
 
-  $: breadcrumbs = buildBreadcrumbs(
-    $leftView,
-    $leftNote,
-    $leftLeaf,
-    leftBreadcrumbNotes,
-    'left',
-    goHome,
-    selectNote,
-    leftBreadcrumbLeaves
-  )
-  $: breadcrumbsRight = buildBreadcrumbs(
-    $rightView,
-    $rightNote,
-    $rightLeaf,
-    rightBreadcrumbNotes,
-    'right',
-    goHome,
-    selectNote,
-    rightBreadcrumbLeaves
-  )
-  $: isGitHubConfigured = $githubConfigured
-  $: document.title = $settings.toolName
+  $effect(() => {
+    breadcrumbs = buildBreadcrumbs(
+      $leftView,
+      $leftNote,
+      $leftLeaf,
+      leftBreadcrumbNotes,
+      'left',
+      goHome,
+      selectNote,
+      leftBreadcrumbLeaves
+    )
+  })
+  $effect(() => {
+    breadcrumbsRight = buildBreadcrumbs(
+      $rightView,
+      $rightNote,
+      $rightLeaf,
+      rightBreadcrumbNotes,
+      'right',
+      goHome,
+      selectNote,
+      rightBreadcrumbLeaves
+    )
+  })
+  let isGitHubConfigured = $derived($githubConfigured)
+  $effect(() => {
+    document.title = $settings.toolName
+  })
 
   // Priorityリーフをリアクティブに生成（metadataからバッジ情報を復元）
-  $: priorityBadgeMeta = $metadata.leaves?.[PRIORITY_LEAF_ID]
-  $: currentPriorityLeaf = createPriorityLeaf(
-    $priorityItems,
-    priorityBadgeMeta?.badgeIcon,
-    priorityBadgeMeta?.badgeColor
+  let priorityBadgeMeta = $derived($metadata.leaves?.[PRIORITY_LEAF_ID])
+  let currentPriorityLeaf = $derived(
+    createPriorityLeaf($priorityItems, priorityBadgeMeta?.badgeIcon, priorityBadgeMeta?.badgeColor)
   )
 
   // オフラインリーフをリアクティブに生成（ストアから）
-  $: currentOfflineLeaf = createOfflineLeaf(
-    $offlineLeafStore.content,
-    $offlineLeafStore.badgeIcon,
-    $offlineLeafStore.badgeColor
+  let currentOfflineLeaf = $derived(
+    createOfflineLeaf(
+      $offlineLeafStore.content,
+      $offlineLeafStore.badgeIcon,
+      $offlineLeafStore.badgeColor
+    )
   )
 
   // Pull/Push中はボタンを無効化（リアクティブに追跡）
-  $: canPull = !$isPulling && !$isPushing && !isArchiveLoading
-  $: canPush = !$isPulling && !$isPushing && !isArchiveLoading && isFirstPriorityFetched
+  let canPull = $derived(!$isPulling && !$isPushing && !isArchiveLoading)
+  let canPush = $derived(!$isPulling && !$isPushing && !isArchiveLoading && isFirstPriorityFetched)
 
   // ペインごとのワールドに応じたノート・リーフを取得するヘルパー
   // （純粋関数のラッパー：ストアから値を取得して渡す）
@@ -379,8 +387,8 @@
   }
 
   // 現在のワールド（左ペイン基準、後方互換性のため）に応じたノート・リーフ
-  $: currentNotes = _getNotesForWorld($leftWorld, $notes, $archiveNotes)
-  $: currentLeaves = _getLeavesForWorld($leftWorld, $leaves, $archiveLeaves)
+  let currentNotes = $derived(_getNotesForWorld($leftWorld, $notes, $archiveNotes))
+  let currentLeaves = $derived(_getLeavesForWorld($leftWorld, $leaves, $archiveLeaves))
 
   // 現在のワールドに応じたノート・リーフ更新ヘルパー
   function setCurrentNotes(newNotes: Note[]): void {
@@ -440,37 +448,41 @@
   })
 
   // Pushボタン無効理由を計算
-  $: pushDisabledReason = $pullProgressInfo
-    ? $_('home.leafFetched', {
-        values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
-      })
-    : ''
+  let pushDisabledReason = $derived(
+    $pullProgressInfo
+      ? $_('home.leafFetched', {
+          values: { fetched: $pullProgressInfo.fetched, total: $pullProgressInfo.total },
+        })
+      : ''
+  )
 
   // paneState をリアクティブに更新
-  $: paneStateStore.set({
-    isFirstPriorityFetched,
-    isPullCompleted,
-    canPush,
-    pushDisabledReason,
-    selectedIndexLeft,
-    selectedIndexRight,
-    editingBreadcrumb,
-    dragOverNoteId,
-    dragOverLeafId,
-    loadingLeafIds,
-    leafSkeletonMap,
-    totalLeafCount,
-    totalLeafChars,
-    lastPulledPushCount: $lastPulledPushCount,
-    currentPriorityLeaf,
-    currentOfflineLeaf,
-    breadcrumbs,
-    breadcrumbsRight,
-    showWelcome,
-    isLoadingUI,
-    leftWorld: $leftWorld,
-    rightWorld: $rightWorld,
-    isArchiveLoading,
+  $effect(() => {
+    paneStateStore.set({
+      isFirstPriorityFetched,
+      isPullCompleted,
+      canPush,
+      pushDisabledReason,
+      selectedIndexLeft,
+      selectedIndexRight,
+      editingBreadcrumb,
+      dragOverNoteId,
+      dragOverLeafId,
+      loadingLeafIds,
+      leafSkeletonMap,
+      totalLeafCount,
+      totalLeafChars,
+      lastPulledPushCount: $lastPulledPushCount,
+      currentPriorityLeaf,
+      currentOfflineLeaf,
+      breadcrumbs,
+      breadcrumbsRight,
+      showWelcome,
+      isLoadingUI,
+      leftWorld: $leftWorld,
+      rightWorld: $rightWorld,
+      isArchiveLoading,
+    })
   })
 
   // Context に設定
@@ -639,21 +651,23 @@
   }
 
   // 未取得リーフのID（ローディング表示用）
-  let loadingLeafIds = new Set<string>()
+  let loadingLeafIds = $state(new Set<string>())
 
   // スケルトン表示用のリーフメタ情報（Pull中のみ使用）
-  let leafSkeletonMap = new Map<string, LeafSkeleton>()
+  let leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
 
   // ペインの状態変更をURLに反映
-  $: ($leftNote,
-    $leftLeaf,
-    $leftView,
-    $leftWorld,
-    $rightNote,
-    $rightLeaf,
-    $rightView,
-    $rightWorld,
-    updateUrlFromState())
+  $effect(() => {
+    $leftNote
+    $leftLeaf
+    $leftView
+    $leftWorld
+    $rightNote
+    $rightLeaf
+    $rightView
+    $rightWorld
+    updateUrlFromState()
+  })
 
   // 初期化
   onMount(() => {

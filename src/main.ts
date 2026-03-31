@@ -1,5 +1,6 @@
 import './App.css'
 import App from './App.svelte'
+import { mount } from 'svelte'
 import { registerSW } from 'virtual:pwa-register'
 
 // PWA更新チェック完了を待つためのPromise
@@ -91,7 +92,7 @@ export const waitForSwCheck: Promise<void> = new Promise((resolve) => {
   setTimeout(safeResolve, 2000)
 })
 
-const app = new App({
+const app = mount(App, {
   target: document.getElementById('app') as HTMLElement,
 })
 
