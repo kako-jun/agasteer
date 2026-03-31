@@ -1,6 +1,5 @@
 <script lang="ts">
   import './App.css'
-  import { waitForSwCheck } from './main'
   import { onMount, tick, setContext } from 'svelte'
 
   import type { Note, Leaf, Breadcrumb, WorldType, SearchMatch } from './lib/types'
@@ -14,12 +13,7 @@
     rootNotes,
     githubConfigured,
     metadata,
-    isDirty,
-    isStructureDirty,
-    clearAllChanges,
-    getPersistedDirtyFlag,
     lastPulledPushCount,
-    lastKnownCommitSha,
     isStale,
     updateSettings,
     leftNote,
@@ -43,18 +37,7 @@
     isArchiveLoaded,
     leftWorld,
     rightWorld,
-    initActivityDetection,
-    initStoreEffects,
-    setupBeforeUnloadSave,
     scheduleOfflineSave,
-    flushPendingSaves,
-    shouldAutoPush,
-    resetAutoPushTimer,
-    startStaleChecker,
-    stopStaleChecker,
-    executeStaleCheck,
-    shouldAutoPull,
-    setLastPushedSnapshot,
     setArchiveBaseline,
     resetForRepoSwitch,
     // ワールドヘルパー（純粋関数）
@@ -67,26 +50,11 @@
     getWorldForLeaf as _getWorldForLeaf,
     getDialogPositionForPane,
   } from './lib/stores'
-  import {
-    loadSettings,
-    loadNotes,
-    loadLeaves,
-    saveNotes,
-    saveLeaves,
-    saveOfflineLeaf,
-    loadOfflineLeaf,
-    shouldShowPwaInstallBanner,
-    setPwaInstallDismissedAt,
-    setPushInFlightAt,
-    getPushInFlightAt,
-    type IndexedDBBackup,
-  } from './lib/data'
+  import { saveOfflineLeaf, setPwaInstallDismissedAt } from './lib/data'
   import { applyTheme } from './lib/ui'
-  import { loadAndApplyCustomFont, loadAndApplySystemMonoFont } from './lib/ui'
-  import { loadAndApplyCustomBackgrounds } from './lib/ui'
   import { pullArchive, translateGitHubMessage } from './lib/api'
   // LeafSkeleton type moved to app-state.svelte.ts
-  import { initI18n, _, locale } from './lib/i18n'
+  import { _, locale } from './lib/i18n'
 
   import {
     pushToastState,
@@ -170,9 +138,6 @@
     OFFLINE_LEAF_ID,
   } from './lib/utils'
   import {
-    // Constants
-    isPWAStandalone,
-    PWA_EXIT_GUARD_KEY,
     // World helpers
     getNotesForWorld,
     getLeavesForWorld,
@@ -192,6 +157,8 @@
     derivedState,
     // Phase 3: App actions registry
     registerAppActions,
+    // Phase 4: initApp
+    initApp,
   } from './lib/app-state.svelte'
 
   // ========================================
@@ -200,8 +167,7 @@
   let isClosingSettingsPull = false
   let repoChangedInSettings = false // 設定画面でリポが変更された
 
-  // PWA終了ガードにいるかどうかのフラグ
-  let atGuardEntry = false
+  // PWA終了ガードにいるかどうかのフラグ（appState.atGuardEntry に移動済み）
 
   // Pushボタン無効理由を計算（$_はsvelte-i18nストアで.svelte内でのみ使用可能）
   let pushDisabledReason = $derived(
@@ -214,14 +180,6 @@
         })
       : ''
   )
-
-  // PWA終了ガード用のダミーエントリを追加
-  function pushExitGuard() {
-    if (isPWAStandalone) {
-      history.pushState({ [PWA_EXIT_GUARD_KEY]: true }, '', location.href)
-      atGuardEntry = true
-    }
-  }
 
   // ユーザーガイドを開く
   const USER_GUIDE_BASE = 'https://github.com/kako-jun/agasteer/blob/main/docs/user-guide'
@@ -358,7 +316,7 @@
 
     const newUrl = `?${params.toString()}`
     window.history.pushState({}, '', newUrl)
-    atGuardEntry = false
+    appState.atGuardEntry = false
   }
 
   async function restoreStateFromUrl(alreadyRestoring = false) {
@@ -517,367 +475,14 @@
     updateUrlFromState()
   })
 
-  // 初期化
+  // 初期化（ロジックは app-state.svelte.ts の initApp() に抽出済み）
   onMount(() => {
-    // 訪問者カウントをインクリメント（非表示、1日1回制限あり）
-    // 設定ページでも表示されるが、nostalgicの重複防止機構で1回のみカウント
-    fetch('https://api.nostalgic.llll-ll.com/visit?action=increment&id=agasteer-c347357a').catch(
-      () => {}
-    )
-
-    // ストア副作用の初期化（isDirty → LocalStorage永続化など）
-    const cleanupStoreEffects = initStoreEffects()
-
-    // ユーザーアクティビティ検知を初期化（自動保存のデバウンス用）
-    const cleanupActivityDetection = initActivityDetection()
-    const cleanupBeforeUnloadSave = setupBeforeUnloadSave()
-
-    // PWAインストールプロンプト（A2HS）
-    const handleBeforeInstallPrompt = (e: Event) => {
-      // スタンドアロンモード（既にインストール済み）なら表示しない
-      if (isPWAStandalone) return
-      // 7日間のcooldown期間内であれば表示しない
-      if (!shouldShowPwaInstallBanner()) return
-      // デフォルトのミニインフォバーを抑制
-      e.preventDefault()
-      // プロンプトを保存して後で使用
-      appState.deferredPrompt = e
-      // バナーを表示
-      appState.showInstallBanner = true
-    }
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-
-    // PWAがインストールされた時
-    const handleAppInstalled = () => {
-      appState.showInstallBanner = false
-      appState.deferredPrompt = null
-    }
-    window.addEventListener('appinstalled', handleAppInstalled)
-
-    // 非同期初期化処理を即座に実行
-    ;(async () => {
-      const loadedSettings = await loadSettings()
-      settings.value = loadedSettings
-
-      // i18n初期化（翻訳読み込み完了を待機）
-      await initI18n(loadedSettings.locale)
-      appState.i18nReady = true
-
-      applyTheme(loadedSettings.theme, loadedSettings)
-      document.title = loadedSettings.toolName
-
-      // オフラインリーフを読み込み（GitHub設定に関係なく常に利用可能）
-      const savedOfflineLeaf = await loadOfflineLeaf(OFFLINE_LEAF_ID)
-      if (savedOfflineLeaf) {
-        offlineLeafStore.value = {
-          content: savedOfflineLeaf.content,
-          badgeIcon: savedOfflineLeaf.badgeIcon || '',
-          badgeColor: savedOfflineLeaf.badgeColor || '',
-          updatedAt: savedOfflineLeaf.updatedAt,
-        }
-      }
-
-      // システム等幅Webフォントを読み込む（エディタ + codeブロック用）
-      // カスタムフォントより先に読み込む（カスタムフォントが優先される）
-      loadAndApplySystemMonoFont().catch((error) => {
-        console.error('Failed to load system mono font:', error)
-      })
-
-      // カスタムフォントがあれば適用（アプリ全体に適用、システム等幅フォントより優先）
-      if (loadedSettings.hasCustomFont) {
-        loadAndApplyCustomFont().catch((error) => {
-          console.error('Failed to load custom font:', error)
-        })
-      }
-
-      // カスタム背景画像があれば適用（左右別々）
-      if (loadedSettings.hasCustomBackgroundLeft || loadedSettings.hasCustomBackgroundRight) {
-        const leftOpacity = loadedSettings.backgroundOpacityLeft ?? 0.1
-        const rightOpacity = loadedSettings.backgroundOpacityRight ?? 0.1
-        loadAndApplyCustomBackgrounds(leftOpacity, rightOpacity).catch((error) => {
-          console.error('Failed to load custom backgrounds:', error)
-        })
-      }
-
-      // 初回Pull（GitHubから最新データを取得）
-      // 重要: IndexedDBからは読み込まない
-      // Pull成功時にIndexedDBは全削除→全作成される
-      // Pull成功後、URLから状態を復元（handlePull内で実行）
-
-      // PWA更新チェック完了を待つ（更新があればリロードされる）
-      await waitForSwCheck
-
-      // GitHub設定チェック
-      const isConfigured = loadedSettings.token && loadedSettings.repoName
-      if (isConfigured) {
-        // 初回Pull実行（pullFromGitHub内でdirtyチェック、staleチェックを行う）
-        // キャンセル時はIndexedDBから読み込んで操作可能にする
-        await pullFromGitHub(true, async () => {
-          try {
-            // 保留中の変更を先にIndexedDBへ保存
-            await flushPendingSaves()
-            // localStorage に保存されているダーティフラグを保存（後で復元するため）
-            const wasDirty = getPersistedDirtyFlag()
-            const savedNotes = await loadNotes()
-            const savedLeaves = await loadLeaves()
-            notes.value = savedNotes
-            leaves.value = savedLeaves
-            // IndexedDBのデータをベースラインとして記録（dirty誤検出を防止）
-            setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
-            // ベースラインとローカルが同じなのでダーティをクリア
-            clearAllChanges()
-            // リーフのisDirtyでは検出できない構造変更があった場合、isStructureDirtyを復元
-            if (wasDirty) {
-              isStructureDirty.value = true
-            }
-            appState.isFirstPriorityFetched = true
-            restoreStateFromUrl(false)
-          } catch (error) {
-            console.error('Failed to load from IndexedDB:', error)
-            // 失敗した場合はPullを実行
-            await pullFromGitHub(true)
-          }
-        })
-      } else {
-        // 未設定の場合はウェルカムモーダルを表示
-        appState.showWelcome = true
-        // GitHub設定が未完了の間は操作をロックしたまま
-      }
-
-      // Stale定期チェッカーを開始（5分ごと、前回Pullから5分経過後にチェック）
-      startStaleChecker()
-    })()
-
-    // アスペクト比を監視して isDualPane を更新（横 > 縦で2ペイン表示）
-    const updateDualPane = () => {
-      appState.isDualPane = window.innerWidth > window.innerHeight
-    }
-    updateDualPane()
-
-    window.addEventListener('resize', updateDualPane)
-
-    // PWAスタンドアロンモードの場合、初期終了ガードを追加
-    pushExitGuard()
-
-    // ブラウザの戻る/進むボタンに対応（PWA終了ガード含む）
-    const handlePopState = (e: PopStateEvent) => {
-      const wasAtGuard = atGuardEntry
-      atGuardEntry = false
-
-      // PWA終了ガード検出（2パターン）
-      // ケース1: 後方のエントリからガードエントリに到達（e.stateにガードキーあり）
-      // ケース2: ガードエントリにいて、その前に戻った（e.stateにはないがフラグで検出）
-      if (isPWAStandalone && (e.state?.[PWA_EXIT_GUARD_KEY] || wasAtGuard)) {
-        // ガードを再追加（アプリ終了を防ぐ）
-        pushExitGuard()
-
-        // 未保存の変更がある場合はトーストで警告
-        if (isDirty.value) {
-          showPushToast($_('leaf.unsaved'), 'error')
-        }
-        return
-      }
-
-      // 通常のpopstate処理
-      restoreStateFromUrl()
-    }
-    window.addEventListener('popstate', handlePopState)
-
-    // ページ離脱時の確認（未保存の変更がある場合）
-    // ブラウザ標準のダイアログを使用
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty.value) {
-        e.preventDefault()
-        e.returnValue = '' // Chrome requires returnValue to be set
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    // グローバルキーボードナビゲーション
-    const handleKeyDown = (e: KeyboardEvent) => {
-      handleGlobalKeyDown(e)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-
-    // PWAバックグラウンド復帰時の処理
-    // 長時間バックグラウンドにいた場合は、Service Workerの状態やIndexedDBが不安定になる可能性があるためリロード
-    let lastVisibleTime = Date.now()
-    const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        const now = Date.now()
-        const elapsed = now - lastVisibleTime
-        if (elapsed > BACKGROUND_THRESHOLD_MS) {
-          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
-          // モーダルを表示し、閉じたら状態確認を実行
-          await alertAsync($_('modal.longBackground'), 'center')
-          // staleチェックを実行
-          const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-          if (staleResult.status === 'stale') {
-            // Push飛行中フラグがある場合、スリープでPushレスポンスが消失した可能性がある
-            // （GitHub側ではPushが成功しているが、レスポンスが届かずSHAが未更新）
-            const pushInFlight = getPushInFlightAt()
-            const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000 // 1時間
-            if (pushInFlight && now - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
-              console.log('Stale detected with push-in-flight flag: resolving as interrupted push')
-              // SHAのみ更新し、スナップショットとダーティは変更しない。
-              // push後〜sleep前にユーザーが追加編集した場合、その編集がダーティとして残り、
-              // 次回pushで正しく送信される。既にpush済みの内容との差分がなければno-op pushになる。
-              lastKnownCommitSha.value = staleResult.remoteCommitSha
-              setPushInFlightAt(undefined)
-              isStale.value = false
-            } else {
-              // フラグが期限切れの場合はクリアして通常のstale処理
-              if (pushInFlight) {
-                setPushInFlightAt(undefined)
-              }
-              isStale.value = true
-            }
-          } else if (staleResult.status === 'up_to_date') {
-            // PushがGitHubに届かなかった場合もここに来る（SHAが変わっていない）
-            // 飛行中フラグがあれば安全にクリア
-            if (getPushInFlightAt()) {
-              setPushInFlightAt(undefined)
-            }
-            isStale.value = false
-          }
-        }
-        lastVisibleTime = now
-
-        // PWA復帰時のレイアウト修復（フッターが画面外に出る問題の対策）
-        requestAnimationFrame(() => {
-          // resizeイベントをトリガーしてレイアウトを再計算
-          window.dispatchEvent(new Event('resize'))
-
-          // フッターが画面内にあることを確認し、なければスクロールをリセット
-          const footers = document.querySelectorAll('.footer-fixed')
-          footers.forEach((footer) => {
-            const rect = footer.getBoundingClientRect()
-            if (rect.top > window.innerHeight || rect.bottom < 0) {
-              // フッターが画面外にある場合、親コンテナのスクロールをリセット
-              const parent = footer.closest('.left-column, .right-column')
-              if (parent) {
-                const mainPane = parent.querySelector('.main-pane')
-                if (mainPane) {
-                  mainPane.scrollTop = 0
-                }
-              }
-            }
-          })
-        })
-      } else {
-        lastVisibleTime = Date.now()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    // 自動Push機能（$effect.rootで購読）
-    const cleanupAutoPush = $effect.root(() => {
-      $effect(() => {
-        const should = shouldAutoPush.value
-        if (!should) return
-
-        // フラグをリセット（連続実行防止）
-        shouldAutoPush.value = false
-
-        // バックグラウンドでは実行しない
-        if (document.visibilityState !== 'visible') return
-
-        // GitHub設定がなければスキップ
-        if (!githubConfigured.value) return
-
-        // Push/Pull中またはアーカイブロード中はスキップ
-        if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
-
-        // 初回Pullが完了していなければスキップ
-        if (!appState.isFirstPriorityFetched) return
-
-        console.log('Auto-push triggered')
-        ;(async () => {
-          // Staleチェックを実行（共通関数で時刻も更新）
-          const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-
-          switch (staleResult.status) {
-            case 'stale':
-              // リモートに新しい変更あり → 確認ダイアログを表示
-              isStale.value = true
-              console.log(
-                `Auto-push stale: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
-              )
-              // ユーザーに確認（手動Pushと同じモーダル）
-              const confirmed = await confirmAsync($_('modal.staleEdit'))
-              if (!confirmed) {
-                // キャンセル → タイマーリセットして終了
-                resetAutoPushTimer()
-                return
-              }
-              // OK → 強制Pushを続行（breakしてswitch抜ける）
-              break
-
-            case 'check_failed':
-              // チェック失敗（ネットワークエラー等）→ 静かにスキップ
-              console.warn('Stale check failed, skipping auto-push:', staleResult.reason)
-              // タイマーをリセット（リトライループ防止、次の42秒後に再試行）
-              resetAutoPushTimer()
-              return
-
-            case 'up_to_date':
-              // 最新状態 → 自動Push実行
-              break
-          }
-
-          await pushToGitHub()
-        })()
-      })
-      return () => {}
+    return initApp({
+      pullFromGitHub,
+      pushToGitHub,
+      restoreStateFromUrl,
+      handleGlobalKeyDown,
     })
-
-    // 自動Pull機能（$effect.rootで購読）
-    // stale-checker.tsでstale検出かつローカルがクリーンなときにtrueになる
-    const cleanupAutoPull = $effect.root(() => {
-      $effect(() => {
-        const should = shouldAutoPull.value
-        if (!should) return
-
-        // フラグをリセット（連続実行防止）
-        shouldAutoPull.value = false
-
-        // バックグラウンドでは実行しない
-        if (document.visibilityState !== 'visible') return
-
-        // GitHub設定がなければスキップ
-        if (!githubConfigured.value) return
-
-        // Push/Pull中またはアーカイブロード中はスキップ
-        if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
-
-        // 初回Pullが完了していなければスキップ
-        if (!appState.isFirstPriorityFetched) return
-
-        console.log('Auto-pull triggered (stale detected, local is clean)')
-
-        // Pull実行（ダーティチェックなし、すでにstale-checkerで確認済み）
-        pullFromGitHub(false)
-      })
-      return () => {}
-    })
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState)
-      window.removeEventListener('resize', updateDualPane)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-      window.removeEventListener('appinstalled', handleAppInstalled)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      cleanupAutoPush()
-      cleanupAutoPull()
-      cleanupStoreEffects()
-      cleanupActivityDetection()
-      cleanupBeforeUnloadSave()
-      stopStaleChecker()
-    }
   })
 
   // ========================================
