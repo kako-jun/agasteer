@@ -15,48 +15,25 @@ import {
   updateNotes,
   updateLeaves,
   isArchiveLoaded,
-  leftWorld,
-  rightWorld,
-  getLeavesForPane as _getLeavesForPane,
 } from '../stores'
 import { processImportFile, isAgasteerZip, parseAgasteerZip } from '../data'
 import { buildNotesZip, generateUniqueName } from '../utils'
+import { appState, appActions, getLeavesForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
-
-/**
- * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして get()/.set() で操作するため、ここには含めない
- */
-export interface IoActionContext {
-  // $state() getters
-  getIsFirstPriorityFetched: () => boolean
-  getIsExportingZip: () => boolean
-  getIsImporting: () => boolean
-
-  // $state() setters
-  setIsExportingZip: (v: boolean) => void
-  setIsImporting: (v: boolean) => void
-  setImportOccurredInSettings: (v: boolean) => void
-
-  // App.svelte 内の関数への参照
-  getLeavesForPane: (pane: Pane) => Leaf[]
-  getEditorView: (pane: Pane) => any
-  getPreviewView: (pane: Pane) => any
-}
 
 /**
  * Git clone相当のZIPエクスポート
  */
-export async function exportNotesAsZip(ctx: IoActionContext): Promise<void> {
+export async function exportNotesAsZip(): Promise<void> {
   const $_ = get(_)
 
-  if (!ctx.getIsFirstPriorityFetched()) {
+  if (!appState.isFirstPriorityFetched) {
     showPushToast($_('settings.importExport.needInitialPull'), 'error')
     return
   }
-  if (ctx.getIsExportingZip()) return
+  if (appState.isExportingZip) return
 
-  ctx.setIsExportingZip(true)
+  appState.isExportingZip = true
   try {
     const allNotes = notes.value
     const allLeaves = leaves.value
@@ -97,18 +74,18 @@ export async function exportNotesAsZip(ctx: IoActionContext): Promise<void> {
     console.error('ZIP export failed:', error)
     showPushToast($_('settings.importExport.exportFailed'), 'error')
   } finally {
-    ctx.setIsExportingZip(false)
+    appState.isExportingZip = false
   }
 }
 
 /**
  * 他アプリからのインポート
  */
-export async function handleImportFromOtherApps(ctx: IoActionContext): Promise<void> {
+export async function handleImportFromOtherApps(): Promise<void> {
   const $_ = get(_)
 
-  if (ctx.getIsImporting()) return
-  if (!ctx.getIsFirstPriorityFetched()) {
+  if (appState.isImporting) return
+  if (!appState.isFirstPriorityFetched) {
     showPushToast($_('settings.importExport.needInitialPullImport'), 'error')
     return
   }
@@ -122,13 +99,13 @@ export async function handleImportFromOtherApps(ctx: IoActionContext): Promise<v
     const file = input.files?.[0]
     if (!file) return
 
-    ctx.setIsImporting(true)
+    appState.isImporting = true
     try {
       showPushToast($_('settings.importExport.importStarting'), 'success')
 
       // まずAgasteer形式かどうかをチェック
       if (file.name.toLowerCase().endsWith('.zip') && (await isAgasteerZip(file))) {
-        await handleAgasteerImport(ctx, file)
+        await handleAgasteerImport(file)
         return
       }
 
@@ -202,13 +179,13 @@ export async function handleImportFromOtherApps(ctx: IoActionContext): Promise<v
       }
 
       if (errors?.length) console.warn('Import skipped items:', errors)
-      ctx.setImportOccurredInSettings(true)
+      appState.importOccurredInSettings = true
       showPushToast($_('settings.importExport.importDone'), 'success')
     } catch (error) {
       console.error('Import failed:', error)
       showPushToast($_('settings.importExport.importFailed'), 'error')
     } finally {
-      ctx.setIsImporting(false)
+      appState.isImporting = false
     }
   }
 
@@ -218,7 +195,7 @@ export async function handleImportFromOtherApps(ctx: IoActionContext): Promise<v
 /**
  * Agasteer形式のzipをインポート（既存データを完全に置き換え）
  */
-export async function handleAgasteerImport(ctx: IoActionContext, file: File): Promise<void> {
+export async function handleAgasteerImport(file: File): Promise<void> {
   const $_ = get(_)
 
   try {
@@ -243,32 +220,32 @@ export async function handleAgasteerImport(ctx: IoActionContext, file: File): Pr
       isArchiveLoaded.value = true
     }
 
-    ctx.setImportOccurredInSettings(true)
+    appState.importOccurredInSettings = true
     showPushToast($_('settings.importExport.importDone'), 'success')
   } catch (error) {
     console.error('Agasteer import failed:', error)
     showPushToast($_('settings.importExport.importFailed'), 'error')
   } finally {
-    ctx.setIsImporting(false)
+    appState.isImporting = false
   }
 }
 
 /**
  * Markdownダウンロード（選択範囲があれば選択範囲をダウンロード）
  */
-export function downloadLeafAsMarkdown(ctx: IoActionContext, leafId: string, pane: Pane): void {
+export function downloadLeafAsMarkdown(leafId: string, pane: Pane): void {
   const $_ = get(_)
 
-  if (!ctx.getIsFirstPriorityFetched()) {
+  if (!appState.isFirstPriorityFetched) {
     showPushToast($_('toast.needInitialPullDownload'), 'error')
     return
   }
 
   // ペインのワールドに応じたリーフを取得
-  const paneLeaves = ctx.getLeavesForPane(pane)
+  const paneLeaves = getLeavesForPane(pane)
 
   // 選択テキストがあればそれをダウンロード
-  const editorView = ctx.getEditorView(pane)
+  const editorView = appActions.getEditorView(pane)
   if (editorView && editorView.getSelectedText) {
     const selectedText = editorView.getSelectedText()
     if (selectedText) {
@@ -304,25 +281,21 @@ export function downloadLeafAsMarkdown(ctx: IoActionContext, leafId: string, pan
 /**
  * プレビューを画像としてダウンロード
  */
-export async function downloadLeafAsImage(
-  ctx: IoActionContext,
-  leafId: string,
-  pane: Pane
-): Promise<void> {
+export async function downloadLeafAsImage(leafId: string, pane: Pane): Promise<void> {
   const $_ = get(_)
 
-  if (!ctx.getIsFirstPriorityFetched()) {
+  if (!appState.isFirstPriorityFetched) {
     showPushToast($_('toast.needInitialPullDownload'), 'error')
     return
   }
 
   // ペインのワールドに応じたリーフを取得
-  const paneLeaves = ctx.getLeavesForPane(pane)
+  const paneLeaves = getLeavesForPane(pane)
   const targetLeaf = paneLeaves.find((l) => l.id === leafId)
   if (!targetLeaf) return
 
   try {
-    const previewView = ctx.getPreviewView(pane)
+    const previewView = appActions.getPreviewView(pane)
     if (previewView && previewView.captureAsImage) {
       await previewView.captureAsImage(targetLeaf.title)
       showPushToast($_('toast.imageDownloaded'), 'success')

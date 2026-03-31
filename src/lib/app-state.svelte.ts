@@ -8,6 +8,7 @@
 import type { Note, Leaf, Breadcrumb, WorldType } from './types'
 import type { Pane } from './navigation'
 import type { LeafSkeleton } from './api'
+import type { ModalPosition } from './ui'
 import {
   notes,
   leaves,
@@ -147,6 +148,8 @@ let _rightEditorView = $state<any>(null)
 let _rightPreviewView = $state<any>(null)
 let _loadingLeafIds = $state(new Set<string>())
 let _leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
+let _isRestoringFromUrl = $state(false)
+let _importOccurredInSettings = $state(false)
 
 export const appState = {
   get breadcrumbs() {
@@ -293,7 +296,64 @@ export const appState = {
   set leafSkeletonMap(v: Map<string, LeafSkeleton>) {
     _leafSkeletonMap = v
   },
+  get isRestoringFromUrl() {
+    return _isRestoringFromUrl
+  },
+  set isRestoringFromUrl(v: boolean) {
+    _isRestoringFromUrl = v
+  },
+  get importOccurredInSettings() {
+    return _importOccurredInSettings
+  },
+  set importOccurredInSettings(v: boolean) {
+    _importOccurredInSettings = v
+  },
 }
+
+// ========================================
+// App Actions Registry — Phase 3
+// ========================================
+// App.svelte の関数を action modules から利用するための登録パターン。
+// App.svelte が registerAppActions() で登録し、action modules が appActions 経由で呼ぶ。
+// 循環依存を避けるため、actions → app-state は OK だが app-state → actions は NG。
+
+export interface AppActionsRegistry {
+  selectNote: (note: Note, pane: Pane) => void
+  selectLeaf: (leaf: Leaf, pane: Pane) => void
+  goHome: (pane: Pane) => void
+  refreshBreadcrumbs: () => void
+  restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void> | void
+  rebuildLeafStats: (leaves: Leaf[], notes: Note[]) => void
+  resetLeafStats: () => void
+  closeMoveModal: () => void
+  updateOfflineContent: (content: string) => void
+  pushToGitHub: () => Promise<void>
+  showPrompt: (
+    message: string,
+    onConfirm: (value: string) => void,
+    defaultValue: string,
+    position?: ModalPosition
+  ) => void
+  showConfirm: (message: string, onConfirm: () => void, position?: ModalPosition) => void
+  getDialogPositionForPane: (pane: Pane) => ModalPosition
+  getEditorView: (pane: Pane) => any
+  getPreviewView: (pane: Pane) => any
+}
+
+let _appActions: AppActionsRegistry | null = null
+
+export function registerAppActions(actions: AppActionsRegistry): void {
+  _appActions = actions
+}
+
+export const appActions: AppActionsRegistry = new Proxy({} as AppActionsRegistry, {
+  get(_target, prop: string) {
+    if (!_appActions) {
+      throw new Error(`appActions not registered yet (accessing '${prop}')`)
+    }
+    return (_appActions as any)[prop]
+  },
+})
 
 // ========================================
 // Derived State ($derived) — Phase 2

@@ -119,14 +119,12 @@
     pushToGitHub as pushToGitHubAction,
     pullFromGitHub as pullFromGitHubAction,
     handleTestConnection as handleTestConnectionAction,
-    type GitActionContext,
   } from './lib/actions/git'
   import {
     moveNoteToWorld as moveNoteToWorldAction,
     moveLeafToWorld as moveLeafToWorldAction,
     moveLeafTo as moveLeafToAction,
     moveNoteTo as moveNoteToAction,
-    type MoveActionContext,
   } from './lib/actions/move'
   import {
     saveEditBreadcrumb as saveEditBreadcrumbAction,
@@ -138,7 +136,6 @@
     updateLeafContent as updateLeafContentAction,
     updateLeafBadge as updateLeafBadgeAction,
     updatePriorityBadge as updatePriorityBadgeAction,
-    type CrudActionContext,
   } from './lib/actions/crud'
   import {
     exportNotesAsZip as exportNotesAsZipAction,
@@ -146,7 +143,6 @@
     handleAgasteerImport as handleAgasteerImportAction,
     downloadLeafAsMarkdown as downloadLeafAsMarkdownAction,
     downloadLeafAsImage as downloadLeafAsImageAction,
-    type IoActionContext,
   } from './lib/actions/io'
   import {
     handlePaneScroll as handlePaneScrollLib,
@@ -194,20 +190,18 @@
     // Phase 2: App state & derived state
     appState,
     derivedState,
+    // Phase 3: App actions registry
+    registerAppActions,
   } from './lib/app-state.svelte'
 
   // ========================================
   // Non-reactive local variables (not $state)
   // ========================================
-  let importOccurredInSettings = false
   let isClosingSettingsPull = false
   let repoChangedInSettings = false // 設定画面でリポが変更された
 
   // PWA終了ガードにいるかどうかのフラグ
   let atGuardEntry = false
-
-  // URLルーティング
-  let isRestoringFromUrl = false
 
   // Pushボタン無効理由を計算（$_はsvelte-i18nストアで.svelte内でのみ使用可能）
   let pushDisabledReason = $derived(
@@ -335,7 +329,7 @@
 
   function updateUrlFromState() {
     // 初期化完了まで、URL更新をスキップ
-    if (isRestoringFromUrl || isPulling.value || !appState.isFirstPriorityFetched) {
+    if (appState.isRestoringFromUrl || isPulling.value || !appState.isFirstPriorityFetched) {
       return
     }
 
@@ -406,7 +400,7 @@
     }
 
     if (!alreadyRestoring) {
-      isRestoringFromUrl = true
+      appState.isRestoringFromUrl = true
     }
 
     // 左ペインの復元
@@ -506,7 +500,7 @@
     }
 
     if (!alreadyRestoring) {
-      isRestoringFromUrl = false
+      appState.isRestoringFromUrl = false
     }
   }
 
@@ -1189,11 +1183,11 @@
   }
 
   async function moveNoteToWorld(note: Note, targetWorld: WorldType, pane: Pane) {
-    return moveNoteToWorldAction(createMoveContext(), note, targetWorld, pane)
+    return moveNoteToWorldAction(note, targetWorld, pane)
   }
 
   async function moveLeafToWorld(leaf: Leaf, targetWorld: WorldType, pane: Pane) {
-    return moveLeafToWorldAction(createMoveContext(), leaf, targetWorld, pane)
+    return moveLeafToWorldAction(leaf, targetWorld, pane)
   }
 
   function closeLeaf(pane: Pane) {
@@ -1554,7 +1548,7 @@
   }
 
   async function saveEditBreadcrumb(id: string, newName: string, type: Breadcrumb['type']) {
-    return saveEditBreadcrumbAction(createCrudContext(), id, newName, type)
+    return saveEditBreadcrumbAction(id, newName, type)
   }
 
   function cancelEditBreadcrumb() {
@@ -1563,16 +1557,16 @@
 
   // ノート管理（crud.tsに委譲）
   function createNote(parentId: string | undefined, pane: Pane, name?: string) {
-    createNoteAction(createCrudContext(), parentId, pane, name)
+    createNoteAction(parentId, pane, name)
   }
 
   function deleteNote(pane: Pane) {
-    deleteNoteAction(createCrudContext(), pane)
+    deleteNoteAction(pane)
   }
 
   // ノートバッジ更新
   function updateNoteBadge(noteId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
-    updateNoteBadgeAction(createCrudContext(), noteId, badgeIcon, badgeColor, pane)
+    updateNoteBadgeAction(noteId, badgeIcon, badgeColor, pane)
   }
 
   // ドラッグ&ドロップ（ノート）
@@ -1610,19 +1604,19 @@
 
   // リーフ管理（crud.tsに委譲）
   function createLeaf(pane: Pane, title?: string) {
-    createLeafAction(createCrudContext(), pane, title)
+    createLeafAction(pane, title)
   }
 
   function deleteLeaf(leafId: string, pane: Pane) {
-    deleteLeafAction(createCrudContext(), leafId, pane)
+    deleteLeafAction(leafId, pane)
   }
 
   async function updateLeafContent(content: string, leafId: string, pane: Pane) {
-    return updateLeafContentAction(createCrudContext(), content, leafId, pane)
+    return updateLeafContentAction(content, leafId, pane)
   }
 
   function updateLeafBadge(leafId: string, badgeIcon: string, badgeColor: string, pane: Pane) {
-    updateLeafBadgeAction(createCrudContext(), leafId, badgeIcon, badgeColor, pane)
+    updateLeafBadgeAction(leafId, badgeIcon, badgeColor, pane)
   }
 
   // Priorityリーフのバッジ更新（metadataに直接保存）
@@ -1693,11 +1687,11 @@
   }
 
   async function moveLeafTo(destNoteId: string | null, targetLeaf: Leaf, pane: Pane) {
-    return moveLeafToAction(createMoveContext(), destNoteId, targetLeaf, pane)
+    return moveLeafToAction(destNoteId, targetLeaf, pane)
   }
 
   async function moveNoteTo(destNoteId: string | null, targetNote: Note, pane: Pane) {
-    return moveNoteToAction(createMoveContext(), destNoteId, targetNote, pane)
+    return moveNoteToAction(destNoteId, targetNote, pane)
   }
 
   // ヘルパー関数（notes.ts, leaves.ts, stats.tsからインポート）
@@ -1711,114 +1705,35 @@
 
   // GitHub同期
 
-  function createGitContext(): GitActionContext {
-    return {
-      getIsArchiveLoading: () => appState.isArchiveLoading,
-      getIsFirstPriorityFetched: () => appState.isFirstPriorityFetched,
-      getIsPullCompleted: () => appState.isPullCompleted,
-      setIsArchiveLoading: (v) => (appState.isArchiveLoading = v),
-      setIsFirstPriorityFetched: (v) => (appState.isFirstPriorityFetched = v),
-      setIsPullCompleted: (v) => (appState.isPullCompleted = v),
-      setIsLoadingUI: (v) => (appState.isLoadingUI = v),
-      setSelectedIndexLeft: (v) => (appState.selectedIndexLeft = v),
-      setSelectedIndexRight: (v) => (appState.selectedIndexRight = v),
-      setLoadingLeafIds: (v) => (appState.loadingLeafIds = v),
-      setLeafSkeletonMap: (v) => (appState.leafSkeletonMap = v),
-      setIsRestoringFromUrl: (v) => (isRestoringFromUrl = v),
-      getLoadingLeafIds: () => appState.loadingLeafIds,
-      restoreStateFromUrl,
-      rebuildLeafStats,
-      resetLeafStats,
-      confirmAsync,
-      choiceAsync,
-      pushToGitHub,
-    }
-  }
-
-  function createMoveContext(): MoveActionContext {
-    return {
-      getIsArchiveLoading: () => appState.isArchiveLoading,
-      setIsArchiveLoading: (v) => (appState.isArchiveLoading = v),
-      getLeafSkeletonMap: () => appState.leafSkeletonMap,
-      setLeafSkeletonMap: (v) => (appState.leafSkeletonMap = v),
-      selectNote,
-      goHome,
-      refreshBreadcrumbs,
-      rebuildLeafStats,
-      closeMoveModal,
-      getWorldForPane,
-    }
-  }
-
-  function createCrudContext(): CrudActionContext {
-    return {
-      getIsFirstPriorityFetched: () => appState.isFirstPriorityFetched,
-      getLeafSkeletonMap: () => appState.leafSkeletonMap,
-      setEditingBreadcrumb: (v) => (appState.editingBreadcrumb = v),
-      setLeafSkeletonMap: (v) => (appState.leafSkeletonMap = v),
-      selectNote,
-      selectLeaf,
-      goHome,
-      refreshBreadcrumbs,
-      rebuildLeafStats,
-      getWorldForPane,
-      getNotesForWorld,
-      getLeavesForWorld,
-      setNotesForWorld,
-      setLeavesForWorld,
-      getLeavesForPane,
-      showPrompt,
-      showConfirm,
-      getDialogPositionForPane,
-      updateOfflineContent,
-    }
-  }
-
-  function createIoContext(): IoActionContext {
-    return {
-      getIsFirstPriorityFetched: () => appState.isFirstPriorityFetched,
-      getIsExportingZip: () => appState.isExportingZip,
-      getIsImporting: () => appState.isImporting,
-      setIsExportingZip: (v) => (appState.isExportingZip = v),
-      setIsImporting: (v) => (appState.isImporting = v),
-      setImportOccurredInSettings: (v) => (importOccurredInSettings = v),
-      getLeavesForPane,
-      getEditorView: (pane: Pane) =>
-        pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
-      getPreviewView: (pane: Pane) =>
-        pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
-    }
-  }
-
   /**
    * GitHubにPush（統合版）
    * すべてのPush処理がこの1つの関数を通る
    */
   async function pushToGitHub() {
-    return pushToGitHubAction(createGitContext())
+    return pushToGitHubAction()
   }
 
   // Git clone相当のZIPエクスポート
   async function exportNotesAsZip() {
-    return exportNotesAsZipAction(createIoContext())
+    return exportNotesAsZipAction()
   }
 
   async function handleImportFromOtherApps() {
-    return handleImportFromOtherAppsAction(createIoContext())
+    return handleImportFromOtherAppsAction()
   }
 
   async function handleAgasteerImport(file: File) {
-    return handleAgasteerImportAction(createIoContext(), file)
+    return handleAgasteerImportAction(file)
   }
 
   // Markdownダウンロード（選択範囲があれば選択範囲をダウンロード）
   function downloadLeafAsMarkdown(leafId: string, pane: Pane) {
-    downloadLeafAsMarkdownAction(createIoContext(), leafId, pane)
+    downloadLeafAsMarkdownAction(leafId, pane)
   }
 
   // プレビューを画像としてダウンロード
   async function downloadLeafAsImage(leafId: string, pane: Pane) {
-    return downloadLeafAsImageAction(createIoContext(), leafId, pane)
+    return downloadLeafAsImageAction(leafId, pane)
   }
 
   // シェア機能（share.tsからインポート）
@@ -1869,6 +1784,27 @@
   // ========================================
   // paneActions Context 設定
   // ========================================
+  // Phase 3: action modules が App.svelte の関数を呼べるように登録
+  registerAppActions({
+    selectNote,
+    selectLeaf,
+    goHome,
+    refreshBreadcrumbs,
+    restoreStateFromUrl,
+    rebuildLeafStats,
+    resetLeafStats,
+    closeMoveModal,
+    updateOfflineContent,
+    pushToGitHub,
+    showPrompt,
+    showConfirm,
+    getDialogPositionForPane,
+    getEditorView: (pane: Pane) =>
+      pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
+    getPreviewView: (pane: Pane) =>
+      pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
+  })
+
   const paneActions: PaneActions = {
     // ナビゲーション
     selectNote,
@@ -1980,7 +1916,7 @@
   }
   async function handleCloseSettings() {
     // リポ変更またはインポートがあった場合のみPull実行
-    if (repoChangedInSettings || importOccurredInSettings) {
+    if (repoChangedInSettings || appState.importOccurredInSettings) {
       // Pull/Push/アーカイブロード中の場合は完了を待たずにリセット済み状態で閉じる
       // （resetForRepoSwitchで既にデータクリア済み、次回操作時に新リポからPullされる）
       if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
@@ -1990,13 +1926,11 @@
       }
     }
     repoChangedInSettings = false
-    importOccurredInSettings = false
+    appState.importOccurredInSettings = false
   }
 
   async function handleTestConnection() {
-    return handleTestConnectionAction({
-      setIsTesting: (v) => (appState.isTesting = v),
-    })
+    return handleTestConnectionAction()
   }
 
   /**
@@ -2004,7 +1938,7 @@
    * すべてのPull処理がこの1つの関数を通る
    */
   async function pullFromGitHub(isInitialStartup = false, onCancel?: () => void | Promise<void>) {
-    return pullFromGitHubAction(createGitContext(), isInitialStartup, onCancel)
+    return pullFromGitHubAction(isInitialStartup, onCancel)
   }
 
   // HMR用の一時保存キー

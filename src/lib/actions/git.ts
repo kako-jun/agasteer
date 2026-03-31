@@ -1,7 +1,6 @@
 import type { Note, Leaf } from '../types'
-import type { PullOptions, LeafSkeleton } from '../api'
-import type { ChoiceOption } from '../ui'
-import { showPushToast, showPullToast } from '../ui'
+import type { PullOptions } from '../api'
+import { showPushToast, showPullToast, confirmAsync, choiceAsync } from '../ui'
 import {
   settings,
   notes,
@@ -51,61 +50,18 @@ import {
   fetchRemotePushCount,
 } from '../api'
 import { isNoteSaveable, isLeafSaveable } from '../utils'
+import { appState, appActions } from '../app-state.svelte'
 import * as nav from '../navigation'
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
 
 /**
- * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして .value で操作するため、ここには含めない
- */
-export interface GitActionContext {
-  // $state() getters
-  getIsArchiveLoading: () => boolean
-  getIsFirstPriorityFetched: () => boolean
-  getIsPullCompleted: () => boolean
-
-  // $state() setters
-  setIsArchiveLoading: (v: boolean) => void
-  setIsFirstPriorityFetched: (v: boolean) => void
-  setIsPullCompleted: (v: boolean) => void
-  setIsLoadingUI: (v: boolean) => void
-  setSelectedIndexLeft: (v: number) => void
-  setSelectedIndexRight: (v: number) => void
-  setLoadingLeafIds: (v: Set<string>) => void
-  setLeafSkeletonMap: (v: Map<string, LeafSkeleton>) => void
-  setIsRestoringFromUrl: (v: boolean) => void
-
-  // $state() mutators
-  getLoadingLeafIds: () => Set<string>
-
-  // App.svelte 内の関数への参照
-  restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void> | void
-  rebuildLeafStats: (leaves: Leaf[], notes: Note[]) => void
-  resetLeafStats: () => void
-
-  // confirmAsync / choiceAsync (UI)
-  confirmAsync: (message: string) => Promise<boolean>
-  choiceAsync: (message: string, choices: ChoiceOption[]) => Promise<string | null>
-
-  // pushToGitHub 参照 (pullFromGitHub から呼ばれる)
-  pushToGitHub: () => Promise<void>
-}
-
-/**
- * handleTestConnection 用の軽量コンテキスト
- */
-export interface TestConnectionContext {
-  setIsTesting: (v: boolean) => void
-}
-
-/**
  * GitHub接続テスト
  */
-export async function handleTestConnection(ctx: TestConnectionContext): Promise<void> {
+export async function handleTestConnection(): Promise<void> {
   const $_ = get(_)
-  ctx.setIsTesting(true)
+  appState.isTesting = true
   try {
     const result = await testGitHubConnection(settings.value)
     const message = translateGitHubMessage(result.message, $_, result.rateLimitInfo)
@@ -114,7 +70,7 @@ export async function handleTestConnection(ctx: TestConnectionContext): Promise<
   } catch (e) {
     showPullToast($_('github.networkError'), 'error')
   } finally {
-    ctx.setIsTesting(false)
+    appState.isTesting = false
   }
 }
 
@@ -122,11 +78,11 @@ export async function handleTestConnection(ctx: TestConnectionContext): Promise<
  * GitHubにPush（統合版）
  * すべてのPush処理がこの1つの関数を通る
  */
-export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
+export async function pushToGitHub(): Promise<void> {
   const $_ = get(_)
 
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
-  if (!canSync(isPulling.value, isPushing.value).canPush || ctx.getIsArchiveLoading()) return
+  if (!canSync(isPulling.value, isPushing.value).canPush || appState.isArchiveLoading) return
 
   // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
   isPushing.value = true
@@ -142,7 +98,7 @@ export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
       console.log(
         `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
       )
-      const confirmed = await ctx.confirmAsync($_('modal.staleEdit'))
+      const confirmed = await confirmAsync($_('modal.staleEdit'))
       if (!confirmed) return
     }
     // check_failedやup_to_dateの場合はそのまま続行
@@ -162,7 +118,7 @@ export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
       leaves: saveableLeaves,
       notes: saveableNotes,
       settings: settings.value,
-      isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+      isOperationsLocked: !appState.isFirstPriorityFetched,
       localMetadata: metadata.value,
       // アーカイブがロード済みの場合のみアーカイブデータを渡す
       archiveLeaves: isArchiveLoaded.value ? archiveLeaves.value : undefined,
@@ -210,14 +166,13 @@ export async function pushToGitHub(ctx: GitActionContext): Promise<void> {
  * Pull処理の統合関数
  */
 export async function pullFromGitHub(
-  ctx: GitActionContext,
   isInitialStartup = false,
   onCancel?: () => void | Promise<void>
 ): Promise<void> {
   const $_ = get(_)
 
   // 交通整理: Pull/Push中またはアーカイブロード中は不可
-  if (!canSync(isPulling.value, isPushing.value).canPull || ctx.getIsArchiveLoading()) return
+  if (!canSync(isPulling.value, isPushing.value).canPull || appState.isArchiveLoading) return
 
   // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
   isPulling.value = true
@@ -226,14 +181,14 @@ export async function pullFromGitHub(
     if (isDirty.value || getPersistedDirtyFlag()) {
       if (isInitialStartup) {
         // 起動時: Push first は選べない（まだPullしていないため）ので従来通り
-        const confirmed = await ctx.confirmAsync($_('modal.unsavedChangesOnStartup'))
+        const confirmed = await confirmAsync($_('modal.unsavedChangesOnStartup'))
         if (!confirmed) {
           await onCancel?.()
           return
         }
       } else {
         // 通常時: Push first / Pull (overwrite) / Cancel の3択
-        const choice = await ctx.choiceAsync($_('modal.unsavedChangesChoice'), [
+        const choice = await choiceAsync($_('modal.unsavedChangesChoice'), [
           { label: $_('modal.pushFirst'), value: 'push', variant: 'primary' },
           { label: $_('modal.pullOverwrite'), value: 'pull', variant: 'secondary' },
           { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
@@ -242,9 +197,9 @@ export async function pullFromGitHub(
         if (choice === 'push') {
           // Push first: isPullingロックを解放してPush→Pull
           isPulling.value = false
-          await ctx.pushToGitHub()
+          await appActions.pushToGitHub()
           // Push後に再度Pull（再帰呼び出し）
-          return pullFromGitHub(ctx, false, onCancel)
+          return pullFromGitHub(false, onCancel)
         } else if (choice === 'cancel' || choice === null) {
           await onCancel?.()
           return
@@ -259,7 +214,7 @@ export async function pullFromGitHub(
     switch (staleResult.status) {
       case 'up_to_date':
         // リモートに変更なし
-        if (ctx.getIsPullCompleted()) {
+        if (appState.isPullCompleted) {
           showPullToast($_('github.noRemoteChanges'), 'success')
           return
         }
@@ -280,9 +235,9 @@ export async function pullFromGitHub(
     }
 
     // Pull開始準備
-    ctx.setIsLoadingUI(true)
-    ctx.setIsFirstPriorityFetched(false)
-    ctx.setIsPullCompleted(false)
+    appState.isLoadingUI = true
+    appState.isFirstPriorityFetched = false
+    appState.isPullCompleted = false
 
     // Pull開始を通知
     showPullToast($_('toast.pullStart'))
@@ -300,8 +255,8 @@ export async function pullFromGitHub(
     await clearAllData()
     notes.value = []
     leaves.value = []
-    ctx.setLoadingLeafIds(new Set())
-    ctx.resetLeafStats()
+    appState.loadingLeafIds = new Set()
+    appActions.resetLeafStats()
     leftNote.value = null
     leftLeaf.value = null
     rightNote.value = null
@@ -313,8 +268,8 @@ export async function pullFromGitHub(
         notes.value = notesFromGitHub
         metadata.value = metadataFromGitHub
 
-        ctx.setLeafSkeletonMap(new Map(leafSkeletons.map((s) => [s.id, s])))
-        ctx.setLoadingLeafIds(new Set(leafSkeletons.map((s) => s.id)))
+        appState.leafSkeletonMap = new Map(leafSkeletons.map((s) => [s.id, s]))
+        appState.loadingLeafIds = new Set(leafSkeletons.map((s) => s.id))
 
         pullProgressStore.start(leafSkeletons.length)
 
@@ -326,23 +281,23 @@ export async function pullFromGitHub(
         leaves.value = [...leaves.value, leaf]
         leafStatsStore.addLeaf(leaf.id, leaf.content)
         addLeafToBaseline(leaf)
-        const currentLoadingIds = ctx.getLoadingLeafIds()
+        const currentLoadingIds = appState.loadingLeafIds
         currentLoadingIds.delete(leaf.id)
-        ctx.setLoadingLeafIds(new Set(currentLoadingIds))
+        appState.loadingLeafIds = new Set(currentLoadingIds)
         pullProgressStore.increment()
       },
 
       // 第1優先リーフ取得完了時
       onPriorityComplete: () => {
-        ctx.setIsFirstPriorityFetched(true)
-        ctx.setIsLoadingUI(false)
+        appState.isFirstPriorityFetched = true
+        appState.isLoadingUI = false
 
         if (isInitialStartup) {
-          ctx.setIsRestoringFromUrl(true)
-          ctx.restoreStateFromUrl(true)
-          ctx.setIsRestoringFromUrl(false)
+          appState.isRestoringFromUrl = true
+          appActions.restoreStateFromUrl(true)
+          appState.isRestoringFromUrl = false
         } else {
-          ctx.restoreStateFromUrl(false)
+          appActions.restoreStateFromUrl(false)
         }
       },
     }
@@ -350,9 +305,9 @@ export async function pullFromGitHub(
     const result = await executePull(settings.value, options)
 
     if (result.success) {
-      ctx.setIsPullCompleted(true)
-      ctx.setSelectedIndexLeft(0)
-      ctx.setSelectedIndexRight(0)
+      appState.isPullCompleted = true
+      appState.selectedIndexLeft = 0
+      appState.selectedIndexRight = 0
 
       const currentLeaves = leaves.value
       const currentLeafMap = new Map(currentLeaves.map((l) => [l.id, l]))
@@ -366,7 +321,7 @@ export async function pullFromGitHub(
           return leaf
         })
       leaves.value = sortedLeaves
-      ctx.rebuildLeafStats(sortedLeaves, result.notes)
+      appActions.rebuildLeafStats(sortedLeaves, result.notes)
 
       if (result.commitSha) {
         lastKnownCommitSha.value = result.commitSha
@@ -384,8 +339,8 @@ export async function pullFromGitHub(
     } else {
       if (result.message === 'github.pullIncomplete') {
         console.error('Pull incomplete: some leaves failed to fetch. UI remains locked.')
-        ctx.setIsFirstPriorityFetched(false)
-        ctx.setIsPullCompleted(false)
+        appState.isFirstPriorityFetched = false
+        appState.isPullCompleted = false
         notes.value = []
         leaves.value = []
       } else if (hasBackupData) {
@@ -394,9 +349,9 @@ export async function pullFromGitHub(
           await restoreFromBackup(backup)
           notes.value = backup.notes
           leaves.value = backup.leaves
-          ctx.rebuildLeafStats(backup.leaves, backup.notes)
-          ctx.restoreStateFromUrl(false)
-          ctx.setIsFirstPriorityFetched(true)
+          appActions.rebuildLeafStats(backup.leaves, backup.notes)
+          appActions.restoreStateFromUrl(false)
+          appState.isFirstPriorityFetched = true
         } catch (restoreError) {
           console.error('Failed to restore from backup:', restoreError)
         }
@@ -405,7 +360,7 @@ export async function pullFromGitHub(
 
     const translatedMessage = translateGitHubMessage(result.message, $_, result.rateLimitInfo)
     showPullToast(translatedMessage, result.variant)
-    ctx.setIsLoadingUI(false)
+    appState.isLoadingUI = false
     pullProgressStore.reset()
   } finally {
     isPulling.value = false

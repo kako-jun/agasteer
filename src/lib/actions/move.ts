@@ -1,7 +1,6 @@
 import { get } from 'svelte/store' // for svelte-i18n only
 import type { Note, Leaf, WorldType } from '../types'
 import type { Pane } from '../navigation'
-import type { LeafSkeleton } from '../api'
 import { showPushToast, showPullToast, choiceAsync, alertAsync } from '../ui'
 import {
   settings,
@@ -26,7 +25,6 @@ import {
   updateArchiveLeaves,
   archiveLeafStatsStore,
   setArchiveBaseline,
-  moveModalStore,
 } from '../stores'
 import {
   saveNotes,
@@ -36,33 +34,13 @@ import {
 } from '../data'
 import { pullArchive, translateGitHubMessage } from '../api'
 import { generateUniqueName } from '../utils'
+import { appState, appActions, getWorldForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
-
-/**
- * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして .value で操作するため、ここには含めない
- */
-export interface MoveActionContext {
-  // $state() getters/setters
-  getIsArchiveLoading: () => boolean
-  setIsArchiveLoading: (v: boolean) => void
-  getLeafSkeletonMap: () => Map<string, LeafSkeleton>
-  setLeafSkeletonMap: (v: Map<string, LeafSkeleton>) => void
-
-  // App.svelte 内の関数への参照
-  selectNote: (note: Note, pane: Pane) => void
-  goHome: (pane: Pane) => void
-  refreshBreadcrumbs: () => void
-  rebuildLeafStats: (leaves: Leaf[], notes: Note[]) => void
-  closeMoveModal: () => void
-  getWorldForPane: (pane: Pane) => WorldType
-}
 
 /**
  * ノートをワールド間で移動する（Home ⇔ Archive）
  */
 export async function moveNoteToWorld(
-  ctx: MoveActionContext,
   note: Note,
   targetWorld: WorldType,
   pane: Pane
@@ -70,7 +48,7 @@ export async function moveNoteToWorld(
   const $_ = get(_)
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  if (isPulling.value || isPushing.value || ctx.getIsArchiveLoading()) return
+  if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
@@ -80,7 +58,7 @@ export async function moveNoteToWorld(
   if (targetWorld === 'archive' && !isArchiveLoaded.value) {
     const $settings = settings.value
     if ($settings.token && $settings.repoName) {
-      ctx.setIsArchiveLoading(true)
+      appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
         const result = await pullArchive($settings, {
@@ -107,7 +85,7 @@ export async function moveNoteToWorld(
         showPullToast($_('toast.pullFailed'), 'error')
         return
       } finally {
-        ctx.setIsArchiveLoading(false)
+        appState.isArchiveLoading = false
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
@@ -284,7 +262,7 @@ export async function moveNoteToWorld(
   // スケルトンマップから移動したリーフを削除（Homeからアーカイブ時のみ）
   if (sourceWorld === 'home') {
     const leafIdsToRemove = leavesToMove.map((l) => l.id)
-    const leafSkeletonMap = ctx.getLeafSkeletonMap()
+    const leafSkeletonMap = appState.leafSkeletonMap
     let hasChanges = false
     for (const id of leafIdsToRemove) {
       if (leafSkeletonMap.has(id)) {
@@ -293,7 +271,7 @@ export async function moveNoteToWorld(
       }
     }
     if (hasChanges) {
-      ctx.setLeafSkeletonMap(new Map(leafSkeletonMap)) // リアクティブ更新をトリガー
+      appState.leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
     }
   }
 
@@ -313,16 +291,16 @@ export async function moveNoteToWorld(
     ) {
       const parentNote = note.parentId ? newSourceNotes.find((n) => n.id === note.parentId) : null
       if (parentNote) {
-        ctx.selectNote(parentNote, paneToCheck)
+        appActions.selectNote(parentNote, paneToCheck)
       } else {
-        ctx.goHome(paneToCheck)
+        appActions.goHome(paneToCheck)
       }
     }
   }
   checkPane('left')
   checkPane('right')
-  ctx.refreshBreadcrumbs()
-  ctx.rebuildLeafStats(leaves.value, notes.value)
+  appActions.refreshBreadcrumbs()
+  appActions.rebuildLeafStats(leaves.value, notes.value)
 
   // トースト表示
   const toastKey = targetWorld === 'archive' ? 'toast.archived' : 'toast.restored'
@@ -333,7 +311,6 @@ export async function moveNoteToWorld(
  * リーフをワールド間で移動する（Home ⇔ Archive）
  */
 export async function moveLeafToWorld(
-  ctx: MoveActionContext,
   leaf: Leaf,
   targetWorld: WorldType,
   pane: Pane
@@ -341,7 +318,7 @@ export async function moveLeafToWorld(
   const $_ = get(_)
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  if (isPulling.value || isPushing.value || ctx.getIsArchiveLoading()) return
+  if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
@@ -351,7 +328,7 @@ export async function moveLeafToWorld(
   if (targetWorld === 'archive' && !isArchiveLoaded.value) {
     const $settings = settings.value
     if ($settings.token && $settings.repoName) {
-      ctx.setIsArchiveLoading(true)
+      appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
         const result = await pullArchive($settings, {
@@ -378,7 +355,7 @@ export async function moveLeafToWorld(
         showPullToast($_('toast.pullFailed'), 'error')
         return
       } finally {
-        ctx.setIsArchiveLoading(false)
+        appState.isArchiveLoading = false
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
@@ -510,10 +487,10 @@ export async function moveLeafToWorld(
 
   // スケルトンマップから移動したリーフを削除（Homeからアーカイブ時のみ）
   if (sourceWorld === 'home') {
-    const leafSkeletonMap = ctx.getLeafSkeletonMap()
+    const leafSkeletonMap = appState.leafSkeletonMap
     if (leafSkeletonMap.has(leaf.id)) {
       leafSkeletonMap.delete(leaf.id)
-      ctx.setLeafSkeletonMap(new Map(leafSkeletonMap)) // リアクティブ更新をトリガー
+      appState.leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
     }
   }
 
@@ -521,13 +498,13 @@ export async function moveLeafToWorld(
   const checkPane = (paneToCheck: Pane) => {
     const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
     if (currentLeaf?.id === leaf.id) {
-      ctx.selectNote(sourceNote, paneToCheck)
+      appActions.selectNote(sourceNote, paneToCheck)
     }
   }
   checkPane('left')
   checkPane('right')
-  ctx.refreshBreadcrumbs()
-  ctx.rebuildLeafStats(leaves.value, notes.value)
+  appActions.refreshBreadcrumbs()
+  appActions.rebuildLeafStats(leaves.value, notes.value)
 
   // トースト表示
   const toastKey = targetWorld === 'archive' ? 'toast.archived' : 'toast.restored'
@@ -538,18 +515,17 @@ export async function moveLeafToWorld(
  * リーフを別のノートに移動する（移動モーダルから呼ばれる）
  */
 export async function moveLeafTo(
-  ctx: MoveActionContext,
   destNoteId: string | null,
   targetLeaf: Leaf,
   pane: Pane
 ): Promise<void> {
   const $_ = get(_)
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
 
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
     if (!destNoteId || targetLeaf.noteId === destNoteId) {
-      ctx.closeMoveModal()
+      appActions.closeMoveModal()
       return
     }
 
@@ -557,7 +533,7 @@ export async function moveLeafTo(
     const allNotes = archiveNotes.value
     const destinationNote = allNotes.find((n) => n.id === destNoteId)
     if (!destinationNote) {
-      ctx.closeMoveModal()
+      appActions.closeMoveModal()
       return
     }
 
@@ -566,7 +542,7 @@ export async function moveLeafTo(
     )
     if (hasDuplicate) {
       await alertAsync($_('modal.duplicateLeafDestination'))
-      ctx.closeMoveModal()
+      appActions.closeMoveModal()
       return
     }
 
@@ -590,7 +566,7 @@ export async function moveLeafTo(
       rightNote.value = destinationNote
     }
     showPushToast($_('toast.moved'), 'success')
-    ctx.closeMoveModal()
+    appActions.closeMoveModal()
     return
   }
 
@@ -608,27 +584,26 @@ export async function moveLeafTo(
       rightNote.value = result.destNote
     }
     // スケルトンマップから移動したリーフを削除（noteIdが古いままになるため）
-    const leafSkeletonMap = ctx.getLeafSkeletonMap()
+    const leafSkeletonMap = appState.leafSkeletonMap
     if (leafSkeletonMap.has(targetLeaf.id)) {
       leafSkeletonMap.delete(targetLeaf.id)
-      ctx.setLeafSkeletonMap(new Map(leafSkeletonMap)) // リアクティブ更新をトリガー
+      appState.leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
     }
     showPushToast($_('toast.moved'), 'success')
   }
-  ctx.closeMoveModal()
+  appActions.closeMoveModal()
 }
 
 /**
  * ノートを別のノートに移動する（移動モーダルから呼ばれる）
  */
 export async function moveNoteTo(
-  ctx: MoveActionContext,
   destNoteId: string | null,
   targetNote: Note,
   pane: Pane
 ): Promise<void> {
   const $_ = get(_)
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
 
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
@@ -636,7 +611,7 @@ export async function moveNoteTo(
     const nextParent = destNoteId
 
     if (currentParent === nextParent) {
-      ctx.closeMoveModal()
+      appActions.closeMoveModal()
       return
     }
 
@@ -646,7 +621,7 @@ export async function moveNoteTo(
     if (nextParent) {
       const dest = allNotes.find((n) => n.id === nextParent)
       if (!dest || dest.parentId) {
-        ctx.closeMoveModal()
+        appActions.closeMoveModal()
         return
       }
     }
@@ -660,7 +635,7 @@ export async function moveNoteTo(
     )
     if (hasDuplicate) {
       await alertAsync($_('modal.duplicateNoteDestination'))
-      ctx.closeMoveModal()
+      appActions.closeMoveModal()
       return
     }
 
@@ -677,7 +652,7 @@ export async function moveNoteTo(
       if ($rightNote?.id === targetNote.id) rightNote.value = updatedNote
       showPushToast($_('toast.moved'), 'success')
     }
-    ctx.closeMoveModal()
+    appActions.closeMoveModal()
     return
   }
 
@@ -690,5 +665,5 @@ export async function moveNoteTo(
     if ($rightNote?.id === targetNote.id) rightNote.value = result.updatedNote
     showPushToast($_('toast.moved'), 'success')
   }
-  ctx.closeMoveModal()
+  appActions.closeMoveModal()
 }

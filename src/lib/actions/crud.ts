@@ -1,8 +1,13 @@
-import type { Note, Leaf, Breadcrumb, WorldType } from '../types'
+import type { Note, Leaf, Breadcrumb } from '../types'
 import type { Pane } from '../navigation'
-import type { LeafSkeleton } from '../api'
-import type { ModalPosition } from '../ui'
-import { showPushToast, alertAsync, extractH1Title, updateH1Title } from '../ui'
+import {
+  showPushToast,
+  alertAsync,
+  extractH1Title,
+  updateH1Title,
+  showPrompt,
+  showConfirm,
+} from '../ui'
 import {
   notes,
   leaves,
@@ -19,11 +24,7 @@ import {
   updateArchiveLeaves,
   updateNotes,
   updateLeaves,
-  getNotesForWorld as _getNotesForWorld,
-  getLeavesForWorld as _getLeavesForWorld,
-  getWorldForPane as _getWorldForPane,
-  leftWorld,
-  rightWorld,
+  getDialogPositionForPane,
 } from '../stores'
 import {
   createNote as createNoteLib,
@@ -37,50 +38,23 @@ import {
   updateLeafBadge as updateLeafBadgeLib,
 } from '../data'
 import { normalizeBadgeValue, PRIORITY_LEAF_ID, isOfflineLeaf } from '../utils'
+import {
+  appState,
+  appActions,
+  getWorldForPane,
+  getNotesForWorld,
+  getLeavesForWorld,
+  setNotesForWorld,
+  setLeavesForWorld,
+  getLeavesForPane,
+} from '../app-state.svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
-
-/**
- * App.svelte のローカル $state() やコンポーネント固有の関数を渡すためのコンテキスト
- * stores は直接インポートして .value で操作するため、ここには含めない
- */
-export interface CrudActionContext {
-  // $state() getters
-  getIsFirstPriorityFetched: () => boolean
-  getLeafSkeletonMap: () => Map<string, LeafSkeleton>
-
-  // $state() setters
-  setEditingBreadcrumb: (v: string | null) => void
-  setLeafSkeletonMap: (v: Map<string, LeafSkeleton>) => void
-
-  // App.svelte 内の関数への参照
-  selectNote: (note: Note, pane: Pane) => void
-  selectLeaf: (leaf: Leaf, pane: Pane) => void
-  goHome: (pane: Pane) => void
-  refreshBreadcrumbs: () => void
-  rebuildLeafStats: (leaves: Leaf[], notes: Note[]) => void
-  getWorldForPane: (pane: Pane) => WorldType
-  getNotesForWorld: (world: WorldType) => Note[]
-  getLeavesForWorld: (world: WorldType) => Leaf[]
-  setNotesForWorld: (world: WorldType, newNotes: Note[]) => void
-  setLeavesForWorld: (world: WorldType, newLeaves: Leaf[]) => void
-  getLeavesForPane: (pane: Pane) => Leaf[]
-  showPrompt: (
-    message: string,
-    onConfirm: (value: string) => void,
-    defaultValue: string,
-    position?: ModalPosition
-  ) => void
-  showConfirm: (message: string, onConfirm: () => void, position?: ModalPosition) => void
-  getDialogPositionForPane: (pane: Pane) => ModalPosition
-  updateOfflineContent: (content: string) => void
-}
 
 /**
  * パンくずリスト名の編集を保存
  */
 export async function saveEditBreadcrumb(
-  ctx: CrudActionContext,
   id: string,
   newName: string,
   type: Breadcrumb['type']
@@ -94,9 +68,9 @@ export async function saveEditBreadcrumb(
   const actualId = isRight ? id.replace('-right', '') : id
   // ペインのワールドに応じたノート・リーフを取得
   const pane: Pane = isRight ? 'right' : 'left'
-  const world = ctx.getWorldForPane(pane)
-  const paneNotes = ctx.getNotesForWorld(world)
-  const paneLeaves = ctx.getLeavesForWorld(world)
+  const world = getWorldForPane(pane)
+  const paneNotes = getNotesForWorld(world)
+  const paneLeaves = getLeavesForWorld(world)
 
   if (type === 'note') {
     const targetNote = paneNotes.find((f) => f.id === actualId)
@@ -111,14 +85,14 @@ export async function saveEditBreadcrumb(
       return
     }
     if (targetNote && targetNote.name === trimmed) {
-      ctx.refreshBreadcrumbs()
-      ctx.setEditingBreadcrumb(null)
+      appActions.refreshBreadcrumbs()
+      appState.editingBreadcrumb = null
       return
     }
 
     // ノート名を更新
     const updatedNotes = paneNotes.map((n) => (n.id === actualId ? { ...n, name: trimmed } : n))
-    ctx.setNotesForWorld(world, updatedNotes)
+    setNotesForWorld(world, updatedNotes)
 
     const updatedNote = updatedNotes.find((f) => f.id === actualId)
     if (updatedNote) {
@@ -146,8 +120,8 @@ export async function saveEditBreadcrumb(
     }
 
     if (targetLeaf && targetLeaf.title === trimmed) {
-      ctx.refreshBreadcrumbs()
-      ctx.setEditingBreadcrumb(null)
+      appActions.refreshBreadcrumbs()
+      appState.editingBreadcrumb = null
       return
     }
 
@@ -162,7 +136,7 @@ export async function saveEditBreadcrumb(
         ? { ...n, title: trimmed, content: updatedContent, updatedAt: Date.now() }
         : n
     )
-    ctx.setLeavesForWorld(world, updatedLeaves)
+    setLeavesForWorld(world, updatedLeaves)
 
     if (targetLeaf) {
       leafStatsStore.updateLeafContent(actualId, updatedContent, targetLeaf.content)
@@ -185,31 +159,26 @@ export async function saveEditBreadcrumb(
     }
   }
 
-  ctx.refreshBreadcrumbs()
-  ctx.setEditingBreadcrumb(null)
+  appActions.refreshBreadcrumbs()
+  appState.editingBreadcrumb = null
 }
 
 /**
  * ノートを作成
  */
-export function createNote(
-  ctx: CrudActionContext,
-  parentId: string | undefined,
-  pane: Pane,
-  name?: string
-): void {
+export function createNote(parentId: string | undefined, pane: Pane, name?: string): void {
   const $_ = get(_)
 
   if (!name) {
     // 名前が指定されていない場合はモーダルで入力を求める
-    const position = ctx.getDialogPositionForPane(pane)
-    ctx.showPrompt(
+    const position = getDialogPositionForPane(pane)
+    showPrompt(
       $_('footer.newNote'),
       (inputName) => {
         const newNote = createNoteLib({
           parentId,
           pane,
-          isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+          isOperationsLocked: !appState.isFirstPriorityFetched,
           translate: $_,
           name: inputName,
         })
@@ -224,7 +193,7 @@ export function createNote(
     const newNote = createNoteLib({
       parentId,
       pane,
-      isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+      isOperationsLocked: !appState.isFirstPriorityFetched,
       translate: $_,
       name,
     })
@@ -237,7 +206,7 @@ export function createNote(
 /**
  * ノートを削除
  */
-export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
+export function deleteNote(pane: Pane): void {
   const $_ = get(_)
   const $leftNote = leftNote.value
   const $rightNote = rightNote.value
@@ -247,18 +216,18 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
   const targetNote = pane === 'left' ? $leftNote : $rightNote
   if (!targetNote) return
 
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
     const allNotes = archiveNotes.value
     const allLeaves = archiveLeaves.value
 
-    const position = ctx.getDialogPositionForPane(pane)
+    const position = getDialogPositionForPane(pane)
     const confirmMessage = targetNote.parentId
       ? $_('modal.deleteSubNote')
       : $_('modal.deleteRootNote')
 
-    ctx.showConfirm(
+    showConfirm(
       confirmMessage,
       () => {
         // 子孫ノートを収集
@@ -288,8 +257,8 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
             descendantIds.has(currentNote?.id ?? '') ||
             (currentLeaf && descendantIds.has(currentLeaf.noteId))
           ) {
-            if (parentNote) ctx.selectNote(parentNote, paneToCheck)
-            else ctx.goHome(paneToCheck)
+            if (parentNote) appActions.selectNote(parentNote, paneToCheck)
+            else appActions.goHome(paneToCheck)
           }
         }
         checkPane('left')
@@ -306,7 +275,7 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
   deleteNoteLib({
     targetNote,
     pane,
-    isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+    isOperationsLocked: !appState.isFirstPriorityFetched,
     translate: $_,
     onNavigate: (p, parentNote) => {
       // 両ペインのナビゲーション処理
@@ -318,16 +287,16 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
           (currentLeaf && currentLeaf.noteId === targetNote.id)
         ) {
           if (parentNote) {
-            ctx.selectNote(parentNote, paneToCheck)
+            appActions.selectNote(parentNote, paneToCheck)
           } else {
-            ctx.goHome(paneToCheck)
+            appActions.goHome(paneToCheck)
           }
         }
       }
       checkPane('left')
       checkPane('right')
     },
-    rebuildLeafStats: ctx.rebuildLeafStats,
+    rebuildLeafStats: appActions.rebuildLeafStats,
   })
 }
 
@@ -335,13 +304,12 @@ export function deleteNote(ctx: CrudActionContext, pane: Pane): void {
  * ノートバッジを更新
  */
 export function updateNoteBadge(
-  ctx: CrudActionContext,
   noteId: string,
   badgeIcon: string,
   badgeColor: string,
   pane: Pane
 ): void {
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
     const allNotes = archiveNotes.value
@@ -372,27 +340,27 @@ export function updateNoteBadge(
 /**
  * リーフを作成
  */
-export function createLeaf(ctx: CrudActionContext, pane: Pane, title?: string): void {
+export function createLeaf(pane: Pane, title?: string): void {
   const $_ = get(_)
   const targetNote = pane === 'left' ? leftNote.value : rightNote.value
   if (!targetNote) return
 
   if (!title) {
     // タイトルが指定されていない場合はモーダルで入力を求める
-    const position = ctx.getDialogPositionForPane(pane)
-    ctx.showPrompt(
+    const position = getDialogPositionForPane(pane)
+    showPrompt(
       $_('footer.newLeaf'),
       (inputTitle) => {
         const newLeaf = createLeafLib({
           targetNote,
           pane,
-          isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+          isOperationsLocked: !appState.isFirstPriorityFetched,
           translate: $_,
           title: inputTitle,
         })
         if (newLeaf) {
           leafStatsStore.addLeaf(newLeaf.id, newLeaf.content)
-          ctx.selectLeaf(newLeaf, pane)
+          appActions.selectLeaf(newLeaf, pane)
           showPushToast($_('toast.leafCreated'), 'success')
         }
       },
@@ -403,13 +371,13 @@ export function createLeaf(ctx: CrudActionContext, pane: Pane, title?: string): 
     const newLeaf = createLeafLib({
       targetNote,
       pane,
-      isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+      isOperationsLocked: !appState.isFirstPriorityFetched,
       translate: $_,
       title,
     })
     if (newLeaf) {
       leafStatsStore.addLeaf(newLeaf.id, newLeaf.content)
-      ctx.selectLeaf(newLeaf, pane)
+      appActions.selectLeaf(newLeaf, pane)
       showPushToast($_('toast.leafCreated'), 'success')
     }
   }
@@ -418,11 +386,11 @@ export function createLeaf(ctx: CrudActionContext, pane: Pane, title?: string): 
 /**
  * リーフを削除
  */
-export function deleteLeaf(ctx: CrudActionContext, leafId: string, pane: Pane): void {
+export function deleteLeaf(leafId: string, pane: Pane): void {
   const $_ = get(_)
   const otherLeaf = pane === 'left' ? rightLeaf.value : leftLeaf.value
 
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
     const allLeaves = archiveLeaves.value
@@ -430,20 +398,20 @@ export function deleteLeaf(ctx: CrudActionContext, leafId: string, pane: Pane): 
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
-    const position = ctx.getDialogPositionForPane(pane)
-    ctx.showConfirm(
+    const position = getDialogPositionForPane(pane)
+    showConfirm(
       $_('modal.deleteLeaf'),
       () => {
         updateArchiveLeaves(allLeaves.filter((l) => l.id !== leafId))
 
         const note = allNotes.find((n) => n.id === targetLeaf.noteId)
-        if (note) ctx.selectNote(note, pane)
-        else ctx.goHome(pane)
+        if (note) appActions.selectNote(note, pane)
+        else appActions.goHome(pane)
 
         if (otherLeaf?.id === leafId) {
           const otherPane = pane === 'left' ? 'right' : 'left'
-          if (note) ctx.selectNote(note, otherPane)
-          else ctx.goHome(otherPane)
+          if (note) appActions.selectNote(note, otherPane)
+          else appActions.goHome(otherPane)
         }
 
         showPushToast($_('toast.deleted'), 'success')
@@ -457,11 +425,11 @@ export function deleteLeaf(ctx: CrudActionContext, leafId: string, pane: Pane): 
   deleteLeafLib({
     leafId,
     pane,
-    isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+    isOperationsLocked: !appState.isFirstPriorityFetched,
     translate: $_,
     onNavigate: (p, note) => {
-      if (note) ctx.selectNote(note, p)
-      else ctx.goHome(p)
+      if (note) appActions.selectNote(note, p)
+      else appActions.goHome(p)
     },
     otherPaneLeafId: otherLeaf?.id,
     onUpdateStats: (id, content) => {
@@ -469,10 +437,10 @@ export function deleteLeaf(ctx: CrudActionContext, leafId: string, pane: Pane): 
     },
   })
   // スケルトンマップからも削除（削除したリーフがスケルトンとして再表示されるのを防ぐ）
-  const leafSkeletonMap = ctx.getLeafSkeletonMap()
+  const leafSkeletonMap = appState.leafSkeletonMap
   if (leafSkeletonMap.has(leafId)) {
     leafSkeletonMap.delete(leafId)
-    ctx.setLeafSkeletonMap(new Map(leafSkeletonMap)) // リアクティブ更新をトリガー
+    appState.leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
   }
 }
 
@@ -480,7 +448,6 @@ export function deleteLeaf(ctx: CrudActionContext, leafId: string, pane: Pane): 
  * リーフのコンテンツを更新
  */
 export async function updateLeafContent(
-  ctx: CrudActionContext,
   content: string,
   leafId: string,
   pane: Pane
@@ -489,12 +456,12 @@ export async function updateLeafContent(
 
   // オフラインリーフは専用の自動保存処理
   if (isOfflineLeaf(leafId)) {
-    ctx.updateOfflineContent(content)
+    appActions.updateOfflineContent(content)
     // 左右ペインのリーフはcurrentOfflineLeafから自動更新されるので不要
     return
   }
 
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
     const allLeaves = archiveLeaves.value
@@ -529,7 +496,7 @@ export async function updateLeafContent(
 
     if (leftLeaf.value?.id === leafId) leftLeaf.value = updatedLeaf
     if (rightLeaf.value?.id === leafId) rightLeaf.value = updatedLeaf
-    if (titleChanged) ctx.refreshBreadcrumbs()
+    if (titleChanged) appActions.refreshBreadcrumbs()
     return
   }
 
@@ -537,7 +504,7 @@ export async function updateLeafContent(
   const result = updateLeafContentLib({
     content,
     leafId,
-    isOperationsLocked: !ctx.getIsFirstPriorityFetched(),
+    isOperationsLocked: !appState.isFirstPriorityFetched,
     translate: $_,
     onStatsUpdate: (id, prevContent, newContent) => {
       leafStatsStore.updateLeafContent(id, newContent, prevContent)
@@ -546,7 +513,7 @@ export async function updateLeafContent(
   if (result.updatedLeaf) {
     if (leftLeaf.value?.id === leafId) leftLeaf.value = result.updatedLeaf
     if (rightLeaf.value?.id === leafId) rightLeaf.value = result.updatedLeaf
-    if (result.titleChanged) ctx.refreshBreadcrumbs()
+    if (result.titleChanged) appActions.refreshBreadcrumbs()
   }
 }
 
@@ -554,13 +521,12 @@ export async function updateLeafContent(
  * リーフバッジを更新
  */
 export function updateLeafBadge(
-  ctx: CrudActionContext,
   leafId: string,
   badgeIcon: string,
   badgeColor: string,
   pane: Pane
 ): void {
-  const paneWorld = ctx.getWorldForPane(pane)
+  const paneWorld = getWorldForPane(pane)
   // アーカイブ内の場合は専用処理
   if (paneWorld === 'archive') {
     const allLeaves = archiveLeaves.value
