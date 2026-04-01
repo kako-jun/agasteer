@@ -18,7 +18,6 @@
 
   function handleTextInput(key: TextSettingKey, event: Event) {
     const value = (event.target as HTMLInputElement).value
-    settings[key] = value
     onSettingsChange({ [key]: value } as Partial<Settings>)
   }
 
@@ -63,7 +62,6 @@
 
   function handleRepoInput(event: Event) {
     const value = (event.target as HTMLInputElement).value
-    settings.repoName = value
     onSettingsChange({ repoName: value })
   }
 
@@ -77,7 +75,6 @@
   }
 
   function selectRepo(repo: string) {
-    settings.repoName = repo
     onSettingsChange({ repoName: repo })
     dropdownOpen = false
   }
@@ -153,7 +150,7 @@
         <input
           id="github-token"
           type="password"
-          bind:value={settings.token}
+          value={settings.token}
           oninput={(e) => handleTextInput('token', e)}
           placeholder={$_('settings.github.tokenPlaceholder')}
         />
@@ -235,7 +232,7 @@
           <input
             id="repo-name"
             type="text"
-            bind:value={settings.repoName}
+            value={settings.repoName}
             oninput={handleRepoInput}
             onblur={handleRepoBlur}
             placeholder={$_('settings.github.repoPlaceholder')}
