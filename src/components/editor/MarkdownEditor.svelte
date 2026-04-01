@@ -524,6 +524,23 @@
       parent: editorContainer,
     }
 
+    // モバイルではタップ時の自動スクロールを無効化
+    if (isMobileDevice()) {
+      editorConfig.dispatchTransactions = (trs: any[], view: any) => {
+        // scrollIntoView効果を除去してからディスパッチ
+        const filteredTrs = trs.map((tr) => {
+          if (tr.scrollIntoView) {
+            return view.state.update({
+              ...tr,
+              scrollIntoView: false,
+            })
+          }
+          return tr
+        })
+        view.update(filteredTrs)
+      }
+    }
+
     editorView = new EditorView(editorConfig)
 
     // DOM要素にペイン情報をマーク（Vimコマンドで参照するため）
