@@ -30,6 +30,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault()
+      localQuery = ''
       clearSearch() // クエリをクリア
       closeSearch()
       inputElement?.blur()
