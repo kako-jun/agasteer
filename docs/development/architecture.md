@@ -181,6 +181,9 @@ agasteer/
 │   │   │   ├── swipe.ts                # スワイプナビゲーション（Svelte action）
 │   │   │   └── portal.ts               # ポータル（Svelte action）
 │   │   ├── app-state.svelte.ts          # 共有リアクティブ状態（Svelte 5 runes）
+│   │   ├── pane-navigation.svelte.ts    # ペインナビゲーション（ビュー遷移・パンくず・URL同期）
+│   │   ├── keyboard-nav.svelte.ts       # キーボードナビゲーション（グローバルキーハンドラ）
+│   │   ├── pane-actions-factory.svelte.ts # PaneActions生成ファクトリ（Context API用）
 │   │   ├── stores/                      # 状態管理モジュール
 │   │   │   ├── stores.svelte.ts         # Svelte 5 rune ベース状態管理
 │   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
@@ -386,20 +389,21 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 
 #### 2. ビジネスロジック層（App.svelte + lib/）
 
-**App.svelteの主要関数:**
+**主要関数（各モジュールに分散）:**
 
-| カテゴリ           | 主要関数                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| **ノート管理**     | `createNote()`, `selectNote()`, `deleteNote()`, `updateNoteTitle()`                                          |
-| **リーフ管理**     | `createLeaf()`, `selectLeaf()`, `deleteLeaf()`, `updateLeafTitle()`, `updateLeafContent()`, `downloadLeaf()` |
-| **並び替え・移動** | `handleDragStart()`, `handleDragEnd()`, `handleDragOver()`, `handleDropNote()`, `handleDropLeaf()`           |
-| **ナビゲーション** | `getBreadcrumbs()`, `goHome()`, `selectNote()`, `selectLeaf()`                                               |
-| **プレビュー**     | `togglePreview()`                                                                                            |
-| **スクロール同期** | `handlePaneScroll()`                                                                                         |
-| **GitHub同期**     | `handlePush()`, `handlePull()`                                                                               |
-| **モーダル**       | `showConfirm()`, `showAlert()`, `closeModal()`                                                               |
-| **設定**           | `openSettings()`, `closeSettings()`, `saveSettings()`, `testGitHubConnection()`                              |
-| **ヘルパー**       | `getItemCount()`, `getNoteLeaves()`                                                                          |
+| カテゴリ           | 主要関数                                                                                                     | 所在モジュール                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| **ノート管理**     | `createNote()`, `selectNote()`, `deleteNote()`, `updateNoteTitle()`                                          | pane-actions-factory.svelte.ts |
+| **リーフ管理**     | `createLeaf()`, `selectLeaf()`, `deleteLeaf()`, `updateLeafTitle()`, `updateLeafContent()`, `downloadLeaf()` | pane-actions-factory.svelte.ts |
+| **並び替え・移動** | `handleDragStart()`, `handleDragEnd()`, `handleDragOver()`, `handleDropNote()`, `handleDropLeaf()`           | pane-actions-factory.svelte.ts |
+| **ナビゲーション** | `goHome()`, `selectNote()`, `selectLeaf()`, `refreshBreadcrumbs()`, `restoreStateFromUrl()`                  | pane-navigation.svelte.ts      |
+| **プレビュー**     | `togglePreview()`                                                                                            | pane-navigation.svelte.ts      |
+| **スクロール同期** | `handlePaneScroll()`                                                                                         | pane-navigation.svelte.ts      |
+| **GitHub同期**     | `handlePush()`, `handlePull()`                                                                               | pane-actions-factory.svelte.ts |
+| **モーダル**       | `showConfirm()`, `showAlert()`, `closeModal()`                                                               | pane-actions-factory.svelte.ts |
+| **設定**           | `openSettings()`, `closeSettings()`, `saveSettings()`, `testGitHubConnection()`                              | pane-actions-factory.svelte.ts |
+| **キーボード**     | `handleGlobalKeyDown()`                                                                                      | keyboard-nav.svelte.ts         |
+| **ヘルパー**       | `getItemCount()`, `getNoteLeaves()`                                                                          | pane-actions-factory.svelte.ts |
 
 **lib/モジュール:**
 
@@ -433,8 +437,8 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 - `getWorldForNote`, `getWorldForLeaf` - データからワールドを判定
 - `getDialogPositionForPane` - ペインに応じたダイアログ位置決定
 
-**App.svelte内のワールド対応:**
-App.svelteでは上記純粋関数のラッパーを定義し、ストアから値を取得して渡す形で使用。これにより一貫性のあるワールド対応を実現しています。
+**pane-navigation.svelte.tsでのワールド対応:**
+pane-navigation.svelte.tsでは上記純粋関数のラッパーを定義し、ストアから値を取得して渡す形で使用。これにより一貫性のあるワールド対応を実現しています。
 
 **注**: Version 5.0のリファクタリングにより、左右ペインの状態は**ローカル変数**で管理されるようになりました。`currentView`, `currentNote`, `currentLeaf`等のストアは削除され、完全な左右対称設計を実現しています。
 
