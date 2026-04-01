@@ -326,11 +326,18 @@ export function getLineNumber(content: string, charIndex: number): number {
 
 // ========== ハンドラー ==========
 
+let _debounceTimer: ReturnType<typeof setTimeout> | null = null
+const DEBOUNCE_MS = 250
+
 export function openSearch(): void {
   isSearchOpen.value = true
 }
 
 export function closeSearch(): void {
+  if (_debounceTimer) {
+    clearTimeout(_debounceTimer)
+    _debounceTimer = null
+  }
   isSearchOpen.value = false
   // 検索クエリはクリアしない（ユーザーが明示的にクリアするまで保持）
   selectedResultIndex.value = -1
@@ -345,13 +352,20 @@ export function toggleSearch(): void {
 }
 
 export function clearSearch(): void {
+  if (_debounceTimer) {
+    clearTimeout(_debounceTimer)
+    _debounceTimer = null
+  }
   searchQuery.value = ''
   selectedResultIndex.value = -1
 }
 
 export function handleSearchInput(query: string): void {
-  searchQuery.value = query
-  selectedResultIndex.value = -1
+  if (_debounceTimer) clearTimeout(_debounceTimer)
+  _debounceTimer = setTimeout(() => {
+    searchQuery.value = query
+    selectedResultIndex.value = -1
+  }, DEBOUNCE_MS)
 }
 
 export function selectNextResult(): void {

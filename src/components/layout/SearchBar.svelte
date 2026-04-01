@@ -25,10 +25,12 @@
   let inputElement: HTMLInputElement | undefined = $state(undefined)
   let containerElement: HTMLDivElement | undefined = $state(undefined)
   let listenerRegistered = false
+  let localQuery = $state(searchQuery.value)
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault()
+      localQuery = ''
       clearSearch() // クエリをクリア
       closeSearch()
       inputElement?.blur()
@@ -53,10 +55,12 @@
 
   function handleInput(e: Event) {
     const target = e.target as HTMLInputElement
+    localQuery = target.value
     handleSearchInput(target.value)
   }
 
   function handleClear() {
+    localQuery = ''
     clearSearch()
     inputElement?.focus()
   }
@@ -131,12 +135,12 @@
         bind:this={inputElement}
         type="text"
         placeholder={$_('search.placeholder')}
-        value={searchQuery.value}
+        value={localQuery}
         oninput={handleInput}
         onkeydown={handleKeydown}
         aria-label={$_('search.placeholder')}
       />
-      {#if searchQuery.value}
+      {#if localQuery}
         <button
           class="clear-button"
           onclick={(e) => {
@@ -163,7 +167,7 @@
     </div>
 
     <!-- 検索結果 -->
-    {#if searchQuery.value}
+    {#if localQuery}
       <div class="search-results" role="listbox">
         {#if searchResults.value.length > 0}
           {#each searchResults.value as result, index}
