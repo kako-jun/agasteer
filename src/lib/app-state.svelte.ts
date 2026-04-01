@@ -791,11 +791,16 @@ export function initApp(deps: InitAppDeps): () => void {
       // ガードを再追加（アプリ終了を防ぐ）
       pushExitGuard()
 
-      // 未保存の変更がある場合はトーストで警告
-      if (isDirty.value) {
+      // pushState直後のUI更新はAndroid Chrome PWAで描画されないため、
+      // 次フレームに遅延させる
+      requestAnimationFrame(() => {
         const t = get(_)
-        showPushToast(t('leaf.unsaved'), 'error')
-      }
+        if (isDirty.value) {
+          showPushToast(t('leaf.unsaved'), 'error')
+        } else {
+          showPushToast(t('pwa.exitWarning'), '')
+        }
+      })
       return
     }
 

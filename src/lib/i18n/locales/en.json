@@ -88,6 +88,9 @@
   "leaf": {
     "unsaved": "Unsaved changes"
   },
+  "pwa": {
+    "exitWarning": "Press back again to exit the app"
+  },
   "footer": {
     "newNote": "New note",
     "newLeaf": "New leaf",
