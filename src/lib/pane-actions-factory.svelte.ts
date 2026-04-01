@@ -81,7 +81,6 @@ import {
   restoreStateFromUrl,
   updateUrlFromState,
 } from './pane-navigation.svelte'
-import { handleGlobalKeyDown } from './keyboard-nav.svelte'
 import { reorderItems } from './navigation'
 import {
   pushToGitHub as pushToGitHubAction,

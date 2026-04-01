@@ -81,7 +81,7 @@ https://agasteer.llll-ll.com/?left=ノート名>リーフ名&right=ノート名>
 2. `currentWorld` を更新
 3. ホーム画面に遷移
 
-**実装**: `src/App.svelte` の `handleWorldChange()`
+**実装**: `src/lib/pane-navigation.svelte.ts` の `handleWorldChange()`
 
 ---
 
