@@ -42,6 +42,7 @@
   }
 
   function close() {
+    if (step === 'processing') return
     resetState()
     onClose()
   }

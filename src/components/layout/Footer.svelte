@@ -13,8 +13,10 @@
 <div class="footer-fixed">
   {@render left?.()}
   <div class="spacer"></div>
-  {@render center?.()}
-  <div class="spacer"></div>
+  {#if center}
+    {@render center()}
+    <div class="spacer"></div>
+  {/if}
   {@render right?.()}
   <AutoSaveIndicator />
 </div>
