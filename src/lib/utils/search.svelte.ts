@@ -349,9 +349,15 @@ export function clearSearch(): void {
   selectedResultIndex.value = -1
 }
 
+let _debounceTimer: ReturnType<typeof setTimeout> | null = null
+const DEBOUNCE_MS = 250
+
 export function handleSearchInput(query: string): void {
-  searchQuery.value = query
-  selectedResultIndex.value = -1
+  if (_debounceTimer) clearTimeout(_debounceTimer)
+  _debounceTimer = setTimeout(() => {
+    searchQuery.value = query
+    selectedResultIndex.value = -1
+  }, DEBOUNCE_MS)
 }
 
 export function selectNextResult(): void {
