@@ -32,7 +32,8 @@
     "noResults": "該当なし",
     "clear": "クリア",
     "close": "閉じる",
-    "archivePrefix": "アーカイブ"
+    "archivePrefix": "アーカイブ",
+    "archiveNotLoaded": "アーカイブは検索対象外です（未読み込み）"
   },
   "breadcrumbs": {
     "goHome": "ホームへ移動",

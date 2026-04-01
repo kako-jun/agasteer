@@ -32,7 +32,8 @@
     "noResults": "No results",
     "clear": "Clear",
     "close": "Close",
-    "archivePrefix": "Archive"
+    "archivePrefix": "Archive",
+    "archiveNotLoaded": "Archive is not searched (not loaded)"
   },
   "breadcrumbs": {
     "goHome": "Go to home",

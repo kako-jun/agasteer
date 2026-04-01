@@ -13,6 +13,7 @@
     getSelectedResult,
     selectedResultIndex,
   } from '../../lib/utils'
+  import { isArchiveLoaded } from '../../lib/stores'
   import type { SearchMatch } from '../../lib/types'
 
   // マッチタイプに応じたジャンプ処理
@@ -188,6 +189,11 @@
             <span>{$_('search.noResults')}</span>
           </div>
         {/if}
+        {#if !isArchiveLoaded.value}
+          <div class="archive-notice">
+            <span>{$_('search.archiveNotLoaded')}</span>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -294,6 +300,15 @@
     text-align: center;
     color: var(--text);
     opacity: 0.7;
+  }
+
+  .archive-notice {
+    padding: 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text);
+    opacity: 0.45;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
   }
 
   .result-item {
