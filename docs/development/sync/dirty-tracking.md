@@ -186,6 +186,7 @@ onMount: LocalStorageからisDirty=trueを検出
 | clearAllChanges       | 全変更をクリア（Push成功時、Pullキャンセル時に呼び出し）                 |
 | isNoteDirty           | 特定ノート配下のリーフがダーティかどうか                                 |
 | setLastPushedSnapshot | スナップショットを保存（ベースライン設定のみ、ダーティクリアは行わない） |
+| addNotesToBaseline    | Pull中に到着したノートをベースラインに追加（ノートダーティ誤検出防止）   |
 | addLeafToBaseline     | Pull中に到着したリーフをベースラインに追加（行ダーティ誤検出防止）       |
 | refreshDirtyState     | ベースラインと現在の状態を比較してダーティフラグを再設定                 |
 
@@ -275,7 +276,7 @@ stores.svelte.tsにモジュールレベルの変数として、Home用とArchiv
 1. **Push成功時**: 現在の状態が「最新の同期済み状態」になる → `clearAllChanges()`
 2. **Pull成功時（Home）**: GitHubから取得した状態が「最新の同期済み状態」になる → `refreshDirtyState()`
 3. **Pull成功時（Archive）**: アーカイブデータが「最新の同期済み状態」になる（Home側のダーティに影響しない）
-4. **Pull中（逐次）**: 各リーフ到着時に`addLeafToBaseline()`でベースラインに追加（行ダーティ誤検出防止）
+4. **Pull中（逐次）**: ノート構造到着時に`addNotesToBaseline()`、各リーフ到着時に`addLeafToBaseline()`でベースラインに追加（ダーティ誤検出防止）
 
 ### UIへの反映
 

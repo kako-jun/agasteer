@@ -28,6 +28,7 @@ import {
   executeStaleCheck,
   setLastPushedSnapshot,
   addLeafToBaseline,
+  addNotesToBaseline,
   refreshDirtyState,
   flushPendingSaves,
   leafStatsStore,
@@ -267,6 +268,7 @@ export async function pullFromGitHub(
       onStructure: (notesFromGitHub, metadataFromGitHub, leafSkeletons) => {
         notes.value = notesFromGitHub
         metadata.value = metadataFromGitHub
+        addNotesToBaseline(notesFromGitHub)
 
         appState.leafSkeletonMap = new Map(leafSkeletons.map((s) => [s.id, s]))
         appState.loadingLeafIds = new Set(leafSkeletons.map((s) => s.id))
