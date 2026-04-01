@@ -189,8 +189,8 @@ const position = getDialogPositionForPane(pane) // 'bottom-left' | 'bottom-right
 **ダーティフラグが立つタイミング:**
 
 - エディタでリーフの内容を編集したとき
-- ノートを作成・削除・名前変更・並び替えたとき（`updateNotes()`内で自動的に`isDirty.value = true`）
-- リーフを作成・削除・名前変更・並び替えたとき（`updateLeaves()`内で自動的に`isDirty.value = true`）
+- ノートを作成・削除・名前変更・並び替えたとき（`updateNotes()`内で差分検出により`isDirty`が自動的にtrueになる）
+- リーフを作成・削除・名前変更・並び替えたとき（`updateLeaves()`内で差分検出により`isDirty`が自動的にtrueになる）
 
 **ダーティフラグがクリアされるタイミング:**
 

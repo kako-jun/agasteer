@@ -61,8 +61,8 @@ Pull中はガラス効果オーバーレイが表示されるが、Offlineリー
 
 ## ファイル構成
 
-| ファイル                   | 内容                             |
-| -------------------------- | -------------------------------- |
-| `src/lib/utils/offline.ts` | 定数、ファクトリ関数、判定関数   |
-| `src/lib/stores.ts`        | offlineLeafStore                 |
-| `src/lib/data/storage.ts`  | saveOfflineLeaf, loadOfflineLeaf |
+| ファイル                          | 内容                             |
+| --------------------------------- | -------------------------------- |
+| `src/lib/utils/offline.ts`        | 定数、ファクトリ関数、判定関数   |
+| `src/lib/stores/stores.svelte.ts` | offlineLeafStore                 |
+| `src/lib/data/storage.ts`         | saveOfflineLeaf, loadOfflineLeaf |
