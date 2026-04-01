@@ -10,6 +10,7 @@
   import MoveIcon from '../../icons/MoveIcon.svelte'
   import ArchiveIcon from '../../icons/ArchiveIcon.svelte'
   import RestoreIcon from '../../icons/RestoreIcon.svelte'
+  import CameraIcon from '../../icons/CameraIcon.svelte'
 
   interface Props {
     onDelete: () => void
@@ -27,6 +28,7 @@
     currentWorld?: WorldType
     onArchive?: (() => void) | null
     onRestore?: (() => void) | null
+    onOcr?: (() => void) | null
   }
 
   let {
@@ -45,6 +47,7 @@
     currentWorld = 'home',
     onArchive = null,
     onRestore = null,
+    onOcr = null,
   }: Props = $props()
 
   let downloadTitle = $state($_('footer.download'))
@@ -113,6 +116,13 @@
     >
       <DownloadIcon />
     </IconButton>
+  {/snippet}
+  {#snippet center()}
+    {#if onOcr}
+      <IconButton onClick={onOcr} title={$_('footer.ocr')} ariaLabel={$_('footer.ocr')} {disabled}>
+        <CameraIcon />
+      </IconButton>
+    {/if}
   {/snippet}
   {#snippet right()}
     <IconButton

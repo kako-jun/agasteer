@@ -48,6 +48,9 @@
   import Breadcrumbs from './Breadcrumbs.svelte'
   import Loading from './Loading.svelte'
   import StatsPanel from './StatsPanel.svelte'
+  import OcrModal from './OcrModal.svelte'
+  import { showPushToast } from '../../lib/ui/ui.svelte'
+  import { _ } from 'svelte-i18n'
 
   // Props
   interface Props {
@@ -57,6 +60,25 @@
   }
 
   let { pane, editorViewRef = $bindable(null), previewViewRef = $bindable(null) }: Props = $props()
+
+  // OCR モーダルの状態
+  let showOcrModal = $state(false)
+
+  function handleOcr() {
+    showOcrModal = true
+  }
+
+  function handleOcrComplete(text: string) {
+    showOcrModal = false
+    if (editorViewRef && editorViewRef.insertAtCursor) {
+      editorViewRef.insertAtCursor(text)
+    }
+    showPushToast($_('ocr.complete'), 'success')
+  }
+
+  function handleOcrClose() {
+    showOcrModal = false
+  }
 
   // Context から取得
   const actions = getContext<PaneActions>('paneActions')
@@ -278,6 +300,7 @@
     currentWorld={paneWorld}
     onArchive={() => actions.archiveLeaf(pane)}
     onRestore={() => actions.restoreLeaf(pane)}
+    onOcr={handleOcr}
   />
 {:else if currentView === 'preview' && currentLeaf}
   <PreviewFooter
@@ -302,3 +325,6 @@
 {#if (paneState.value.isLoadingUI || isPushing.value) && !(currentLeaf && isOfflineLeaf(currentLeaf.id))}
   <Loading />
 {/if}
+
+<!-- OCRモーダル -->
+<OcrModal show={showOcrModal} {pane} onComplete={handleOcrComplete} onClose={handleOcrClose} />

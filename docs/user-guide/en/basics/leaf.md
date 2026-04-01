@@ -75,6 +75,20 @@ Notes can be moved the same way.
 
 ---
 
+## Text Recognition (OCR)
+
+You can extract text from images and insert it into a leaf.
+
+1. Open a leaf (edit mode)
+2. Tap the camera button in the center of the footer
+3. Choose "Take Photo" or "Choose File"
+4. Review the image and tap "Recognize"
+5. The extracted text is inserted at the cursor position
+
+> **Tip**: Processing runs entirely in the browser. Your images are never sent to external servers. If the result isn't what you expected, use Ctrl+Z (Cmd+Z) to undo.
+
+---
+
 ## Download
 
 You can download individual leaves locally.
