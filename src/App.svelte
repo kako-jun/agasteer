@@ -1,6 +1,7 @@
 <script lang="ts">
   import './App.css'
   import { onMount, setContext } from 'svelte'
+  import LeafSpinner from './components/icons/LeafSpinner.svelte'
 
   import {
     settings,
@@ -190,11 +191,7 @@
 {#if !appState.i18nReady}
   <!-- i18n読み込み中 -->
   <div class="i18n-loading">
-    <div class="loading-spinner">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-    </div>
+    <LeafSpinner size={40} />
   </div>
 {:else}
   <!-- メインアプリケーション -->

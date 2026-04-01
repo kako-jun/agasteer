@@ -4,6 +4,7 @@
   import IconButton from '../buttons/IconButton.svelte'
   import ShareButton from '../buttons/ShareButton.svelte'
   import HomeIcon from '../icons/HomeIcon.svelte'
+  import LeafSpinner from '../icons/LeafSpinner.svelte'
   import EditIcon from '../icons/EditIcon.svelte'
   import ArchiveIcon from '../icons/ArchiveIcon.svelte'
   import { isOfflineLeaf, isPriorityLeaf } from '../../lib/utils'
@@ -246,7 +247,7 @@
                 <span class="world-icon"><ArchiveIcon /></span>
                 {$_('breadcrumbs.worldArchive')}
                 {#if isArchiveLoading}
-                  <span class="loading-indicator">...</span>
+                  <span class="loading-indicator"><LeafSpinner size={14} /></span>
                 {/if}
               </button>
             </div>
@@ -574,16 +575,7 @@
 
   .loading-indicator {
     margin-left: 0.5rem;
-    animation: blink 1s infinite;
-  }
-
-  @keyframes blink {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.3;
-    }
+    display: inline-flex;
+    vertical-align: middle;
   }
 </style>
