@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import LeafSpinner from '../icons/LeafSpinner.svelte'
 
   import type { ThemeType } from '../../lib/types'
   import type { Pane } from '../../lib/navigation'
@@ -629,11 +630,7 @@
 
 {#if isLoading}
   <div class="loading-container">
-    <div class="loading-dots">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
+    <LeafSpinner size={28} />
   </div>
 {:else}
   <div bind:this={editorContainer} class="editor-container"></div>
@@ -646,40 +643,6 @@
     justify-content: center;
     align-items: center;
     background-color: var(--bg);
-  }
-
-  .loading-dots {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .loading-dots span {
-    width: 12px;
-    height: 12px;
-    background-color: var(--accent);
-    border-radius: 50%;
-    animation: pulse 1.4s infinite ease-in-out both;
-  }
-
-  .loading-dots span:nth-child(1) {
-    animation-delay: -0.32s;
-  }
-
-  .loading-dots span:nth-child(2) {
-    animation-delay: -0.16s;
-  }
-
-  @keyframes pulse {
-    0%,
-    80%,
-    100% {
-      transform: scale(0);
-      opacity: 0.5;
-    }
-    40% {
-      transform: scale(1);
-      opacity: 1;
-    }
   }
 
   .editor-container {
