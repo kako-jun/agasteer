@@ -5,6 +5,7 @@
   import { recognizeText } from '../../lib/ocr'
   import LeafSpinner from '../icons/LeafSpinner.svelte'
   import CameraIcon from '../icons/CameraIcon.svelte'
+  import ImageIcon from '../icons/ImageIcon.svelte'
 
   interface Props {
     show: boolean
@@ -180,6 +181,7 @@
             {$_('ocr.fromCamera')}
           </button>
           <button class="choice-button" onclick={openFilePicker}>
+            <ImageIcon />
             {$_('ocr.fromFile')}
           </button>
         </div>
