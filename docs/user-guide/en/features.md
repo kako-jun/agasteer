@@ -13,6 +13,13 @@
 
 - **[Share Feature](./features/share.md)** - Share via URL, Markdown, or QR code
 
+## Text Recognition (OCR)
+
+- **Text Recognition** - Extract text from camera photos or selected images and insert into a leaf
+  - Activate from the camera button in the center of the footer while editing a leaf
+  - Runs entirely in the browser (Tesseract.js), no data sent to external servers
+  - Supports Japanese and English
+
 ## Data Management
 
 - **[Archive](./features/archive.md)** - Store unused notes/leaves in a separate location
