@@ -432,6 +432,23 @@ export function setArchiveBaseline(archiveNotesData: Note[], archiveLeavesData: 
 }
 
 /**
+ * Pull中に到着したノートをベースラインに追加（ノートダーティの誤検出防止）
+ * Pull完了前でも、到着済みノートが「新規追加」と誤判定されることを防ぐ。
+ * Pull完了時の setLastPushedSnapshot で全上書きされるため、一時的なベースライン。
+ */
+export function addNotesToBaseline(notesData: Note[]): void {
+  const copies: Note[] = JSON.parse(JSON.stringify(notesData))
+  for (const copy of copies) {
+    const idx = lastPushedNotes.findIndex((n) => n.id === copy.id)
+    if (idx >= 0) {
+      lastPushedNotes[idx] = copy
+    } else {
+      lastPushedNotes.push(copy)
+    }
+  }
+}
+
+/**
  * Pull中に到着したリーフをベースラインに追加（行ダーティの誤検出防止）
  * Pull完了前でも、到着済みリーフの編集で全行がダーティになることを防ぐ。
  * Pull完了時の setLastPushedSnapshot で全上書きされるため、一時的なベースライン。
