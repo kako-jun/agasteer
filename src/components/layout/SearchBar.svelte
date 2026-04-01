@@ -307,8 +307,14 @@
     text-align: center;
     font-size: 0.75rem;
     color: var(--text);
-    opacity: 0.45;
+    opacity: 0.5;
     border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  :global([data-theme='greenboard']) .archive-notice,
+  :global([data-theme='dotsD']) .archive-notice,
+  :global([data-theme='dotsF']) .archive-notice {
+    border-top-color: rgba(255, 255, 255, 0.05);
   }
 
   .result-item {
