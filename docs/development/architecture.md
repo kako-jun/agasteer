@@ -195,7 +195,8 @@ agasteer/
 │   │   ├── sync.ts                      # Push/Pull処理
 │   │   ├── theme.ts                     # テーマ管理
 │   │   ├── types.ts                     # TypeScript型定義
-│   │   └── ui.svelte.ts                  # トースト状態管理
+│   │   └── ui/
+│   │       └── ui.svelte.ts             # トースト状態管理
 │   ├── app.css                          # グローバルスタイル + テーマ定義
 │   ├── app.d.ts                         # TypeScript型宣言
 │   ├── App.svelte                       # ルートコンポーネント
