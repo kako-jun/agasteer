@@ -100,7 +100,8 @@
     "edit": "Edit",
     "move": "Move",
     "archive": "Archive",
-    "restore": "Restore"
+    "restore": "Restore",
+    "ocr": "Text Recognition"
   },
   "settings": {
     "title": "Settings",
@@ -242,6 +243,18 @@
     "restored": "Restored successfully",
     "noteCreated": "Note created",
     "leafCreated": "Leaf created"
+  },
+  "ocr": {
+    "title": "Text Recognition",
+    "fromCamera": "Take Photo",
+    "fromFile": "Choose File",
+    "capture": "Capture",
+    "back": "Back",
+    "recognize": "Recognize",
+    "processing": "Recognizing...",
+    "complete": "Text inserted",
+    "error": "Recognition failed",
+    "cameraError": "Cannot access camera"
   },
   "modal": {
     "longBackground": "You were away for a while. Checking current state.",

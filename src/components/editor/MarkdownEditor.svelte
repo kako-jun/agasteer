@@ -122,6 +122,17 @@
     }
   }
 
+  // 外部からカーソル位置にテキストを挿入する関数
+  export function insertAtCursor(text: string) {
+    if (!editorView) return
+    const { from } = editorView.state.selection.main
+    editorView.dispatch({
+      changes: { from, insert: text },
+      selection: { anchor: from + text.length },
+    })
+    editorView.focus()
+  }
+
   // 外部から選択テキストを取得する関数
   export function getSelectedText(): string {
     if (!editorView) return ''

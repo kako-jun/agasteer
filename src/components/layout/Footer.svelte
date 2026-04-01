@@ -3,14 +3,17 @@
 
   interface Props {
     left?: import('svelte').Snippet
+    center?: import('svelte').Snippet
     right?: import('svelte').Snippet
   }
 
-  let { left, right }: Props = $props()
+  let { left, center, right }: Props = $props()
 </script>
 
 <div class="footer-fixed">
   {@render left?.()}
+  <div class="spacer"></div>
+  {@render center?.()}
   <div class="spacer"></div>
   {@render right?.()}
   <AutoSaveIndicator />

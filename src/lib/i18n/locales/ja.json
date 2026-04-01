@@ -100,7 +100,8 @@
     "edit": "編集",
     "move": "移動",
     "archive": "アーカイブ",
-    "restore": "リストア"
+    "restore": "リストア",
+    "ocr": "テキスト読み取り"
   },
   "settings": {
     "title": "設定",
@@ -243,6 +244,18 @@
     "restored": "リストアしました",
     "noteCreated": "ノートを作成しました",
     "leafCreated": "リーフを作成しました"
+  },
+  "ocr": {
+    "title": "テキスト読み取り",
+    "fromCamera": "カメラで撮影",
+    "fromFile": "ファイルから選択",
+    "capture": "撮影",
+    "back": "戻る",
+    "recognize": "読み取る",
+    "processing": "読み取り中...",
+    "complete": "テキストを挿入しました",
+    "error": "読み取りに失敗しました",
+    "cameraError": "カメラにアクセスできません"
   },
   "modal": {
     "longBackground": "長時間バックグラウンドでした。現在の状態を確認します。",

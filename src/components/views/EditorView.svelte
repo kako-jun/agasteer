@@ -68,6 +68,13 @@
     }
   }
 
+  // 外部からカーソル位置にテキストを挿入する関数
+  export function insertAtCursor(text: string) {
+    if (markdownEditor && markdownEditor.insertAtCursor) {
+      markdownEditor.insertAtCursor(text)
+    }
+  }
+
   // 外部から選択テキストを取得する関数
   export function getSelectedText(): string {
     if (markdownEditor && markdownEditor.getSelectedText) {
