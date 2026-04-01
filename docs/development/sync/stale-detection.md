@@ -119,7 +119,7 @@ Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`
 **ローカルがクリーン（`isDirty === false`）の場合：**
 
 1. `shouldAutoPull`ストアを`true`に設定
-2. App.svelteで購読し、自動的にPullを実行
+2. app-state.svelte.tsで購読し、自動的にPullを実行
 3. ユーザー操作不要で最新状態に同期
 
 **ローカルがダーティ（`isDirty === true`）の場合：**

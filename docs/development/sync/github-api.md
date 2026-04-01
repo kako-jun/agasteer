@@ -135,7 +135,7 @@ return { success: true, message: 'github.pushOk', ... }
 
 #### ダーティフラグの維持
 
-失敗時は`success: false`が返されるため、App.svelteの以下のロジックによりダーティフラグが維持されます：
+失敗時は`success: false`が返されるため、pane-actions-factory.svelte.tsの以下のロジックによりダーティフラグが維持されます：
 
 ```typescript
 if (result.variant === 'success') {

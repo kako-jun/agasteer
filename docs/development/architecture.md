@@ -398,7 +398,7 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 | **並び替え・移動** | `handleDragStart()`, `handleDragEnd()`, `handleDragOver()`, `handleDropNote()`, `handleDropLeaf()`           | pane-actions-factory.svelte.ts |
 | **ナビゲーション** | `goHome()`, `selectNote()`, `selectLeaf()`, `refreshBreadcrumbs()`, `restoreStateFromUrl()`                  | pane-navigation.svelte.ts      |
 | **プレビュー**     | `togglePreview()`                                                                                            | pane-navigation.svelte.ts      |
-| **スクロール同期** | `handlePaneScroll()`                                                                                         | App.svelte                     |
+| **スクロール同期** | `handlePaneScroll()`                                                                                         | pane-navigation.svelte.ts      |
 | **GitHub同期**     | `handlePush()`, `handlePull()`                                                                               | pane-actions-factory.svelte.ts |
 | **モーダル**       | `showConfirm()`, `showAlert()`, `closeModal()`                                                               | pane-actions-factory.svelte.ts |
 | **設定**           | `openSettings()`, `closeSettings()`, `saveSettings()`, `testGitHubConnection()`                              | pane-actions-factory.svelte.ts |
