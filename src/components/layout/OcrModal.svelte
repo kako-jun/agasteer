@@ -61,7 +61,6 @@
         video: { facingMode: 'environment' },
       })
       step = 'camera'
-      // $effect will attach stream to video element
     } catch {
       errorMessage = $_('ocr.cameraError')
       step = 'select'
@@ -304,7 +303,12 @@
   }
 
   .hidden-input {
-    display: none;
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .camera-container {
