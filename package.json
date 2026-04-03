@@ -30,7 +30,8 @@
     "marked": "^17.0.1",
     "qrcode": "^1.5.4",
     "svelte": "^5.0.0",
-    "svelte-i18n": "^4.0.1"
+    "svelte-i18n": "^4.0.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
