@@ -2,38 +2,44 @@
   import { onMount, onDestroy } from 'svelte'
 
   const icons: string[] = [
-    'icon_alien',
-    'icon_bag',
-    'icon_blade',
-    'icon_book',
-    'icon_building',
-    'icon_car',
+    // キャラ系
+    'icon_female',
+    'icon_male',
     'icon_cat_ears',
+    'icon_alien',
+    // その他
     'icon_clock',
     'icon_coin',
-    'icon_drop',
-    'icon_exclamation',
-    'icon_fan',
-    'icon_female',
-    'icon_fish',
-    'icon_flame',
-    'icon_house',
-    'icon_kimetsu',
-    'icon_kirakira',
-    'icon_knife_fork',
-    'icon_letter_a',
-    'icon_letter_b',
-    'icon_male',
-    'icon_millennium_puzzle',
+    'icon_book',
     'icon_music',
     'icon_plant',
-    'icon_qtai',
-    'icon_question',
-    'icon_required',
     'icon_ribbon',
+    'icon_car',
+    'icon_bag',
+    'icon_knife_fork',
+    'icon_fish',
+    'icon_fan',
+    'icon_blade',
     'icon_saturn',
-    'icon_star',
+    // 場所系
+    'icon_house',
+    'icon_building',
+    // エフェクト系
+    'icon_drop',
+    'icon_flame',
     'icon_thought_bubble',
+    'icon_kirakira',
+    'icon_star',
+    'icon_required',
+    'icon_letter_a',
+    'icon_letter_b',
+    // 記号系
+    'icon_exclamation',
+    'icon_question',
+    // 特殊系
+    'icon_millennium_puzzle',
+    'icon_kimetsu',
+    'icon_qtai',
   ]
 
   const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#c7a443', '#ef4444']
@@ -136,7 +142,11 @@
     type="button"
   >
     {#if icon}
-      <img src="/assets/badge-icons/{icon}.webp" alt={icon} />
+      <div
+        class="icon-mask"
+        style={`-webkit-mask-image: url('/assets/badge-icons/${icon}.webp'); mask-image: url('/assets/badge-icons/${icon}.webp'); background-color: ${color || colors[0]};`}
+        aria-hidden="true"
+      ></div>
     {:else}
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="var(--text-muted)" />
@@ -153,8 +163,17 @@
           aria-label="clear badge"
         ></button>
         {#each icons as ic}
-          <button type="button" class:active={icon === ic} onclick={() => selectIcon(ic)}>
-            <img src="/assets/badge-icons/{ic}.webp" alt={ic} />
+          <button
+            type="button"
+            class:active={icon === ic}
+            aria-label={ic}
+            onclick={() => selectIcon(ic)}
+          >
+            <div
+              class="icon-mask"
+              style={`-webkit-mask-image: url('/assets/badge-icons/${ic}.webp'); mask-image: url('/assets/badge-icons/${ic}.webp'); background-color: ${color || colors[0]};`}
+              aria-hidden="true"
+            ></div>
           </button>
         {/each}
       </div>
@@ -259,10 +278,20 @@
     place-items: center;
   }
 
-  .icons button img {
+  .icon-mask {
     width: 22px;
     height: 22px;
-    object-fit: contain;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+  }
+
+  .badge-container .badge .icon-mask {
+    width: 1.2rem;
+    height: 1.2rem;
   }
 
   .icons button.active {
