@@ -554,6 +554,7 @@ export async function moveLeafTo(
       updatedAt: Date.now(),
     }
     updateArchiveLeaves([...remaining, movedLeaf])
+    isStructureDirty.value = true
 
     const $leftLeaf = leftLeaf.value
     const $rightLeaf = rightLeaf.value
@@ -643,6 +644,7 @@ export async function moveNoteTo(
       n.id === targetNote.id ? { ...n, parentId: nextParent || undefined } : n
     )
     updateArchiveNotes(updated)
+    isStructureDirty.value = true
 
     const updatedNote = updated.find((n) => n.id === targetNote.id)
     if (updatedNote) {

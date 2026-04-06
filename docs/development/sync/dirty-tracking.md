@@ -28,7 +28,7 @@ PWAがOSによってバックグラウンドで強制終了された場合、`be
 - ノート/リーフの作成、削除、名前変更
 - リーフのコンテンツ編集
 
-**注意:** 並び替え（`order`変更）は `dirtyNoteIds`/`dirtyLeafIds` には追加されないが、Push時は `notes.value`/`leaves.value` を全件送信するため、並び替え結果は確実にGitHubに反映される。
+**注意:** 並び替え（`order`変更）は `dirtyNoteIds`/`dirtyLeafIds` には追加されないが、Push時は `notes.value`/`leaves.value` を全件送信するため、並び替え結果は確実にGitHubに反映される。ただし並び替え時は `handleDropNote`/`handleDropLeaf` 内で `isStructureDirty.value = true` が立つため、Pushボタンの赤丸は正しく表示される。
 
 #### ダーティフラグがクリアされるタイミング
 
@@ -179,7 +179,7 @@ onMount: LocalStorageからisDirty=trueを検出
 | ---------------- | ---------------------------------------------------------------------- |
 | dirtyLeafIds     | コンテンツ変更があったリーフIDのSet（スナップショット比較）            |
 | dirtyNoteIds     | 構造変更があったノートIDのSet（スナップショット比較）                  |
-| isStructureDirty | フォールバック用フラグ（PWA復元時など特殊ケース用）                    |
+| isStructureDirty | フォールバック用フラグ（並び替え時、PWA復元時など特殊ケース用）        |
 | isDirty          | 全体のダーティ判定（dirtyLeafIds or dirtyNoteIds or isStructureDirty） |
 
 ### ヘルパー関数

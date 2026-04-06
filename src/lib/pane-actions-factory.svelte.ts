@@ -36,6 +36,7 @@ import {
   archiveLeaves,
   getDialogPositionForPane,
   resetForRepoSwitch,
+  isStructureDirty,
 } from './stores'
 import {
   appState,
@@ -155,6 +156,7 @@ export function handleDropNote(targetNote: Note) {
       : !n.parentId
   )
   setNotesForWorld(world, updatedNotes)
+  isStructureDirty.value = true
   dragStore.endDragNote()
 }
 
@@ -191,6 +193,7 @@ export function handleDropLeaf(targetLeaf: Leaf) {
     (l) => l.noteId === derivedState.draggedLeaf!.noteId
   )
   setLeavesForWorld(world, updatedLeaves)
+  isStructureDirty.value = true
   dragStore.endDragLeaf()
 }
 
