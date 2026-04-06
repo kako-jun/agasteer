@@ -226,7 +226,7 @@ function detectDirtyIds(
   for (const note of currentNotes) {
     const lastNote = lastNoteMap.get(note.id)
     if (lastNote) {
-      if (note.name !== lastNote.name || note.order !== lastNote.order) {
+      if (note.name !== lastNote.name) {
         // 属性変更: そのノート自体（と親）がdirty
         if (note.parentId) {
           dirtyNoteIds.add(note.parentId)
@@ -266,7 +266,7 @@ function detectDirtyIds(
   for (const leaf of currentLeaves) {
     const lastLeaf = lastLeafMap.get(leaf.id)
     if (lastLeaf) {
-      if (leaf.title !== lastLeaf.title || leaf.order !== lastLeaf.order) {
+      if (leaf.title !== lastLeaf.title) {
         // 属性変更: 親ノートがdirty、リーフ自体もdirty
         dirtyNoteIds.add(leaf.noteId)
         dirtyLeafIds.add(leaf.id)
