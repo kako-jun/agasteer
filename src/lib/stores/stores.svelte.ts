@@ -222,7 +222,7 @@ function detectDirtyIds(
     }
   }
 
-  // ノートの変更: name, parentId, orderの変更
+  // ノートの変更: name, parentId の変更
   for (const note of currentNotes) {
     const lastNote = lastNoteMap.get(note.id)
     if (lastNote) {
@@ -262,7 +262,7 @@ function detectDirtyIds(
     }
   }
 
-  // リーフの変更: noteId, title, order, contentの変更
+  // リーフの変更: noteId, title, content の変更
   for (const leaf of currentLeaves) {
     const lastLeaf = lastLeafMap.get(leaf.id)
     if (lastLeaf) {
