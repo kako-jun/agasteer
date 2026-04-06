@@ -1,117 +1,39 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import BackIcon from './icons/BackIcon.svelte'
-  import BoltIcon from './icons/BoltIcon.svelte'
-  import BookmarkIcon from './icons/BookmarkIcon.svelte'
-  import CheckIcon from './icons/CheckIcon.svelte'
-  import CircleIcon from './icons/CircleIcon.svelte'
-  import CloudIcon from './icons/CloudIcon.svelte'
-  import CrossIcon from './icons/CrossIcon.svelte'
-  import DiamondIcon from './icons/DiamondIcon.svelte'
-  import EditIcon from './icons/EditIcon.svelte'
-  import EyeIcon from './icons/EyeIcon.svelte'
-  import FlagIcon from './icons/FlagIcon.svelte'
-  import HeartIcon from './icons/HeartIcon.svelte'
-  import HexagonIcon from './icons/HexagonIcon.svelte'
-  import MoonIcon from './icons/MoonIcon.svelte'
-  import MusicIcon from './icons/MusicIcon.svelte'
-  import PinIcon from './icons/PinIcon.svelte'
-  import PlayIcon from './icons/PlayIcon.svelte'
-  import SquareIcon from './icons/SquareIcon.svelte'
-  import StarIcon from './icons/StarIcon.svelte'
-  import StarburstIcon from './icons/StarburstIcon.svelte'
-  import SunIcon from './icons/SunIcon.svelte'
-  import TagIcon from './icons/TagIcon.svelte'
-  import TriangleDownIcon from './icons/TriangleDownIcon.svelte'
-  import TriangleUpIcon from './icons/TriangleUpIcon.svelte'
 
-  const iconComponents = {
-    star: StarIcon,
-    heart: HeartIcon,
-    diamond: DiamondIcon,
-    circle: CircleIcon,
-    square: SquareIcon,
-    hexagon: HexagonIcon,
-    'triangle-up': TriangleUpIcon,
-    'triangle-down': TriangleDownIcon,
-    play: PlayIcon,
-    back: BackIcon,
-    cross: CrossIcon,
-    check: CheckIcon,
-    edit: EditIcon,
-    music: MusicIcon,
-    bookmark: BookmarkIcon,
-    flag: FlagIcon,
-    pin: PinIcon,
-    bolt: BoltIcon,
-    tag: TagIcon,
-    eye: EyeIcon,
-    cloud: CloudIcon,
-    moon: MoonIcon,
-    sun: SunIcon,
-    starburst: StarburstIcon,
-  } as const
-
-  type IconId = keyof typeof iconComponents
-
-  const legacyIconMap: Record<string, IconId> = {
-    '★': 'star',
-    '♥': 'heart',
-    '❤': 'heart',
-    '◆': 'diamond',
-    '◇': 'diamond',
-    '●': 'circle',
-    '○': 'circle',
-    '■': 'square',
-    '⬤': 'circle',
-    '⬛': 'square',
-    '⬢': 'hexagon',
-    '▲': 'triangle-up',
-    '▼': 'triangle-down',
-    '▶': 'play',
-    '◀': 'back',
-    '☀': 'sun',
-    '☾': 'moon',
-    '☁': 'cloud',
-    '✕': 'cross',
-    '×': 'cross',
-    '✓': 'check',
-    '✔': 'check',
-    '✎': 'edit',
-    '♪': 'music',
-    '＠': 'tag',
-    '＃': 'tag',
-    '#': 'tag',
-    '＆': 'tag',
-    '&': 'tag',
-    '✪': 'starburst',
-  }
-
-  const icons: IconId[] = [
-    'star',
-    'heart',
-    'diamond',
-    'circle',
-    'square',
-    'hexagon',
-    'triangle-up',
-    'triangle-down',
-    'play',
-    'back',
-    'cross',
-    'check',
-    'edit',
-    'music',
-    'flag',
-    'pin',
-    'bolt',
-    'bookmark',
-    'tag',
-    'eye',
-    'cloud',
-    'moon',
-    'sun',
-    'starburst',
+  const icons: string[] = [
+    'icon_alien',
+    'icon_bag',
+    'icon_blade',
+    'icon_book',
+    'icon_building',
+    'icon_car',
+    'icon_cat_ears',
+    'icon_clock',
+    'icon_coin',
+    'icon_drop',
+    'icon_exclamation',
+    'icon_fan',
+    'icon_female',
+    'icon_fish',
+    'icon_flame',
+    'icon_house',
+    'icon_kimetsu',
+    'icon_kirakira',
+    'icon_knife_fork',
+    'icon_letter_a',
+    'icon_letter_b',
+    'icon_male',
+    'icon_millennium_puzzle',
+    'icon_music',
+    'icon_plant',
+    'icon_qtai',
+    'icon_question',
+    'icon_required',
+    'icon_ribbon',
+    'icon_saturn',
+    'icon_star',
+    'icon_thought_bubble',
   ]
 
   const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#c7a443', '#ef4444']
@@ -131,13 +53,6 @@
   let containerEl: HTMLElement | null = null
   let panelTop = $state(0)
   let panelLeft = $state(0)
-  let resolvedIcon = $derived((legacyIconMap[icon] ?? icon) as IconId | string)
-  let currentIconComponent = $derived(
-    typeof resolvedIcon === 'string' && resolvedIcon in iconComponents
-      ? iconComponents[resolvedIcon as IconId]
-      : null
-  )
-  let CurrentIconComponent = $derived(currentIconComponent)
 
   function computePanelPosition() {
     const paneEl = containerEl?.closest('.left-column') || containerEl?.closest('.right-column')
@@ -168,11 +83,9 @@
   }
 
   function selectColor(newColor: string) {
-    const nextIcon = (resolvedIcon as IconId) || icons[0]
+    const nextIcon = icon || icons[0]
     onChange(nextIcon, newColor)
   }
-
-  let computedColor = $derived(color || 'var(--text-muted)')
 
   function handleGlobalOpen(e: Event) {
     const detail = (e as CustomEvent<string>).detail
@@ -216,18 +129,17 @@
   <button
     class="badge"
     aria-label="badge"
-    style={`color: ${computedColor}`}
     onclick={(e) => {
       e.stopPropagation()
       toggleOpen(e)
     }}
     type="button"
   >
-    {#if CurrentIconComponent}
-      <CurrentIconComponent color={computedColor} />
+    {#if icon}
+      <img src="/assets/badge-icons/{icon}.webp" alt={icon} />
     {:else}
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill={computedColor} />
+        <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="var(--text-muted)" />
       </svg>
     {/if}
   </button>
@@ -241,9 +153,8 @@
           aria-label="clear badge"
         ></button>
         {#each icons as ic}
-          {@const IconComp = iconComponents[ic]}
-          <button type="button" class:active={resolvedIcon === ic} onclick={() => selectIcon(ic)}>
-            <IconComp color={computedColor} />
+          <button type="button" class:active={icon === ic} onclick={() => selectIcon(ic)}>
+            <img src="/assets/badge-icons/{ic}.webp" alt={ic} />
           </button>
         {/each}
       </div>
@@ -348,9 +259,10 @@
     place-items: center;
   }
 
-  .icons button :global(svg) {
+  .icons button img {
     width: 22px;
     height: 22px;
+    object-fit: contain;
   }
 
   .icons button.active {
