@@ -63,12 +63,12 @@
     <span class="dirty-indicator" title={$_('note.hasUnsavedLeaves')}></span>
   {/if}
   <BadgeButton icon={badgeIcon} color={badgeColor} onChange={onBadgeChange} />
-  <strong class="note-title text-ellipsis">
+  <strong class="note-title">
     <svg class="folder-icon" viewBox="0 0 20 20" aria-hidden="true">
       <path
         d="M2 5a2 2 0 0 1 2-2h3.586A2 2 0 0 1 9 3.586L10.414 5H16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5Z"
       />
-    </svg>{note.name}</strong
+    </svg><span class="note-name text-ellipsis">{note.name}</span></strong
   >
   <div class="card-meta">
     {#each items as item}
@@ -94,7 +94,6 @@
   }
 
   .note-card strong {
-    display: block;
     max-width: 100%;
     margin-bottom: 0.5rem;
   }
@@ -103,6 +102,10 @@
     display: flex;
     align-items: center;
     gap: 0.3em;
+  }
+
+  .note-name {
+    min-width: 0;
   }
 
   .folder-icon {
