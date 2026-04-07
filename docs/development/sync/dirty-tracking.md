@@ -27,6 +27,7 @@ PWAがOSによってバックグラウンドで強制終了された場合、`be
 
 - ノート/リーフの作成、削除、名前変更
 - リーフのコンテンツ編集
+- ノート/リーフのバッジ変更（badgeIcon, badgeColor）
 
 **注意:** 並び替え（`order`変更）は `dirtyNoteIds`/`dirtyLeafIds` には追加されないが、Push時は `notes.value`/`leaves.value` を全件送信するため、並び替え結果は確実にGitHubに反映される。ただし並び替え時は `handleDropNote`/`handleDropLeaf` 内で `isStructureDirty.value = true` が立つため、Pushボタンの赤丸は正しく表示される。
 
@@ -258,6 +259,7 @@ stores.svelte.tsにモジュールレベルの変数として、Home用とArchiv
 | 追加       | 現在にあり、スナップショットにない | 親ノート             |
 | 削除       | スナップショットにあり、現在にない | 親ノート             |
 | 名前変更   | `name`の比較                       | 親ノート             |
+| バッジ変更 | `badgeIcon`/`badgeColor`の比較     | 親ノート             |
 | 移動       | `parentId`の比較                   | 元の親 + 新しい親    |
 
 #### リーフの変更
@@ -269,6 +271,7 @@ stores.svelte.tsにモジュールレベルの変数として、Home用とArchiv
 | タイトル変更   | `title`の比較                      | 親ノート             | リーフ自体           |
 | 移動           | `noteId`の比較                     | 元の親 + 新しい親    | リーフ自体           |
 | コンテンツ変更 | `content`の比較                    | -                    | リーフ自体           |
+| バッジ変更     | `badgeIcon`/`badgeColor`の比較     | -                    | リーフ自体           |
 
 ### スナップショット更新のタイミング
 
