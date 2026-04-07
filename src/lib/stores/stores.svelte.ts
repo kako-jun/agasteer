@@ -222,11 +222,15 @@ function detectDirtyIds(
     }
   }
 
-  // ノートの変更: name, parentId の変更
+  // ノートの変更: name, parentId, badge の変更
   for (const note of currentNotes) {
     const lastNote = lastNoteMap.get(note.id)
     if (lastNote) {
-      if (note.name !== lastNote.name) {
+      if (
+        note.name !== lastNote.name ||
+        note.badgeIcon !== lastNote.badgeIcon ||
+        note.badgeColor !== lastNote.badgeColor
+      ) {
         // 属性変更: そのノート自体（と親）がdirty
         if (note.parentId) {
           dirtyNoteIds.add(note.parentId)
@@ -262,7 +266,7 @@ function detectDirtyIds(
     }
   }
 
-  // リーフの変更: noteId, title, content の変更
+  // リーフの変更: noteId, title, content, badge の変更
   for (const leaf of currentLeaves) {
     const lastLeaf = lastLeafMap.get(leaf.id)
     if (lastLeaf) {
@@ -279,6 +283,10 @@ function detectDirtyIds(
       }
       // コンテンツ変更: リーフ自体がdirty（スナップショット比較）
       if (leaf.content !== lastLeaf.content) {
+        dirtyLeafIds.add(leaf.id)
+      }
+      // バッジ変更: リーフ自体がdirty
+      if (leaf.badgeIcon !== lastLeaf.badgeIcon || leaf.badgeColor !== lastLeaf.badgeColor) {
         dirtyLeafIds.add(leaf.id)
       }
     }
