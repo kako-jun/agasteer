@@ -266,11 +266,7 @@ export function handleDisabledPushClick(reason: string, pushDisabledReason: stri
  * IndexedDBからアーカイブキャッシュを読み込み、ストアにセットする。
  * @returns キャッシュが存在したかどうか
  */
-async function loadArchiveCacheFromDB(): Promise<{
-  cachedNotes: import('./types').Note[]
-  cachedLeaves: import('./types').Leaf[]
-  hasCachedData: boolean
-}> {
+async function loadArchiveCacheFromDB(): Promise<{ hasCachedData: boolean }> {
   const [cachedNotes, cachedLeaves] = await Promise.all([loadArchiveNotes(), loadArchiveLeaves()])
   const hasCachedData = cachedNotes.length > 0 || cachedLeaves.length > 0
   if (hasCachedData) {
@@ -281,7 +277,7 @@ async function loadArchiveCacheFromDB(): Promise<{
     // キャッシュからstatsを再構築（pullArchive完了前でも統計を表示可能にする）
     archiveLeafStatsStore.rebuild(cachedLeaves, cachedNotes)
   }
-  return { cachedNotes, cachedLeaves, hasCachedData }
+  return { hasCachedData }
 }
 
 // ========================================
@@ -309,7 +305,9 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
 
       // キャッシュの有無にかかわらずpullArchiveで最新化
       appState.isArchiveLoading = true
-      archiveLeafStatsStore.reset()
+      if (!hasCachedData) {
+        archiveLeafStatsStore.reset()
+      }
       try {
         const result = await pullArchive(settings.value, {
           onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
@@ -709,7 +707,9 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
     const { hasCachedData } = await loadArchiveCacheFromDB()
 
     appState.isArchiveLoading = true
-    archiveLeafStatsStore.reset()
+    if (!hasCachedData) {
+      archiveLeafStatsStore.reset()
+    }
     try {
       const result = await pullArchive(settings.value, {
         onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
