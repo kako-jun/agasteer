@@ -3,8 +3,14 @@
  * ユーザー操作を検知し、無操作が一定時間続いたら自動保存・自動Pushを実行
  */
 
-import { leaves, notes, offlineLeafStore } from './stores.svelte'
-import { saveLeaves, saveNotes, saveOfflineLeaf } from '../data/storage'
+import { leaves, notes, archiveLeaves, archiveNotes, offlineLeafStore } from './stores.svelte'
+import {
+  saveLeaves,
+  saveNotes,
+  saveArchiveLeaves,
+  saveArchiveNotes,
+  saveOfflineLeaf,
+} from '../data/storage'
 import { createOfflineLeaf } from '../utils/offline'
 
 /**
@@ -31,6 +37,8 @@ const AUTO_PUSH_INTERVAL_MS = 42 * 1000 // 42秒
 // 保存が必要かどうかのフラグ
 let pendingLeavesSave = false
 let pendingNotesSave = false
+let pendingArchiveLeavesSave = false
+let pendingArchiveNotesSave = false
 let pendingOfflineSave = false
 
 // タイマーID
@@ -132,6 +140,22 @@ export function scheduleNotesSave(): void {
 }
 
 /**
+ * アーカイブリーフ保存をスケジュール
+ */
+export function scheduleArchiveLeavesSave(): void {
+  pendingArchiveLeavesSave = true
+  resetActivityTimer()
+}
+
+/**
+ * アーカイブノート保存をスケジュール
+ */
+export function scheduleArchiveNotesSave(): void {
+  pendingArchiveNotesSave = true
+  resetActivityTimer()
+}
+
+/**
  * オフラインリーフ保存をスケジュール
  */
 export function scheduleOfflineSave(): void {
@@ -172,6 +196,26 @@ async function executePendingSaves(): Promise<void> {
     )
   }
 
+  if (pendingArchiveLeavesSave) {
+    pendingArchiveLeavesSave = false
+    const currentArchiveLeaves = archiveLeaves.value
+    promises.push(
+      saveArchiveLeaves(currentArchiveLeaves).catch((err) =>
+        console.error('Failed to persist archive leaves:', err)
+      )
+    )
+  }
+
+  if (pendingArchiveNotesSave) {
+    pendingArchiveNotesSave = false
+    const currentArchiveNotes = archiveNotes.value
+    promises.push(
+      saveArchiveNotes(currentArchiveNotes).catch((err) =>
+        console.error('Failed to persist archive notes:', err)
+      )
+    )
+  }
+
   if (pendingOfflineSave) {
     pendingOfflineSave = false
     const current = offlineLeafStore.value
@@ -205,7 +249,13 @@ function resetActivityTimer(): void {
  */
 function handleUserActivity(): void {
   // 保留中の保存がある場合のみタイマーをリセット
-  if (pendingLeavesSave || pendingNotesSave || pendingOfflineSave) {
+  if (
+    pendingLeavesSave ||
+    pendingNotesSave ||
+    pendingArchiveLeavesSave ||
+    pendingArchiveNotesSave ||
+    pendingOfflineSave
+  ) {
     resetActivityTimer()
   }
 
@@ -261,7 +311,13 @@ export function setupBeforeUnloadSave(): () => void {
   const handler = () => {
     // beforeunload では非同期処理が完了する保証がないため、
     // 同期的に実行できる範囲で保存をトリガー
-    if (pendingLeavesSave || pendingNotesSave || pendingOfflineSave) {
+    if (
+      pendingLeavesSave ||
+      pendingNotesSave ||
+      pendingArchiveLeavesSave ||
+      pendingArchiveNotesSave ||
+      pendingOfflineSave
+    ) {
       executePendingSaves()
     }
   }

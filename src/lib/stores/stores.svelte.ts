@@ -13,8 +13,14 @@ import {
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
   getPersistedCommitSha,
   setPersistedCommitSha,
+  clearArchiveData,
 } from '../data/storage'
-import { scheduleLeavesSave, scheduleNotesSave } from './auto-save.svelte'
+import {
+  scheduleLeavesSave,
+  scheduleNotesSave,
+  scheduleArchiveLeavesSave,
+  scheduleArchiveNotesSave,
+} from './auto-save.svelte'
 
 // ============================================
 // 基本ストア（Home用）
@@ -728,14 +734,16 @@ export function updateLeaves(newLeaves: Leaf[]): void {
 
 export function updateArchiveNotes(newNotes: Note[]): void {
   archiveNotes.value = newNotes
-  // TODO: アーカイブ用のIndexedDB永続化を実装
+  // 無操作1秒後にIndexedDBへ保存をスケジュール
+  scheduleArchiveNotesSave()
   // 差分検出でdirtyNoteIdsを更新（ルートノートの変更も検出される）
   updateArchiveDirtyIds(newNotes, archiveLeaves.value)
 }
 
 export function updateArchiveLeaves(newLeaves: Leaf[]): void {
   archiveLeaves.value = newLeaves
-  // TODO: アーカイブ用のIndexedDB永続化を実装
+  // 無操作1秒後にIndexedDBへ保存をスケジュール
+  scheduleArchiveLeavesSave()
   // 差分検出でdirtyNoteIds/dirtyLeafIdsを更新
   updateArchiveDirtyIds(archiveNotes.value, newLeaves)
 }
@@ -748,6 +756,7 @@ export function resetArchive(): void {
   archiveLeaves.value = []
   archiveMetadata.value = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
   isArchiveLoaded.value = false
+  clearArchiveData().catch((err) => console.error('Failed to clear archive data:', err))
 }
 
 /**
