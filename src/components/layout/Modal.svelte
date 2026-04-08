@@ -95,19 +95,29 @@
 </script>
 
 {#if show}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="modal-overlay"
     class:bottom-left={position === 'bottom-left'}
     class:bottom-right={position === 'bottom-right'}
     onclick={handleClose}
-    role="presentation"
+    onkeydown={(e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        handleClose()
+      }
+    }}
+    role="button"
+    tabindex="-1"
+    aria-label={$_('common.close')}
   >
+    <!-- role="dialog" にイベントハンドラを付けているのは、ダイアログ内のクリックがオーバーレイに伝播してモーダルが閉じるのを防止するため -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="modal-content"
       onclick={(e) => {
+        e.stopPropagation()
+      }}
+      onkeydown={(e) => {
         e.stopPropagation()
       }}
       role="dialog"

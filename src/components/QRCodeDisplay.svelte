@@ -126,10 +126,28 @@
 {/if}
 
 {#if showModal}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="qr-modal-backdrop" use:portal onclick={handleBackdropClick}>
-    <div class="qr-modal">
+  <div
+    class="qr-modal-backdrop"
+    use:portal
+    onclick={handleBackdropClick}
+    onkeydown={(e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeModal()
+      }
+    }}
+    role="button"
+    tabindex="-1"
+    aria-label={$_('common.close')}
+  >
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="qr-modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onkeydown={(e) => e.stopPropagation()}
+    >
       {#if qrDataUrl}
         <img src={qrDataUrl} alt="QR Code" class="qr-image" />
       {:else}

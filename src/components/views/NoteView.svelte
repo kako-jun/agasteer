@@ -207,7 +207,7 @@
         />
       {/each}
       {#each displayItems as item, itemIndex (item.type === 'leaf' ? item.leaf.id : item.skeleton.id)}
-        <!-- tabindexは条件付きrole="button"と連動、スケルトン時は-1 -->
+        <!-- tabindexは条件付きrole="button"と連動: リーフ時は0（操作可能）、スケルトン時は-1（操作不可） -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class="note-card leaf-card"

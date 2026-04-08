@@ -40,8 +40,6 @@
   }: Props = $props()
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="note-card"
   class:note-group-card={isGroup}
@@ -58,6 +56,12 @@
     onDrop()
   }}
   onclick={onSelect}
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onSelect()
+    }
+  }}
 >
   {#if isDirty}
     <span class="dirty-indicator" title={$_('note.hasUnsavedLeaves')}></span>

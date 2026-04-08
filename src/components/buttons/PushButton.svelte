@@ -40,12 +40,24 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="push-button-wrapper" id={id || undefined} onclick={handleClick}>
+<div
+  class="push-button-wrapper"
+  id={id || undefined}
+  onclick={handleClick}
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleClick()
+    }
+  }}
+  role="button"
+  tabindex="0"
+  aria-disabled={disabled}
+>
   <button
     type="button"
     class="push-button"
+    tabindex="-1"
     {disabled}
     title={$_('header.push')}
     aria-label={$_('header.push')}
@@ -56,14 +68,21 @@
     <span class="notification-badge"></span>
   {/if}
   {#if showGuide}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="guide-tooltip"
       onclick={(e) => {
         e.stopPropagation()
         handleDismiss()
       }}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          handleDismiss()
+        }
+      }}
+      role="button"
+      tabindex="0"
     >
       <span class="guide-text">{$_('guide.saveToGitHub')}</span>
       <span class="guide-close">×</span>
