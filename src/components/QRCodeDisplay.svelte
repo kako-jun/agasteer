@@ -131,16 +131,23 @@
     use:portal
     onclick={handleBackdropClick}
     onkeydown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === 'Escape') {
         e.preventDefault()
         closeModal()
       }
     }}
     role="button"
-    tabindex="0"
-    aria-label="Close QR code"
+    tabindex="-1"
+    aria-label={$_('common.close')}
   >
-    <div class="qr-modal">
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="qr-modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onkeydown={(e) => e.stopPropagation()}
+    >
       {#if qrDataUrl}
         <img src={qrDataUrl} alt="QR Code" class="qr-image" />
       {:else}

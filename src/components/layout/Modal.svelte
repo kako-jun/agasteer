@@ -107,10 +107,10 @@
       }
     }}
     role="button"
-    tabindex="0"
+    tabindex="-1"
     aria-label={$_('common.close')}
   >
-    <!-- role="dialog" にイベントハンドラを付けているのは、オーバーレイへのクリック伝播を防止するため -->
+    <!-- role="dialog" にイベントハンドラを付けているのは、ダイアログ内のクリックがオーバーレイに伝播してモーダルが閉じるのを防止するため -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="modal-content"

@@ -52,10 +52,12 @@
   }}
   role="button"
   tabindex="0"
+  aria-disabled={disabled}
 >
   <button
     type="button"
     class="push-button"
+    tabindex="-1"
     {disabled}
     title={$_('header.push')}
     aria-label={$_('header.push')}
