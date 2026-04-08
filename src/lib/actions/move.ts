@@ -29,6 +29,8 @@ import {
 import {
   saveNotes,
   saveLeaves,
+  saveArchiveNotes,
+  saveArchiveLeaves,
   moveLeafTo as moveLeafToLib,
   moveNoteTo as moveNoteToLib,
 } from '../data'
@@ -74,6 +76,12 @@ export async function moveNoteToWorld(
           freshArchiveLeaves = result.leaves
           // Archive部分のベースラインのみ更新（Home側に影響しない）
           setArchiveBaseline(result.notes, result.leaves)
+          saveArchiveNotes(result.notes).catch((err) =>
+            console.error('Failed to persist archive notes:', err)
+          )
+          saveArchiveLeaves(result.leaves).catch((err) =>
+            console.error('Failed to persist archive leaves:', err)
+          )
         } else {
           // Pull失敗時はアーカイブ操作を中止（データ損失防止）
           showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
@@ -344,6 +352,12 @@ export async function moveLeafToWorld(
           freshArchiveLeaves = result.leaves
           // Archive部分のベースラインのみ更新（Home側に影響しない）
           setArchiveBaseline(result.notes, result.leaves)
+          saveArchiveNotes(result.notes).catch((err) =>
+            console.error('Failed to persist archive notes:', err)
+          )
+          saveArchiveLeaves(result.leaves).catch((err) =>
+            console.error('Failed to persist archive leaves:', err)
+          )
         } else {
           // Pull失敗時はアーカイブ操作を中止（データ損失防止）
           showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')

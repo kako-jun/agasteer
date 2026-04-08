@@ -13,6 +13,7 @@ import {
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
   getPersistedCommitSha,
   setPersistedCommitSha,
+  clearArchiveData,
 } from '../data/storage'
 import { scheduleLeavesSave, scheduleNotesSave } from './auto-save.svelte'
 
@@ -748,6 +749,7 @@ export function resetArchive(): void {
   archiveLeaves.value = []
   archiveMetadata.value = { version: 1, notes: {}, leaves: {}, pushCount: 0 }
   isArchiveLoaded.value = false
+  clearArchiveData().catch((err) => console.error('Failed to clear archive data:', err))
 }
 
 /**

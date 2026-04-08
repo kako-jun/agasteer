@@ -49,7 +49,13 @@ import {
   createOfflineLeaf,
   isOfflineLeaf,
 } from './utils'
-import { saveOfflineLeaf } from './data'
+import {
+  saveOfflineLeaf,
+  saveArchiveNotes,
+  saveArchiveLeaves,
+  loadArchiveNotes,
+  loadArchiveLeaves,
+} from './data'
 import { pullArchive, translateGitHubMessage } from './api'
 import {
   showPushToast,
@@ -272,6 +278,19 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
 
   if (world === 'archive' && !isArchiveLoaded.value && !appState.isArchiveLoading) {
     if (settings.value.token && settings.value.repoName) {
+      // まずIndexedDBキャッシュから読み出し
+      const [cachedNotes, cachedLeaves] = await Promise.all([
+        loadArchiveNotes(),
+        loadArchiveLeaves(),
+      ])
+      if (cachedNotes.length > 0 || cachedLeaves.length > 0) {
+        archiveNotes.value = cachedNotes
+        archiveLeaves.value = cachedLeaves
+        isArchiveLoaded.value = true
+        setArchiveBaseline(cachedNotes, cachedLeaves)
+      }
+
+      // キャッシュの有無にかかわらずpullArchiveで最新化
       appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
@@ -284,14 +303,25 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
           archiveMetadata.value = result.metadata
           isArchiveLoaded.value = true
           setArchiveBaseline(result.notes, result.leaves)
+          saveArchiveNotes(result.notes).catch((err) =>
+            console.error('Failed to persist archive notes:', err)
+          )
+          saveArchiveLeaves(result.leaves).catch((err) =>
+            console.error('Failed to persist archive leaves:', err)
+          )
         } else {
           const t = get(_)
-          showPullToast(translateGitHubMessage(result.message, t, result.rateLimitInfo), 'error')
+          // キャッシュがなければエラー表示
+          if (cachedNotes.length === 0 && cachedLeaves.length === 0) {
+            showPullToast(translateGitHubMessage(result.message, t, result.rateLimitInfo), 'error')
+          }
         }
       } catch (e) {
         console.error('Archive pull failed:', e)
-        const t = get(_)
-        showPullToast(t('toast.pullFailed'), 'error')
+        if (cachedNotes.length === 0 && cachedLeaves.length === 0) {
+          const t = get(_)
+          showPullToast(t('toast.pullFailed'), 'error')
+        }
       } finally {
         appState.isArchiveLoading = false
       }
@@ -658,6 +688,15 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
 
   const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
   if (needsArchive && !isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
+    // まずIndexedDBキャッシュから読み出し
+    const [cachedNotes, cachedLeaves] = await Promise.all([loadArchiveNotes(), loadArchiveLeaves()])
+    if (cachedNotes.length > 0 || cachedLeaves.length > 0) {
+      archiveNotes.value = cachedNotes
+      archiveLeaves.value = cachedLeaves
+      isArchiveLoaded.value = true
+      setArchiveBaseline(cachedNotes, cachedLeaves)
+    }
+
     appState.isArchiveLoading = true
     archiveLeafStatsStore.reset()
     try {
@@ -670,6 +709,12 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
         archiveMetadata.value = result.metadata
         isArchiveLoaded.value = true
         setArchiveBaseline(result.notes, result.leaves)
+        saveArchiveNotes(result.notes).catch((err) =>
+          console.error('Failed to persist archive notes:', err)
+        )
+        saveArchiveLeaves(result.leaves).catch((err) =>
+          console.error('Failed to persist archive leaves:', err)
+        )
       }
     } catch (e) {
       console.error('Archive pull failed during URL restore:', e)

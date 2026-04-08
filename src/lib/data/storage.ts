@@ -113,12 +113,14 @@ function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 const DB_NAME = 'agasteer/db'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
 const FONTS_STORE = 'fonts'
 const BACKGROUNDS_STORE = 'backgrounds'
 const OFFLINE_STORE = 'offline'
+const ARCHIVE_LEAVES_STORE = 'archiveLeaves'
+const ARCHIVE_NOTES_STORE = 'archiveNotes'
 
 export const defaultSettings: Settings = {
   token: '',
@@ -428,6 +430,16 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
             db.createObjectStore(OFFLINE_STORE, { keyPath: 'id' })
           }
         }
+
+        // バージョン5: archive stores追加（アーカイブのIndexedDB永続化）
+        if (oldVersion < 5) {
+          if (!db.objectStoreNames.contains(ARCHIVE_LEAVES_STORE)) {
+            db.createObjectStore(ARCHIVE_LEAVES_STORE, { keyPath: 'id' })
+          }
+          if (!db.objectStoreNames.contains(ARCHIVE_NOTES_STORE)) {
+            db.createObjectStore(ARCHIVE_NOTES_STORE, { keyPath: 'id' })
+          }
+        }
       } catch (upgradeError) {
         console.error('IndexedDB upgrade failed:', upgradeError)
         settle(() => {
@@ -586,6 +598,72 @@ export async function clearAllData(): Promise<void> {
     await replaceAllInStore<Note>(db, NOTES_STORE, [])
   } catch (error) {
     console.error('Failed to clear data in IndexedDB:', error)
+  }
+}
+
+/**
+ * アーカイブリーフを読み込む（IndexedDB）
+ */
+export async function loadArchiveLeaves(): Promise<Leaf[]> {
+  try {
+    const db = await openAppDB()
+    return await getAllFromStore<Leaf>(db, ARCHIVE_LEAVES_STORE)
+  } catch (error) {
+    console.error('Failed to load archive leaves from IndexedDB:', error)
+    return []
+  }
+}
+
+/**
+ * アーカイブリーフを保存
+ */
+export async function saveArchiveLeaves(newLeaves: Leaf[]): Promise<void> {
+  try {
+    const db = await openAppDB()
+    await replaceAllInStore<Leaf>(db, ARCHIVE_LEAVES_STORE, newLeaves)
+  } catch (error) {
+    console.error('Failed to save archive leaves to IndexedDB:', error)
+    throw error
+  }
+}
+
+/**
+ * アーカイブノートを読み込む
+ */
+export async function loadArchiveNotes(): Promise<Note[]> {
+  try {
+    const db = await openAppDB()
+    const notes = await getAllFromStore<Note>(db, ARCHIVE_NOTES_STORE)
+    return notes.map((note, index) => (note.order === undefined ? { ...note, order: index } : note))
+  } catch (error) {
+    console.error('Failed to load archive notes from IndexedDB:', error)
+    return []
+  }
+}
+
+/**
+ * アーカイブノートを保存
+ */
+export async function saveArchiveNotes(notes: Note[]): Promise<void> {
+  try {
+    const db = await openAppDB()
+    await replaceAllInStore<Note>(db, ARCHIVE_NOTES_STORE, notes)
+  } catch (error) {
+    console.error('Failed to save archive notes to IndexedDB:', error)
+    throw error
+  }
+}
+
+/**
+ * アーカイブデータを削除（リポ切り替え時用）
+ */
+export async function clearArchiveData(): Promise<void> {
+  try {
+    const db = await openAppDB()
+    await replaceAllInStore<Leaf>(db, ARCHIVE_LEAVES_STORE, [])
+    await replaceAllInStore<Note>(db, ARCHIVE_NOTES_STORE, [])
+  } catch (error) {
+    console.error('Failed to clear archive data in IndexedDB:', error)
   }
 }
 
