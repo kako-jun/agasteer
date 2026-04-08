@@ -122,9 +122,18 @@
           <FilePlusIcon />
         </IconButton>
         {#if showGuide}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="guide-tooltip" onclick={handleDismiss}>
+          <div
+            class="guide-tooltip"
+            onclick={handleDismiss}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleDismiss()
+              }
+            }}
+            role="button"
+            tabindex="0"
+          >
             <span class="guide-text">{$_('guide.createLeaf')}</span>
             <span class="guide-close">×</span>
           </div>

@@ -126,9 +126,20 @@
 {/if}
 
 {#if showModal}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="qr-modal-backdrop" use:portal onclick={handleBackdropClick}>
+  <div
+    class="qr-modal-backdrop"
+    use:portal
+    onclick={handleBackdropClick}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        closeModal()
+      }
+    }}
+    role="button"
+    tabindex="0"
+    aria-label="Close QR code"
+  >
     <div class="qr-modal">
       {#if qrDataUrl}
         <img src={qrDataUrl} alt="QR Code" class="qr-image" />

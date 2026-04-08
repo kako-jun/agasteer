@@ -159,6 +159,7 @@
     tabindex="-1"
     aria-label={$_('ocr.back')}
   >
+    <!-- role="dialog" にイベントハンドラを付けているのは、オーバーレイへのクリック伝播を防止するため -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="ocr-modal"
@@ -196,6 +197,7 @@
         {/if}
       {:else if step === 'camera'}
         <div class="camera-container">
+          <!-- OCRプレビュー用のリアルタイムカメラ映像のため、キャプションは不要 -->
           <!-- svelte-ignore a11y_media_has_caption -->
           <video bind:this={videoEl} autoplay playsinline class="camera-preview"></video>
         </div>

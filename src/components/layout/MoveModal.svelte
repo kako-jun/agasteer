@@ -149,7 +149,7 @@
     tabindex="-1"
     aria-label={$_('move.cancel')}
   >
-    <!-- イベント伝播停止はオーバーレイクリック時にモーダルが閉じないようにするため -->
+    <!-- role="dialog" にイベントハンドラを付けているのは、オーバーレイへのクリック伝播を防止するため -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="move-modal"

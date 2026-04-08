@@ -70,8 +70,7 @@
     onkeydown={handleOverlayKeydown}
     aria-label={$_('common.closeSettings')}
   >
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- role="dialog" にイベントハンドラを付けているのは、オーバーレイへのクリック伝播を防止するため -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="settings-modal-content"
@@ -82,6 +81,9 @@
       onpointerdown={handleContentPointerDown}
       onpointerup={handleContentPointerUp}
       onclick={handleContentClick}
+      onkeydown={(e) => {
+        e.stopPropagation()
+      }}
     >
       <button class="settings-close-button" onclick={onClose} aria-label={$_('common.close')}>
         <svg
