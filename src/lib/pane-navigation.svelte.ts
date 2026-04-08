@@ -259,6 +259,32 @@ export function handleDisabledPushClick(reason: string, pushDisabledReason: stri
 }
 
 // ========================================
+// Archive cache helper
+// ========================================
+
+/**
+ * IndexedDBからアーカイブキャッシュを読み込み、ストアにセットする。
+ * @returns キャッシュが存在したかどうか
+ */
+async function loadArchiveCacheFromDB(): Promise<{
+  cachedNotes: import('./types').Note[]
+  cachedLeaves: import('./types').Leaf[]
+  hasCachedData: boolean
+}> {
+  const [cachedNotes, cachedLeaves] = await Promise.all([loadArchiveNotes(), loadArchiveLeaves()])
+  const hasCachedData = cachedNotes.length > 0 || cachedLeaves.length > 0
+  if (hasCachedData) {
+    archiveNotes.value = cachedNotes
+    archiveLeaves.value = cachedLeaves
+    isArchiveLoaded.value = true
+    setArchiveBaseline(cachedNotes, cachedLeaves)
+    // キャッシュからstatsを再構築（pullArchive完了前でも統計を表示可能にする）
+    archiveLeafStatsStore.rebuild(cachedLeaves, cachedNotes)
+  }
+  return { cachedNotes, cachedLeaves, hasCachedData }
+}
+
+// ========================================
 // World switching / Archive / Restore
 // ========================================
 
@@ -279,16 +305,7 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
   if (world === 'archive' && !isArchiveLoaded.value && !appState.isArchiveLoading) {
     if (settings.value.token && settings.value.repoName) {
       // まずIndexedDBキャッシュから読み出し
-      const [cachedNotes, cachedLeaves] = await Promise.all([
-        loadArchiveNotes(),
-        loadArchiveLeaves(),
-      ])
-      if (cachedNotes.length > 0 || cachedLeaves.length > 0) {
-        archiveNotes.value = cachedNotes
-        archiveLeaves.value = cachedLeaves
-        isArchiveLoaded.value = true
-        setArchiveBaseline(cachedNotes, cachedLeaves)
-      }
+      const { hasCachedData } = await loadArchiveCacheFromDB()
 
       // キャッシュの有無にかかわらずpullArchiveで最新化
       appState.isArchiveLoading = true
@@ -312,13 +329,13 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
         } else {
           const t = get(_)
           // キャッシュがなければエラー表示
-          if (cachedNotes.length === 0 && cachedLeaves.length === 0) {
+          if (!hasCachedData) {
             showPullToast(translateGitHubMessage(result.message, t, result.rateLimitInfo), 'error')
           }
         }
       } catch (e) {
         console.error('Archive pull failed:', e)
-        if (cachedNotes.length === 0 && cachedLeaves.length === 0) {
+        if (!hasCachedData) {
           const t = get(_)
           showPullToast(t('toast.pullFailed'), 'error')
         }
@@ -689,13 +706,7 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
   const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
   if (needsArchive && !isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
     // まずIndexedDBキャッシュから読み出し
-    const [cachedNotes, cachedLeaves] = await Promise.all([loadArchiveNotes(), loadArchiveLeaves()])
-    if (cachedNotes.length > 0 || cachedLeaves.length > 0) {
-      archiveNotes.value = cachedNotes
-      archiveLeaves.value = cachedLeaves
-      isArchiveLoaded.value = true
-      setArchiveBaseline(cachedNotes, cachedLeaves)
-    }
+    const { hasCachedData } = await loadArchiveCacheFromDB()
 
     appState.isArchiveLoading = true
     archiveLeafStatsStore.reset()
@@ -715,9 +726,19 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
         saveArchiveLeaves(result.leaves).catch((err) =>
           console.error('Failed to persist archive leaves:', err)
         )
+      } else {
+        // キャッシュがなければエラー表示
+        if (!hasCachedData) {
+          const t = get(_)
+          showPullToast(translateGitHubMessage(result.message, t, result.rateLimitInfo), 'error')
+        }
       }
     } catch (e) {
       console.error('Archive pull failed during URL restore:', e)
+      if (!hasCachedData) {
+        const t = get(_)
+        showPullToast(t('toast.pullFailed'), 'error')
+      }
     } finally {
       appState.isArchiveLoading = false
     }
