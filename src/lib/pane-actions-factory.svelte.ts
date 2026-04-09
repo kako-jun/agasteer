@@ -403,10 +403,17 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
 
 export async function handleCloseSettings() {
   if (githubSettingsChangedInSettings || appState.importOccurredInSettings) {
-    if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
-      isClosingSettingsPull = true
-      await pullFromGitHub(false)
-      isClosingSettingsPull = false
+    const hasValidConfig = !!(settings.value.token && settings.value.repoName)
+    if (hasValidConfig) {
+      if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
+        isClosingSettingsPull = true
+        await pullFromGitHub(false)
+        isClosingSettingsPull = false
+      }
+    } else {
+      // トークンやリポ名が空 → pullせず初回pull前の状態に戻す
+      appState.isPullCompleted = false
+      appState.isFirstPriorityFetched = false
     }
   }
   repoChangedInSettings = false
