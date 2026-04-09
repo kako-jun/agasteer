@@ -141,7 +141,8 @@ export async function pushToGitHub(): Promise<void> {
     setPushInFlightAt(undefined)
 
     // Push成功時にダーティフラグをクリアし、pushCountを更新
-    if (result.variant === 'success') {
+    // noChangesの場合は実際にPushしていないので、スナップショット更新やフラグクリアを行わない
+    if (result.variant === 'success' && result.message !== 'github.noChanges') {
       // 現在の状態をスナップショットとして保存（次回以降の差分検出のベースライン）
       setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
       clearAllChanges()
@@ -151,11 +152,9 @@ export async function pushToGitHub(): Promise<void> {
         lastKnownCommitSha.value = result.commitSha
       }
       // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
-      if (result.message === 'github.pushOk') {
-        const remoteResult = await fetchRemotePushCount(settings.value)
-        if (remoteResult.status === 'success') {
-          lastPulledPushCount.value = remoteResult.pushCount
-        }
+      const remoteResult = await fetchRemotePushCount(settings.value)
+      if (remoteResult.status === 'success') {
+        lastPulledPushCount.value = remoteResult.pushCount
       }
     }
   } finally {
