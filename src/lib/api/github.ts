@@ -448,8 +448,8 @@ export async function pushAllWithTreeAPI(
     for (const key of noteKeys) {
       const n = meta.notes[key]
       const entry: any = { id: n.id, order: n.order }
-      if (n.badgeIcon) entry.badgeIcon = n.badgeIcon
-      if (n.badgeColor) entry.badgeColor = n.badgeColor
+      if (n.badgeIcon !== undefined) entry.badgeIcon = n.badgeIcon
+      if (n.badgeColor !== undefined) entry.badgeColor = n.badgeColor
       normalized.notes[key] = entry
     }
 
@@ -459,8 +459,8 @@ export async function pushAllWithTreeAPI(
       // __priority__は仮想リーフなのでupdatedAtを固定値0に正規化（比較時の差分を防ぐ）
       const updatedAt = key === PRIORITY_LEAF_ID ? 0 : l.updatedAt
       const entry: any = { id: l.id, updatedAt, order: l.order }
-      if (l.badgeIcon) entry.badgeIcon = l.badgeIcon
-      if (l.badgeColor) entry.badgeColor = l.badgeColor
+      if (l.badgeIcon !== undefined) entry.badgeIcon = l.badgeIcon
+      if (l.badgeColor !== undefined) entry.badgeColor = l.badgeColor
       normalized.leaves[key] = entry
     }
 
