@@ -157,6 +157,7 @@ export async function pushToGitHub(): Promise<void> {
       // 現在の状態をスナップショットとして保存（次回以降の差分検出のベースライン）
       setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
       clearAllChanges()
+      isStale.value = false
       lastPushTime.value = Date.now() // 自動Push用に最終Push時刻を記録
       // Push成功後のcommit SHAをストアに保存（stale検出用）
       if (result.commitSha) {
