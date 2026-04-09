@@ -745,7 +745,8 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
               t,
               result.rateLimitInfo,
               undefined,
-              result.errorCode
+              result.errorCode,
+              result.httpStatus
             ),
             'error'
           )

@@ -70,7 +70,8 @@ export async function handleTestConnection(): Promise<void> {
       $_,
       result.rateLimitInfo,
       undefined,
-      result.errorCode
+      result.errorCode,
+      result.httpStatus
     )
 
     showPullToast(message, result.success ? 'success' : 'error')
@@ -142,7 +143,8 @@ export async function pushToGitHub(): Promise<void> {
       $_,
       result.rateLimitInfo,
       totalLeafCount > 0 ? totalLeafCount : undefined,
-      result.errorCode
+      result.errorCode,
+      result.httpStatus
     )
     showPushToast(translatedMessage, result.variant)
 
@@ -373,7 +375,8 @@ export async function pullFromGitHub(
       $_,
       result.rateLimitInfo,
       undefined,
-      result.errorCode
+      result.errorCode,
+      result.httpStatus
     )
     showPullToast(translatedMessage, result.variant)
     appState.isLoadingUI = false
