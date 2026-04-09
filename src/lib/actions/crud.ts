@@ -560,13 +560,13 @@ export function updateLeafBadge(
 export function updatePriorityBadge(badgeIcon: string, badgeColor: string): void {
   const m = metadata.value
   const newLeaves = { ...m.leaves }
-  if (badgeIcon || badgeColor) {
+  if (badgeIcon !== undefined || badgeColor !== undefined) {
     newLeaves[PRIORITY_LEAF_ID] = {
       id: PRIORITY_LEAF_ID,
       updatedAt: Date.now(),
       order: 0,
-      badgeIcon: badgeIcon || undefined,
-      badgeColor: badgeColor || undefined,
+      badgeIcon,
+      badgeColor,
     }
   } else {
     // バッジをクリアした場合はエントリを削除

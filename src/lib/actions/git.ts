@@ -129,11 +129,12 @@ export async function pushToGitHub(): Promise<void> {
     })
 
     // 結果を通知（GitHub APIのメッセージキーを翻訳、変更件数を含める）
+    const totalLeafCount = (result.changedLeafCount ?? 0) + (result.changedArchiveLeafCount ?? 0)
     const translatedMessage = translateGitHubMessage(
       result.message,
       $_,
       result.rateLimitInfo,
-      result.changedLeafCount
+      totalLeafCount || undefined
     )
     showPushToast(translatedMessage, result.variant)
 

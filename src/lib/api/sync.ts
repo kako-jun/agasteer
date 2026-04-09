@@ -13,8 +13,10 @@ export interface PushResult {
   message: string
   variant: 'success' | 'error'
   rateLimitInfo?: RateLimitInfo
-  /** 変更されたリーフの数（コンテンツ変更のみカウント） */
+  /** 変更されたホームリーフの数（コンテンツ変更のみカウント） */
   changedLeafCount?: number
+  /** 変更されたアーカイブリーフの数（コンテンツ変更のみカウント） */
+  changedArchiveLeafCount?: number
   /** メタデータのみ変更されたか（リーフ変更なしでメタデータ変更あり） */
   metadataOnlyChanged?: boolean
   /** Push成功時のcommit SHA（stale検出用） */
@@ -115,6 +117,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     variant: result.success ? 'success' : 'error',
     rateLimitInfo: result.rateLimitInfo,
     changedLeafCount: result.changedLeafCount,
+    changedArchiveLeafCount: result.changedArchiveLeafCount,
     metadataOnlyChanged: result.metadataOnlyChanged,
     commitSha: result.commitSha,
   }

@@ -709,7 +709,10 @@ export async function pushAllWithTreeAPI(
     // ローカルのmetadataストアを優先し、なければGitHubの既存metadataから復元
     const priorityMeta =
       localMetadata?.leaves?.[PRIORITY_LEAF_ID] || existingMetadata?.leaves?.[PRIORITY_LEAF_ID]
-    if (priorityMeta && (priorityMeta.badgeIcon || priorityMeta.badgeColor)) {
+    if (
+      priorityMeta &&
+      (priorityMeta.badgeIcon !== undefined || priorityMeta.badgeColor !== undefined)
+    ) {
       metadata.leaves[PRIORITY_LEAF_ID] = {
         id: PRIORITY_LEAF_ID,
         updatedAt: 0, // 固定値（仮想リーフなので実際の更新時刻は不要、比較時の差分を防ぐ）
@@ -885,10 +888,7 @@ export async function pushAllWithTreeAPI(
     // アーカイブメタデータの差分チェック（ロード済みの場合のみ）
     let archiveMetadataChanged = false
     if (isArchiveLoaded && archiveNotes && archiveLeaves && archiveMeta) {
-      const normalizedExistingArchive = normalizeMetadata(
-        existingArchiveMetadata || { version: 1, notes: {}, leaves: {}, pushCount: 0 },
-        0
-      )
+      const normalizedExistingArchive = normalizeMetadata(existingArchiveMetadata, 0)
       const normalizedCurrentArchive = normalizeMetadata(archiveMeta, 0)
       archiveMetadataChanged =
         stableStringify(normalizedExistingArchive) !== stableStringify(normalizedCurrentArchive)
