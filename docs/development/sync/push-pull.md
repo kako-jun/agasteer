@@ -398,7 +398,11 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 
 設定画面を閉じるときに**Pullが実行されるのは、リポジトリまたはトークンが変更された場合、もしくはインポートが行われた場合のみ**（`handleCloseSettings()`）。テーマやツール名だけの変更ではPullは実行されない。
 
+さらに、**トークンまたはリポジトリ名が空の場合**（`hasValidConfig = false`）は**Pullを実行せず、初回Pull前の状態に戻す**（`isPullCompleted = false` → `isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。これにより、設定が不完全な状態でデータ操作が行われることを防ぐ。
+
 Pull/Push/アーカイブロード中に設定画面を閉じた場合は、新しいPullを発行せずリセット済みの状態で閉じる（`resetForRepoSwitch()`で既にデータがクリアされているため、次回操作時に新リポからPullされる）。
+
+**Pullが失敗した場合**も同様に、`isPullCompleted = false`となるため初回Pull前の状態にリセットされる（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。
 
 ### リポジトリ変更時の注意表示
 
@@ -659,17 +663,19 @@ sequenceDiagram
 
 #### Cランク（軽微 — 現在の動作で問題なし）
 
-| #   | 操作シナリオ                             | 期待動作                         | 対応するガード/関数                                               | 深刻度 |
-| --- | ---------------------------------------- | -------------------------------- | ----------------------------------------------------------------- | :----: |
-| 21  | リポ切替後にワールド切替（Home→Archive） | 新リポのアーカイブがPullされる   | `isArchiveLoaded=false` → `handleWorldChange()` → `pullArchive()` |   C    |
-| 22  | 空のリポ名を設定                         | エラー表示                       | GitHub API呼び出しが失敗→エラートースト                           |   C    |
-| 23  | 存在しないリポ名を設定                   | 404エラー表示                    | `pullFromGitHub()` → `executePull()` → エラーハンドリング         |   C    |
-| 24  | アーカイブが空のリポに切替               | 空のアーカイブが表示される       | `pullArchive()`が空データで成功返却                               |   C    |
-| 25  | 別端末でPush済み→リポ切替→Pull           | 最新データが取得される           | `lastKnownCommitSha=null` → staleチェックスキップ → 初回Pull扱い  |   C    |
-| 26  | ネットワーク切断中にリポ切替             | エラー表示、バックアップから復元 | `pullFromGitHub()` → エラーハンドリング + バックアップ復元        |   C    |
-| 27  | APIレート制限中にリポ切替                | レート制限メッセージ表示         | `rateLimitInfo`をトーストに表示                                   |   C    |
-| 28  | トークン変更のみ（リポ名同じ）           | 新トークンで接続（Pullあり）     | `githubSettingsChangedInSettings=true` → リセットなし、Pull実行   |   B    |
-| 29  | トークンとリポの組み合わせが不正         | 認証エラー表示                   | GitHub API 401→エラートースト                                     |   C    |
+| #   | 操作シナリオ                             | 期待動作                         | 対応するガード/関数                                                                                                                 | 深刻度 |
+| --- | ---------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | :----: |
+| 21  | リポ切替後にワールド切替（Home→Archive） | 新リポのアーカイブがPullされる   | `isArchiveLoaded=false` → `handleWorldChange()` → `pullArchive()`                                                                   |   C    |
+| 22  | 空のリポ名を設定して閉じる               | Pullせずリセット                 | `hasValidConfig=false` → `isPullCompleted=false` → リセット処理（初回Pull前の状態に戻す）                                           |   C    |
+| 23  | 存在しないリポ名を設定                   | 404エラー表示                    | `pullFromGitHub()` → `executePull()` → エラーハンドリング                                                                           |   C    |
+| 24  | アーカイブが空のリポに切替               | 空のアーカイブが表示される       | `pullArchive()`が空データで成功返却                                                                                                 |   C    |
+| 25  | 別端末でPush済み→リポ切替→Pull           | 最新データが取得される           | `lastKnownCommitSha=null` → staleチェックスキップ → 初回Pull扱い                                                                    |   C    |
+| 26  | ネットワーク切断中にリポ切替             | エラー表示、バックアップから復元 | `pullFromGitHub()` → エラーハンドリング + バックアップ復元                                                                          |   C    |
+| 27  | APIレート制限中にリポ切替                | レート制限メッセージ表示         | `rateLimitInfo`をトーストに表示                                                                                                     |   C    |
+| 28  | トークン変更のみ（リポ名同じ）           | 新トークンで接続（Pullあり）     | `githubSettingsChangedInSettings=true` → リセットなし、Pull実行                                                                     |   B    |
+| 29  | トークンとリポの組み合わせが不正         | 認証エラー表示                   | GitHub API 401→エラートースト                                                                                                       |   C    |
+| 30  | トークンを空にして閉じる                 | Pullせずリセット                 | `hasValidConfig=false` → `isPullCompleted=false` → リセット処理（初回Pull前の状態に戻す）                                           |   C    |
+| 31  | Pull失敗（ネットワーク等）後の状態       | 初回Pull前の状態に戻る           | `isPullCompleted=false` → リセット処理（`isFirstPriorityFetched=false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`） |   C    |
 
 ---
 
@@ -775,10 +781,15 @@ flowchart TD
     CheckFlags -->|両方false| SkipPull[Pull不要<br/>テーマ等の変更のみ]
     SkipPull --> ClearFlags
 
-    CheckFlags -->|どちらかtrue| CheckSync{isPulling OR<br/>isPushing OR<br/>isArchiveLoading?}
+    CheckFlags -->|どちらかtrue| CheckValid{hasValidConfig?<br/>token && repoName}
+
+    CheckValid -->|No: 設定が不完全| SetNotCompleted[isPullCompleted = false]
+    SetNotCompleted --> CheckReset
+
+    CheckValid -->|Yes: 設定あり| CheckSync{isPulling OR<br/>isPushing OR<br/>isArchiveLoading?}
 
     CheckSync -->|Yes: いずれか実行中| SkipSafe[新Pullをスキップ<br/>resetForRepoSwitchで<br/>既にデータクリア済み]
-    SkipSafe --> ClearFlags
+    SkipSafe --> CheckReset
 
     CheckSync -->|No: 全て空き| SetClosing[isClosingSettingsPull = true]
     SetClosing --> Pull[await pullFromGitHub false]
@@ -794,25 +805,34 @@ flowchart TD
     ErrorHandle --> ResetClosing
     NoChange --> ResetClosing
 
-    ResetClosing --> ClearFlags[repoChangedInSettings = false<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false]
+    ResetClosing --> CheckReset{isPullCompleted?}
+
+    CheckReset -->|false| Reset[isFirstPriorityFetched = false<br/>resetForRepoSwitch<br/>archiveLeafStatsStore.reset]
+    CheckReset -->|true| ClearFlags
+
+    Reset --> ClearFlags[repoChangedInSettings = false<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false]
     ClearFlags --> End[handleCloseSettings 完了]
 ```
 
 #### handleCloseSettings() の条件分岐表
 
-| githubSettingsChanged | importOccurred | isPulling | isPushing | isArchiveLoading | 結果                                               |
-| :-------------------: | :------------: | :-------: | :-------: | :--------------: | -------------------------------------------------- |
-|         true          |     false      |   false   |   false   |      false       | Pull実行（リポ名またはトークン変更後のデータ取得） |
-|         true          |     false      | **true**  |   false   |      false       | スキップ（リセット済み、次回手動Pull時に取得）     |
-|         true          |     false      |   false   | **true**  |      false       | スキップ（同上）                                   |
-|         true          |     false      |   false   |   false   |     **true**     | スキップ（同上）                                   |
-|         false         |      true      |   false   |   false   |      false       | Pull実行（インポート後のデータ同期）               |
-|         false         |      true      | **true**  |   false   |      false       | スキップ                                           |
-|         true          |      true      |   false   |   false   |      false       | Pull実行（両方trueでも1回のみ）                    |
-|         false         |     false      |   false   |   false   |      false       | スキップ（テーマ等の変更のみ → Pullなし）          |
-|         false         |     false      | **true**  |   false   |      false       | スキップ（操作なし）                               |
+| githubSettingsChanged | importOccurred | hasValidConfig | isPulling | isPushing | isArchiveLoading | 結果                                                      |
+| :-------------------: | :------------: | :------------: | :-------: | :-------: | :--------------: | --------------------------------------------------------- |
+|         true          |     false      |      true      |   false   |   false   |      false       | Pull実行（リポ名またはトークン変更後のデータ取得）        |
+|         true          |     false      |      true      | **true**  |   false   |      false       | スキップ（リセット済み、次回手動Pull時に取得）            |
+|         true          |     false      |      true      |   false   | **true**  |      false       | スキップ（同上）                                          |
+|         true          |     false      |      true      |   false   |   false   |     **true**     | スキップ（同上）                                          |
+|         true          |     false      |   **false**    |     -     |     -     |        -         | Pullせずリセット（設定が不完全 → 初回Pull前の状態に戻す） |
+|         false         |      true      |      true      |   false   |   false   |      false       | Pull実行（インポート後のデータ同期）                      |
+|         false         |      true      |      true      | **true**  |   false   |      false       | スキップ                                                  |
+|         true          |      true      |      true      |   false   |   false   |      false       | Pull実行（両方trueでも1回のみ）                           |
+|         false         |     false      |       -        |     -     |     -     |        -         | スキップ（テーマ等の変更のみ → Pullなし）                 |
 
-**補足**: `repoChanged`も`importOccurred`も`false`の場合（テーマ変更のみ等）、外側のif文で弾かれるためPullは実行されない。これにより不要なAPI呼び出しとトースト通知を回避する。
+**補足**:
+
+- `repoChanged`も`importOccurred`も`false`の場合（テーマ変更のみ等）、外側のif文で弾かれるためPullは実行されない。これにより不要なAPI呼び出しとトースト通知を回避する。
+- `hasValidConfig`は`!!(settings.value.token && settings.value.repoName)`で判定。`false`の場合は`isPullCompleted = false`を設定し、Pullを実行せずに後続の`isPullCompleted`チェックでリセット処理に入る。
+- Pull失敗時も`isPullCompleted = false`となるため、同様にリセット処理（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）が実行される。
 
 ---
 
