@@ -560,7 +560,7 @@ export function updateLeafBadge(
 export function updatePriorityBadge(badgeIcon: string, badgeColor: string): void {
   const m = metadata.value
   const newLeaves = { ...m.leaves }
-  if (badgeIcon !== undefined || badgeColor !== undefined) {
+  if (badgeIcon || badgeColor) {
     newLeaves[PRIORITY_LEAF_ID] = {
       id: PRIORITY_LEAF_ID,
       updatedAt: Date.now(),
