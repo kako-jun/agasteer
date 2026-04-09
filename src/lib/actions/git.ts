@@ -350,10 +350,10 @@ export async function pullFromGitHub(
       refreshDirtyState()
       isStale.value = false
     } else {
+      appState.isPullCompleted = false
       if (result.message === 'github.pullIncomplete') {
         console.error('Pull incomplete: some leaves failed to fetch. UI remains locked.')
         appState.isFirstPriorityFetched = false
-        appState.isPullCompleted = false
         notes.value = []
         leaves.value = []
       } else if (hasBackupData) {

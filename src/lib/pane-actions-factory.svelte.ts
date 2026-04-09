@@ -123,6 +123,7 @@ import { createOfflineLeaf } from './utils'
 // ========================================
 let isClosingSettingsPull = false
 let repoChangedInSettings = false
+let githubSettingsChangedInSettings = false
 
 // ========================================
 // Drag & Drop (Note)
@@ -379,6 +380,7 @@ export function handleThemeChange(theme: typeof settings.value.theme) {
 
 export function handleSettingsChange(payload: Partial<typeof settings.value>) {
   const repoChanged = payload.repoName !== undefined && payload.repoName !== settings.value.repoName
+  const tokenChanged = payload.token !== undefined && payload.token !== settings.value.token
   const next = { ...settings.value, ...payload }
   updateSettings(next)
   if (payload.theme) {
@@ -394,17 +396,32 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     resetForRepoSwitch()
     archiveLeafStatsStore.reset()
   }
+  if (repoChanged || tokenChanged) {
+    githubSettingsChangedInSettings = true
+  }
 }
 
 export async function handleCloseSettings() {
-  if (repoChangedInSettings || appState.importOccurredInSettings) {
-    if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
-      isClosingSettingsPull = true
-      await pullFromGitHub(false)
-      isClosingSettingsPull = false
+  if (githubSettingsChangedInSettings || appState.importOccurredInSettings) {
+    const hasValidConfig = !!(settings.value.token && settings.value.repoName)
+    if (hasValidConfig) {
+      if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
+        isClosingSettingsPull = true
+        await pullFromGitHub(false)
+        isClosingSettingsPull = false
+      }
+    } else {
+      appState.isPullCompleted = false
+    }
+    // pull失敗または設定が不完全 → 初回pull前の状態に戻す
+    if (!appState.isPullCompleted) {
+      appState.isFirstPriorityFetched = false
+      resetForRepoSwitch()
+      archiveLeafStatsStore.reset()
     }
   }
   repoChangedInSettings = false
+  githubSettingsChangedInSettings = false
   appState.importOccurredInSettings = false
 }
 
