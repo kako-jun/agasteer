@@ -107,8 +107,10 @@ export interface SaveResult {
   success: boolean
   message: string
   rateLimitInfo?: RateLimitInfo
-  /** 変更されたリーフの数（コンテンツ変更のみカウント） */
+  /** 変更されたホームリーフの数（コンテンツ変更のみカウント） */
   changedLeafCount?: number
+  /** 変更されたアーカイブリーフの数（コンテンツ変更のみカウント） */
+  changedArchiveLeafCount?: number
   /** メタデータのみ変更されたか（リーフ変更なしでメタデータ変更あり） */
   metadataOnlyChanged?: boolean
   /** Push成功時のcommit SHA（stale検出用） */
@@ -448,8 +450,8 @@ export async function pushAllWithTreeAPI(
     for (const key of noteKeys) {
       const n = meta.notes[key]
       const entry: any = { id: n.id, order: n.order }
-      if (n.badgeIcon) entry.badgeIcon = n.badgeIcon
-      if (n.badgeColor) entry.badgeColor = n.badgeColor
+      if (n.badgeIcon !== undefined) entry.badgeIcon = n.badgeIcon
+      if (n.badgeColor !== undefined) entry.badgeColor = n.badgeColor
       normalized.notes[key] = entry
     }
 
@@ -459,8 +461,8 @@ export async function pushAllWithTreeAPI(
       // __priority__は仮想リーフなのでupdatedAtを固定値0に正規化（比較時の差分を防ぐ）
       const updatedAt = key === PRIORITY_LEAF_ID ? 0 : l.updatedAt
       const entry: any = { id: l.id, updatedAt, order: l.order }
-      if (l.badgeIcon) entry.badgeIcon = l.badgeIcon
-      if (l.badgeColor) entry.badgeColor = l.badgeColor
+      if (l.badgeIcon !== undefined) entry.badgeIcon = l.badgeIcon
+      if (l.badgeColor !== undefined) entry.badgeColor = l.badgeColor
       normalized.leaves[key] = entry
     }
 
@@ -707,7 +709,10 @@ export async function pushAllWithTreeAPI(
     // ローカルのmetadataストアを優先し、なければGitHubの既存metadataから復元
     const priorityMeta =
       localMetadata?.leaves?.[PRIORITY_LEAF_ID] || existingMetadata?.leaves?.[PRIORITY_LEAF_ID]
-    if (priorityMeta && (priorityMeta.badgeIcon || priorityMeta.badgeColor)) {
+    if (
+      priorityMeta &&
+      (priorityMeta.badgeIcon !== undefined || priorityMeta.badgeColor !== undefined)
+    ) {
       metadata.leaves[PRIORITY_LEAF_ID] = {
         id: PRIORITY_LEAF_ID,
         updatedAt: 0, // 固定値（仮想リーフなので実際の更新時刻は不要、比較時の差分を防ぐ）
@@ -742,7 +747,8 @@ export async function pushAllWithTreeAPI(
       })
     }
 
-    const changedLeafPaths: string[] = []
+    const changedHomeLeafPaths: string[] = []
+    const changedArchiveLeafPaths: string[] = []
 
     // 全リーフをTreeに追加（変化していないファイルは既存SHAを使用）
     for (const leaf of leaves) {
@@ -771,41 +777,14 @@ export async function pushAllWithTreeAPI(
         type: 'blob',
         content: leaf.content,
       })
-      changedLeafPaths.push(path)
+      changedHomeLeafPaths.push(path)
     }
 
-    // metadata差分を含めて変更チェック（pushCountのインクリメントは除外）
-    const normalizedExisting = normalizeMetadata(existingMetadata, currentPushCount)
-    const normalizedCurrent = normalizeMetadata(metadata, currentPushCount)
-    const metadataChanged =
-      stableStringify(normalizedExisting) !== stableStringify(normalizedCurrent)
-
-    const leafChanged = changedLeafPaths.length > 0
-    const hasAnyChanges = leafChanged || metadataChanged
-    if (!hasAnyChanges) {
-      // 変更がない場合は何もせずに成功を返す
-      return {
-        success: true,
-        message: 'github.noChanges',
-        commitSha: currentCommitSha ?? undefined,
-      }
-    }
-
-    // 変更がある場合のみpushCountをインクリメントし、metadata.jsonを追加
-    const metadataToWrite = normalizeMetadata(metadata, currentPushCount + 1)
-    const metadataContent = JSON.stringify(metadataToWrite, null, 2)
-
-    treeItems.push({
-      path: NOTES_METADATA_PATH,
-      mode: '100644',
-      type: 'blob',
-      content: metadataContent,
-    })
-
-    // アーカイブの処理
+    // アーカイブの処理（hasAnyChangesチェックの前に実行し、アーカイブの変更も検出する）
+    let archiveMeta: Metadata | undefined
     if (isArchiveLoaded && archiveNotes && archiveLeaves) {
       // アーカイブがロード済みの場合は、アーカイブデータも書き込む
-      const archiveMeta: Metadata = {
+      archiveMeta = {
         version: 1,
         notes: {},
         leaves: {},
@@ -887,7 +866,7 @@ export async function pushAllWithTreeAPI(
           type: 'blob',
           content: leaf.content,
         })
-        changedLeafPaths.push(path)
+        changedArchiveLeafPaths.push(path)
       }
 
       // アーカイブのmetadata.json
@@ -898,8 +877,36 @@ export async function pushAllWithTreeAPI(
         type: 'blob',
         content: archiveMetaContent,
       })
-    } else {
-      // アーカイブがロードされていない場合は、既存のアーカイブファイルを保持
+    }
+
+    // metadata差分を含めて変更チェック（pushCountのインクリメントは除外）
+    const normalizedExisting = normalizeMetadata(existingMetadata, currentPushCount)
+    const normalizedCurrent = normalizeMetadata(metadata, currentPushCount)
+    const metadataChanged =
+      stableStringify(normalizedExisting) !== stableStringify(normalizedCurrent)
+
+    // アーカイブメタデータの差分チェック（ロード済みの場合のみ）
+    let archiveMetadataChanged = false
+    if (isArchiveLoaded && archiveNotes && archiveLeaves && archiveMeta) {
+      const normalizedExistingArchive = normalizeMetadata(existingArchiveMetadata, 0)
+      const normalizedCurrentArchive = normalizeMetadata(archiveMeta, 0)
+      archiveMetadataChanged =
+        stableStringify(normalizedExistingArchive) !== stableStringify(normalizedCurrentArchive)
+    }
+
+    const leafChanged = changedHomeLeafPaths.length > 0 || changedArchiveLeafPaths.length > 0
+    const hasAnyChanges = leafChanged || metadataChanged || archiveMetadataChanged
+    if (!hasAnyChanges) {
+      // 変更がない場合は何もせずに成功を返す
+      return {
+        success: true,
+        message: 'github.noChanges',
+        commitSha: currentCommitSha ?? undefined,
+      }
+    }
+
+    // アーカイブがロードされていない場合は、既存のアーカイブファイルを保持
+    if (!isArchiveLoaded || !archiveNotes || !archiveLeaves) {
       for (const [path, sha] of existingArchiveFiles) {
         treeItems.push({
           path,
@@ -909,6 +916,17 @@ export async function pushAllWithTreeAPI(
         })
       }
     }
+
+    // 変更がある場合のみpushCountをインクリメントし、metadata.jsonを追加
+    const metadataToWrite = normalizeMetadata(metadata, currentPushCount + 1)
+    const metadataContent = JSON.stringify(metadataToWrite, null, 2)
+
+    treeItems.push({
+      path: NOTES_METADATA_PATH,
+      mode: '100644',
+      type: 'blob',
+      content: metadataContent,
+    })
 
     // 6. 新しいTreeを作成（base_treeなし、全ファイルを明示的に指定）
     const newTreeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
@@ -987,8 +1005,9 @@ export async function pushAllWithTreeAPI(
     return {
       success: true,
       message: 'github.pushOk',
-      changedLeafCount: changedLeafPaths.length,
-      metadataOnlyChanged: !leafChanged && metadataChanged,
+      changedLeafCount: changedHomeLeafPaths.length,
+      changedArchiveLeafCount: changedArchiveLeafPaths.length,
+      metadataOnlyChanged: !leafChanged && (metadataChanged || archiveMetadataChanged),
       commitSha: newCommitSha,
     }
   } catch (error) {

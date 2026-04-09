@@ -691,8 +691,8 @@ export function initApp(deps: InitAppDeps): () => void {
     if (savedOfflineLeaf) {
       offlineLeafStore.value = {
         content: savedOfflineLeaf.content,
-        badgeIcon: savedOfflineLeaf.badgeIcon || '',
-        badgeColor: savedOfflineLeaf.badgeColor || '',
+        badgeIcon: savedOfflineLeaf.badgeIcon ?? '',
+        badgeColor: savedOfflineLeaf.badgeColor ?? '',
         updatedAt: savedOfflineLeaf.updatedAt,
       }
     }
