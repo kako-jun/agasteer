@@ -459,7 +459,7 @@ const HMR_OFFLINE_KEY = 'agasteer_hmr_offline'
 
 function flushOfflineSaveSync() {
   const current = offlineLeafStore.value
-  if (current.content || current.badgeIcon !== undefined || current.badgeColor !== undefined) {
+  if (current.content || current.badgeIcon || current.badgeColor) {
     localStorage.setItem(HMR_OFFLINE_KEY, JSON.stringify(current))
     console.log('[HMR] Saved offline leaf to localStorage:', current)
   }
