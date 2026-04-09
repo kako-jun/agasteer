@@ -15,6 +15,8 @@ export interface PushResult {
   rateLimitInfo?: RateLimitInfo
   /** エラー発生箇所を特定するための一意コード（例: E-1001） */
   errorCode?: string
+  /** HTTPレスポンスのステータスコード（レスポンスが取得できた場合のみ） */
+  httpStatus?: number
   /** 変更されたホームリーフの数（コンテンツ変更のみカウント） */
   changedLeafCount?: number
   /** 変更されたアーカイブリーフの数（コンテンツ変更のみカウント） */
@@ -38,6 +40,8 @@ export interface PullResult {
   rateLimitInfo?: RateLimitInfo
   /** エラー発生箇所を特定するための一意コード（例: E-2001） */
   errorCode?: string
+  /** HTTPレスポンスのステータスコード（レスポンスが取得できた場合のみ） */
+  httpStatus?: number
   /** Pull成功時のcommit SHA（stale検出用） */
   commitSha?: string
 }
@@ -123,6 +127,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     variant: result.success ? 'success' : 'error',
     rateLimitInfo: result.rateLimitInfo,
     errorCode: result.errorCode,
+    httpStatus: result.httpStatus,
     changedLeafCount: result.changedLeafCount,
     changedArchiveLeafCount: result.changedArchiveLeafCount,
     metadataOnlyChanged: result.metadataOnlyChanged,
@@ -163,6 +168,7 @@ export async function executePull(settings: Settings, options?: PullOptions): Pr
       metadata: result.metadata,
       rateLimitInfo: result.rateLimitInfo,
       errorCode: result.errorCode,
+      httpStatus: result.httpStatus,
     }
   }
 }

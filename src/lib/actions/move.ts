@@ -90,7 +90,8 @@ export async function moveNoteToWorld(
               $_,
               result.rateLimitInfo,
               undefined,
-              result.errorCode
+              result.errorCode,
+              result.httpStatus
             ),
             'error'
           )
@@ -375,7 +376,8 @@ export async function moveLeafToWorld(
               $_,
               result.rateLimitInfo,
               undefined,
-              result.errorCode
+              result.errorCode,
+              result.httpStatus
             ),
             'error'
           )

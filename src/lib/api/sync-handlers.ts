@@ -16,7 +16,8 @@ export function translateGitHubMessage(
   translate: (key: string, options?: { values?: Record<string, unknown> }) => string,
   rateLimitInfo?: RateLimitInfo,
   changedLeafCount?: number,
-  errorCode?: string
+  errorCode?: string,
+  httpStatus?: number
 ): string {
   // i18nキーでなければそのまま返す（後方互換性のため）
   if (!messageKey.startsWith('github.') && !messageKey.startsWith('toast.')) {
@@ -26,9 +27,13 @@ export function translateGitHubMessage(
   // レート制限メッセージの場合、残り時間を含める（GitHub APIは最大60分でリセット）
   if (messageKey === 'github.rateLimited' && rateLimitInfo?.remainingSeconds !== undefined) {
     const minutes = Math.ceil(rateLimitInfo.remainingSeconds / 60)
-    return appendErrorCode(translate('github.rateLimited', { values: { minutes } }), errorCode)
+    return appendErrorCode(
+      translate('github.rateLimited', { values: { minutes } }),
+      errorCode,
+      httpStatus
+    )
   } else if (messageKey === 'github.rateLimited') {
-    return appendErrorCode(translate('github.rateLimitedNoTime'), errorCode)
+    return appendErrorCode(translate('github.rateLimitedNoTime'), errorCode, httpStatus)
   }
 
   // Push成功時に変更件数を含める
@@ -42,15 +47,17 @@ export function translateGitHubMessage(
   }
 
   // 通常のi18n翻訳
-  return appendErrorCode(translate(messageKey), errorCode)
+  return appendErrorCode(translate(messageKey), errorCode, httpStatus)
 }
 
 /**
  * エラーコードが提供されている場合はメッセージ末尾に付与する。
  * エラーコードがない場合はそのまま返す。
  */
-function appendErrorCode(translated: string, errorCode?: string): string {
-  return errorCode ? `${translated} (${errorCode})` : translated
+function appendErrorCode(translated: string, errorCode?: string, httpStatus?: number): string {
+  if (!errorCode) return translated
+  const suffix = httpStatus ? `${errorCode}/${httpStatus}` : errorCode
+  return `${translated} (${suffix})`
 }
 
 /**
