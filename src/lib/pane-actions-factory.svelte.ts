@@ -410,9 +410,9 @@ export async function handleCloseSettings() {
         await pullFromGitHub(false)
         isClosingSettingsPull = false
       }
-    } else {
-      // トークンやリポ名が空 → pullせず初回pull前の状態に戻す
-      appState.isPullCompleted = false
+    }
+    // pull失敗または設定が不完全 → 初回pull前の状態に戻す
+    if (!appState.isPullCompleted) {
       appState.isFirstPriorityFetched = false
       resetForRepoSwitch()
       archiveLeafStatsStore.reset()
