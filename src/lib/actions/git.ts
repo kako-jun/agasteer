@@ -65,7 +65,13 @@ export async function handleTestConnection(): Promise<void> {
   appState.isTesting = true
   try {
     const result = await testGitHubConnection(settings.value)
-    const message = translateGitHubMessage(result.message, $_, result.rateLimitInfo)
+    const message = translateGitHubMessage(
+      result.message,
+      $_,
+      result.rateLimitInfo,
+      undefined,
+      result.errorCode
+    )
 
     showPullToast(message, result.success ? 'success' : 'error')
   } catch (e) {
@@ -135,7 +141,8 @@ export async function pushToGitHub(): Promise<void> {
       result.message,
       $_,
       result.rateLimitInfo,
-      totalLeafCount > 0 ? totalLeafCount : undefined
+      totalLeafCount > 0 ? totalLeafCount : undefined,
+      result.errorCode
     )
     showPushToast(translatedMessage, result.variant)
 
@@ -361,7 +368,13 @@ export async function pullFromGitHub(
       }
     }
 
-    const translatedMessage = translateGitHubMessage(result.message, $_, result.rateLimitInfo)
+    const translatedMessage = translateGitHubMessage(
+      result.message,
+      $_,
+      result.rateLimitInfo,
+      undefined,
+      result.errorCode
+    )
     showPullToast(translatedMessage, result.variant)
     appState.isLoadingUI = false
     pullProgressStore.reset()

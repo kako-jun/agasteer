@@ -84,7 +84,16 @@ export async function moveNoteToWorld(
           )
         } else {
           // Pull失敗時はアーカイブ操作を中止（データ損失防止）
-          showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
+          showPullToast(
+            translateGitHubMessage(
+              result.message,
+              $_,
+              result.rateLimitInfo,
+              undefined,
+              result.errorCode
+            ),
+            'error'
+          )
           return
         }
       } catch (e) {
@@ -360,7 +369,16 @@ export async function moveLeafToWorld(
           )
         } else {
           // Pull失敗時はアーカイブ操作を中止（データ損失防止）
-          showPullToast(translateGitHubMessage(result.message, $_, result.rateLimitInfo), 'error')
+          showPullToast(
+            translateGitHubMessage(
+              result.message,
+              $_,
+              result.rateLimitInfo,
+              undefined,
+              result.errorCode
+            ),
+            'error'
+          )
           return
         }
       } catch (e) {

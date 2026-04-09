@@ -13,6 +13,8 @@ export interface PushResult {
   message: string
   variant: 'success' | 'error'
   rateLimitInfo?: RateLimitInfo
+  /** エラー発生箇所を特定するための一意コード（例: E-1001） */
+  errorCode?: string
   /** 変更されたホームリーフの数（コンテンツ変更のみカウント） */
   changedLeafCount?: number
   /** 変更されたアーカイブリーフの数（コンテンツ変更のみカウント） */
@@ -34,6 +36,8 @@ export interface PullResult {
   leaves: Leaf[]
   metadata: Metadata
   rateLimitInfo?: RateLimitInfo
+  /** エラー発生箇所を特定するための一意コード（例: E-2001） */
+  errorCode?: string
   /** Pull成功時のcommit SHA（stale検出用） */
   commitSha?: string
 }
@@ -87,6 +91,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
       success: false,
       message: 'toast.pushFailed',
       variant: 'error',
+      errorCode: 'E-5001',
     }
   }
 
@@ -96,6 +101,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
       success: false,
       message: 'toast.noLeaves',
       variant: 'error',
+      errorCode: 'E-5002',
     }
   }
 
@@ -116,6 +122,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     message: result.message,
     variant: result.success ? 'success' : 'error',
     rateLimitInfo: result.rateLimitInfo,
+    errorCode: result.errorCode,
     changedLeafCount: result.changedLeafCount,
     changedArchiveLeafCount: result.changedArchiveLeafCount,
     metadataOnlyChanged: result.metadataOnlyChanged,
@@ -155,6 +162,7 @@ export async function executePull(settings: Settings, options?: PullOptions): Pr
       leaves: [],
       metadata: result.metadata,
       rateLimitInfo: result.rateLimitInfo,
+      errorCode: result.errorCode,
     }
   }
 }

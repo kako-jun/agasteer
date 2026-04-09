@@ -328,7 +328,16 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
           const t = get(_)
           // キャッシュがなければエラー表示
           if (!hasCachedData) {
-            showPullToast(translateGitHubMessage(result.message, t, result.rateLimitInfo), 'error')
+            showPullToast(
+              translateGitHubMessage(
+                result.message,
+                t,
+                result.rateLimitInfo,
+                undefined,
+                result.errorCode
+              ),
+              'error'
+            )
           }
         }
       } catch (e) {
@@ -730,7 +739,16 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
         // キャッシュがなければエラー表示
         if (!hasCachedData) {
           const t = get(_)
-          showPullToast(translateGitHubMessage(result.message, t, result.rateLimitInfo), 'error')
+          showPullToast(
+            translateGitHubMessage(
+              result.message,
+              t,
+              result.rateLimitInfo,
+              undefined,
+              result.errorCode
+            ),
+            'error'
+          )
         }
       }
     } catch (e) {

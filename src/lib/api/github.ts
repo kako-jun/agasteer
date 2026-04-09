@@ -107,6 +107,8 @@ export interface SaveResult {
   success: boolean
   message: string
   rateLimitInfo?: RateLimitInfo
+  /** エラー発生箇所を特定するための一意コード（例: E-1001） */
+  errorCode?: string
   /** 変更されたホームリーフの数（コンテンツ変更のみカウント） */
   changedLeafCount?: number
   /** 変更されたアーカイブリーフの数（コンテンツ変更のみカウント） */
@@ -121,6 +123,8 @@ export interface TestResult {
   success: boolean
   message: string
   rateLimitInfo?: RateLimitInfo
+  /** エラー発生箇所を特定するための一意コード（例: E-3001） */
+  errorCode?: string
 }
 
 export interface PullResult {
@@ -130,6 +134,8 @@ export interface PullResult {
   leaves: Leaf[]
   metadata: Metadata
   rateLimitInfo?: RateLimitInfo
+  /** エラー発生箇所を特定するための一意コード（例: E-2001） */
+  errorCode?: string
   /** Pull成功時のcommit SHA（stale検出用） */
   commitSha?: string
 }
@@ -489,10 +495,15 @@ export async function pushAllWithTreeAPI(
     // レート制限チェック
     const repoRateLimit = parseRateLimitResponse(repoRes)
     if (repoRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: repoRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: repoRateLimit,
+        errorCode: 'E-1001',
+      }
     }
     if (!repoRes.ok) {
-      return { success: false, message: 'github.repoFetchFailed' }
+      return { success: false, message: 'github.repoFetchFailed', errorCode: 'E-1002' }
     }
     const repoData = await repoRes.json()
     const branch = repoData.default_branch || 'main'
@@ -505,7 +516,12 @@ export async function pushAllWithTreeAPI(
     // レート制限チェック
     const refRateLimit = parseRateLimitResponse(refRes)
     if (refRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: refRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: refRateLimit,
+        errorCode: 'E-1003',
+      }
     }
 
     // 空のリポジトリかどうか（ブランチがまだない場合）
@@ -530,14 +546,14 @@ export async function pushAllWithTreeAPI(
         }
       )
       if (!initRes.ok) {
-        return { success: false, message: 'github.treeCreateFailed' }
+        return { success: false, message: 'github.treeCreateFailed', errorCode: 'E-1004' }
       }
       const initData = await initRes.json()
       currentCommitSha = initData.commit.sha
       baseTreeSha = initData.commit.tree.sha
     } else {
       if (!refRes.ok) {
-        return { success: false, message: 'github.branchFetchFailed' }
+        return { success: false, message: 'github.branchFetchFailed', errorCode: 'E-1005' }
       }
       const refData = await refRes.json()
       currentCommitSha = refData.object.sha
@@ -550,10 +566,15 @@ export async function pushAllWithTreeAPI(
       // レート制限チェック
       const commitRateLimit = parseRateLimitResponse(commitRes)
       if (commitRateLimit.isRateLimited) {
-        return { success: false, message: 'github.rateLimited', rateLimitInfo: commitRateLimit }
+        return {
+          success: false,
+          message: 'github.rateLimited',
+          rateLimitInfo: commitRateLimit,
+          errorCode: 'E-1006',
+        }
       }
       if (!commitRes.ok) {
-        return { success: false, message: 'github.commitFetchFailed' }
+        return { success: false, message: 'github.commitFetchFailed', errorCode: 'E-1007' }
       }
       const commitData = await commitRes.json()
       baseTreeSha = commitData.tree.sha
@@ -576,6 +597,7 @@ export async function pushAllWithTreeAPI(
           success: false,
           message: 'github.rateLimited',
           rateLimitInfo: existingTreeRateLimit,
+          errorCode: 'E-1008',
         }
       }
       if (existingTreeRes.ok) {
@@ -638,7 +660,7 @@ export async function pushAllWithTreeAPI(
         { headers }
       )
       if (!blobRes.ok) {
-        return { success: false, message: 'github.metadataFetchFailed' }
+        return { success: false, message: 'github.metadataFetchFailed', errorCode: 'E-1009' }
       }
       try {
         const blobData = await blobRes.json()
@@ -646,7 +668,7 @@ export async function pushAllWithTreeAPI(
         existingMetadata = JSON.parse(decoded)
         currentPushCount = existingMetadata.pushCount || 0
       } catch (e) {
-        return { success: false, message: 'github.metadataFetchFailed' }
+        return { success: false, message: 'github.metadataFetchFailed', errorCode: 'E-1010' }
       }
     }
     // metadata.jsonがtreeにない場合 = 初回Push → currentPushCount=0のまま（正常）
@@ -939,10 +961,15 @@ export async function pushAllWithTreeAPI(
     // レート制限チェック
     const newTreeRateLimit = parseRateLimitResponse(newTreeRes)
     if (newTreeRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: newTreeRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: newTreeRateLimit,
+        errorCode: 'E-1011',
+      }
     }
     if (!newTreeRes.ok) {
-      return { success: false, message: 'github.treeCreateFailed' }
+      return { success: false, message: 'github.treeCreateFailed', errorCode: 'E-1012' }
     }
     const newTreeData = await newTreeRes.json()
     const newTreeSha = newTreeData.sha
@@ -972,10 +999,15 @@ export async function pushAllWithTreeAPI(
     // レート制限チェック
     const newCommitRateLimit = parseRateLimitResponse(newCommitRes)
     if (newCommitRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: newCommitRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: newCommitRateLimit,
+        errorCode: 'E-1013',
+      }
     }
     if (!newCommitRes.ok) {
-      return { success: false, message: 'github.commitCreateFailed' }
+      return { success: false, message: 'github.commitCreateFailed', errorCode: 'E-1014' }
     }
     const newCommitData = await newCommitRes.json()
     const newCommitSha = newCommitData.sha
@@ -996,10 +1028,15 @@ export async function pushAllWithTreeAPI(
     // レート制限チェック
     const updateRefRateLimit = parseRateLimitResponse(updateRefRes)
     if (updateRefRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: updateRefRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: updateRefRateLimit,
+        errorCode: 'E-1015',
+      }
     }
     if (!updateRefRes.ok) {
-      return { success: false, message: 'github.branchUpdateFailed' }
+      return { success: false, message: 'github.branchUpdateFailed', errorCode: 'E-1016' }
     }
 
     return {
@@ -1015,6 +1052,7 @@ export async function pushAllWithTreeAPI(
     return {
       success: false,
       message: 'github.networkError',
+      errorCode: 'E-1017',
     }
   }
 }
@@ -1057,6 +1095,7 @@ export async function pullFromGitHub(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-2001',
       }
     }
     // レート制限チェック
@@ -1069,6 +1108,7 @@ export async function pullFromGitHub(
         leaves: [],
         metadata: defaultMetadata,
         rateLimitInfo: repoRateLimit,
+        errorCode: 'E-2002',
       }
     }
     if (repoRes.status === 401) {
@@ -1078,6 +1118,7 @@ export async function pullFromGitHub(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-2003',
       }
     }
     if (!repoRes.ok) {
@@ -1087,6 +1128,7 @@ export async function pullFromGitHub(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-2004',
       }
     }
 
@@ -1121,6 +1163,7 @@ export async function pullFromGitHub(
         leaves: [],
         metadata: defaultMetadata,
         rateLimitInfo: treeRateLimit,
+        errorCode: 'E-2005',
       }
     }
     // 空のリポジトリ（コミットがない）の場合は404または409が返る → 空のデータで成功扱い
@@ -1147,6 +1190,7 @@ export async function pullFromGitHub(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-2006',
       }
     }
 
@@ -1158,6 +1202,7 @@ export async function pullFromGitHub(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-2007',
       }
     }
     const entries: { path: string; type: string; sha: string }[] = treeData.tree || []
@@ -1394,6 +1439,7 @@ export async function pullFromGitHub(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-2008',
       }
     }
 
@@ -1416,6 +1462,7 @@ export async function pullFromGitHub(
       notes: [],
       leaves: [],
       metadata: defaultMetadata,
+      errorCode: 'E-2009',
     }
   }
 }
@@ -1531,7 +1578,11 @@ export async function fetchRemotePushCount(settings: Settings): Promise<FetchPus
 export async function testGitHubConnection(settings: Settings): Promise<TestResult> {
   const validation = validateGitHubSettings(settings)
   if (!validation.valid) {
-    return { success: false, message: validation.errorKey || 'github.networkError' }
+    return {
+      success: false,
+      message: validation.errorKey || 'github.networkError',
+      errorCode: 'E-3001',
+    }
   }
 
   const headers = {
@@ -1542,38 +1593,48 @@ export async function testGitHubConnection(settings: Settings): Promise<TestResu
     // 認証確認
     const userRes = await fetch('https://api.github.com/user', { headers })
     if (userRes.status === 401) {
-      return { success: false, message: 'github.invalidToken' }
+      return { success: false, message: 'github.invalidToken', errorCode: 'E-3002' }
     }
     // レート制限チェック
     const userRateLimit = parseRateLimitResponse(userRes)
     if (userRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: userRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: userRateLimit,
+        errorCode: 'E-3003',
+      }
     }
     if (!userRes.ok) {
-      return { success: false, message: 'github.userFetchFailed' }
+      return { success: false, message: 'github.userFetchFailed', errorCode: 'E-3004' }
     }
 
     // リポジトリ参照確認
     const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
     if (repoRes.status === 404) {
-      return { success: false, message: 'github.repoNotFound' }
+      return { success: false, message: 'github.repoNotFound', errorCode: 'E-3005' }
     }
     // レート制限チェック
     const repoRateLimit = parseRateLimitResponse(repoRes)
     if (repoRateLimit.isRateLimited) {
-      return { success: false, message: 'github.rateLimited', rateLimitInfo: repoRateLimit }
+      return {
+        success: false,
+        message: 'github.rateLimited',
+        rateLimitInfo: repoRateLimit,
+        errorCode: 'E-3006',
+      }
     }
     if (repoRes.status === 401) {
-      return { success: false, message: 'github.noPermission' }
+      return { success: false, message: 'github.noPermission', errorCode: 'E-3007' }
     }
     if (!repoRes.ok) {
-      return { success: false, message: 'github.repoFetchFailed' }
+      return { success: false, message: 'github.repoFetchFailed', errorCode: 'E-3008' }
     }
 
     return { success: true, message: 'github.connectionOk' }
   } catch (error) {
     console.error('GitHub test error:', error)
-    return { success: false, message: 'github.networkError' }
+    return { success: false, message: 'github.networkError', errorCode: 'E-3009' }
   }
 }
 const sanitizePathPart = (raw: string): string => {
@@ -1599,6 +1660,8 @@ export interface ArchivePullResult {
   leaves: Leaf[]
   metadata: Metadata
   rateLimitInfo?: RateLimitInfo
+  /** エラー発生箇所を特定するための一意コード（例: E-4001） */
+  errorCode?: string
 }
 
 /**
@@ -1629,6 +1692,7 @@ export async function pullArchive(
       notes: [],
       leaves: [],
       metadata: defaultMetadata,
+      errorCode: 'E-4001',
     }
   }
 
@@ -1646,6 +1710,7 @@ export async function pullArchive(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-4002',
       }
     }
     const repoRateLimit = parseRateLimitResponse(repoRes)
@@ -1657,6 +1722,7 @@ export async function pullArchive(
         leaves: [],
         metadata: defaultMetadata,
         rateLimitInfo: repoRateLimit,
+        errorCode: 'E-4003',
       }
     }
     if (!repoRes.ok) {
@@ -1666,6 +1732,7 @@ export async function pullArchive(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-4004',
       }
     }
 
@@ -1687,6 +1754,7 @@ export async function pullArchive(
         leaves: [],
         metadata: defaultMetadata,
         rateLimitInfo: treeRateLimit,
+        errorCode: 'E-4005',
       }
     }
     // 空のリポジトリの場合は404または409が返る → 空のデータで成功扱い
@@ -1706,6 +1774,7 @@ export async function pullArchive(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-4006',
       }
     }
 
@@ -1717,6 +1786,7 @@ export async function pullArchive(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-4007',
       }
     }
     const entries: { path: string; type: string; sha: string }[] = treeData.tree || []
@@ -1907,6 +1977,7 @@ export async function pullArchive(
         notes: [],
         leaves: [],
         metadata: defaultMetadata,
+        errorCode: 'E-4008',
       }
     }
 
@@ -1927,6 +1998,7 @@ export async function pullArchive(
       message: 'github.networkError',
       notes: [],
       leaves: [],
+      errorCode: 'E-4009',
       metadata: defaultMetadata,
     }
   }
