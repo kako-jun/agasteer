@@ -410,6 +410,8 @@ export async function handleCloseSettings() {
         await pullFromGitHub(false)
         isClosingSettingsPull = false
       }
+    } else {
+      appState.isPullCompleted = false
     }
     // pull失敗または設定が不完全 → 初回pull前の状態に戻す
     if (!appState.isPullCompleted) {
