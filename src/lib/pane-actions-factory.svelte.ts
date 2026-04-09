@@ -414,6 +414,8 @@ export async function handleCloseSettings() {
       // トークンやリポ名が空 → pullせず初回pull前の状態に戻す
       appState.isPullCompleted = false
       appState.isFirstPriorityFetched = false
+      resetForRepoSwitch()
+      archiveLeafStatsStore.reset()
     }
   }
   repoChangedInSettings = false
