@@ -334,7 +334,8 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
                 t,
                 result.rateLimitInfo,
                 undefined,
-                result.errorCode
+                result.errorCode,
+                result.httpStatus
               ),
               'error'
             )
