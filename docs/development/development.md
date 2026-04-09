@@ -149,7 +149,7 @@ git push origin main
 
 #### 1. GitHub同期エラー
 
-**症状**: エラーメッセージとエラーコード（例: `E-2004`）が表示される
+**症状**: エラーメッセージとエラーコード（例: `E-3002`）が表示される
 
 **エラーコードの見方**:
 
@@ -157,6 +157,7 @@ git push origin main
 - `E-2xxx`: Pull処理のエラー
 - `E-3xxx`: 接続テストのエラー
 - `E-4xxx`: アーカイブPullのエラー
+- `E-5xxx`: Push前バリデーションのエラー
 
 詳細は `docs/development/sync/github-api.md` のエラーコード表を参照。
 

@@ -481,6 +481,7 @@ export async function pushAllWithTreeAPI(
     return {
       success: false,
       message: validation.errorKey || 'github.networkError',
+      errorCode: 'E-1018',
     }
   }
 
@@ -1076,6 +1077,7 @@ export async function pullFromGitHub(
     return {
       success: false,
       message: validation.errorKey || 'github.networkError',
+      errorCode: 'E-2010',
       notes: [],
       leaves: [],
       metadata: defaultMetadata,
