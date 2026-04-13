@@ -399,4 +399,36 @@
     border-top: 1px solid var(--text-muted);
     margin: 2em 0;
   }
+
+  /* App.css のグローバル input/textarea/select/button ルールがプレビュー内に漏れるのを防ぐ */
+  .preview-content :global(input),
+  .preview-content :global(textarea),
+  .preview-content :global(select) {
+    width: auto;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    font-size: inherit;
+    background: transparent;
+    color: inherit;
+  }
+
+  .preview-content :global(input[type='checkbox']) {
+    width: 18px;
+    height: 18px;
+    margin: 0 6px 0 0;
+    vertical-align: middle;
+    cursor: default;
+  }
+
+  .preview-content :global(button) {
+    display: inline;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: inherit;
+    cursor: inherit;
+  }
 </style>
