@@ -21,7 +21,7 @@
     <input
       id="lined-mode"
       type="checkbox"
-      checked={settings.linedMode ?? false}
+      checked={settings.linedMode ?? true}
       onchange={handleLinedModeChange}
     />
     <span>{$_('settings.editor.linedMode')}</span>
