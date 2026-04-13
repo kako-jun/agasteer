@@ -57,3 +57,7 @@ npm run preview      # ビルド結果確認
 - **リポジトリ**: [github.com/kako-jun/agasteer](https://github.com/kako-jun/agasteer)
 - **デモサイト**: [agasteer.llll-ll.com](https://agasteer.llll-ll.com)
 - **デプロイ**: Cloudflare Pages
+
+## デザインシステム
+
+UIの生成・修正時は `DESIGN.md` に定義されたデザインシステムに従うこと。定義外の色・フォント・スペーシングを勝手に使わない。
