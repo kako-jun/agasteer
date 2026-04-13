@@ -10,6 +10,7 @@
   import BackgroundCustomizer from '../settings/BackgroundCustomizer.svelte'
   import LinedModeToggle from '../settings/LinedModeToggle.svelte'
   import VimModeToggle from '../settings/VimModeToggle.svelte'
+  import CursorTrailToggle from '../settings/CursorTrailToggle.svelte'
   import ExportSection from '../settings/ExportSection.svelte'
   import ImportSection from '../settings/ImportSection.svelte'
   import AboutSection from '../settings/AboutSection.svelte'
@@ -68,6 +69,7 @@
           <h3>{$_('settings.editor.title')}</h3>
           <LinedModeToggle {settings} {onSettingsChange} />
           <VimModeToggle {settings} {onSettingsChange} />
+          <CursorTrailToggle {settings} {onSettingsChange} />
         </div>
       </div>
       <hr />

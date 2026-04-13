@@ -227,6 +227,7 @@
       theme={settings.value.theme}
       vimMode={settings.value.vimMode ?? false}
       linedMode={settings.value.linedMode ?? false}
+      cursorTrailEnabled={settings.value.cursorTrailEnabled ?? false}
       {pane}
       onContentChange={(content, leafId) => actions.updateLeafContent(content, leafId, pane)}
       onPush={actions.handlePushToGitHub}

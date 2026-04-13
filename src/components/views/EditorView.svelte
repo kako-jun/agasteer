@@ -8,6 +8,7 @@
     theme: ThemeType
     vimMode?: boolean
     linedMode?: boolean
+    cursorTrailEnabled?: boolean
     pane: Pane
     onContentChange: (content: string, leafId: string) => void
     onPush: () => void
@@ -23,6 +24,7 @@
     theme,
     vimMode = false,
     linedMode = false,
+    cursorTrailEnabled = false,
     pane,
     onContentChange,
     onPush,
@@ -91,6 +93,7 @@
     {theme}
     {vimMode}
     {linedMode}
+    {cursorTrailEnabled}
     leafId={leaf.id}
     {pane}
     onChange={handleContentChange}

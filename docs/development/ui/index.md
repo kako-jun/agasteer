@@ -9,6 +9,7 @@ AgasteerのUI/UX関連機能の実装詳細。
 | [layout.md](./layout.md)                       | 2ペイン表示、レスポンシブ対応                  | ~60  |
 | [editor.md](./editor.md)                       | 罫線エディタモード                             | ~70  |
 | [dirty-line-marker.md](./dirty-line-marker.md) | 変更行マーカー（計画）                         | ~180 |
+| [cursor-trail.md](./cursor-trail.md)           | カーソルトレイル（残像エフェクト）             | ~100 |
 | [customization.md](./customization.md)         | カスタムフォント、背景画像                     | ~420 |
 | [i18n.md](./i18n.md)                           | 国際化（日本語・英語）                         | ~260 |
 | [badges.md](./badges.md)                       | バッジ機能（アイコン＋色）                     | ~100 |

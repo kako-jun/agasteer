@@ -180,7 +180,8 @@
     "editor": {
       "title": "Editor",
       "linedMode": "Enable lined editor mode",
-      "vimMode": "Enable Vim Mode"
+      "vimMode": "Enable Vim Mode",
+      "cursorTrail": "Enable cursor trail effect"
     },
     "data": {
       "title": "Data"
