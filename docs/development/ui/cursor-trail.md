@@ -6,11 +6,11 @@
 
 ## 実装ファイル
 
-| ファイル                                        | 役割                                         |
-| ----------------------------------------------- | -------------------------------------------- |
-| `src/lib/editor/cursor-trail.ts`                | WebGL2シェーダーとCodeMirror拡張のファクトリ |
-| `src/components/editor/MarkdownEditor.svelte`   | 拡張機能の統合（設定に応じて有効化）         |
-| `src/components/settings/EditorSettings.svelte` | カーソルトレイルのON/OFFトグル               |
+| ファイル                                           | 役割                                         |
+| -------------------------------------------------- | -------------------------------------------- |
+| `src/lib/editor/cursor-trail.ts`                   | WebGL2シェーダーとCodeMirror拡張のファクトリ |
+| `src/components/editor/MarkdownEditor.svelte`      | 拡張機能の統合（設定に応じて有効化）         |
+| `src/components/settings/CursorTrailToggle.svelte` | カーソルトレイルのON/OFFトグル               |
 
 ## 設計と実装
 

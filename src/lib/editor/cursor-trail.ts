@@ -50,6 +50,10 @@ void main() {
 
   vec2 abDir = ab / max(abLen, 0.001);
 
+  // 軌跡に沿った射影（共通計算）
+  float proj = dot(fragCoord - uPreviousCursor, abDir);
+  float s = clamp(proj / max(abLen, 0.001), 0.0, 1.0);
+
   float dist;
   if (abLen < 0.5) {
     // ほぼ移動していない: カーソル矩形のSDF
@@ -57,8 +61,6 @@ void main() {
     dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
   } else {
     // 軌跡に沿ったSDF
-    float proj = dot(fragCoord - uPreviousCursor, abDir);
-    float s = clamp(proj / abLen, 0.0, 1.0);
     vec2 closest = uPreviousCursor + ab * s;
     vec2 d = abs(fragCoord - closest) - vec2(halfW, halfH);
     dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
@@ -69,8 +71,6 @@ void main() {
 
   // カーソルからの距離ベースの追加減衰（現カーソルに近いほど濃い）
   if (abLen > 0.5) {
-    float proj = dot(fragCoord - uPreviousCursor, abDir);
-    float s = clamp(proj / abLen, 0.0, 1.0);
     // s=0（前カーソル）で減衰、s=1（現カーソル）で最大
     alpha *= mix(0.3, 1.0, s);
   }
@@ -263,7 +263,6 @@ export function createCursorTrailExtension(
     accentColorRGB = parseAccentColor(editorEl)
 
     resizeCanvas()
-    startLoop()
   }
 
   function resizeCanvas() {
@@ -283,8 +282,6 @@ export function createCursorTrailExtension(
 
   function render() {
     if (!gl || !program || !canvas) return
-
-    resizeCanvas()
 
     const now = performance.now() / 1000
     const elapsed = now - timeCursorChange
