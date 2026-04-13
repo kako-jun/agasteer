@@ -226,6 +226,10 @@
       '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: 'var(--accent)',
       },
+      '.cm-fat-cursor, &:not(.cm-focused) .cm-fat-cursor': {
+        background: 'var(--accent) !important',
+        outline: 'none !important',
+      },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
         backgroundColor: 'var(--selection) !important',
         color: 'var(--text)',
@@ -276,14 +280,12 @@
         '.cm-cursor, .cm-dropCursor': {
           borderLeftColor: 'var(--accent)',
         },
+        '.cm-fat-cursor, &:not(.cm-focused) .cm-fat-cursor': {
+          background: 'var(--accent) !important',
+          outline: 'none !important',
+        },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
           backgroundColor: 'var(--selection) !important',
-          color: 'var(--text)',
-          mixBlendMode: 'normal',
-          opacity: 1,
-        },
-        '.cm-activeLine .cm-selectionBackground': {
-          backgroundColor: 'var(--selection-active) !important',
           color: 'var(--text)',
           mixBlendMode: 'normal',
           opacity: 1,
