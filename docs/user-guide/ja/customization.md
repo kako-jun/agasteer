@@ -8,6 +8,7 @@
 
 - **[テーマ](./customize/theme.md)** - 6種類のテーマから選択
 - **[罫線モード](./customize/lined-mode.md)** - 紙のノートのような罫線表示
+- **[カーソルトレイル](./customize/cursor-trail.md)** - カーソル移動時の残像エフェクト
 - **[カスタムフォント](./customize/font.md)** - 好きなフォントをアップロード
 - **[カスタム背景画像](./customize/background.md)** - 左右ペイン別に背景を設定
 

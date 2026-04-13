@@ -8,6 +8,7 @@
 
 - **[Themes](./customize/theme.md)** - Choose from 6 themes
 - **[Lined Mode](./customize/lined-mode.md)** - Display lines like a paper notebook
+- **[Cursor Trail](./customize/cursor-trail.md)** - Visual trail effect on cursor movement
 - **[Custom Fonts](./customize/font.md)** - Upload your favorite fonts
 - **[Custom Background Images](./customize/background.md)** - Set backgrounds for left/right panes separately
 
