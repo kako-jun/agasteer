@@ -226,20 +226,18 @@
       '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: 'var(--accent)',
       },
+      '.cm-fat-cursor, &:not(.cm-focused) .cm-fat-cursor': {
+        background: 'var(--accent) !important',
+        outline: 'none !important',
+      },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
         backgroundColor: 'var(--selection) !important',
         color: 'var(--text)',
         mixBlendMode: 'normal',
         opacity: 1,
       },
-      '.cm-activeLine .cm-selectionBackground': {
-        backgroundColor: 'var(--selection) !important',
-        color: 'var(--text)',
-        mixBlendMode: 'normal',
-        opacity: 1,
-      },
       '.cm-activeLine': {
-        backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
+        backgroundColor: 'color-mix(in srgb, var(--surface-1) 35%, transparent 65%)',
       },
       '.cm-gutters': {
         backgroundColor: 'var(--bg)',
@@ -259,7 +257,7 @@
         color: 'var(--text-muted)',
       },
       '.cm-activeLineGutter': {
-        backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
+        backgroundColor: 'color-mix(in srgb, var(--surface-1) 35%, transparent 65%)',
       },
     })
   }
@@ -282,20 +280,18 @@
         '.cm-cursor, .cm-dropCursor': {
           borderLeftColor: 'var(--accent)',
         },
+        '.cm-fat-cursor, &:not(.cm-focused) .cm-fat-cursor': {
+          background: 'var(--accent) !important',
+          outline: 'none !important',
+        },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
           backgroundColor: 'var(--selection) !important',
           color: 'var(--text)',
           mixBlendMode: 'normal',
           opacity: 1,
         },
-        '.cm-activeLine .cm-selectionBackground': {
-          backgroundColor: 'var(--selection) !important',
-          color: 'var(--text)',
-          mixBlendMode: 'normal',
-          opacity: 1,
-        },
         '.cm-activeLine': {
-          backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
+          backgroundColor: 'color-mix(in srgb, var(--surface-1) 35%, transparent 65%)',
         },
         '.cm-gutters': {
           backgroundColor: 'var(--bg)',
@@ -315,7 +311,7 @@
           color: 'var(--text-muted)',
         },
         '.cm-activeLineGutter': {
-          backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
+          backgroundColor: 'color-mix(in srgb, var(--surface-1) 35%, transparent 65%)',
         },
       },
       { dark: true }
@@ -338,7 +334,7 @@
           padding: '6px 0',
         },
         '.cm-activeLineGutter': {
-          backgroundColor: 'color-mix(in srgb, var(--surface-1) 60%, transparent 40%)',
+          backgroundColor: 'color-mix(in srgb, var(--surface-1) 35%, transparent 65%)',
         },
       },
       isDark ? { dark: true } : {}

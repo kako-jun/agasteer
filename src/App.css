@@ -16,7 +16,7 @@
   --dirty-line: color-mix(in srgb, var(--accent) 80%, var(--text) 20%);
 
   /* derived */
-  --selection: color-mix(in srgb, var(--accent) 35%, var(--bg) 65%);
+  --selection: color-mix(in srgb, var(--accent) 55%, var(--bg) 45%);
   --text-muted: color-mix(in srgb, var(--text) 70%, var(--bg) 30%);
   --surface-1: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
   --surface-2: color-mix(in srgb, var(--bg) 86%, var(--text) 14%);
@@ -49,7 +49,7 @@
 }
 
 :root[data-theme='whiteboard'] {
-  --bg: #ffffff;
+  --bg: #e8e8e8;
   --text: #1f2933;
   --accent: #3b82f6;
   --error: #b42318;
@@ -64,7 +64,7 @@
   --accent: #666666;
   --error: #f472b6;
   --dirty-line: #888888;
-  --selection: #3a3a3a;
+  --selection: #555555;
   --qr-filter: brightness(0) saturate(100%) invert(42%) sepia(0%) saturate(0%) hue-rotate(0deg)
     brightness(96%) contrast(89%);
 }
