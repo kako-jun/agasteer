@@ -130,7 +130,8 @@ export const defaultSettings: Settings = {
   toolName: 'Agasteer',
   locale: 'en', // デフォルトは英語
   vimMode: false, // デフォルトはVimモードオフ
-  linedMode: false, // デフォルトは罫線モードオフ
+  linedMode: true, // デフォルトは罫線モードオン
+  cursorTrailEnabled: true, // デフォルトはカーソルトレイルオン
 }
 
 /**

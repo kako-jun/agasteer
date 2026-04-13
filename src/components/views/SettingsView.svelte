@@ -68,8 +68,8 @@
         <div class="form-field">
           <h3>{$_('settings.editor.title')}</h3>
           <LinedModeToggle {settings} {onSettingsChange} />
-          <VimModeToggle {settings} {onSettingsChange} />
           <CursorTrailToggle {settings} {onSettingsChange} />
+          <VimModeToggle {settings} {onSettingsChange} />
         </div>
       </div>
       <hr />

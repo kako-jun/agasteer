@@ -21,7 +21,7 @@
     <input
       id="cursor-trail"
       type="checkbox"
-      checked={settings.cursorTrailEnabled ?? false}
+      checked={settings.cursorTrailEnabled ?? true}
       onchange={handleCursorTrailChange}
     />
     <span>{$_('settings.editor.cursorTrail')}</span>
