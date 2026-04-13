@@ -601,15 +601,12 @@
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
-  // テーマまたはVimモード変更時にエディタを再初期化
+  // テーマ・Vimモード・罫線モード・カーソルトレイル変更時にエディタを再初期化
   $effect(() => {
-    if (
-      editorView &&
-      (theme ||
-        vimMode !== undefined ||
-        linedMode !== undefined ||
-        cursorTrailEnabled !== undefined)
-    ) {
+    // 各 prop を読み取ることでリアクティブ追跡に登録する
+    const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
+    if (!editorView || _deps.length === 0) return
+    if (editorView) {
       // dirtyLeafIdsストアの購読解除
       if (dirtyLeafIdsUnsubscribe) {
         dirtyLeafIdsUnsubscribe()

@@ -259,10 +259,12 @@ export function createCursorTrailExtension(
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
-    // アクセントカラーを取得
-    accentColorRGB = parseAccentColor(editorEl)
-
     resizeCanvas()
+
+    // アクセントカラーを遅延取得（CSS変数の反映を待つ）
+    requestAnimationFrame(() => {
+      accentColorRGB = parseAccentColor(editorEl)
+    })
   }
 
   function resizeCanvas() {
