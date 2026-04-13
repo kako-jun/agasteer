@@ -14,19 +14,18 @@ All colors are CSS custom properties, dynamically computed via `color-mix()`.
 
 ### Core Variables
 
-| Variable             | Derivation              | Usage                               |
-| -------------------- | ----------------------- | ----------------------------------- |
-| `--bg`               | Theme-defined           | Page background                     |
-| `--text`             | Theme-defined           | Primary text                        |
-| `--accent`           | Theme-defined           | Brand, links, selection             |
-| `--error`            | Theme-defined           | Error states                        |
-| `--selection`        | `accent 35% + bg 65%`   | Text selection highlight            |
-| `--selection-active` | `accent 80% + text 20%` | Selection on active line (stronger) |
-| `--text-muted`       | `text 70% + bg 30%`     | Secondary text                      |
-| `--surface-1`        | `bg 92% + text 8%`      | Card backgrounds                    |
-| `--surface-2`        | `bg 86% + text 14%`     | Badge backgrounds                   |
-| `--border`           | `text 15% + bg 85%`     | Standard borders                    |
-| `--border-strong`    | `text 25% + bg 75%`     | Input borders, toggles              |
+| Variable          | Derivation            | Usage                    |
+| ----------------- | --------------------- | ------------------------ |
+| `--bg`            | Theme-defined         | Page background          |
+| `--text`          | Theme-defined         | Primary text             |
+| `--accent`        | Theme-defined         | Brand, links, selection  |
+| `--error`         | Theme-defined         | Error states             |
+| `--selection`     | `accent 55% + bg 45%` | Text selection highlight |
+| `--text-muted`    | `text 70% + bg 30%`   | Secondary text           |
+| `--surface-1`     | `bg 92% + text 8%`    | Card backgrounds         |
+| `--surface-2`     | `bg 86% + text 14%`   | Badge backgrounds        |
+| `--border`        | `text 15% + bg 85%`   | Standard borders         |
+| `--border-strong` | `text 25% + bg 75%`   | Input borders, toggles   |
 
 ### Theme Definitions
 
@@ -256,7 +255,7 @@ All colors are CSS custom properties, dynamically computed via `color-mix()`.
 
 ```
 Core (set by theme):     --bg, --text, --accent, --error
-Derived (auto-computed): --selection, --selection-active, --text-muted, --surface-1, --surface-2, --border, --border-strong
+Derived (auto-computed): --selection, --text-muted, --surface-1, --surface-2, --border, --border-strong
 ```
 
 ### When generating UI for this project
