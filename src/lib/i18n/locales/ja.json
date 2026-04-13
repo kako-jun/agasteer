@@ -180,7 +180,8 @@
     "editor": {
       "title": "エディタ",
       "linedMode": "罫線モードを有効にする",
-      "vimMode": "Vimモードを有効にする"
+      "vimMode": "Vimモードを有効にする",
+      "cursorTrail": "カーソルトレイルを有効にする"
     },
     "data": {
       "title": "データ管理"

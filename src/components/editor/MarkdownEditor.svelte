@@ -5,6 +5,7 @@
   import type { ThemeType } from '../../lib/types'
   import type { Pane } from '../../lib/navigation'
   import { createDirtyLineExtension } from '../../lib/editor/dirty-lines'
+  import { createCursorTrailExtension } from '../../lib/editor/cursor-trail'
   import { getLastPushedContent, dirtyLeafIds } from '../../lib/stores'
 
   interface Props {
@@ -12,6 +13,7 @@
     theme: ThemeType
     vimMode?: boolean
     linedMode?: boolean
+    cursorTrailEnabled?: boolean
     leafId?: string
     pane: Pane
     onChange: (newContent: string) => void
@@ -26,6 +28,7 @@
     theme,
     vimMode = false,
     linedMode = false,
+    cursorTrailEnabled = false,
     leafId = '',
     pane,
     onChange,
@@ -43,6 +46,7 @@
   let dirtyLineCleanup: (() => void) | null = null // ダーティラインマーカーのクリーンアップ関数
   let updateDirtyLinesFnRef: ((view: any) => void) | null = null // ダーティライン更新関数の参照
   let dirtyLeafIdsUnsubscribe: (() => void) | null = null // dirtyLeafIdsストアのアンサブスクライブ関数
+  let cursorTrailCleanup: (() => void) | null = null // カーソルトレイルのクリーンアップ関数
 
   // モバイル判定（タッチデバイスかつ画面幅が小さい）
   function isMobileDevice(): boolean {
@@ -524,6 +528,16 @@
       })
     }
 
+    // カーソルトレイル（設定が有効かつ非モバイルの場合）
+    if (cursorTrailEnabled && !isMobileDevice()) {
+      const { extension: trailExt, cleanup: trailClean } = createCursorTrailExtension(
+        { EditorView },
+        isMobileDevice()
+      )
+      extensions.push(trailExt)
+      cursorTrailCleanup = trailClean
+    }
+
     currentExtensions = extensions
 
     const startState = EditorState.create({
@@ -589,7 +603,13 @@
 
   // テーマまたはVimモード変更時にエディタを再初期化
   $effect(() => {
-    if (editorView && (theme || vimMode !== undefined || linedMode !== undefined)) {
+    if (
+      editorView &&
+      (theme ||
+        vimMode !== undefined ||
+        linedMode !== undefined ||
+        cursorTrailEnabled !== undefined)
+    ) {
       // dirtyLeafIdsストアの購読解除
       if (dirtyLeafIdsUnsubscribe) {
         dirtyLeafIdsUnsubscribe()
@@ -599,6 +619,11 @@
       if (dirtyLineCleanup) {
         dirtyLineCleanup()
         dirtyLineCleanup = null
+      }
+      // カーソルトレイルのクリーンアップ
+      if (cursorTrailCleanup) {
+        cursorTrailCleanup()
+        cursorTrailCleanup = null
       }
       editorView.destroy()
       editorView = null
@@ -628,6 +653,11 @@
     if (dirtyLineCleanup) {
       dirtyLineCleanup()
       dirtyLineCleanup = null
+    }
+    // カーソルトレイルのクリーンアップ
+    if (cursorTrailCleanup) {
+      cursorTrailCleanup()
+      cursorTrailCleanup = null
     }
     if (editorView) {
       editorView.destroy()

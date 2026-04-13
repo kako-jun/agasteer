@@ -23,6 +23,7 @@ export interface Settings {
   locale: Locale
   vimMode?: boolean
   linedMode?: boolean
+  cursorTrailEnabled?: boolean
   hasCustomFont?: boolean
   hasCustomBackgroundLeft?: boolean
   hasCustomBackgroundRight?: boolean
