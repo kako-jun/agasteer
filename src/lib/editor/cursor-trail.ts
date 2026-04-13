@@ -27,30 +27,6 @@ uniform vec3 uAccentColor;     // アクセントカラー (RGB, 0-1)
 
 out vec4 fragColor;
 
-// 平行四辺形 SDF（前カーソル→現カーソルの軌跡）
-float sdParallelogram(vec2 p, vec2 a, vec2 b, float halfWidth, float halfHeight) {
-  vec2 ab = b - a;
-  float abLen = length(ab);
-  if (abLen < 0.001) {
-    // 移動していない場合は矩形 SDF
-    vec2 d = abs(p - a) - vec2(halfWidth, halfHeight);
-    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-  }
-  vec2 abDir = ab / abLen;
-  // ab方向への射影
-  float proj = dot(p - a, abDir);
-  float t = clamp(proj / abLen, 0.0, 1.0);
-  vec2 closest = a + ab * t;
-  vec2 diff = p - closest;
-  // 幅方向はab直交方向、高さ方向は垂直
-  vec2 perp = vec2(-abDir.y, abDir.x);
-  float dx = abs(dot(diff, perp)) - halfWidth;
-  float dy = abs(diff.y - dot(diff, vec2(0.0, 1.0)) * 0.0) - halfHeight;
-  // 簡易: 最寄り点からの距離 - サイズ
-  vec2 d2 = abs(p - closest) - vec2(halfWidth, halfHeight);
-  return length(max(d2, 0.0)) + min(max(d2.x, d2.y), 0.0);
-}
-
 void main() {
   vec2 fragCoord = gl_FragCoord.xy;
   fragCoord.y = uResolution.y - fragCoord.y; // Y軸反転（Canvas座標系に合わせる）
@@ -72,6 +48,8 @@ void main() {
   float halfW = uCursorSize.x * 0.5;
   float halfH = uCursorSize.y * 0.5;
 
+  vec2 abDir = ab / max(abLen, 0.001);
+
   float dist;
   if (abLen < 0.5) {
     // ほぼ移動していない: カーソル矩形のSDF
@@ -79,7 +57,6 @@ void main() {
     dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
   } else {
     // 軌跡に沿ったSDF
-    vec2 abDir = ab / abLen;
     float proj = dot(fragCoord - uPreviousCursor, abDir);
     float s = clamp(proj / abLen, 0.0, 1.0);
     vec2 closest = uPreviousCursor + ab * s;
@@ -92,7 +69,6 @@ void main() {
 
   // カーソルからの距離ベースの追加減衰（現カーソルに近いほど濃い）
   if (abLen > 0.5) {
-    vec2 abDir = ab / abLen;
     float proj = dot(fragCoord - uPreviousCursor, abDir);
     float s = clamp(proj / abLen, 0.0, 1.0);
     // s=0（前カーソル）で減衰、s=1（現カーソル）で最大
@@ -190,7 +166,10 @@ export function createCursorTrailExtension(
   let canvas: HTMLCanvasElement | null = null
   let gl: WebGL2RenderingContext | null = null
   let program: WebGLProgram | null = null
+  let vao: WebGLVertexArrayObject | null = null
+  let buf: WebGLBuffer | null = null
   let animFrameId: number | null = null
+  let loopRunning = false
   let destroyed = false
 
   // uniform locations
@@ -210,6 +189,7 @@ export function createCursorTrailExtension(
   let cursorWidth = 2
   let cursorHeight = 20
   let timeCursorChange = 0
+  let isFirstUpdate = true
   let accentColorRGB: [number, number, number] = [0.4, 0.6, 1.0]
 
   // reduced-motion の動的変更を監視
@@ -253,9 +233,9 @@ export function createCursorTrailExtension(
     }
 
     // フルスクリーン四角形の頂点バッファ
-    const vao = gl.createVertexArray()
+    vao = gl.createVertexArray()
     gl.bindVertexArray(vao)
-    const buf = gl.createBuffer()
+    buf = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -309,10 +289,11 @@ export function createCursorTrailExtension(
     const now = performance.now() / 1000
     const elapsed = now - timeCursorChange
 
-    // フェードアウト完了後は描画スキップ（クリアのみ）
+    // フェードアウト完了後はクリアしてループ停止
     if (elapsed > 0.6) {
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
+      stopLoop()
       return
     }
 
@@ -333,10 +314,19 @@ export function createCursorTrailExtension(
     gl.drawArrays(gl.TRIANGLES, 0, 6)
   }
 
+  function stopLoop() {
+    if (animFrameId !== null) {
+      cancelAnimationFrame(animFrameId)
+      animFrameId = null
+    }
+    loopRunning = false
+  }
+
   function startLoop() {
-    if (destroyed) return
+    if (destroyed || loopRunning) return
+    loopRunning = true
     function frame() {
-      if (destroyed) return
+      if (destroyed || !loopRunning) return
       render()
       animFrameId = requestAnimationFrame(frame)
     }
@@ -374,15 +364,16 @@ export function createCursorTrailExtension(
     currentCursorY = y
 
     // 初回は前の位置も同じにする（トレイルが画面端から出ないように）
-    if (previousCursorX === 0 && previousCursorY === 0) {
+    if (isFirstUpdate) {
       previousCursorX = currentCursorX
       previousCursorY = currentCursorY
+      isFirstUpdate = false
     }
 
     timeCursorChange = performance.now() / 1000
 
-    // テーマ変更に追従するためアクセントカラーを再取得
-    accentColorRGB = parseAccentColor(editorEl)
+    // フェードアウト完了でループが停止している場合は再開
+    startLoop()
   }
 
   // ViewPlugin 定義
@@ -417,16 +408,26 @@ export function createCursorTrailExtension(
 
   function cleanupInternal() {
     destroyed = true
-    if (animFrameId !== null) {
-      cancelAnimationFrame(animFrameId)
-      animFrameId = null
+    stopLoop()
+    if (gl) {
+      if (buf) {
+        gl.deleteBuffer(buf)
+        buf = null
+      }
+      if (vao) {
+        gl.deleteVertexArray(vao)
+        vao = null
+      }
+      if (program) {
+        gl.deleteProgram(program)
+        program = null
+      }
     }
     if (canvas) {
       canvas.remove()
       canvas = null
     }
     gl = null
-    program = null
     if (motionQuery && motionListener) {
       motionQuery.removeEventListener('change', motionListener)
       motionQuery = null

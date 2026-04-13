@@ -532,7 +532,7 @@
     if (cursorTrailEnabled && !isMobileDevice()) {
       const { extension: trailExt, cleanup: trailClean } = createCursorTrailExtension(
         { EditorView },
-        isMobileDevice()
+        false
       )
       extensions.push(trailExt)
       cursorTrailCleanup = trailClean
