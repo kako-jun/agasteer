@@ -233,7 +233,7 @@
         opacity: 1,
       },
       '.cm-activeLine .cm-selectionBackground': {
-        backgroundColor: 'var(--selection) !important',
+        backgroundColor: 'var(--selection-active) !important',
         color: 'var(--text)',
         mixBlendMode: 'normal',
         opacity: 1,
@@ -289,7 +289,7 @@
           opacity: 1,
         },
         '.cm-activeLine .cm-selectionBackground': {
-          backgroundColor: 'var(--selection) !important',
+          backgroundColor: 'var(--selection-active) !important',
           color: 'var(--text)',
           mixBlendMode: 'normal',
           opacity: 1,

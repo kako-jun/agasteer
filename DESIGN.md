@@ -14,18 +14,19 @@ All colors are CSS custom properties, dynamically computed via `color-mix()`.
 
 ### Core Variables
 
-| Variable          | Derivation            | Usage                    |
-| ----------------- | --------------------- | ------------------------ |
-| `--bg`            | Theme-defined         | Page background          |
-| `--text`          | Theme-defined         | Primary text             |
-| `--accent`        | Theme-defined         | Brand, links, selection  |
-| `--error`         | Theme-defined         | Error states             |
-| `--selection`     | `accent 35% + bg 65%` | Text selection highlight |
-| `--text-muted`    | `text 70% + bg 30%`   | Secondary text           |
-| `--surface-1`     | `bg 92% + text 8%`    | Card backgrounds         |
-| `--surface-2`     | `bg 86% + text 14%`   | Badge backgrounds        |
-| `--border`        | `text 15% + bg 85%`   | Standard borders         |
-| `--border-strong` | `text 25% + bg 75%`   | Input borders, toggles   |
+| Variable             | Derivation            | Usage                               |
+| -------------------- | --------------------- | ----------------------------------- |
+| `--bg`               | Theme-defined         | Page background                     |
+| `--text`             | Theme-defined         | Primary text                        |
+| `--accent`           | Theme-defined         | Brand, links, selection             |
+| `--error`            | Theme-defined         | Error states                        |
+| `--selection`        | `accent 35% + bg 65%` | Text selection highlight            |
+| `--selection-active` | `accent 50% + bg 50%` | Selection on active line (stronger) |
+| `--text-muted`       | `text 70% + bg 30%`   | Secondary text                      |
+| `--surface-1`        | `bg 92% + text 8%`    | Card backgrounds                    |
+| `--surface-2`        | `bg 86% + text 14%`   | Badge backgrounds                   |
+| `--border`           | `text 15% + bg 85%`   | Standard borders                    |
+| `--border-strong`    | `text 25% + bg 75%`   | Input borders, toggles              |
 
 ### Theme Definitions
 
@@ -34,7 +35,7 @@ All colors are CSS custom properties, dynamically computed via `color-mix()`.
 | default    | `#fdfdfc` | `#1f2933` | `#c7a443` | `#b42318` | Warm neutral    |
 | campus     | `#fdf8ec` | `#1f2937` | `#2f56c6` | `#b42318` | Academic blue   |
 | greenboard | `#102117` | `#e6f0e7` | `#96d46a` | `#ff9f9f` | Dark chalkboard |
-| whiteboard | `#ffffff` | `#1f2933` | `#3b82f6` | `#b42318` | Clean white     |
+| whiteboard | `#e8e8e8` | `#1f2933` | `#3b82f6` | `#b42318` | Clean white     |
 | dotsD      | `#05080f` | `#e2ecff` | `#666666` | `#f472b6` | Dark modern     |
 | dotsF      | `#0000aa` | `#ffffff` | `#5ca8ff` | `#ff6666` | Retro neon      |
 
