@@ -56,6 +56,7 @@ import * as nav from '../navigation'
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
+import { PULL_ICON, PUSH_ICON } from '../ui/icons'
 
 /**
  * GitHub接続テスト
@@ -106,8 +107,22 @@ export async function pushToGitHub(): Promise<void> {
       console.log(
         `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
       )
-      const confirmed = await confirmAsync($_('modal.staleEdit'))
-      if (!confirmed) return
+      const choice = await choiceAsync($_('modal.staleEdit'), [
+        { label: $_('modal.pullFirst'), value: 'pull', variant: 'primary', icon: PULL_ICON },
+        { label: $_('modal.pushOverwrite'), value: 'push', variant: 'secondary', icon: PUSH_ICON },
+        { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
+      ])
+
+      if (choice === 'pull') {
+        // Pull first: isPushingロックを解放してPull→Push
+        isPushing.value = false
+        await pullFromGitHub(false)
+        // Pull後に再度Push（再帰呼び出し）
+        return appActions.pushToGitHub()
+      } else if (choice === 'cancel' || choice === null) {
+        return
+      }
+      // choice === 'push' → 続行（上書き）
     }
     // check_failedやup_to_dateの場合はそのまま続行
 
@@ -201,8 +216,8 @@ export async function pullFromGitHub(
       } else {
         // 通常時: Push first / Pull (overwrite) / Cancel の3択
         const choice = await choiceAsync($_('modal.unsavedChangesChoice'), [
-          { label: $_('modal.pushFirst'), value: 'push', variant: 'primary' },
-          { label: $_('modal.pullOverwrite'), value: 'pull', variant: 'secondary' },
+          { label: $_('modal.pullOverwrite'), value: 'pull', variant: 'primary', icon: PULL_ICON },
+          { label: $_('modal.pushFirst'), value: 'push', variant: 'secondary', icon: PUSH_ICON },
           { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
         ])
 

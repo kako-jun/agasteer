@@ -89,7 +89,9 @@ import {
   showPushToast,
   showPullToast,
   alertAsync,
-  confirmAsync,
+  choiceAsync,
+  PULL_ICON,
+  PUSH_ICON,
 } from './ui'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
@@ -935,14 +937,30 @@ export function initApp(deps: InitAppDeps): () => void {
             // ユーザーに確認（手動Pushと同じモーダル）
             {
               const t = get(_)
-              const confirmed = await confirmAsync(t('modal.staleEdit'))
-              if (!confirmed) {
+              const choice = await choiceAsync(t('modal.staleEdit'), [
+                { label: t('modal.pullFirst'), value: 'pull', variant: 'primary', icon: PULL_ICON },
+                {
+                  label: t('modal.pushOverwrite'),
+                  value: 'push',
+                  variant: 'secondary',
+                  icon: PUSH_ICON,
+                },
+                { label: t('modal.cancel'), value: 'cancel', variant: 'cancel' },
+              ])
+
+              if (choice === 'pull') {
+                // Pull first: Pull→Push
+                resetAutoPushTimer()
+                await deps.pullFromGitHub(false)
+                await deps.pushToGitHub()
+                return
+              } else if (choice === 'cancel' || choice === null) {
                 // キャンセル → タイマーリセットして終了
                 resetAutoPushTimer()
                 return
               }
             }
-            // OK → 強制Pushを続行（breakしてswitch抜ける）
+            // choice === 'push' → 強制Pushを続行（breakしてswitch抜ける）
             break
 
           case 'check_failed':
