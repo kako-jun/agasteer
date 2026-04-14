@@ -351,7 +351,7 @@ export function createCursorTrailExtension(modules: {
     if (!scroller) return null
     const scrollerRect = scroller.getBoundingClientRect()
 
-    const charHeight = coords.bottom - coords.top
+    const charHeight = Math.max(coords.bottom - coords.top, 1)
 
     return {
       x: coords.left - scrollerRect.left,
