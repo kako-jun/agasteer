@@ -400,8 +400,17 @@ export function createCursorTrailExtension(modules: {
     startLoop()
   }
 
-  /** スクロール時: 座標を再取得して軌跡を切る（startLoop は呼ばない） */
+  /** canvas をスクロール位置に追従させる */
+  function syncCanvasToScroll(scroller: HTMLElement) {
+    if (!canvas) return
+    canvas.style.top = scroller.scrollTop + 'px'
+    canvas.style.left = scroller.scrollLeft + 'px'
+  }
+
+  /** スクロール時: canvas を追従 + 座標を再取得して軌跡を切る（startLoop は呼ばない） */
   function onScroll(view: InstanceType<typeof EditorView>) {
+    syncCanvasToScroll(view.scrollDOM)
+
     const pos = getCursorScrollerCoords(view)
 
     if (!pos) {
