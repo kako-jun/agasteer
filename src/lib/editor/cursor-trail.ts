@@ -189,6 +189,10 @@ export function createCursorTrailExtension(modules: {
   let isFirstUpdate = true
   let accentColorRGB: [number, number, number] = [0.4, 0.6, 1.0]
 
+  // スクロール監視
+  let scrollHandler: (() => void) | null = null
+  let scrollView: InstanceType<typeof EditorView> | null = null
+
   // reduced-motion の動的変更を監視
   let motionQuery: MediaQueryList | null = null
   let motionListener: ((e: MediaQueryListEvent) => void) | null = null
@@ -329,10 +333,20 @@ export function createCursorTrailExtension(modules: {
     animFrameId = requestAnimationFrame(frame)
   }
 
+  function resetTrailToCurrent() {
+    previousCursorX = currentCursorX
+    previousCursorY = currentCursorY
+  }
+
   function updateCursorPosition(view: InstanceType<typeof EditorView>) {
     const sel = view.state.selection.main
     const coords = view.coordsAtPos(sel.head)
-    if (!coords) return
+
+    // カーソルがビューポート外: 座標を取得できないので軌跡をリセット
+    if (!coords) {
+      resetTrailToCurrent()
+      return
+    }
 
     const scroller = view.scrollDOM
     if (!scroller) return
@@ -361,8 +375,7 @@ export function createCursorTrailExtension(modules: {
 
     // 初回は前の位置も同じにする（トレイルが画面端から出ないように）
     if (isFirstUpdate) {
-      previousCursorX = currentCursorX
-      previousCursorY = currentCursorY
+      resetTrailToCurrent()
       isFirstUpdate = false
     }
 
@@ -372,11 +385,39 @@ export function createCursorTrailExtension(modules: {
     startLoop()
   }
 
+  function onScroll(view: InstanceType<typeof EditorView>) {
+    const sel = view.state.selection.main
+    const coords = view.coordsAtPos(sel.head)
+
+    if (!coords) {
+      // カーソルがビューポート外: 軌跡をリセットするだけ
+      resetTrailToCurrent()
+      return
+    }
+
+    const scroller = view.scrollDOM
+    if (!scroller) return
+    const scrollerRect = scroller.getBoundingClientRect()
+
+    const x = coords.left - scrollerRect.left
+    const y = coords.top - scrollerRect.top
+
+    // スクロール後の座標で両方を更新（軌跡を切る）
+    currentCursorX = x
+    currentCursorY = y
+    resetTrailToCurrent()
+  }
+
   // ViewPlugin 定義
   const cursorTrailPlugin = EditorView.updateListener.of((update) => {
-    // エディタ初期化時に canvas をセットアップ
+    // エディタ初期化時に canvas をセットアップ + スクロール監視を登録
     if (!canvas) {
       setupCanvas(update.view.dom)
+      if (!scrollHandler) {
+        scrollView = update.view
+        scrollHandler = () => onScroll(scrollView!)
+        update.view.scrollDOM.addEventListener('scroll', scrollHandler, { passive: true })
+      }
     }
 
     // カーソル位置の変更を検知
@@ -405,6 +446,11 @@ export function createCursorTrailExtension(modules: {
   function cleanupInternal() {
     destroyed = true
     stopLoop()
+    if (scrollHandler && scrollView) {
+      scrollView.scrollDOM.removeEventListener('scroll', scrollHandler)
+      scrollHandler = null
+      scrollView = null
+    }
     if (gl) {
       if (buf) {
         gl.deleteBuffer(buf)
