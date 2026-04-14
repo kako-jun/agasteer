@@ -20,6 +20,7 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 確認ダイアログ表示中もロックを保持するため、Promise版のダイアログ関数を使用：
 
 - `confirmAsync(message)` - 確認ダイアログ（true/false を返す）
+- `choiceAsync(message, options)` - 選択肢ダイアログ（選択値/null を返す）
 - `promptAsync(message, placeholder)` - 入力ダイアログ（string/null を返す）
 
 従来のコールバック版（`showConfirm`）では、ダイアログ表示中にロックを解放する必要がありましたが、Promise版では`await`で待機することでロックを保持したまま処理を継続できます。
@@ -55,9 +56,10 @@ flowchart TD
     Lock --> Flush[保留中の保存をフラッシュ]
     Flush --> Stale[Staleチェック]
     Stale --> Check2{Stale?}
-    Check2 -->|Yes| Confirm[確認ダイアログ<br/>ロック保持]
+    Check2 -->|Yes| Confirm[3択ダイアログ<br/>ロック保持]
     Check2 -->|No| Push
-    Confirm -->|OK| Push[Push実行]
+    Confirm -->|Pull first| PullFirst[Pull実行→再Push]
+    Confirm -->|Push上書き| Push[Push実行]
     Confirm -->|Cancel| Unlock
     Push --> Success{成功?}
     Success -->|Yes| Clear[ダーティクリア<br/>pushCount取得]
@@ -71,7 +73,7 @@ flowchart TD
 
 1. **ロック取得は最初**: `canSync`チェック直後、すべての非同期処理の前にロックを取得
 2. **finally句で解放**: 成功・失敗・エラー・キャンセルに関わらず、必ずロックを解放
-3. **ダイアログ中もロック保持**: `await confirmAsync()`でロックを保持したまま待機
+3. **ダイアログ中もロック保持**: `await confirmAsync()` / `await choiceAsync()`でロックを保持したまま待機
 
 ### データ損失が起きる可能性があった箇所（修正済み）
 
@@ -309,12 +311,12 @@ Pull実行中にPushが開始されると、以下のような順序でデータ
 
 ### 修正箇所
 
-| 修正前                                                              | 修正後                                                              |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `handlePushToGitHub()` + `executePushInternal()`（2関数）           | `pushToGitHub()`（1関数）                                           |
-| `handlePull()` + `executePullInternal()`（2関数）                   | `pullFromGitHub()`（1関数）                                         |
-| `showConfirm(message, onOK, onCancel)`（コールバック版）            | `await confirmAsync(message)`（Promise版）                          |
-| `await flushPendingSaves(); isPushing.value = true`（ロックが遅い） | `isPushing.value = true; await flushPendingSaves()`（ロックが早い） |
+| 修正前                                                              | 修正後                                                                             |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `handlePushToGitHub()` + `executePushInternal()`（2関数）           | `pushToGitHub()`（1関数）                                                          |
+| `handlePull()` + `executePullInternal()`（2関数）                   | `pullFromGitHub()`（1関数）                                                        |
+| `showConfirm(message, onOK, onCancel)`（コールバック版）            | `await confirmAsync(message)` / `await choiceAsync(message, options)`（Promise版） |
+| `await flushPendingSaves(); isPushing.value = true`（ロックが遅い） | `isPushing.value = true; await flushPendingSaves()`（ロックが早い）                |
 
 ### 動作フロー（例：自動Push中にPullボタンをクリック）
 

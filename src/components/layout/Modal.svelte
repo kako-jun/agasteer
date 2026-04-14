@@ -157,6 +157,7 @@
                     : 'secondary'}
                 onclick={() => handleChoiceSelect(option.value)}
               >
+                <!-- icon は信頼済みSVG文字列のみ（PULL_ICON/PUSH_ICON等のハードコード定数）。ユーザー入力を渡さないこと -->
                 {#if option.icon}{@html option.icon}{/if}
                 {option.label}
               </button>
