@@ -187,6 +187,7 @@ export function createCursorTrailExtension(modules: {
   let cursorHeight = 20
   let timeCursorChange = 0
   let isFirstUpdate = true
+  let cursorWasOffscreen = false
   let accentColorRGB: [number, number, number] = [0.4, 0.6, 1.0]
 
   // スクロール監視
@@ -338,10 +339,10 @@ export function createCursorTrailExtension(modules: {
     previousCursorY = currentCursorY
   }
 
-  /** カーソルの scroller 内相対座標を返す。ビューポート外なら null */
+  /** カーソルの scroller 内相対座標と実際の高さを返す。ビューポート外なら null */
   function getCursorScrollerCoords(
     view: InstanceType<typeof EditorView>
-  ): { x: number; y: number } | null {
+  ): { x: number; y: number; charHeight: number } | null {
     const sel = view.state.selection.main
     const coords = view.coordsAtPos(sel.head)
     if (!coords) return null
@@ -350,42 +351,47 @@ export function createCursorTrailExtension(modules: {
     if (!scroller) return null
     const scrollerRect = scroller.getBoundingClientRect()
 
+    const charHeight = coords.bottom - coords.top
+
     return {
       x: coords.left - scrollerRect.left,
-      y: coords.top - scrollerRect.top,
+      // シェーダーは座標を矩形の中心として扱うため、カーソル中心の Y 座標を返す
+      y: coords.top - scrollerRect.top + charHeight / 2,
+      charHeight,
     }
   }
 
   function updateCursorPosition(view: InstanceType<typeof EditorView>) {
     const pos = getCursorScrollerCoords(view)
 
-    // カーソルがビューポート外: 座標を取得できないので軌跡をリセット
+    // カーソルがビューポート外: 次回復帰時にトレイルを切るためフラグを立てる
     if (!pos) {
-      resetTrailToCurrent()
+      cursorWasOffscreen = true
       return
     }
 
     // カーソル形状検出
     const editorEl = view.dom
     const isBlockCursor = editorEl.classList.contains('cm-fat-cursor')
-    const defaultLineHeight = view.defaultLineHeight
     const defaultCharWidth = view.defaultCharacterWidth
 
     cursorWidth = isBlockCursor ? defaultCharWidth : 2
-    cursorHeight = defaultLineHeight
+    cursorHeight = pos.charHeight
 
-    // 前の位置を保存
-    previousCursorX = currentCursorX
-    previousCursorY = currentCursorY
-
-    // 新しい位置を設定
-    currentCursorX = pos.x
-    currentCursorY = pos.y
-
-    // 初回は前の位置も同じにする（トレイルが画面端から出ないように）
-    if (isFirstUpdate) {
+    // 初回またはビューポート外から復帰した場合:
+    // 古い座標からの不正なトレイルを防ぐため、前の位置も新しい位置にする
+    if (isFirstUpdate || cursorWasOffscreen) {
+      currentCursorX = pos.x
+      currentCursorY = pos.y
       resetTrailToCurrent()
       isFirstUpdate = false
+      cursorWasOffscreen = false
+    } else {
+      // 通常のカーソル移動: 前の位置を保存してから新しい位置を設定
+      previousCursorX = currentCursorX
+      previousCursorY = currentCursorY
+      currentCursorX = pos.x
+      currentCursorY = pos.y
     }
 
     timeCursorChange = performance.now() / 1000
@@ -399,13 +405,16 @@ export function createCursorTrailExtension(modules: {
     const pos = getCursorScrollerCoords(view)
 
     if (!pos) {
-      resetTrailToCurrent()
+      // カーソルがビューポート外に出た
+      cursorWasOffscreen = true
       return
     }
 
+    // スクロール中でもカーソルがビューポート内なら座標を追従させる
     currentCursorX = pos.x
     currentCursorY = pos.y
     resetTrailToCurrent()
+    cursorWasOffscreen = false
   }
 
   // ViewPlugin 定義
