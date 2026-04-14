@@ -29,13 +29,16 @@
 
 CodeMirrorの `EditorView.updateListener` を使い、以下のイベントを監視:
 
-- **初回描画時**: `.cm-scroller` 内にcanvasを生成し、WebGL2コンテキストを初期化
+- **初回描画時**: `.cm-scroller` 内にcanvasを生成し、WebGL2コンテキストを初期化。同時に `scrollDOM` の `scroll` イベントリスナーを登録
 - **selectionSet / docChanged**: カーソル座標を更新し、アニメーションループを再開
 - **geometryChanged**: canvasをリサイズ
+- **scroll（DOM イベント）**: スクロール時にカーソル座標を再取得し、前回座標=現在座標にリセットして軌跡を切る
 
 ### 座標計算
 
 `view.coordsAtPos()` でカーソルのビューポート座標を取得し、`.cm-scroller` のBoundingClientRectとの差分でscroller内相対座標に変換。devicePixelRatioを考慮してシェーダーに渡す。
+
+`coordsAtPos()` はカーソルがビューポート外の場合 `null` を返す。この場合は座標更新をスキップし、前回座標をリセットすることで、スクロール復帰時に古い位置からの不正な軌跡が描画されることを防ぐ。
 
 ### カーソル形状検出
 
