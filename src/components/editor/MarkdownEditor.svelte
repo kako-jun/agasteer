@@ -524,12 +524,11 @@
       })
     }
 
-    // カーソルトレイル（設定が有効かつ非モバイルの場合）
-    if (cursorTrailEnabled && !isMobileDevice()) {
-      const { extension: trailExt, cleanup: trailClean } = createCursorTrailExtension(
-        { EditorView },
-        false
-      )
+    // カーソルトレイル（設定が有効な場合）
+    if (cursorTrailEnabled) {
+      const { extension: trailExt, cleanup: trailClean } = createCursorTrailExtension({
+        EditorView,
+      })
       extensions.push(trailExt)
       cursorTrailCleanup = trailClean
     }

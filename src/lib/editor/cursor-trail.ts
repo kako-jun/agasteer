@@ -147,17 +147,14 @@ function prefersReducedMotion(): boolean {
 
 // --- メインファクトリ ---
 
-export function createCursorTrailExtension(
-  modules: {
-    EditorView: typeof import('@codemirror/view').EditorView
-  },
-  isMobile: boolean
-): {
+export function createCursorTrailExtension(modules: {
+  EditorView: typeof import('@codemirror/view').EditorView
+}): {
   extension: Extension
   cleanup: () => void
 } {
-  // モバイルまたは reduced-motion の場合は空の拡張を返す
-  if (isMobile || prefersReducedMotion()) {
+  // reduced-motion の場合は空の拡張を返す
+  if (prefersReducedMotion()) {
     return { extension: [], cleanup: () => {} }
   }
 
