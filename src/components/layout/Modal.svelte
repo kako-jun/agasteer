@@ -157,6 +157,7 @@
                     : 'secondary'}
                 onclick={() => handleChoiceSelect(option.value)}
               >
+                {#if option.icon}{@html option.icon}{/if}
                 {option.label}
               </button>
             {/each}
@@ -263,6 +264,16 @@
   .choice-buttons button {
     width: 100%;
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .choice-buttons button :global(svg) {
+    height: 1.2em;
+    width: auto;
+    flex-shrink: 0;
   }
 
   .prompt-input {

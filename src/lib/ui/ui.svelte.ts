@@ -20,6 +20,7 @@ export interface ChoiceOption {
   label: string
   value: string
   variant?: 'primary' | 'secondary' | 'cancel'
+  icon?: string
 }
 
 /**
