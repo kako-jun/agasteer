@@ -7,7 +7,14 @@
 
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
-import type { Note, Leaf, Breadcrumb, WorldType, SearchMatch } from './types'
+import {
+  type Note,
+  type Leaf,
+  type Breadcrumb,
+  type WorldType,
+  type SearchMatch,
+  buildBlobShaCache,
+} from './types'
 import type { Pane } from './navigation'
 import * as nav from './navigation'
 import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
@@ -261,19 +268,6 @@ export function handleDisabledPushClick(reason: string, pushDisabledReason: stri
 // ========================================
 // Archive cache helper
 // ========================================
-
-/**
- * リーフ配列からblob SHA→Leafのマップを構築（Pull時のキャッシュ比較用）
- */
-function buildBlobShaCache(leafList: Leaf[]): Map<string, Leaf> {
-  const map = new Map<string, Leaf>()
-  for (const leaf of leafList) {
-    if (leaf.blobSha) {
-      map.set(leaf.blobSha, leaf)
-    }
-  }
-  return map
-}
 
 /**
  * IndexedDBからアーカイブキャッシュを読み込み、ストアにセットする。
@@ -737,11 +731,11 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
       archiveLeafStatsStore.reset()
     }
     // blob SHAキャッシュ用: キャッシュ済みリーフからSHA→Leafのマップを構築
-    const cachedLeafMap2 = buildBlobShaCache(archiveLeaves.value)
+    const cachedLeafMap = buildBlobShaCache(archiveLeaves.value)
     try {
       const result = await pullArchive(settings.value, {
         onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
-        cachedLeaves: cachedLeafMap2.size > 0 ? cachedLeafMap2 : undefined,
+        cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
       })
       if (result.success) {
         archiveNotes.value = result.notes

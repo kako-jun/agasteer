@@ -1,4 +1,4 @@
-import type { Note, Leaf } from '../types'
+import { type Note, type Leaf, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
 import { showPushToast, showPullToast, confirmAsync, choiceAsync } from '../ui'
 import {
@@ -279,12 +279,7 @@ export async function pullFromGitHub(
     }
 
     // blob SHAキャッシュ用: クリア前にバックアップのリーフからSHA→Leafのマップを構築
-    const cachedLeafMap = new Map<string, Leaf>()
-    for (const leaf of backup.leaves) {
-      if (leaf.blobSha) {
-        cachedLeafMap.set(leaf.blobSha, leaf)
-      }
-    }
+    const cachedLeafMap = buildBlobShaCache(backup.leaves)
 
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     await clearAllData()
