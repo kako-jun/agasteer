@@ -313,11 +313,12 @@ Pull/Push操作の排他制御を一元管理する関数。Pull中またはPush
 3. 一致すればcontent取得をスキップし、IndexedDBの既存contentをそのまま使用
 4. 不一致または保存SHAなし → 従来どおりfetch
 
-**フォールバック:**
+**dirty時の安全策:**
 
-- IndexedDBが空（初回起動、クリア後）→ 全件fetch（従来動作）
-- IndexedDBのリーフに`blobSha`フィールドがない（移行期）→ 不一致扱いでfetch
-- SHAが一致してもcontentが空 → fetch
+- `isDirty === true`（ローカルに未Push変更がある）の場合、キャッシュを一切使わず全件fetchする
+- 編集でcontentが変わったリーフに古いblobShaが残ることで、キャッシュヒット→編集内容がリモート由来として扱われる問題を防止
+- Pull中にユーザーが編集したリーフは `blobSha` をクリアし、次回Pullで必ずfetchさせる
+- メインケース（クリーンな状態でのPull: 起動時Pull、auto-pull）でのみキャッシュが有効
 
 **GH上で直接編集された場合:**
 
@@ -328,11 +329,13 @@ blob SHAが変わるため、次回Pull時にTree APIが新しいSHAを返し、
 - GitHubがSSoT（Single Source of Truth）である原則を維持
 - リモートのSHAを正として判断し、ローカルはキャッシュとして扱う
 - ローカルのcontentからSHA再計算は不要（Tree APIのSHAをそのまま保存・比較）
+- マイナーケースは安全側に倒す（キャッシュ無効→従来動作にフォールバック）
 
 **効果:**
 
 - 100件中5件変更: 102回 → 7回のAPI呼び出し（96%削減）
 - アーカイブ300件（ほぼ変更なし）: 302回 → 2回
+- dirty時は従来どおり全件fetch（安全性優先）
 
 ### 技術的な最適化
 
