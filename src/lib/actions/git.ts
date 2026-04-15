@@ -348,7 +348,9 @@ export async function pullFromGitHub(
         .map((leaf) => {
           const currentLeaf = currentLeafMap.get(leaf.id)
           if (currentLeaf && currentLeaf.content !== leaf.content) {
-            return { ...leaf, content: currentLeaf.content }
+            // Pull中に編集されたリーフ: contentは編集後を採用し、blobShaはクリア
+            // blobShaを残すと次回Pullでキャッシュヒットし、リモートの内容が取得されない
+            return { ...leaf, content: currentLeaf.content, blobSha: undefined }
           }
           return leaf
         })
