@@ -42,6 +42,7 @@ import {
   archiveMetadata,
   isArchiveLoaded,
   archiveLeafStatsStore,
+  isDirty,
   getDialogPositionForPane,
   getNotesForWorld as _getNotesForWorld,
   getLeavesForWorld as _getLeavesForWorld,
@@ -315,8 +316,10 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
       if (!hasCachedData) {
         archiveLeafStatsStore.reset()
       }
-      // blob SHAキャッシュ用: キャッシュ済みリーフからSHA→Leafのマップを構築
-      const cachedLeafMap = buildBlobShaCache(archiveLeaves.value)
+      // blob SHAキャッシュ用: dirtyでなければキャッシュ済みリーフからSHA→Leafのマップを構築
+      const cachedLeafMap = isDirty.value
+        ? new Map<string, Leaf>()
+        : buildBlobShaCache(archiveLeaves.value)
       try {
         const result = await pullArchive(settings.value, {
           onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
@@ -730,8 +733,10 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
     if (!hasCachedData) {
       archiveLeafStatsStore.reset()
     }
-    // blob SHAキャッシュ用: キャッシュ済みリーフからSHA→Leafのマップを構築
-    const cachedLeafMap = buildBlobShaCache(archiveLeaves.value)
+    // blob SHAキャッシュ用: dirtyでなければキャッシュ済みリーフからSHA→Leafのマップを構築
+    const cachedLeafMap = isDirty.value
+      ? new Map<string, Leaf>()
+      : buildBlobShaCache(archiveLeaves.value)
     try {
       const result = await pullArchive(settings.value, {
         onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),

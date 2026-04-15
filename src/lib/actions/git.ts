@@ -279,7 +279,8 @@ export async function pullFromGitHub(
     }
 
     // blob SHAキャッシュ用: クリア前にバックアップのリーフからSHA→Leafのマップを構築
-    const cachedLeafMap = buildBlobShaCache(backup.leaves)
+    // dirtyな状態ではキャッシュを使わない（編集後contentがリモート由来として扱われるのを防止）
+    const cachedLeafMap = isDirty.value ? new Map<string, Leaf>() : buildBlobShaCache(backup.leaves)
 
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     await clearAllData()
