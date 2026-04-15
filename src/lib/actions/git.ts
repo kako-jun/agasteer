@@ -278,6 +278,14 @@ export async function pullFromGitHub(
       )
     }
 
+    // blob SHAキャッシュ用: クリア前にバックアップのリーフからSHA→Leafのマップを構築
+    const cachedLeafMap = new Map<string, Leaf>()
+    for (const leaf of backup.leaves) {
+      if (leaf.blobSha) {
+        cachedLeafMap.set(leaf.blobSha, leaf)
+      }
+    }
+
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     await clearAllData()
     notes.value = []
@@ -290,6 +298,7 @@ export async function pullFromGitHub(
     rightLeaf.value = null
 
     const options: PullOptions = {
+      cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
       // ノート構造確定時
       onStructure: (notesFromGitHub, metadataFromGitHub, leafSkeletons) => {
         notes.value = notesFromGitHub

@@ -302,11 +302,44 @@ Pull/Push操作の排他制御を一元管理する関数。Pull中またはPush
 
 この段階的制御により、残りのリーフ取得中にユーザーが同名リーフを作成したり、まだ取得していないノートを削除するなどの矛盾を防ぎます。
 
+### blob SHAキャッシュによる差分Pull（2026-04）
+
+変更のないリーフのcontent取得をスキップし、API呼び出し回数を削減する。
+
+**仕組み:**
+
+1. Pull成功時、Tree APIから取得した各リーフのblob SHAをIndexedDBにリーフと一緒に保存（`blobSha`フィールド）
+2. 次回Pull時、Tree APIのSHAとIndexedDBの保存SHAを比較
+3. 一致すればcontent取得をスキップし、IndexedDBの既存contentをそのまま使用
+4. 不一致または保存SHAなし → 従来どおりfetch
+
+**フォールバック:**
+
+- IndexedDBが空（初回起動、クリア後）→ 全件fetch（従来動作）
+- IndexedDBのリーフに`blobSha`フィールドがない（移行期）→ 不一致扱いでfetch
+- SHAが一致してもcontentが空 → fetch
+
+**GH上で直接編集された場合:**
+
+blob SHAが変わるため、次回Pull時にTree APIが新しいSHAを返し、不一致 → 正しくfetchされる。
+
+**設計原則との整合:**
+
+- GitHubがSSoT（Single Source of Truth）である原則を維持
+- リモートのSHAを正として判断し、ローカルはキャッシュとして扱う
+- ローカルのcontentからSHA再計算は不要（Tree APIのSHAをそのまま保存・比較）
+
+**効果:**
+
+- 100件中5件変更: 102回 → 7回のAPI呼び出し（96%削減）
+- アーカイブ300件（ほぼ変更なし）: 302回 → 2回
+
 ### 技術的な最適化
 
 - **生テキスト取得**: `Accept: application/vnd.github.raw`でBase64デコードを回避
 - **並列取得**: `CONTENT_FETCH_CONCURRENCY = 10`で10並列実行
 - **キャッシュバスター**: `?t=${Date.now()}`で常に最新データを取得
+- **blob SHAキャッシュ**: IndexedDBの保存SHAとTree APIのSHAが一致すればfetchスキップ
 
 ### Base64デコード
 

@@ -71,6 +71,7 @@ export interface Leaf {
   order: number
   badgeIcon?: string
   badgeColor?: string
+  blobSha?: string
 }
 
 export interface BreadcrumbSibling {
