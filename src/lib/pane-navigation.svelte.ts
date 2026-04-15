@@ -7,7 +7,14 @@
 
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
-import type { Note, Leaf, Breadcrumb, WorldType, SearchMatch } from './types'
+import {
+  type Note,
+  type Leaf,
+  type Breadcrumb,
+  type WorldType,
+  type SearchMatch,
+  buildBlobShaCache,
+} from './types'
 import type { Pane } from './navigation'
 import * as nav from './navigation'
 import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
@@ -308,9 +315,12 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
       if (!hasCachedData) {
         archiveLeafStatsStore.reset()
       }
+      // blob SHAキャッシュ用: キャッシュ済みリーフからSHA→Leafのマップを構築
+      const cachedLeafMap = buildBlobShaCache(archiveLeaves.value)
       try {
         const result = await pullArchive(settings.value, {
           onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
+          cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
         })
         if (result.success) {
           archiveNotes.value = result.notes
@@ -720,9 +730,12 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
     if (!hasCachedData) {
       archiveLeafStatsStore.reset()
     }
+    // blob SHAキャッシュ用: キャッシュ済みリーフからSHA→Leafのマップを構築
+    const cachedLeafMap = buildBlobShaCache(archiveLeaves.value)
     try {
       const result = await pullArchive(settings.value, {
         onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
+        cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
       })
       if (result.success) {
         archiveNotes.value = result.notes

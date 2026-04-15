@@ -182,6 +182,8 @@ export interface PullOptions {
   onLeaf?: (leaf: Leaf) => void
   /** 第1優先リーフ全取得完了時のコールバック */
   onPriorityComplete?: () => void
+  /** blob SHAキャッシュ: SHAをキーにしたLeafのMap（一致すればfetchスキップ） */
+  cachedLeaves?: Map<string, Leaf>
 }
 
 // コンテンツ取得を並列化する際の上限（HTTP/2では同時接続数制限が緩和されている）
@@ -1444,6 +1446,31 @@ export async function pullFromGitHub(
       sortedTargets,
       CONTENT_FETCH_CONCURRENCY,
       async (target) => {
+        // blob SHAキャッシュ: IndexedDBのSHAと一致すればfetchスキップ
+        const cached = options?.cachedLeaves?.get(target.entry.sha)
+        if (cached?.content) {
+          const leaf: Leaf = {
+            id: target.leafMeta.id,
+            title: target.title,
+            noteId: target.noteId,
+            content: cached.content,
+            updatedAt: target.leafMeta.updatedAt,
+            order: target.leafMeta.order,
+            badgeIcon: target.leafMeta.badgeIcon,
+            badgeColor: target.leafMeta.badgeColor,
+            blobSha: target.entry.sha,
+          }
+          options?.onLeaf?.(leaf)
+          if (getPriority(target) === 0) {
+            priority1Completed++
+            if (priority1Completed >= priority1Count && !priority1CallbackFired) {
+              priority1CallbackFired = true
+              options?.onPriorityComplete?.()
+            }
+          }
+          return leaf
+        }
+
         const contentRes = await fetchGitHubContents(
           target.entry.path,
           settings.repoName,
@@ -1469,6 +1496,7 @@ export async function pullFromGitHub(
           order: target.leafMeta.order,
           badgeIcon: target.leafMeta.badgeIcon,
           badgeColor: target.leafMeta.badgeColor,
+          blobSha: target.entry.sha,
         }
 
         // 各リーフ取得完了時のコールバック
@@ -1760,6 +1788,8 @@ export interface ArchivePullResult {
 export interface ArchivePullOptions {
   /** 進捗報告コールバック: リーフ取得完了時に呼び出し（統計更新用） */
   onLeafFetched?: (leaf: Leaf) => void
+  /** blob SHAキャッシュ: SHAをキーにしたLeafのMap（一致すればfetchスキップ） */
+  cachedLeaves?: Map<string, Leaf>
 }
 
 /**
@@ -2026,6 +2056,24 @@ export async function pullArchive(
       leafTargets,
       CONTENT_FETCH_CONCURRENCY,
       async (target) => {
+        // blob SHAキャッシュ: IndexedDBのSHAと一致すればfetchスキップ
+        const cached = options.cachedLeaves?.get(target.entry.sha)
+        if (cached?.content) {
+          const leaf: Leaf = {
+            id: target.leafMeta.id,
+            title: target.title,
+            noteId: target.noteId,
+            content: cached.content,
+            updatedAt: target.leafMeta.updatedAt,
+            order: target.leafMeta.order,
+            badgeIcon: target.leafMeta.badgeIcon,
+            badgeColor: target.leafMeta.badgeColor,
+            blobSha: target.entry.sha,
+          }
+          options.onLeafFetched?.(leaf)
+          return leaf
+        }
+
         const contentRes = await fetchGitHubContents(
           target.entry.path,
           settings.repoName,
@@ -2051,6 +2099,7 @@ export async function pullArchive(
           order: target.leafMeta.order,
           badgeIcon: target.leafMeta.badgeIcon,
           badgeColor: target.leafMeta.badgeColor,
+          blobSha: target.entry.sha,
         }
 
         // 進捗報告

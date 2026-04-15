@@ -71,6 +71,20 @@ export interface Leaf {
   order: number
   badgeIcon?: string
   badgeColor?: string
+  blobSha?: string
+}
+
+/**
+ * リーフ配列からblob SHA→Leafのマップを構築（Pull時のキャッシュ比較用）
+ */
+export function buildBlobShaCache(leafList: Leaf[]): Map<string, Leaf> {
+  const map = new Map<string, Leaf>()
+  for (const leaf of leafList) {
+    if (leaf.blobSha) {
+      map.set(leaf.blobSha, leaf)
+    }
+  }
+  return map
 }
 
 export interface BreadcrumbSibling {

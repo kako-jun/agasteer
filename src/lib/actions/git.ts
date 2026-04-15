@@ -1,4 +1,4 @@
-import type { Note, Leaf } from '../types'
+import { type Note, type Leaf, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
 import { showPushToast, showPullToast, confirmAsync, choiceAsync } from '../ui'
 import {
@@ -278,6 +278,9 @@ export async function pullFromGitHub(
       )
     }
 
+    // blob SHAキャッシュ用: クリア前にバックアップのリーフからSHA→Leafのマップを構築
+    const cachedLeafMap = buildBlobShaCache(backup.leaves)
+
     // 重要: GitHubが唯一の真実の情報源（Single Source of Truth）
     await clearAllData()
     notes.value = []
@@ -290,6 +293,7 @@ export async function pullFromGitHub(
     rightLeaf.value = null
 
     const options: PullOptions = {
+      cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
       // ノート構造確定時
       onStructure: (notesFromGitHub, metadataFromGitHub, leafSkeletons) => {
         notes.value = notesFromGitHub

@@ -89,14 +89,15 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 #### `leaves` オブジェクトストア
 
-| フィールド | 型     | 説明                                |
-| ---------- | ------ | ----------------------------------- |
-| id         | string | UUID（主キー）                      |
-| title      | string | リーフタイトル                      |
-| noteId     | string | 所属ノートのID                      |
-| content    | string | Markdownコンテンツ                  |
-| updatedAt  | number | 最終更新タイムスタンプ（Unix time） |
-| order      | number | 並び順                              |
+| フィールド | 型      | 説明                                                         |
+| ---------- | ------- | ------------------------------------------------------------ |
+| id         | string  | UUID（主キー）                                               |
+| title      | string  | リーフタイトル                                               |
+| noteId     | string  | 所属ノートのID                                               |
+| content    | string  | Markdownコンテンツ                                           |
+| updatedAt  | number  | 最終更新タイムスタンプ（Unix time）                          |
+| order      | number  | 並び順                                                       |
+| blobSha    | string? | Git blob SHA（Pull時にTree APIから取得。差分Pull判定に使用） |
 
 **例:**
 
@@ -108,7 +109,8 @@ Agasteerのデータ永続化スキーマについて説明します。
     "noteId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
     "content": "# 会議メモ\n\n## 議題\n- ...",
     "updatedAt": 1703000000000,
-    "order": 0
+    "order": 0,
+    "blobSha": "a1b2c3d4e5f6..."
   }
 ]
 ```
