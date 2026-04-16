@@ -901,6 +901,16 @@ export function initApp(deps: InitAppDeps): () => void {
   }
   document.addEventListener('visibilitychange', handleVisibilityChange)
 
+  // オンライン復帰時の自動Pull リトライ
+  // 初回Pull失敗（オフライン起動）後、ネットワーク復帰で自動的にPullを再試行する
+  const handleOnline = () => {
+    if (!appState.isFirstPriorityFetched && !isPulling.value) {
+      console.log('Online detected: retrying initial pull')
+      deps.pullFromGitHub(true)
+    }
+  }
+  window.addEventListener('online', handleOnline)
+
   // 自動Push機能（$effect.rootで購読）
   const cleanupAutoPush = $effect.root(() => {
     $effect(() => {
@@ -1019,6 +1029,7 @@ export function initApp(deps: InitAppDeps): () => void {
     window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.removeEventListener('appinstalled', handleAppInstalled)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('online', handleOnline)
     cleanupAutoPush()
     cleanupAutoPull()
     cleanupStoreEffects()
