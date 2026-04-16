@@ -222,6 +222,7 @@
       },
       '.cm-content': {
         caretColor: 'var(--accent)',
+        color: 'var(--text)',
       },
       '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: 'var(--accent)',
@@ -276,6 +277,7 @@
         },
         '.cm-content': {
           caretColor: 'var(--accent)',
+          color: 'var(--text)',
         },
         '.cm-cursor, .cm-dropCursor': {
           borderLeftColor: 'var(--accent)',
