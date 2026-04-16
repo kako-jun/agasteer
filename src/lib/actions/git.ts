@@ -398,7 +398,7 @@ export async function pullFromGitHub(
         // メモリ上はクリア（UIはガラス状を維持）
         notes.value = []
         leaves.value = []
-        // ベースラインもリセット��onLeafで追加された部分リーフが残らないように）
+        // ベースラインもリセット（onLeafで追加された部分リーフが残らないように）
         setLastPushedSnapshot([], [], archiveNotes.value, archiveLeaves.value)
       } else if (hasBackupData && !isInitialStartup) {
         // 非初回Pull失敗: 直前の同期済みデータにリストアする（作業中の状態を保護）

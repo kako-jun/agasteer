@@ -333,10 +333,10 @@ blob SHAが変わるため、次回Pull時にTree APIが新しいSHAを返し、
 
 **Pull不完全時のキャッシュ蓄積:**
 
-リーフ数が多く（300超）レート制限でPullが不完全に終わる場合、途中まで取得したリーフをIndexedDBに保存する。次回Pullでこれらがキャッシュヒットし、実際のAPI呼び出しが減��。数回のPullで全リーフが揃い、最終的にPullが成功する。
+リーフ数が多く（300超）レート制限でPullが不完全に終わる場合、途中まで取得したリーフをIndexedDBに保存する。次回Pullでこれらがキャッシュヒットし、実際のAPI呼び出しが減る。数回のPullで全リーフが揃い、最終的にPullが成功する。
 
-- pullIncomplete時: ��得済みリーフをIndexedDBに保存してからメモリをクリア
-- UIはガラス状（ロック状��）を維持し、Pushもブロックされるため安全
+- pullIncomplete時: 取得済みリーフをIndexedDBに保存してからメモリをクリア
+- UIはガラス状（ロック状態）を維持し、Pushもブロックされるため安全
 - 次回Pull時にcreateBackup() → buildBlobShaCache()で部分キャッシュが利用される
 
 **効果:**
