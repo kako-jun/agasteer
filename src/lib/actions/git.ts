@@ -378,7 +378,8 @@ export async function pullFromGitHub(
         appState.isFirstPriorityFetched = false
         notes.value = []
         leaves.value = []
-      } else if (hasBackupData) {
+      } else if (hasBackupData && !isInitialStartup) {
+        // 非初回Pull失敗: 直前の同期済みデータにリストアする（作業中の状態を保護）
         console.log('Pull failed, restoring from backup...')
         try {
           await restoreFromBackup(backup)
@@ -391,6 +392,8 @@ export async function pullFromGitHub(
           console.error('Failed to restore from backup:', restoreError)
         }
       }
+      // 初回Pull失敗: リストアしない。UIはロック状態（ガラス状）を維持。
+      // Offlineリーフのみ操作可能。オンライン復帰で自動リトライする。
     }
 
     const translatedMessage = translateGitHubMessage(
