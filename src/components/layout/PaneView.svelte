@@ -168,7 +168,6 @@
       notes={activeRootNotes}
       allLeaves={activeLeaves}
       isFirstPriorityFetched={isArchiveWorld || paneState.value.isFirstPriorityFetched}
-      isPullCompleted={isArchiveWorld || paneState.value.isPullCompleted}
       {selectedIndex}
       {isActive}
       vimMode={settings.value.vimMode ?? false}

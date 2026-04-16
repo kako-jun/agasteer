@@ -43,8 +43,7 @@ export function getCurrentItemsForPane(pane: Pane): (Note | Leaf)[] {
     const specialLeaves: Leaf[] = []
     if (getWorldForPane(pane) !== 'archive') {
       if (derivedState.currentOfflineLeaf) specialLeaves.push(derivedState.currentOfflineLeaf)
-      if (derivedState.currentPriorityLeaf && appState.isPullCompleted)
-        specialLeaves.push(derivedState.currentPriorityLeaf)
+      if (derivedState.currentPriorityLeaf) specialLeaves.push(derivedState.currentPriorityLeaf)
     }
     const rootNotes = paneNotes.filter((n) => !n.parentId).sort((a, b) => a.order - b.order)
     return [...specialLeaves, ...rootNotes]
