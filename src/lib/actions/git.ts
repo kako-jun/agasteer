@@ -376,8 +376,30 @@ export async function pullFromGitHub(
       if (result.message === 'github.pullIncomplete') {
         console.error('Pull incomplete: some leaves failed to fetch. UI remains locked.')
         appState.isFirstPriorityFetched = false
+
+        // 途中まで取得したリーフをIndexedDBに保存（次回Pullのblobキャッシュ用）
+        // これにより数回のPullで全リーフが揃い、最終的にPullが成功する
+        const partialLeaves = leaves.value
+        const partialNotes = notes.value
+        if (partialLeaves.length > 0) {
+          console.log(
+            `Saving ${partialLeaves.length} partial leaves to IndexedDB for next pull cache`
+          )
+          saveLeaves(partialLeaves).catch((err) =>
+            console.error('Failed to save partial leaves for cache:', err)
+          )
+        }
+        if (partialNotes.length > 0) {
+          saveNotes(partialNotes).catch((err) =>
+            console.error('Failed to save partial notes for cache:', err)
+          )
+        }
+
+        // メモリ上はクリア（UIはガラス状を維持）
         notes.value = []
         leaves.value = []
+        // ベースラインもリセット��onLeafで追加された部分リーフが残らないように）
+        setLastPushedSnapshot([], [], archiveNotes.value, archiveLeaves.value)
       } else if (hasBackupData && !isInitialStartup) {
         // 非初回Pull失敗: 直前の同期済みデータにリストアする（作業中の状態を保護）
         console.log('Pull failed, restoring from backup...')
