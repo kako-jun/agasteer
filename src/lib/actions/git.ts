@@ -413,8 +413,14 @@ export async function pullFromGitHub(
         } catch (restoreError) {
           console.error('Failed to restore from backup:', restoreError)
         }
+      } else if (hasBackupData && isInitialStartup) {
+        // 初回Pull失敗: メモリにはリストアしない（UIはガラス状を維持）が、
+        // IndexedDBにはバックアップを書き戻す（次回PullのblobSHAキャッシュを保全）
+        console.log('Initial pull failed, restoring IndexedDB for cache (UI remains locked)')
+        restoreFromBackup(backup).catch((err) =>
+          console.error('Failed to restore IndexedDB for cache:', err)
+        )
       }
-      // 初回Pull失敗: リストアしない。UIはロック状態（ガラス状）を維持。
       // Offlineリーフのみ操作可能。オンライン復帰で自動リトライする。
     }
 
