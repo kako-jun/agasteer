@@ -16,7 +16,6 @@
     onDrop: (note: Note) => void
     dragOverNoteId?: string | null
     isFirstPriorityFetched?: boolean
-    isPullCompleted?: boolean
     selectedIndex?: number
     isActive?: boolean
     vimMode?: boolean
@@ -40,7 +39,6 @@
     onDrop,
     dragOverNoteId = null,
     isFirstPriorityFetched = false,
-    isPullCompleted = false,
     selectedIndex = 0,
     isActive = true,
     vimMode = false,
@@ -84,7 +82,7 @@
 
   // 特殊リーフ（Offline, Priority）のカウント（Vimナビゲーション用）
   // Priorityは全リーフPull完了後のみ表示されるのでカウントに含める
-  let specialLeafCount = $derived((offlineLeaf ? 1 : 0) + (priorityLeaf && isPullCompleted ? 1 : 0))
+  let specialLeafCount = $derived((offlineLeaf ? 1 : 0) + (priorityLeaf ? 1 : 0))
 
   // Vimモードで選択が変わったら選択中のカードが見えるようにスクロール
   $effect(() => {
@@ -192,8 +190,8 @@
       </div>
     {/if}
 
-    <!-- Priority リーフ: Offlineの次に表示（全リーフPull完了後のみ） -->
-    {#if priorityLeaf && isPullCompleted}
+    <!-- Priority リーフ: Offlineの次に常に表示（Pull中は内容がリアルタイムに更新される） -->
+    {#if priorityLeaf}
       <div
         class="leaf-card"
         class:selected={vimMode && isActive && selectedIndex === (offlineLeaf ? 1 : 0)}
