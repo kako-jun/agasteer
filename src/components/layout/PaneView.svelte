@@ -134,6 +134,13 @@
   let handleScroll = $derived(
     pane === 'left' ? actions.handleLeftScroll : actions.handleRightScroll
   )
+
+  // ガラス効果オーバーレイの表示状態（オフラインリーフ表示中は除外）
+  // 真のときヘッダ・フッタ以外の背面に inert を付けて操作不可にする
+  let showGlassOverlay = $derived(
+    (paneState.value.isLoadingUI || isPushing.value) &&
+      !(currentLeaf && isOfflineLeaf(currentLeaf.id))
+  )
 </script>
 
 <Breadcrumbs
@@ -162,7 +169,7 @@
   isSyncing={isPulling.value || isPushing.value}
 />
 
-<main class="main-pane">
+<main class="main-pane" inert={showGlassOverlay}>
   {#if currentView === 'home'}
     <HomeView
       notes={activeRootNotes}
@@ -322,7 +329,7 @@
 {/if}
 
 <!-- ガラス効果オーバーレイ（オフラインリーフ表示中は除外 - GitHub同期と無関係なため） -->
-{#if (paneState.value.isLoadingUI || isPushing.value) && !(currentLeaf && isOfflineLeaf(currentLeaf.id))}
+{#if showGlassOverlay}
   <Loading />
 {/if}
 
