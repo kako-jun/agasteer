@@ -136,7 +136,7 @@
   )
 
   // ガラス効果オーバーレイの表示状態（オフラインリーフ表示中は除外）
-  // Issue #117: この間はヘッダ・フッタ以外の背面を inert で完全に操作不可にする
+  // 真のときヘッダ・フッタ以外の背面に inert を付けて操作不可にする
   let showGlassOverlay = $derived(
     (paneState.value.isLoadingUI || isPushing.value) &&
       !(currentLeaf && isOfflineLeaf(currentLeaf.id))
