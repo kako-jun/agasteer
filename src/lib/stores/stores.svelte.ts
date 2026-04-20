@@ -31,7 +31,7 @@ export const settings = {
     return _settings
   },
   set value(v: Settings) {
-    _settings = v
+    Object.assign(_settings, v)
   },
 }
 
