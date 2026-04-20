@@ -201,6 +201,9 @@ export function createCursorTrailExtension(modules: {
   // WebGL コンテキストロスト復旧用に直近の editorEl を保持する
   let lastEditorEl: HTMLElement | null = null
   let visibilityListener: (() => void) | null = null
+  // ロスト中フラグ。立っている間は updateListener から自動再生成しない
+  // （restored / visibility 経由で意図したタイミングだけ再生成する）
+  let contextLost = false
 
   // GL リソースを開放し canvas も DOM から外す（visibility/contextlost 復旧と cleanup から共用）
   function teardownGlResources() {
@@ -250,13 +253,14 @@ export function createCursorTrailExtension(modules: {
     // preventDefault() しないと restored は発火しない。
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault()
+      contextLost = true
       stopLoop()
       teardownGlResources()
     })
     canvas.addEventListener('webglcontextrestored', () => {
-      if (!destroyed && lastEditorEl) {
-        setupCanvas(lastEditorEl)
-      }
+      contextLost = false
+      if (destroyed) return
+      if (lastEditorEl?.isConnected) setupCanvas(lastEditorEl)
     })
 
     gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
@@ -469,8 +473,9 @@ export function createCursorTrailExtension(modules: {
 
   // ViewPlugin 定義
   const cursorTrailPlugin = EditorView.updateListener.of((update) => {
-    // エディタ初期化時に canvas をセットアップ
-    if (!canvas) {
+    // エディタ初期化時に canvas をセットアップ。
+    // contextLost 中は restored / visibility 経由でのみ再生成する。
+    if (!canvas && !contextLost) {
       setupCanvas(update.view.dom)
     }
 
@@ -508,11 +513,15 @@ export function createCursorTrailExtension(modules: {
     visibilityListener = () => {
       if (document.visibilityState !== 'visible') return
       if (destroyed) return
-      if (gl && gl.isContextLost()) {
-        stopLoop()
-        teardownGlResources()
-        if (lastEditorEl) setupCanvas(lastEditorEl)
-      }
+      // ロスト検知ルート2系統:
+      // (1) webglcontextlost が発火済みで contextLost フラグが立っている
+      // (2) restored が発火しない端末で gl は生きているが isContextLost() が true
+      const isLost = contextLost || (gl ? gl.isContextLost() : false)
+      if (!isLost) return
+      stopLoop()
+      teardownGlResources()
+      contextLost = false
+      if (lastEditorEl?.isConnected) setupCanvas(lastEditorEl)
     }
     document.addEventListener('visibilitychange', visibilityListener)
   }
@@ -526,6 +535,7 @@ export function createCursorTrailExtension(modules: {
       scrollView = null
     }
     teardownGlResources()
+    contextLost = false
     lastEditorEl = null
     if (motionQuery && motionListener) {
       motionQuery.removeEventListener('change', motionListener)
