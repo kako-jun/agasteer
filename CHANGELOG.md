@@ -4,6 +4,17 @@ Agasteerの変更履歴を記録しています。
 
 ---
 
+## 2026-04-20 - バグ修正
+
+### モバイル
+
+- **MDエディタ復帰時に本文が消える問題を修正**（#119）
+  - カーソルトレイル拡張の WebGL コンテキストロストを未処理だった
+  - `webglcontextlost` / `webglcontextrestored` ハンドラを追加し、復帰時に canvas を再生成
+  - `visibilitychange` で `gl.isContextLost()` を確認するフォールバックも追加（restored が発火しない端末対応）
+
+---
+
 ## 2026-02-11 - バグ修正
 
 ### GitHub同期
