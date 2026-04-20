@@ -679,7 +679,7 @@ export function initApp(deps: InitAppDeps): () => void {
   // 非同期初期化処理を即座に実行
   ;(async () => {
     const loadedSettings = await loadSettings()
-    settings.value = loadedSettings
+    Object.assign(settings.value, loadedSettings)
 
     // i18n初期化（翻訳読み込み完了を待機）
     await initI18n(loadedSettings.locale)

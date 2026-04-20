@@ -30,8 +30,9 @@ export const settings = {
   get value() {
     return _settings
   },
+  // proxy 同一性を保つため置換ではなくフィールドごとにミューテートする（#121）
   set value(v: Settings) {
-    _settings = v
+    Object.assign(_settings, v)
   },
 }
 
@@ -707,8 +708,8 @@ export const githubConfigured = {
 
 // ストアの更新と永続化をまとめたヘルパー関数
 export function updateSettings(newSettings: Settings): void {
-  settings.value = newSettings
-  saveSettings(newSettings)
+  Object.assign(_settings, newSettings)
+  saveSettings(_settings)
 }
 
 export function updateNotes(newNotes: Note[]): void {
