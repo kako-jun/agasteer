@@ -198,9 +198,37 @@ export function createCursorTrailExtension(modules: {
   let motionQuery: MediaQueryList | null = null
   let motionListener: ((e: MediaQueryListEvent) => void) | null = null
 
+  // WebGL コンテキストロスト復旧用に直近の editorEl を保持する
+  let lastEditorEl: HTMLElement | null = null
+  let visibilityListener: (() => void) | null = null
+
+  // GL リソースを開放し canvas も DOM から外す（visibility/contextlost 復旧と cleanup から共用）
+  function teardownGlResources() {
+    if (gl) {
+      if (buf) {
+        gl.deleteBuffer(buf)
+        buf = null
+      }
+      if (vao) {
+        gl.deleteVertexArray(vao)
+        vao = null
+      }
+      if (program) {
+        gl.deleteProgram(program)
+        program = null
+      }
+    }
+    if (canvas) {
+      canvas.remove()
+      canvas = null
+    }
+    gl = null
+  }
+
   function setupCanvas(editorEl: HTMLElement) {
     const scroller = editorEl.querySelector('.cm-scroller') as HTMLElement
     if (!scroller || canvas) return
+    lastEditorEl = editorEl
 
     // scroller の position を relative に（既に relative なら問題なし）
     const scrollerPosition = getComputedStyle(scroller).position
@@ -217,6 +245,19 @@ export function createCursorTrailExtension(modules: {
     canvas.style.pointerEvents = 'none'
     canvas.style.zIndex = '10'
     scroller.appendChild(canvas)
+
+    // モバイルのパワーセーブ復帰時に WebGL コンテキストが破棄されることがある。
+    // preventDefault() しないと restored は発火しない。
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault()
+      stopLoop()
+      teardownGlResources()
+    })
+    canvas.addEventListener('webglcontextrestored', () => {
+      if (!destroyed && lastEditorEl) {
+        setupCanvas(lastEditorEl)
+      }
+    })
 
     gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
     if (!gl) {
@@ -461,6 +502,19 @@ export function createCursorTrailExtension(modules: {
       }
     }
     motionQuery.addEventListener('change', motionListener)
+
+    // visibility 復帰時のフォールバック。webglcontextrestored が発火しない端末でも復旧できるよう、
+    // ロスト状態を検知したら teardown して再生成する。
+    visibilityListener = () => {
+      if (document.visibilityState !== 'visible') return
+      if (destroyed) return
+      if (gl && gl.isContextLost()) {
+        stopLoop()
+        teardownGlResources()
+        if (lastEditorEl) setupCanvas(lastEditorEl)
+      }
+    }
+    document.addEventListener('visibilitychange', visibilityListener)
   }
 
   function cleanupInternal() {
@@ -471,29 +525,16 @@ export function createCursorTrailExtension(modules: {
       scrollHandler = null
       scrollView = null
     }
-    if (gl) {
-      if (buf) {
-        gl.deleteBuffer(buf)
-        buf = null
-      }
-      if (vao) {
-        gl.deleteVertexArray(vao)
-        vao = null
-      }
-      if (program) {
-        gl.deleteProgram(program)
-        program = null
-      }
-    }
-    if (canvas) {
-      canvas.remove()
-      canvas = null
-    }
-    gl = null
+    teardownGlResources()
+    lastEditorEl = null
     if (motionQuery && motionListener) {
       motionQuery.removeEventListener('change', motionListener)
       motionQuery = null
       motionListener = null
+    }
+    if (visibilityListener) {
+      document.removeEventListener('visibilitychange', visibilityListener)
+      visibilityListener = null
     }
   }
 
