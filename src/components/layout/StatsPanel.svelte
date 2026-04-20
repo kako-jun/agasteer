@@ -32,8 +32,8 @@
     position: absolute;
     bottom: 40px; /* フッターの高さ */
     right: 0;
-    width: 400px;
-    height: 400px;
+    width: 1500px;
+    height: 1500px;
     background: linear-gradient(
       135deg,
       transparent 45%,
