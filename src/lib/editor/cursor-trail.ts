@@ -369,7 +369,7 @@ export function createCursorTrailExtension(modules: {
   }
 
   function startLoop() {
-    if (destroyed || loopRunning) return
+    if (destroyed || loopRunning || contextLost) return
     loopRunning = true
     function frame() {
       if (destroyed || !loopRunning) return
