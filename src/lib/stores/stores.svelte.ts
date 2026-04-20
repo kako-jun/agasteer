@@ -707,8 +707,8 @@ export const githubConfigured = {
 
 // ストアの更新と永続化をまとめたヘルパー関数
 export function updateSettings(newSettings: Settings): void {
-  settings.value = newSettings
-  saveSettings(newSettings)
+  Object.assign(_settings, newSettings)
+  saveSettings(_settings)
 }
 
 export function updateNotes(newNotes: Note[]): void {
