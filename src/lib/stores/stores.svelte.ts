@@ -30,6 +30,7 @@ export const settings = {
   get value() {
     return _settings
   },
+  // proxy 同一性を保つため置換ではなくフィールドごとにミューテートする（#121）
   set value(v: Settings) {
     Object.assign(_settings, v)
   },
