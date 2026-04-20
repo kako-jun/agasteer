@@ -36,8 +36,8 @@
     height: 400px;
     background: linear-gradient(
       135deg,
-      transparent 45%,
-      color-mix(in srgb, var(--bg) 40%, transparent) 65%,
+      transparent 50%,
+      color-mix(in srgb, var(--bg) 40%, transparent) 70%,
       color-mix(in srgb, var(--bg) 60%, transparent) 100%
     );
     pointer-events: none;
