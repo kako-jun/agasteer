@@ -397,6 +397,28 @@ GitHub Contents API呼び出しにキャッシュバスター（`?t=${Date.now()
 - ✅ リーフコンテンツも常に最新
 - ✅ キャッシュバスターの管理が一元化（保守性向上）
 
+### Git Data API の ref/tree 取得にも `cache: 'no-store'` が必須
+
+Contents API だけでなく **Git Data API のブランチ参照系 GET にも同じキャッシュ問題**がある。ref や「ブランチ名で引くツリー」はブランチHEADに追従する可変リソースなので、キャッシュされた応答で古いSHAを返す可能性がある。
+
+**具体的な影響（過去に発生した不具合）:**
+
+`pushAllWithTreeAPI` の ref 取得にキャッシュ対策が欠けていた結果:
+
+1. 連続push時に **古いHEAD SHA** を取得
+2. その古い commit を親として新 commit を作成
+3. ブランチ更新は `force: true` のため **実HEADを上書きして消す**
+4. 既存ツリーも古い参照から取得するため local leaf SHA と合わず、毎回「1件push」と誤報告
+5. pushで帳尻が合わず、pullするまで解消しない（pullは fresh fetchするため）
+
+**対策（適用済み）:** 以下の GET すべてに `cache: 'no-store'` を付与:
+
+- `/repos/{repoName}` （default_branch 取得、push/pull/staleCheck/pullArchive 全経路）
+- `/repos/{repoName}/git/ref/heads/{branch}` （ref 取得、全経路）
+- `/repos/{repoName}/git/trees/{branch}?recursive=1` （ブランチ名でのツリー取得、pull/pullArchive）
+
+一方、SHA アドレスで取得する `/git/commits/{sha}` `/git/trees/{sha}` `/git/blobs/{sha}` は **content-addressed で不変**なのでキャッシュしても安全。むしろキャッシュヒットが望ましい。
+
 ---
 
 ## ファイルパスの構築
