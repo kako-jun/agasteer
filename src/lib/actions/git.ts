@@ -107,7 +107,19 @@ export async function pushToGitHub(): Promise<void> {
       console.log(
         `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
       )
-      const choice = await choiceAsync($_('modal.staleEdit'), [
+      // 診断情報: ローカル/リモートのpushCountとSHAを付与し、誤検出に気付けるようにする
+      const remotePushCountResult = await fetchRemotePushCount(settings.value)
+      const remotePushCount =
+        remotePushCountResult.status === 'success' ? remotePushCountResult.pushCount : '?'
+      const diagnostic = $_('modal.staleEditDiagnostic', {
+        values: {
+          localSha: (staleResult.localCommitSha ?? 'null').slice(0, 7),
+          remoteSha: staleResult.remoteCommitSha.slice(0, 7),
+          localCount: metadata.value.pushCount,
+          remoteCount: remotePushCount,
+        },
+      })
+      const choice = await choiceAsync($_('modal.staleEdit') + diagnostic, [
         { label: $_('modal.pullFirst'), value: 'pull', variant: 'primary', icon: PULL_ICON },
         { label: $_('modal.pushOverwrite'), value: 'push', variant: 'secondary', icon: PUSH_ICON },
         { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
