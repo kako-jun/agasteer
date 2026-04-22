@@ -264,6 +264,7 @@
   "modal": {
     "longBackground": "長時間バックグラウンドでした。現在の状態を確認します。",
     "staleEdit": "リモートに新しい変更があります。\nこのまま保存すると上書きされます。",
+    "staleEditDiagnostic": "\n\nローカル: {localSha} (push #{localCount})\nリモート: {remoteSha} (push #{remoteCount})",
     "unsavedChanges": "未保存の変更があります。Pullすると上書きされます。続行しますか？",
     "unsavedChangesOnStartup": "前回の編集内容がGitHubに保存されていません。\nPullすると失われます。Pullしますか？\n\n「キャンセル」を選ぶとローカルの変更を保持します。",
     "unsavedChangesChoice": "未保存の変更があります。\nPullすると上書きされます。",

@@ -263,6 +263,7 @@
   "modal": {
     "longBackground": "You were away for a while. Checking current state.",
     "staleEdit": "Remote has newer changes.\nSaving will overwrite them.",
+    "staleEditDiagnostic": "\n\nLocal: {localSha} (push #{localCount})\nRemote: {remoteSha} (push #{remoteCount})",
     "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
     "unsavedChangesOnStartup": "Your previous edits were not saved to GitHub.\nPulling will lose them. Pull anyway?\n\nSelect 'Cancel' to keep local changes.",
     "unsavedChangesChoice": "You have unsaved changes.\nPulling will overwrite them.",
