@@ -524,9 +524,11 @@ export async function pushAllWithTreeAPI(
     const branch = repoData.default_branch || 'main'
 
     // 2. 現在のブランチのHEADを取得
+    // cache: 'no-store' は必須。キャッシュされたref値で push すると stale な parent の上に
+    // 新 commit を作り、force push で実 HEAD を上書きして履歴を失う（兄弟コミット量産）。
     const refRes = await fetch(
       `https://api.github.com/repos/${settings.repoName}/git/ref/heads/${branch}`,
-      { headers }
+      { headers, cache: 'no-store' }
     )
     // レート制限チェック
     const refRateLimit = parseRateLimitResponse(refRes)
@@ -1197,10 +1199,11 @@ export async function pullFromGitHub(
     const defaultBranch = repoData.default_branch || 'main'
 
     // HEAD commit SHAを取得（stale検出用）
+    // cache: 'no-store' は必須。キャッシュで古いSHAを拾うと stale検出が狂う。
     let pullCommitSha: string | undefined
     const refRes = await fetch(
       `https://api.github.com/repos/${settings.repoName}/git/ref/heads/${defaultBranch}`,
-      { headers }
+      { headers, cache: 'no-store' }
     )
     if (refRes.ok) {
       const refData = await refRes.json()
