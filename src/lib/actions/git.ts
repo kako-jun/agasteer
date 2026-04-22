@@ -166,22 +166,29 @@ export async function pushToGitHub(): Promise<void> {
     // Push飛行中フラグをクリア（レスポンスを受信できた）
     setPushInFlightAt(undefined)
 
-    // Push成功時にダーティフラグをクリアし、pushCountを更新
-    // noChangesの場合は実際にPushしていないので、スナップショット更新やフラグクリアを行わない
-    if (result.variant === 'success' && result.message !== 'github.noChanges') {
-      // 現在の状態をスナップショットとして保存（次回以降の差分検出のベースライン）
-      setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
-      clearAllChanges()
-      isStale.value = false
-      lastPushTime.value = Date.now() // 自動Push用に最終Push時刻を記録
-      // Push成功後のcommit SHAをストアに保存（stale検出用）
+    // Push成功時の後処理
+    if (result.variant === 'success') {
+      // commit SHAはリモートHEADの外的事実なので、noChangesでも常に更新する。
+      // noChangesで更新しないと、lastKnownCommitShaがドリフトして次回のstaleチェックで
+      // 誤検出（pull/push選択ダイアログの誤表示）につながる。
       if (result.commitSha) {
         lastKnownCommitSha.value = result.commitSha
       }
-      // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
-      const remoteResult = await fetchRemotePushCount(settings.value)
-      if (remoteResult.status === 'success') {
-        lastPulledPushCount.value = remoteResult.pushCount
+
+      // スナップショット更新とダーティクリアは実際にPushしたときだけ行う。
+      // noChangesで更新すると、executePushをawaitしている間にユーザーが加えた編集が
+      // ベースラインに吸収されてダーティ追跡から消える（データ損失リスク）。
+      // 参照: docs/development/sync/stale-detection.md
+      if (result.message !== 'github.noChanges') {
+        setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
+        clearAllChanges()
+        isStale.value = false
+        lastPushTime.value = Date.now() // 自動Push用に最終Push時刻を記録
+        // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
+        const remoteResult = await fetchRemotePushCount(settings.value)
+        if (remoteResult.status === 'success') {
+          lastPulledPushCount.value = remoteResult.pushCount
+        }
       }
     }
   } finally {

@@ -62,12 +62,21 @@ flowchart TD
     Confirm -->|Push上書き| Push[Push実行]
     Confirm -->|Cancel| Unlock
     Push --> Success{成功?}
-    Success -->|Yes| Clear[ダーティクリア<br/>pushCount取得]
+    Success -->|Yes: 実Push| Clear[SHA更新<br/>ダーティクリア<br/>pushCount取得]
+    Success -->|Yes: noChanges| ShaOnly[SHA更新のみ]
     Success -->|No| Notify[エラー通知]
     Clear --> Unlock[isPushing = false]
+    ShaOnly --> Unlock
     Notify --> Unlock
     Unlock --> End2[完了]
 ```
+
+**成功時の分岐:**
+
+- 実際にPushした場合: `lastKnownCommitSha`更新 + スナップショット更新 + ダーティクリア + `lastPushTime`更新 + `pushCount`取得
+- `github.noChanges`の場合: `lastKnownCommitSha`のみ更新（スナップショット・ダーティは触らない）
+
+noChangesで`lastKnownCommitSha`を更新するのは、SHAがリモートHEADの外的事実であり、更新を怠るとドリフトして次回staleチェックで誤検出につながるため。一方、スナップショットをnoChangesで更新しないのは、`executePush`をawaitしている間にユーザーが加えた編集がベースラインに吸収されて消失するのを防ぐため（`stale-detection.md`の「なぜSHA更新のみでスナップショットを更新しないか」と同じ原則）。
 
 ### 排他制御のポイント
 

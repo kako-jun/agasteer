@@ -301,6 +301,40 @@ stores.svelte.tsにモジュールレベルの変数として、Home用とArchiv
 
 ---
 
+## オフラインリーフと同期レイヤの分離
+
+### 原則
+
+オフラインリーフ（`isOfflineLeaf(id)` で判定されるリーフ）は **GitHub 同期対象外**。ダーティ追跡・スナップショット比較・stale検出のすべての同期レイヤから完全に分離されている。
+
+### 分離のポイント
+
+| レイヤ               | オフラインリーフの扱い                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| 状態ストア           | 専用ストア `offlineLeafStore`（`leaves.value` には含めない）                            |
+| 編集エントリポイント | `updateLeafContent` 先頭で `isOfflineLeaf` 判定し `updateOfflineContent` に早期リターン |
+| 自動保存             | `scheduleOfflineSave` → `saveOfflineLeaf`（IndexedDB永続化のみ、`leaves` は触らない）   |
+| ダーティ追跡         | `dirtyLeafIds`・`lastPushedLeaves` の対象外（`leaves.value` に含まれないため自動的に）  |
+| Push対象             | `isLeafSaveable` のフィルタで除外（`leaves.value` に含まれないため実質的に到達しない）  |
+| ガラス効果           | `!isOfflineLeaf(currentLeaf)` 条件で、Pull/Push 中でもオフラインリーフは編集可能        |
+
+### 設計意図
+
+オフラインリーフは GitHub に依存しないローカル専用のメモ。ネットワーク未接続・未設定の状態でも使えるようにするため、同期関連の一切の状態（dirty、stale、lastPushed\*）に影響を与えない。
+
+### アンチパターン
+
+以下は **絶対に行ってはいけない**:
+
+- `leaves.value` にオフラインリーフを混ぜる（Push対象に混入する）
+- オフラインリーフ編集時に `dirtyLeafIds` へ追加する（赤丸表示が誤って出る）
+- オフラインリーフの状態を `lastPushedLeaves` に含める（リポ切替時のリセット対象が増え管理が複雑化）
+- `updateLeafContent` の早期リターンを外す（同期レイヤへの漏れが発生）
+
+将来のリファクタで同期関連の処理を統一したいと思ったとき、オフラインリーフを含めないこと。
+
+---
+
 ## 自動Push機能
 
 ### 概要
