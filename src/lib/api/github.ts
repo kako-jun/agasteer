@@ -500,7 +500,10 @@ export async function pushAllWithTreeAPI(
 
   try {
     // 1. デフォルトブランチを取得
-    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
+      headers,
+      cache: 'no-store',
+    })
     // レート制限チェック
     const repoRateLimit = parseRateLimitResponse(repoRes)
     if (repoRateLimit.isRateLimited) {
@@ -1146,7 +1149,10 @@ export async function pullFromGitHub(
   }
 
   try {
-    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
+      headers,
+      cache: 'no-store',
+    })
     if (repoRes.status === 404) {
       return {
         success: false,
@@ -1211,10 +1217,10 @@ export async function pullFromGitHub(
     }
     // refRes失敗時（空リポジトリ等）はpullCommitSha=undefinedのまま続行
 
-    // tree取得
+    // tree取得（ブランチ名参照なので可変 → cache: 'no-store' 必須）
     const treeRes = await fetch(
       `https://api.github.com/repos/${settings.repoName}/git/trees/${defaultBranch}?recursive=1`,
-      { headers }
+      { headers, cache: 'no-store' }
     )
 
     // レート制限チェック（tree）
@@ -1683,7 +1689,7 @@ export async function testGitHubConnection(settings: Settings): Promise<TestResu
 
   try {
     // 認証確認
-    const userRes = await fetch('https://api.github.com/user', { headers })
+    const userRes = await fetch('https://api.github.com/user', { headers, cache: 'no-store' })
     if (userRes.status === 401) {
       return {
         success: false,
@@ -1713,7 +1719,10 @@ export async function testGitHubConnection(settings: Settings): Promise<TestResu
     }
 
     // リポジトリ参照確認
-    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
+      headers,
+      cache: 'no-store',
+    })
     if (repoRes.status === 404) {
       return {
         success: false,
@@ -1825,7 +1834,10 @@ export async function pullArchive(
 
   try {
     // リポジトリ情報を取得
-    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, { headers })
+    const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
+      headers,
+      cache: 'no-store',
+    })
     if (repoRes.status === 404) {
       return {
         success: false,
@@ -1865,10 +1877,10 @@ export async function pullArchive(
     const repoData = await repoRes.json()
     const defaultBranch = repoData.default_branch || 'main'
 
-    // tree取得
+    // tree取得（ブランチ名参照なので可変 → cache: 'no-store' 必須）
     const treeRes = await fetch(
       `https://api.github.com/repos/${settings.repoName}/git/trees/${defaultBranch}?recursive=1`,
-      { headers }
+      { headers, cache: 'no-store' }
     )
 
     const treeRateLimit = parseRateLimitResponse(treeRes)
