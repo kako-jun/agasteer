@@ -38,6 +38,26 @@ import { pullArchive, translateGitHubMessage } from '../api'
 import { generateUniqueName } from '../utils'
 import { appState, appActions, getWorldForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
+import { runPendingRepoSyncIfIdle } from '../sync/repo-sync-queue'
+
+async function runPendingRepoSyncAfterArchiveLoad(): Promise<void> {
+  const hasValidConfig = !!(settings.value.token && settings.value.repoName)
+  await runPendingRepoSyncIfIdle(
+    {
+      isPulling: isPulling.value,
+      isPushing: isPushing.value,
+      isArchiveLoading: appState.isArchiveLoading,
+    },
+    hasValidConfig,
+    appState.pendingRepoSync,
+    () => {
+      appState.pendingRepoSync = false
+    },
+    async () => {
+      await appActions.pullFromGitHub(false)
+    }
+  )
+}
 
 /**
  * ノートをワールド間で移動する（Home ⇔ Archive）
@@ -104,6 +124,7 @@ export async function moveNoteToWorld(
         return
       } finally {
         appState.isArchiveLoading = false
+        await runPendingRepoSyncAfterArchiveLoad()
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
@@ -390,6 +411,7 @@ export async function moveLeafToWorld(
         return
       } finally {
         appState.isArchiveLoading = false
+        await runPendingRepoSyncAfterArchiveLoad()
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）

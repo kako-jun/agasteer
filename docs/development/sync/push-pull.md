@@ -432,7 +432,7 @@ Pull失敗時のバックアップ復元は**初回Pull（`isInitialStartup = tr
 
 さらに、**トークンまたはリポジトリ名が空の場合**（`hasValidConfig = false`）は**Pullを実行せず、初回Pull前の状態に戻す**（`isPullCompleted = false` → `isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。これにより、設定が不完全な状態でデータ操作が行われることを防ぐ。
 
-Pull/Push/アーカイブロード中に設定画面を閉じた場合は、新しいPullを発行せずリセット済みの状態で閉じる（`resetForRepoSwitch()`で既にデータがクリアされているため、次回操作時に新リポからPullされる）。
+Pull/Push/アーカイブロード中に設定画面を閉じた場合は、即時Pullではなく**予約Pull**に切り替える。`pendingRepoSync = true` を立て、進行中の同期処理が完了した直後に、最新の `settings.repoName` / `settings.token` に対して `pullFromGitHub(false)` を1回だけ自動実行する。
 
 **Pullが失敗した場合**も同様に、`isPullCompleted = false`となるため初回Pull前の状態にリセットされる（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。
 
@@ -669,15 +669,15 @@ sequenceDiagram
 
 #### Aランク（重大 — 誤動作の可能性）
 
-| #   | 操作シナリオ                               | 期待動作                                 | 対応するガード/関数                                                                                        | 深刻度 |
-| --- | ------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- | :----: |
-| 6   | Pull中にリポ切替                           | 進行中Pullが旧リポデータを注入しない     | `handleCloseSettings()` → `isPulling`チェック → 新Pullスキップ                                             |   A    |
-| 7   | Push中にリポ切替                           | 旧リポへのPushは完了し新リポに影響しない | `handleCloseSettings()` → `isPushing`チェック → 新Pullスキップ                                             |   A    |
-| 8   | アーカイブロード中にリポ切替               | アーカイブPullの結果が破棄される         | `handleCloseSettings()` → `isArchiveLoading`チェック → 新Pullスキップ。`isArchiveLoaded=false`で再Pull必要 |   A    |
-| 9   | lastKnownCommitShaが旧リポのまま残る       | staleチェックが新リポのSHAと比較する     | `resetForRepoSwitch()` → `lastKnownCommitSha.set(null)` → 初回Pull扱い                                     |   A    |
-| 10  | lastPushedSnapshotが旧リポのまま残る       | dirty検出が新リポ基準で動作する          | `resetForRepoSwitch()` → 全スナップショット配列を`[]`にクリア                                              |   A    |
-| 11  | 自動Push（42秒タイマー）がリポ切替後に発火 | 旧データを新リポにPushしない             | `resetForRepoSwitch()` → `clearAllChanges()` → `isDirty=false` → 自動Push条件不成立                        |   A    |
-| 12  | staleチェックがリポ切替をまたぐ            | 旧リポのSHAでstale判定しない             | `lastStaleCheckTime=0` → `canPerformCheck()=false` → 新Pull完了までチェック抑制                            |   A    |
+| #   | 操作シナリオ                               | 期待動作                                | 対応するガード/関数                                                                     | 深刻度 |
+| --- | ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------- | :----: |
+| 6   | Pull中にリポ切替                           | 進行中Pull完了後に新repo pullへ収束する | `handleCloseSettings()` → `pendingRepoSync=true` → Pull finally後に予約pull実行         |   A    |
+| 7   | Push中にリポ切替                           | Push完了後に新repo pullへ収束する       | `handleCloseSettings()` → `pendingRepoSync=true` → Push finally後に予約pull実行         |   A    |
+| 8   | アーカイブロード中にリポ切替               | archive完了後に新repo pullへ収束する    | `handleCloseSettings()` → `pendingRepoSync=true` → archive load finally後に予約pull実行 |   A    |
+| 9   | lastKnownCommitShaが旧リポのまま残る       | staleチェックが新リポのSHAと比較する    | `resetForRepoSwitch()` → `lastKnownCommitSha.set(null)` → 初回Pull扱い                  |   A    |
+| 10  | lastPushedSnapshotが旧リポのまま残る       | dirty検出が新リポ基準で動作する         | `resetForRepoSwitch()` → 全スナップショット配列を`[]`にクリア                           |   A    |
+| 11  | 自動Push（42秒タイマー）がリポ切替後に発火 | 旧データを新リポにPushしない            | `resetForRepoSwitch()` → `clearAllChanges()` → `isDirty=false` → 自動Push条件不成立     |   A    |
+| 12  | staleチェックがリポ切替をまたぐ            | 旧リポのSHAでstale判定しない            | `lastStaleCheckTime=0` → `canPerformCheck()=false` → 新Pull完了までチェック抑制         |   A    |
 
 #### Bランク（UX問題 — 動作はするが改善が望ましい）
 
@@ -794,11 +794,10 @@ sequenceDiagram
 **修正後:**
 
 - `handleCloseSettings()`で`isPulling.value || isPushing.value || isArchiveLoading`をチェック
-- いずれかがtrueの場合、新Pullを発行しない
-- `resetForRepoSwitch()`で既にデータクリア済みなので、旧Pullの結果は無害
-  - 旧Pullが`notes.set()`等を呼んでも、すぐ後に`handleCloseSettings()`でPullが走らないため混在しない
-  - ユーザーが手動でPullを実行すれば新リポからデータ取得される
-- **結果: 安全。クリア済み状態で閉じ、次回操作時に新リポからPull**
+- いずれかがtrueの場合、即時Pullではなく `pendingRepoSync = true` を記録
+- `resetForRepoSwitch()`で既にデータクリア済みなので、進行中の旧Pull結果は操作対象として残らない
+- 進行中の同期が finally に入った時点で予約を確認し、新repo pull を1回だけ実行する
+- **結果: 安全性を保ったまま、自動で新リポへ収束する**
 
 ---
 

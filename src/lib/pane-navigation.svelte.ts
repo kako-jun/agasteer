@@ -18,6 +18,7 @@ import {
 import type { Pane } from './navigation'
 import type { EditorPaneRef } from './editor/editor-pane-ref'
 import { waitForMatchingEditor } from './editor/wait-for-editor'
+import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from './sync/repo-sync-queue'
 import * as nav from './navigation'
 import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
 import { _ } from './i18n'
@@ -51,7 +52,13 @@ import {
   setArchiveBaseline,
   scheduleOfflineSave,
 } from './stores'
-import { appState, derivedState, getNotesForPane, getLeavesForPane } from './app-state.svelte'
+import {
+  appActions,
+  appState,
+  derivedState,
+  getNotesForPane,
+  getLeavesForPane,
+} from './app-state.svelte'
 import {
   priorityItems,
   createPriorityLeaf,
@@ -122,6 +129,25 @@ export function syncNavState(state: nav.NavigationState) {
   focusedPane.value = state.focusedPane
   appState.selectedIndexLeft = state.selectedIndexLeft
   appState.selectedIndexRight = state.selectedIndexRight
+}
+
+async function runPendingRepoSyncIfIdle(): Promise<void> {
+  const hasValidConfig = !!(settings.value.token && settings.value.repoName)
+  await runPendingRepoSyncIfIdleShared(
+    {
+      isPulling: isPulling.value,
+      isPushing: isPushing.value,
+      isArchiveLoading: appState.isArchiveLoading,
+    },
+    hasValidConfig,
+    appState.pendingRepoSync,
+    () => {
+      appState.pendingRepoSync = false
+    },
+    async () => {
+      await appActions.pullFromGitHub(false)
+    }
+  )
 }
 
 // ========================================
@@ -380,6 +406,7 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
         }
       } finally {
         appState.isArchiveLoading = false
+        await runPendingRepoSyncIfIdle()
       }
     }
   }
@@ -797,6 +824,7 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
       }
     } finally {
       appState.isArchiveLoading = false
+      await runPendingRepoSyncIfIdle()
     }
   }
 

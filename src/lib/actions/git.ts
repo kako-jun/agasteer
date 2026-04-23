@@ -57,6 +57,26 @@ import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
 import { PULL_ICON, PUSH_ICON } from '../ui/icons'
+import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from '../sync/repo-sync-queue'
+
+async function runPendingRepoSyncIfIdle(): Promise<void> {
+  const hasValidConfig = !!(settings.value.token && settings.value.repoName)
+  await runPendingRepoSyncIfIdleShared(
+    {
+      isPulling: isPulling.value,
+      isPushing: isPushing.value,
+      isArchiveLoading: appState.isArchiveLoading,
+    },
+    hasValidConfig,
+    appState.pendingRepoSync,
+    () => {
+      appState.pendingRepoSync = false
+    },
+    async () => {
+      await pullFromGitHub(false)
+    }
+  )
+}
 
 /**
  * GitHub接続テスト
@@ -205,6 +225,7 @@ export async function pushToGitHub(): Promise<void> {
     }
   } finally {
     isPushing.value = false
+    await runPendingRepoSyncIfIdle()
   }
 }
 
@@ -460,5 +481,6 @@ export async function pullFromGitHub(
     pullProgressStore.reset()
   } finally {
     isPulling.value = false
+    await runPendingRepoSyncIfIdle()
   }
 }
