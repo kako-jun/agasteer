@@ -140,7 +140,7 @@ Check the following:
 
 **A:** This is a compatibility issue with Gboard (Google Japanese Input).
 
-Tapping empty lines (blank lines between paragraphs) may cause the scroll position to jump unexpectedly.
+Agasteer suppresses the immediate tap-triggered auto-scroll and then keeps the cursor visible after the keyboard appears. Even with that mitigation, tapping empty lines (blank lines between paragraphs) may still cause unexpected scroll jumps because of Gboard behavior.
 
 **Workaround**: Instead of tapping empty lines, tap a line with text and then move the cursor.
 
