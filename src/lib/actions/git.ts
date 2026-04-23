@@ -124,6 +124,7 @@ export async function pushToGitHub(): Promise<void> {
 
     if (staleResult.status === 'stale') {
       // リモートに新しい変更あり → 確認ダイアログを表示
+      isStale.value = true
       console.log(
         `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
       )
@@ -205,6 +206,7 @@ export async function pushToGitHub(): Promise<void> {
       // 誤検出（pull/push選択ダイアログの誤表示）につながる。
       if (result.commitSha) {
         lastKnownCommitSha.value = result.commitSha
+        isStale.value = false
       }
 
       // スナップショット更新とダーティクリアは実際にPushしたときだけ行う。
@@ -214,7 +216,6 @@ export async function pushToGitHub(): Promise<void> {
       if (result.message !== 'github.noChanges') {
         setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
         clearAllChanges()
-        isStale.value = false
         lastPushTime.value = Date.now() // 自動Push用に最終Push時刻を記録
         // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
         const remoteResult = await fetchRemotePushCount(settings.value)
