@@ -3,6 +3,7 @@
   import type { Pane } from '../../lib/navigation'
   import type { PaneActions, PaneState } from '../../lib/stores'
   import type { Note, Leaf, View } from '../../lib/types'
+  import type { EditorPaneRef } from '../../lib/editor/editor-pane-ref'
   import {
     isPriorityLeaf,
     isOfflineLeaf,
@@ -55,11 +56,15 @@
   // Props
   interface Props {
     pane: Pane
-    editorViewRef?: any
+    editorViewRef?: EditorPaneRef | null
     previewViewRef?: any
   }
 
-  let { pane, editorViewRef = $bindable(null), previewViewRef = $bindable(null) }: Props = $props()
+  let {
+    pane,
+    editorViewRef = $bindable<EditorPaneRef | null>(null),
+    previewViewRef = $bindable(null),
+  }: Props = $props()
 
   // OCR モーダルの状態
   let showOcrModal = $state(false)
@@ -227,22 +232,24 @@
       isArchive={isArchiveWorld}
     />
   {:else if currentView === 'edit' && currentLeaf}
-    <EditorView
-      bind:this={editorViewRef}
-      leaf={currentLeaf}
-      theme={settings.value.theme}
-      vimMode={settings.value.vimMode ?? false}
-      linedMode={settings.value.linedMode ?? true}
-      cursorTrailEnabled={settings.value.cursorTrailEnabled ?? true}
-      {pane}
-      onContentChange={(content, leafId) => actions.updateLeafContent(content, leafId, pane)}
-      onPush={actions.handlePushToGitHub}
-      onClose={() => actions.closeLeaf(pane)}
-      onSwitchPane={() => actions.switchPane(pane)}
-      onDownload={(leafId) => actions.downloadLeafAsMarkdown(leafId, pane)}
-      onDelete={(leafId) => actions.deleteLeaf(leafId, pane)}
-      onScroll={handleScroll}
-    />
+    {#key currentLeaf.id}
+      <EditorView
+        bind:this={editorViewRef}
+        leaf={currentLeaf}
+        theme={settings.value.theme}
+        vimMode={settings.value.vimMode ?? false}
+        linedMode={settings.value.linedMode ?? true}
+        cursorTrailEnabled={settings.value.cursorTrailEnabled ?? true}
+        {pane}
+        onContentChange={(content, leafId) => actions.updateLeafContent(content, leafId, pane)}
+        onPush={actions.handlePushToGitHub}
+        onClose={() => actions.closeLeaf(pane)}
+        onSwitchPane={() => actions.switchPane(pane)}
+        onDownload={(leafId) => actions.downloadLeafAsMarkdown(leafId, pane)}
+        onDelete={(leafId) => actions.deleteLeaf(leafId, pane)}
+        onScroll={handleScroll}
+      />
+    {/key}
   {:else if currentView === 'preview' && currentLeaf}
     <PreviewView
       bind:this={previewViewRef}

@@ -10,6 +10,7 @@ import type { Note, Leaf, Breadcrumb, WorldType } from './types'
 import type { Pane } from './navigation'
 import type { LeafSkeleton } from './api'
 import type { ModalPosition } from './ui'
+import type { EditorPaneRef } from './editor/editor-pane-ref'
 import { get } from 'svelte/store'
 import {
   notes,
@@ -195,9 +196,9 @@ let _isArchiveLoading = $state(false)
 let _isDualPane = $state(false)
 let _selectedIndexLeft = $state(0)
 let _selectedIndexRight = $state(0)
-let _leftEditorView = $state<any>(null)
+let _leftEditorView = $state<EditorPaneRef | null>(null)
 let _leftPreviewView = $state<any>(null)
-let _rightEditorView = $state<any>(null)
+let _rightEditorView = $state<EditorPaneRef | null>(null)
 let _rightPreviewView = $state<any>(null)
 let _loadingLeafIds = $state(new Set<string>())
 let _leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
@@ -314,10 +315,10 @@ export const appState = {
   set selectedIndexRight(v: number) {
     _selectedIndexRight = v
   },
-  get leftEditorView() {
+  get leftEditorView(): EditorPaneRef | null {
     return _leftEditorView
   },
-  set leftEditorView(v: any) {
+  set leftEditorView(v: EditorPaneRef | null) {
     _leftEditorView = v
   },
   get leftPreviewView() {
@@ -326,10 +327,10 @@ export const appState = {
   set leftPreviewView(v: any) {
     _leftPreviewView = v
   },
-  get rightEditorView() {
+  get rightEditorView(): EditorPaneRef | null {
     return _rightEditorView
   },
-  set rightEditorView(v: any) {
+  set rightEditorView(v: EditorPaneRef | null) {
     _rightEditorView = v
   },
   get rightPreviewView() {
