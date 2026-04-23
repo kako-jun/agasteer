@@ -472,30 +472,40 @@ export function createCursorTrailExtension(modules: {
   }
 
   // ViewPlugin 定義
-  const cursorTrailPlugin = EditorView.updateListener.of((update) => {
-    // エディタ初期化時に canvas をセットアップ。
-    // contextLost 中は restored / visibility 経由でのみ再生成する。
-    if (!canvas && !contextLost) {
-      setupCanvas(update.view.dom)
-    }
+  const cursorTrailPlugin: Extension = [
+    EditorView.updateListener.of((update) => {
+      // エディタ初期化時に canvas をセットアップ。
+      // contextLost 中は restored / visibility 経由でのみ再生成する。
+      if (!canvas && !contextLost) {
+        setupCanvas(update.view.dom)
+      }
 
-    // canvas が正常に作成された場合のみスクロール監視を登録
-    if (canvas && !scrollHandler) {
-      scrollView = update.view
-      scrollHandler = () => onScroll(scrollView!)
-      update.view.scrollDOM.addEventListener('scroll', scrollHandler, { passive: true })
-    }
+      // canvas が正常に作成された場合のみスクロール監視を登録
+      if (canvas && !scrollHandler) {
+        scrollView = update.view
+        scrollHandler = () => onScroll(scrollView!)
+        update.view.scrollDOM.addEventListener('scroll', scrollHandler, { passive: true })
+      }
 
-    // カーソル位置の変更を検知
-    if (update.selectionSet || update.docChanged) {
-      updateCursorPosition(update.view)
-    }
+      // カーソル位置の変更を検知
+      if ((update.selectionSet || update.docChanged) && !update.view.composing) {
+        updateCursorPosition(update.view)
+      }
 
-    // ジオメトリ変更時にリサイズ
-    if (update.geometryChanged) {
-      resizeCanvas()
-    }
-  })
+      // ジオメトリ変更時にリサイズ
+      if (update.geometryChanged) {
+        resizeCanvas()
+      }
+    }),
+    EditorView.domEventHandlers({
+      compositionend: (_event, view) => {
+        queueMicrotask(() => {
+          if (destroyed || view.composing) return
+          updateCursorPosition(view)
+        })
+      },
+    }),
+  ]
 
   // reduced-motion の動的変更を監視
   if (typeof window !== 'undefined') {

@@ -47,6 +47,9 @@
   let updateDirtyLinesFnRef: ((view: any) => void) | null = null // ダーティライン更新関数の参照
   let dirtyLeafIdsUnsubscribe: (() => void) | null = null // dirtyLeafIdsストアのアンサブスクライブ関数
   let cursorTrailCleanup: (() => void) | null = null // カーソルトレイルのクリーンアップ関数
+  let isComposing = false // IME変換中は親state更新と装飾更新を遅延する
+  let pendingCompositionChange = false
+  let pendingVimScrollFrame: number | null = null
 
   // モバイル判定（タッチデバイスかつ画面幅が小さい）
   function isMobileDevice(): boolean {
@@ -144,6 +147,30 @@
     const selection = state.selection.main
     if (selection.empty) return ''
     return state.doc.sliceString(selection.from, selection.to)
+  }
+
+  function flushPendingCompositionChange(view = editorView) {
+    if (!pendingCompositionChange || !view) return
+    pendingCompositionChange = false
+    onChange(view.state.doc.toString())
+    if (editorView === view && updateDirtyLinesFnRef) {
+      updateDirtyLinesFnRef(view)
+    }
+  }
+
+  function scheduleVimSelectionScroll(view: any) {
+    if (!vimMode || isComposing || view.composing) return
+    if (pendingVimScrollFrame !== null) {
+      cancelAnimationFrame(pendingVimScrollFrame)
+    }
+    pendingVimScrollFrame = requestAnimationFrame(() => {
+      pendingVimScrollFrame = null
+      if (!editorView || editorView !== view || isComposing || view.composing) return
+      const head = view.state.selection.main.head
+      view.dispatch({
+        effects: EditorView.scrollIntoView(head, { y: 'nearest' }),
+      })
+    })
   }
 
   const darkThemes: ThemeType[] = ['greenboard', 'dotsD', 'dotsF']
@@ -381,12 +408,31 @@
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          const newContent = update.state.doc.toString()
-          onChange(newContent)
+          if (isComposing || update.view.composing) {
+            pendingCompositionChange = true
+          } else {
+            onChange(update.state.doc.toString())
+          }
           // ダーティ判定はスナップショット比較で自動検出されるため、ここでは何もしない
+        }
+        if (update.selectionSet && !update.docChanged) {
+          scheduleVimSelectionScroll(update.view)
         }
       }),
       EditorView.domEventHandlers({
+        compositionstart: () => {
+          isComposing = true
+        },
+        compositionend: () => {
+          isComposing = false
+          if (pendingCompositionChange) {
+            const view = editorView
+            queueMicrotask(() => {
+              if (editorView !== view) return
+              flushPendingCompositionChange(view)
+            })
+          }
+        },
         scroll: (event) => {
           if (isScrollingSynced || !onScroll) return
           const target = event.target as HTMLElement
@@ -467,7 +513,7 @@
               callbacks.onSwitchPane()
             }
           })
-          Vim.mapCommand('<Space>', 'action', 'switchPane')
+          Vim.mapCommand('<Space>', 'action', 'switchPane', {}, { context: 'normal' })
 
           window.vimCommandsInitialized = true
         }
@@ -604,6 +650,8 @@
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
     if (editorView) {
+      flushPendingCompositionChange(editorView)
+      isComposing = false
       // dirtyLeafIdsストアの購読解除
       if (dirtyLeafIdsUnsubscribe) {
         dirtyLeafIdsUnsubscribe()
@@ -619,6 +667,10 @@
         cursorTrailCleanup()
         cursorTrailCleanup = null
       }
+      if (pendingVimScrollFrame !== null) {
+        cancelAnimationFrame(pendingVimScrollFrame)
+        pendingVimScrollFrame = null
+      }
       editorView.destroy()
       editorView = null
       initializeEditor()
@@ -628,6 +680,7 @@
   // contentが外部から変更された時にエディタを更新
   $effect(() => {
     if (editorView && content !== undefined) {
+      if (isComposing || editorView.composing || pendingCompositionChange) return
       updateEditorContent(content)
     }
   })
@@ -638,6 +691,8 @@
   })
 
   onDestroy(() => {
+    flushPendingCompositionChange(editorView)
+    isComposing = false
     // dirtyLeafIdsストアの購読解除
     if (dirtyLeafIdsUnsubscribe) {
       dirtyLeafIdsUnsubscribe()
@@ -652,6 +707,10 @@
     if (cursorTrailCleanup) {
       cursorTrailCleanup()
       cursorTrailCleanup = null
+    }
+    if (pendingVimScrollFrame !== null) {
+      cancelAnimationFrame(pendingVimScrollFrame)
+      pendingVimScrollFrame = null
     }
     if (editorView) {
       editorView.destroy()

@@ -20,7 +20,7 @@ On landscape screens, content is displayed in two side-by-side panes.
 
 ### When Same Leaf is Open in Both Panes
 
-- **Edits sync instantly** (type in one → reflected in the other)
+- **Edits sync instantly** (type in one → reflected in the other). IME composition syncs after conversion is committed.
 - **Scroll position also syncs**
 - Left: edit mode, Right: preview → Check your writing as you go
 
@@ -57,4 +57,4 @@ In two-pane display, **each pane can show a different world (Home/Archive)**.
 | Compare           | Leaf A         | Leaf B       |
 | Archive reference | Archive        | Home         |
 
-> **Tip**: In Vim mode, use `<Space>` to switch between panes.
+> **Tip**: In Vim mode, use normal-mode `<Space>` to switch between panes.

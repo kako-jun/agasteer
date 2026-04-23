@@ -22,16 +22,16 @@ When Vim mode is enabled, the following shortcuts are available.
 
 ### Normal Mode
 
-| Key                   | Action                     |
-| --------------------- | -------------------------- |
-| `i` / `a` / `o`       | Enter insert mode          |
-| `h` / `j` / `k` / `l` | Cursor movement            |
-| `dd`                  | Delete line                |
-| `yy`                  | Copy line                  |
-| `p`                   | Paste                      |
-| `u`                   | Undo                       |
-| `Ctrl-r`              | Redo                       |
-| `<Space>`             | Switch panes (in two-pane) |
+| Key                   | Action                                    |
+| --------------------- | ----------------------------------------- |
+| `i` / `a` / `o`       | Enter insert mode                         |
+| `h` / `j` / `k` / `l` | Cursor movement                           |
+| `dd`                  | Delete line                               |
+| `yy`                  | Copy line                                 |
+| `p`                   | Paste                                     |
+| `u`                   | Undo                                      |
+| `Ctrl-r`              | Redo                                      |
+| `<Space>`             | Switch panes in normal mode (in two-pane) |
 
 ### Agasteer-Specific Commands
 

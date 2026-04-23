@@ -15,16 +15,16 @@ Use CodeMirror's Vim key bindings.
 
 ### Normal Mode
 
-| Key                   | Action                     |
-| --------------------- | -------------------------- |
-| `i` / `a` / `o`       | Enter insert mode          |
-| `h` / `j` / `k` / `l` | Cursor movement            |
-| `dd`                  | Delete line                |
-| `yy`                  | Copy line                  |
-| `p`                   | Paste                      |
-| `u`                   | Undo                       |
-| `Ctrl-r`              | Redo                       |
-| `<Space>`             | Switch panes (in two-pane) |
+| Key                   | Action                                    |
+| --------------------- | ----------------------------------------- |
+| `i` / `a` / `o`       | Enter insert mode                         |
+| `h` / `j` / `k` / `l` | Cursor movement                           |
+| `dd`                  | Delete line                               |
+| `yy`                  | Copy line                                 |
+| `p`                   | Paste                                     |
+| `u`                   | Undo                                      |
+| `Ctrl-r`              | Redo                                      |
+| `<Space>`             | Switch panes in normal mode (in two-pane) |
 
 ### Agasteer-Specific Commands
 
@@ -39,5 +39,5 @@ Use CodeMirror's Vim key bindings.
 ## Two-Pane Behavior
 
 - Vim mode operates independently in left and right panes
-- Use `<Space>` to switch between left and right panes
+- Use normal-mode `<Space>` to switch between left and right panes
 - Commands can be executed independently in each pane

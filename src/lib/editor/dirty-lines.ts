@@ -194,7 +194,7 @@ export function createDirtyLineExtension(
     dirtyLineGutter,
     // ドキュメント変更時にデバウンス付きで更新
     EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
+      if (update.docChanged && !update.view.composing) {
         debouncedUpdate(update.view)
       }
     }),
