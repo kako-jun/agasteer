@@ -326,30 +326,6 @@
       {/if}
     </div>
   </div>
-  <div class="video-guide-hint">
-    <span>{$_('settings.github.videoGuideHint')}</span>
-    <a
-      href="https://www.youtube.com/watch?v=example"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="video-link"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <polygon points="5 3 19 12 5 21 5 3" />
-      </svg>
-      <span>{$_('settings.github.videoGuide')}</span>
-    </a>
-  </div>
   <div class="test-actions">
     <button type="button" class="test-button" onclick={onTestConnection} disabled={isTesting}>
       <svg class="test-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -659,30 +635,6 @@
   .help-icon:hover {
     opacity: 1;
     transform: scale(1.1);
-  }
-
-  .video-guide-hint {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-muted, #888);
-    flex-wrap: wrap;
-  }
-
-  .video-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    color: var(--accent);
-    text-decoration: none;
-    transition: opacity 0.2s;
-  }
-
-  .video-link:hover {
-    opacity: 0.8;
-    text-decoration: underline;
   }
 
   @media (max-width: 600px) {
