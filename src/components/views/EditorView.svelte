@@ -70,6 +70,11 @@
     }
   }
 
+  // 現在このエディタが表示しているリーフIDを返す
+  export function getLeafId(): string {
+    return leaf.id
+  }
+
   // 外部からカーソル位置にテキストを挿入する関数
   export function insertAtCursor(text: string) {
     if (markdownEditor && markdownEditor.insertAtCursor) {

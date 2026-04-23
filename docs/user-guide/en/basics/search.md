@@ -8,6 +8,8 @@ Use the search box on the home screen to search across note names, leaf names, a
 
 1. Enter a keyword in the search box
 2. Results are displayed in real-time
+3. Click a result to open the matched note or leaf
+4. When a content match is opened, the editor jumps to the matched line
 
 ---
 

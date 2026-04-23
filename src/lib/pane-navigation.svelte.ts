@@ -16,6 +16,8 @@ import {
   buildBlobShaCache,
 } from './types'
 import type { Pane } from './navigation'
+import type { EditorPaneRef } from './editor/editor-pane-ref'
+import { waitForMatchingEditor } from './editor/wait-for-editor'
 import * as nav from './navigation'
 import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
 import { _ } from './i18n'
@@ -211,6 +213,33 @@ export function selectLeaf(leaf: Leaf, pane: Pane) {
   }
 }
 
+async function waitForEditorLeaf(
+  pane: Pane,
+  expectedLeafId: string,
+  maxAttempts = 12
+): Promise<EditorPaneRef | null> {
+  return waitForMatchingEditor(
+    () => (pane === 'left' ? appState.leftEditorView : appState.rightEditorView),
+    async () => {
+      await tick()
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+    },
+    expectedLeafId,
+    maxAttempts
+  )
+}
+
+async function scrollLeafLineWhenReady(
+  pane: Pane,
+  expectedLeafId: string,
+  line: number
+): Promise<void> {
+  const editorView = await waitForEditorLeaf(pane, expectedLeafId)
+  if (editorView?.scrollToLine) {
+    editorView.scrollToLine(line)
+  }
+}
+
 export async function handleSearchResultClick(result: SearchMatch) {
   const targetNotes = result.world === 'archive' ? archiveNotes.value : notes.value
   const targetLeaves = result.world === 'archive' ? archiveLeaves.value : leaves.value
@@ -229,18 +258,12 @@ export async function handleSearchResultClick(result: SearchMatch) {
   } else {
     if (isOfflineLeaf(result.leafId)) {
       openOfflineView('left')
-      await tick()
-      if (appState.leftEditorView && appState.leftEditorView.scrollToLine) {
-        appState.leftEditorView.scrollToLine(result.line)
-      }
+      await scrollLeafLineWhenReady('left', result.leafId, result.line)
     } else {
       const leaf = targetLeaves.find((l) => l.id === result.leafId)
       if (leaf) {
         selectLeaf(leaf, 'left')
-        await tick()
-        if (appState.leftEditorView && appState.leftEditorView.scrollToLine) {
-          appState.leftEditorView.scrollToLine(result.line)
-        }
+        await scrollLeafLineWhenReady('left', leaf.id, result.line)
       }
     }
   }
@@ -250,12 +273,7 @@ export async function handlePriorityLinkClick(leafId: string, line: number, pane
   const leaf = leaves.value.find((l) => l.id === leafId)
   if (leaf) {
     selectLeaf(leaf, pane)
-    await tick()
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    const editorView = pane === 'left' ? appState.leftEditorView : appState.rightEditorView
-    if (editorView && editorView.scrollToLine) {
-      editorView.scrollToLine(line)
-    }
+    await scrollLeafLineWhenReady(pane, leaf.id, line)
   }
 }
 
