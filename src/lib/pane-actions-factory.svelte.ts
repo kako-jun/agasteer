@@ -11,6 +11,7 @@ import type { Note, Leaf, Breadcrumb } from './types'
 import type { Pane } from './navigation'
 import type { PaneActions } from './stores'
 import { _ } from './i18n'
+import { shouldQueueRepoSync } from './sync/repo-sync-queue'
 import { locale } from 'svelte-i18n'
 import {
   settings,
@@ -405,13 +406,25 @@ export async function handleCloseSettings() {
   if (githubSettingsChangedInSettings || appState.importOccurredInSettings) {
     const hasValidConfig = !!(settings.value.token && settings.value.repoName)
     if (hasValidConfig) {
-      if (!isPulling.value && !isPushing.value && !appState.isArchiveLoading) {
+      if (
+        shouldQueueRepoSync(
+          {
+            isPulling: isPulling.value,
+            isPushing: isPushing.value,
+            isArchiveLoading: appState.isArchiveLoading,
+          },
+          hasValidConfig
+        )
+      ) {
+        appState.pendingRepoSync = true
+      } else {
         isClosingSettingsPull = true
         await pullFromGitHub(false)
         isClosingSettingsPull = false
       }
     } else {
       appState.isPullCompleted = false
+      appState.pendingRepoSync = false
     }
     // pull失敗または設定が不完全 → 初回pull前の状態に戻す
     if (!appState.isPullCompleted) {
@@ -528,6 +541,7 @@ export function setupAppActionsAndContext(pushDisabledReasonGetter: () => string
     closeMoveModal,
     updateOfflineContent,
     pushToGitHub,
+    pullFromGitHub,
     showPrompt,
     showConfirm,
     getDialogPositionForPane,

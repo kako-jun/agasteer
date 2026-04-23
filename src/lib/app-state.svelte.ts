@@ -205,6 +205,7 @@ let _leafSkeletonMap = $state(new Map<string, LeafSkeleton>())
 let _isRestoringFromUrl = $state(false)
 let _importOccurredInSettings = $state(false)
 let _atGuardEntry = $state(false)
+let _pendingRepoSync = $state(false)
 
 export const appState = {
   get breadcrumbs() {
@@ -369,6 +370,12 @@ export const appState = {
   set atGuardEntry(v: boolean) {
     _atGuardEntry = v
   },
+  get pendingRepoSync() {
+    return _pendingRepoSync
+  },
+  set pendingRepoSync(v: boolean) {
+    _pendingRepoSync = v
+  },
 }
 
 // ========================================
@@ -389,6 +396,10 @@ export interface AppActionsRegistry {
   closeMoveModal: () => void
   updateOfflineContent: (content: string) => void
   pushToGitHub: () => Promise<void>
+  pullFromGitHub: (
+    isInitialStartup?: boolean,
+    onCancel?: () => void | Promise<void>
+  ) => Promise<void>
   showPrompt: (
     message: string,
     onConfirm: (value: string) => void,
