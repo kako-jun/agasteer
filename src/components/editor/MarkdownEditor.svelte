@@ -6,6 +6,13 @@
   import type { Pane } from '../../lib/navigation'
   import { createDirtyLineExtension } from '../../lib/editor/dirty-lines'
   import { createCursorTrailExtension } from '../../lib/editor/cursor-trail'
+  import {
+    MOBILE_CURSOR_SCROLL_DELAYS,
+    getCursorVisibilityScrollDelta,
+    getMobilePointerScrollUntil,
+    isMobilePointerScrollActive as isMobilePointerScrollWindowActive,
+    shouldSuppressMobileScrollIntoView,
+  } from '../../lib/editor/mobile-cursor-scroll'
   import { getLastPushedContent, dirtyLeafIds } from '../../lib/stores'
 
   interface Props {
@@ -50,6 +57,9 @@
   let isComposing = false // IME変換中は親state更新と装飾更新を遅延する
   let pendingCompositionChange = false
   let pendingVimScrollFrame: number | null = null
+  let mobilePointerScrollUntil = 0
+  let pendingMobileScrollTimers: number[] = []
+  let pendingMobileScrollFrames: number[] = []
 
   // モバイル判定（タッチデバイスかつ画面幅が小さい）
   function isMobileDevice(): boolean {
@@ -171,6 +181,65 @@
         effects: EditorView.scrollIntoView(head, { y: 'nearest' }),
       })
     })
+  }
+
+  function clearPendingMobileCursorScroll() {
+    for (const timer of pendingMobileScrollTimers) {
+      clearTimeout(timer)
+    }
+    pendingMobileScrollTimers = []
+    for (const frame of pendingMobileScrollFrames) {
+      cancelAnimationFrame(frame)
+    }
+    pendingMobileScrollFrames = []
+  }
+
+  function markMobilePointerScroll() {
+    if (!isMobileDevice()) return
+    mobilePointerScrollUntil = getMobilePointerScrollUntil()
+  }
+
+  function isMobilePointerScrollActive(): boolean {
+    return isMobileDevice() && isMobilePointerScrollWindowActive(mobilePointerScrollUntil)
+  }
+
+  function keepMobileCursorVisible(view: any) {
+    if (!isMobileDevice() || !view || editorView !== view || isComposing || view.composing) return
+    const scroller = view.scrollDOM
+    const coords = view.coordsAtPos(view.state.selection.main.head)
+    if (!scroller || !coords) return
+
+    const visualViewport = window.visualViewport
+    const viewportTop = visualViewport?.offsetTop ?? 0
+    const viewportBottom = viewportTop + (visualViewport?.height ?? window.innerHeight)
+    const topMargin = 16
+    const bottomMargin = 32
+
+    const scrollDelta = getCursorVisibilityScrollDelta(
+      { top: coords.top, bottom: coords.bottom },
+      { top: viewportTop, bottom: viewportBottom },
+      { top: topMargin, bottom: bottomMargin }
+    )
+    if (scrollDelta !== 0) {
+      scroller.scrollTop += scrollDelta
+    }
+  }
+
+  function scheduleMobileCursorScroll(view: any) {
+    if (!isMobileDevice() || !view) return
+    clearPendingMobileCursorScroll()
+
+    for (const delay of MOBILE_CURSOR_SCROLL_DELAYS) {
+      const timer = window.setTimeout(() => {
+        pendingMobileScrollTimers = pendingMobileScrollTimers.filter((id) => id !== timer)
+        const frame = requestAnimationFrame(() => {
+          pendingMobileScrollFrames = pendingMobileScrollFrames.filter((id) => id !== frame)
+          keepMobileCursorVisible(view)
+        })
+        pendingMobileScrollFrames.push(frame)
+      }, delay)
+      pendingMobileScrollTimers.push(timer)
+    }
   }
 
   const darkThemes: ThemeType[] = ['greenboard', 'dotsD', 'dotsF']
@@ -417,9 +486,25 @@
         }
         if (update.selectionSet && !update.docChanged) {
           scheduleVimSelectionScroll(update.view)
+          if (isMobilePointerScrollActive()) {
+            scheduleMobileCursorScroll(update.view)
+          }
         }
       }),
       EditorView.domEventHandlers({
+        pointerdown: (event: PointerEvent) => {
+          if (event.pointerType === 'touch') {
+            markMobilePointerScroll()
+          }
+        },
+        touchstart: () => {
+          markMobilePointerScroll()
+        },
+        focus: (_event: FocusEvent, view: any) => {
+          if (isMobilePointerScrollActive()) {
+            scheduleMobileCursorScroll(view)
+          }
+        },
         compositionstart: () => {
           isComposing = true
         },
@@ -596,9 +681,15 @@
     // モバイルではタップ時の自動スクロールを無効化
     if (isMobileDevice()) {
       editorConfig.dispatchTransactions = (trs: any[], view: any) => {
-        // scrollIntoView効果を除去してからディスパッチ
+        // タップ直後のCodeMirror自動スクロールだけ抑制し、キーボード表示後に手動補正する
         const filteredTrs = trs.map((tr) => {
-          if (tr.scrollIntoView) {
+          if (
+            shouldSuppressMobileScrollIntoView({
+              isMobile: true,
+              scrollIntoView: tr.scrollIntoView,
+              pointerScrollUntil: mobilePointerScrollUntil,
+            })
+          ) {
             return view.state.update({
               ...tr,
               scrollIntoView: false,
@@ -671,6 +762,7 @@
         cancelAnimationFrame(pendingVimScrollFrame)
         pendingVimScrollFrame = null
       }
+      clearPendingMobileCursorScroll()
       editorView.destroy()
       editorView = null
       initializeEditor()
@@ -712,8 +804,11 @@
       cancelAnimationFrame(pendingVimScrollFrame)
       pendingVimScrollFrame = null
     }
+    clearPendingMobileCursorScroll()
     if (editorView) {
-      editorView.destroy()
+      const view = editorView
+      editorView = null
+      view.destroy()
     }
     // Vimコールバックのクリーンアップ
     if (window.editorCallbacks) {
