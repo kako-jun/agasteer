@@ -262,7 +262,8 @@ export async function pullFromGitHub(
     // Staleチェックを先に行う。
     // リモートに変更がない（= 実際のPullが走らない）場合にまで
     // 「未保存の変更があります。Pullすると上書きされます」系の警告を出すと、
-    // インポート直後の設定クローズなど「ローカル先行」状態でも誤った stale 警告
+    // インポート直後（ローカルはリモートと同一commitのまま、配下データだけ増えた
+    // 状態）の設定クローズなど「ローカル先行」状態でも誤った stale 警告
     // が出てしまうため（#152）。
     const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
 
