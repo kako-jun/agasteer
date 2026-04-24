@@ -114,6 +114,11 @@
   // ペインのワールドに応じてノート・リーフストアを切り替え
   let paneWorld = $derived(pane === 'left' ? paneState.value.leftWorld : paneState.value.rightWorld)
   let isArchiveWorld = $derived(paneWorld === 'archive')
+
+  // [#142] PaneView に届いた paneWorld の変化を確認（Breadcrumbs に currentWorld として流れる値）
+  $effect(() => {
+    console.debug('[#142] PaneView paneWorld', { pane, paneWorld })
+  })
   let activeNotes = $derived(isArchiveWorld ? archiveNotes.value : notes.value)
   let activeLeaves = $derived(isArchiveWorld ? archiveLeaves.value : leaves.value)
   let activeRootNotes = $derived(
