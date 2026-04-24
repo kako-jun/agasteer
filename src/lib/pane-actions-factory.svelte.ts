@@ -7,7 +7,7 @@
  */
 
 import { get } from 'svelte/store'
-import type { Note, Leaf, Breadcrumb } from './types'
+import type { Note, Leaf, Breadcrumb, StaleCheckResult } from './types'
 import type { Pane } from './navigation'
 import type { PaneActions } from './stores'
 import { _ } from './i18n'
@@ -282,7 +282,7 @@ export async function pushToGitHub() {
 export async function pullFromGitHub(
   isInitialStartup = false,
   onCancel?: () => void | Promise<void>,
-  precomputedStale?: import('./types').StaleCheckResult
+  precomputedStale?: StaleCheckResult
 ) {
   return pullFromGitHubAction(isInitialStartup, onCancel, precomputedStale)
 }

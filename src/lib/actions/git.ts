@@ -250,6 +250,8 @@ export async function pushToGitHub(): Promise<void> {
  * @param precomputedStale - 呼び出し元で既に実行した stale check の結果。
  *   指定した場合は内部で再取得せずそれを使う（#158: app-state の起動時
  *   スキップ判定で先行実行した結果を流用し、GitHub Refs API の二重呼び出しを避ける）。
+ *   **注意**: 鮮度は検証しない。**この関数呼び出しの直前**に取得した結果だけを渡すこと。
+ *   古い結果を渡すと、その間にリモートが進んでいても up_to_date と判定してしまう。
  */
 export async function pullFromGitHub(
   isInitialStartup = false,

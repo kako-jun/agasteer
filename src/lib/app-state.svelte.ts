@@ -6,7 +6,7 @@
  * Phase 4: onMount ロジックを initApp() に抽出。
  */
 
-import type { Note, Leaf, Breadcrumb, WorldType } from './types'
+import type { Note, Leaf, Breadcrumb, WorldType, StaleCheckResult } from './types'
 import type { Pane } from './navigation'
 import type { LeafSkeleton } from './api'
 import type { ModalPosition } from './ui'
@@ -422,7 +422,7 @@ export interface AppActionsRegistry {
   pullFromGitHub: (
     isInitialStartup?: boolean,
     onCancel?: () => void | Promise<void>,
-    precomputedStale?: import('./types').StaleCheckResult
+    precomputedStale?: StaleCheckResult
   ) => Promise<void>
   showPrompt: (
     message: string,
@@ -661,7 +661,7 @@ export interface InitAppDeps {
   pullFromGitHub: (
     isInitial: boolean,
     onCancel?: () => void | Promise<void>,
-    precomputedStale?: import('./types').StaleCheckResult
+    precomputedStale?: StaleCheckResult
   ) => Promise<void>
   pushToGitHub: () => Promise<void>
   restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
@@ -817,13 +817,13 @@ export function initApp(deps: InitAppDeps): () => void {
         if (initialStartup) {
           appState.isRestoringFromUrl = true
           try {
-            deps.restoreStateFromUrl(true)
+            await deps.restoreStateFromUrl(true)
           } finally {
             // restoreStateFromUrl が例外を投げてもフラグが残らないようにする
             appState.isRestoringFromUrl = false
           }
         } else {
-          deps.restoreStateFromUrl(false)
+          await deps.restoreStateFromUrl(false)
         }
         return savedNotes.length + savedLeaves.length
       }
@@ -835,21 +835,24 @@ export function initApp(deps: InitAppDeps): () => void {
         lastKnownCommitSha.value !== null
           ? await executeStaleCheck(settings.value, lastKnownCommitSha.value)
           : null
-      const canSkipFullPull =
-        staleResult !== null &&
-        staleResult.status === 'up_to_date' &&
-        lastKnownCommitSha.value !== null
+      const canSkipFullPull = staleResult?.status === 'up_to_date'
 
       if (canSkipFullPull) {
         try {
           const restoredCount = await restoreFromIndexedDb(true)
           if (restoredCount === 0) {
-            // localStorage に SHA が残っているのに IndexedDB が空になっている
-            // 不整合ケース（クォータ圧でブラウザが IndexedDB だけ evict した、
-            // devtools で手動削除した等）。SHA が古いまま空画面を表示するより、
-            // full pull でリモートから取り直す。
+            // localStorage に SHA が残っているのに IndexedDB が空。
+            // 2 つの可能性がある:
+            //   (a) 本当に空リポ（リーフ 0 件で push 済みの状態）
+            //   (b) ブラウザが IndexedDB だけ evict した / devtools で手動削除した
+            //       等の不整合ケース
+            // SHA だけで両者を区別できないため、安全側に倒して full pull する。
+            // (a) の場合はリモートも 0 件なので軽量（tree API 1 回 + 空応答）。
+            // ノートが 1 つでも入っていれば次回起動からは skip パスに戻る。
+            const shaPrefix = lastKnownCommitSha.value?.slice(0, 7) ?? '<null>'
             console.warn(
-              'IndexedDB is empty despite non-null lastKnownCommitSha; falling back to full pull'
+              `IndexedDB empty despite lastKnownCommitSha=${shaPrefix}; falling back to full pull ` +
+                '(either truly empty repo, or local DB was evicted)'
             )
             await deps.pullFromGitHub(true)
           } else {
