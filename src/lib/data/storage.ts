@@ -103,9 +103,25 @@ interface StorageData {
 /**
  * repoName を DB 名に使える形にサニタイズする
  * 例: "kako-jun/notes" -> "kako-jun__notes"
+ *
+ * GitHub の repoName は `<owner>/<repo>` 形式に正規化済みで、
+ * owner/repo 名に使える文字は英数字・`-`・`_`・`.` のみ。
+ * したがって `/` だけを置換すれば衝突のない一意な DB 名になる。
  */
 function sanitizeRepoKey(repoName: string): string {
   return repoName.replace(/\//g, '__')
+}
+
+/**
+ * currentRepoKey() は高頻度で呼ばれるため、repoName だけを軽量に
+ * キャッシュして localStorage の全 JSON パースを避ける。
+ * loadStorageData()/saveStorageData() を通るたびに更新される。
+ * undefined は「未初期化」、null は「設定済みだが repoName 空」を表す。
+ */
+let cachedRepoName: string | null | undefined = undefined
+
+function updateRepoNameCache(repoName: string | null | undefined): void {
+  cachedRepoName = repoName ? repoName : null
 }
 
 /**
@@ -119,12 +135,14 @@ function loadStorageData(): StorageData {
         state?: Partial<PerRepoState & GlobalState>
       }
       // 新形式を優先。旧形式は state を捨てる（#131 で後方互換なし）
-      return {
+      const merged: StorageData = {
         settings: { ...defaultSettings, ...(parsed.settings ?? {}) } as Settings,
         globalState: { ...defaultGlobalState, ...(parsed.globalState ?? {}) },
         byRepo: parsed.byRepo ?? {},
         v131Migrated: parsed.v131Migrated,
       }
+      updateRepoNameCache(merged.settings.repoName)
+      return merged
     } catch {
       // パース失敗時はデフォルト値
     }
@@ -133,11 +151,13 @@ function loadStorageData(): StorageData {
   const browserLocale = getLocaleFromNavigator()
   const detectedLocale: Locale = browserLocale?.startsWith('ja') ? 'ja' : 'en'
 
-  return {
+  const fallback: StorageData = {
     settings: { ...defaultSettings, locale: detectedLocale },
     globalState: { ...defaultGlobalState },
     byRepo: {},
   }
+  updateRepoNameCache(fallback.settings.repoName)
+  return fallback
 }
 
 /**
@@ -145,6 +165,7 @@ function loadStorageData(): StorageData {
  */
 function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  updateRepoNameCache(data.settings.repoName)
 }
 
 // IndexedDB 設定
@@ -185,27 +206,42 @@ function normalizeTheme(theme: string): ThemeType {
 /**
  * #131 移行処理: 初回起動時に旧DB `agasteer/db` を削除する
  * ユーザー決定により後方互換なし、ローカルデータは破棄
+ *
+ * deleteDatabase は非同期。success/blocked/error を確実にハンドルし、
+ * blocked の場合は v131Migrated フラグを立てない（次回起動でリトライするため）。
  */
-function runV131MigrationIfNeeded(): void {
+async function runV131MigrationIfNeeded(): Promise<void> {
   const data = loadStorageData()
   if (data.v131Migrated) return
-  try {
-    // 旧グローバルDBを削除（blocked になっても無視）
-    indexedDB.deleteDatabase('agasteer/db')
-  } catch (error) {
-    console.warn('Failed to delete legacy agasteer/db:', error)
+  const deleted = await new Promise<boolean>((resolve) => {
+    try {
+      const request = indexedDB.deleteDatabase('agasteer/db')
+      request.onsuccess = () => resolve(true)
+      request.onerror = () => {
+        console.warn('Failed to delete legacy agasteer/db:', request.error)
+        resolve(false)
+      }
+      request.onblocked = () => {
+        // 他タブが旧DBを開きっぱなし。フラグは立てず次回リトライする。
+        console.warn('Legacy agasteer/db deletion is blocked by another tab; will retry next boot')
+        resolve(false)
+      }
+    } catch (error) {
+      console.warn('Failed to request deletion of legacy agasteer/db:', error)
+      resolve(false)
+    }
+  })
+  if (deleted) {
+    data.v131Migrated = true
+    saveStorageData(data)
   }
-  data.v131Migrated = true
-  saveStorageData(data)
 }
 
 // 初回評価時に旧DB削除を試みる（ブラウザ環境でのみ）
 if (typeof indexedDB !== 'undefined' && typeof localStorage !== 'undefined') {
-  try {
-    runV131MigrationIfNeeded()
-  } catch (error) {
+  runV131MigrationIfNeeded().catch((error) => {
     console.warn('v131 migration check failed:', error)
-  }
+  })
 }
 
 /**
@@ -341,10 +377,18 @@ export function shouldShowPwaInstallBanner(): boolean {
 
 /**
  * 現在のリポ (settings.repoName) のキーを返す。未設定時は null。
+ *
+ * 高頻度に呼ばれるため、キャッシュ未初期化時のみ localStorage を読み込み、
+ * 以降は loadStorageData()/saveStorageData() を通るたびに更新される
+ * キャッシュから返す。
  */
 function currentRepoKey(): string | null {
-  const repoName = loadStorageData().settings.repoName
-  return repoName ? repoName : null
+  if (cachedRepoName === undefined) {
+    // まだ一度も localStorage を読んでいない場合のみ読み込む。
+    // 読み込み自体が updateRepoNameCache を呼ぶため、以降は localStorage を触らない。
+    loadStorageData()
+  }
+  return cachedRepoName ?? null
 }
 
 /**
@@ -376,6 +420,11 @@ function updateCurrentRepoState(patch: Partial<PerRepoState>): void {
 
 /**
  * ダーティフラグを取得（現在リポ。起動時チェック用）
+ *
+ * `settings.repoName` 未設定（GitHub未連携）の場合は常に false を返す。
+ * per-repo slot は repoName をキーに引くため、未設定時は参照先がなく、
+ * dirty復元もスキップする仕様。ユーザーが設定画面からリポを指定すると
+ * 以降このフラグが該当 slot を参照する。
  */
 export function getPersistedDirtyFlag(): boolean {
   const key = currentRepoKey()
@@ -440,6 +489,10 @@ export function setOnDbClosed(callback: (() => void) | null): void {
 let currentDb: IDBDatabase | null = null
 let currentDbRepoKey: string | null = null
 let currentDbPromise: Promise<IDBDatabase> | null = null
+// 連続リポ切替で古い open() の resolve が後着して currentDb を上書きする
+// レースを防ぐため epoch を導入する。setCurrentRepo を呼ぶたびに加算し、
+// open() 完了時に自分の epoch が最新でなければ破棄する。
+let currentDbEpoch = 0
 
 // 共有DB (fonts, backgrounds)
 let sharedDb: IDBDatabase | null = null
@@ -481,6 +534,10 @@ async function getCurrentDb(): Promise<IDBDatabase> {
 /**
  * 現在の per-repo DB を指定リポに切り替える
  * 既に開いている DB は閉じ、新しい DB を開く
+ *
+ * 連続呼び出し対応: epoch を採番し、open() 完了時に自分の epoch が最新で
+ * なければ結果を破棄する（古い promise が後着して currentDb を上書きする
+ * のを防ぐ）。
  */
 export async function setCurrentRepo(repoKey: string): Promise<void> {
   if (currentDbRepoKey === repoKey && currentDb) {
@@ -497,13 +554,31 @@ export async function setCurrentRepo(repoKey: string): Promise<void> {
   currentDb = null
   currentDbPromise = null
   currentDbRepoKey = repoKey
-  // 次の get で開く（ここでは preload のみ）
-  currentDbPromise = openPerRepoDB(repoKey).then((db) => {
+  const myEpoch = ++currentDbEpoch
+  const promise = openPerRepoDB(repoKey).then((db) => {
+    if (myEpoch !== currentDbEpoch) {
+      // 自分より新しい setCurrentRepo 呼び出しがあった → この結果は破棄する。
+      try {
+        db.close()
+      } catch (error) {
+        console.warn('Failed to close stale DB handle:', error)
+      }
+      throw new StorageError('db_open', 'setCurrentRepo superseded by newer call')
+    }
     currentDb = db
     currentDbPromise = null
     return db
   })
-  await currentDbPromise
+  currentDbPromise = promise
+  try {
+    await promise
+  } catch (error) {
+    // superseded は正常なキャンセル扱い。呼び出し元には「古い切替」であることを伝える。
+    if (myEpoch !== currentDbEpoch) {
+      return
+    }
+    throw error
+  }
 }
 
 /**
@@ -520,6 +595,8 @@ export function closeCurrentRepoDb(): void {
   currentDb = null
   currentDbPromise = null
   currentDbRepoKey = null
+  // 進行中の open() が後着で上書きするのを防ぐ
+  currentDbEpoch++
 }
 
 /**
@@ -933,12 +1010,29 @@ async function deleteItemShared(storeName: string, key: string): Promise<void> {
 }
 
 /**
+ * blocked 系エラーかどうか判定する（共有DBが他タブの古いバージョンに
+ * ブロックされて開けないケース。現状 version=1 固定なのでほぼ起きないが、
+ * 防御的にハンドルする）
+ */
+function isDbBlocked(error: unknown): boolean {
+  return error instanceof StorageError && error.type === 'db_blocked'
+}
+
+/**
  * カスタムフォントを保存（共有DB）
+ *
+ * 共有DBが他タブにblockされている場合はwarnして静かに失敗させる
+ * （保存できなかっただけで UI を崩さない）。load側も null 返却で
+ * 同様に degrade するため、挙動を揃える。
  */
 export async function saveCustomFont(font: CustomFont): Promise<void> {
   try {
     await putItemShared(FONTS_STORE, font)
   } catch (error) {
+    if (isDbBlocked(error)) {
+      console.warn('Custom font save skipped: shared DB is blocked by another tab')
+      return
+    }
     console.error('Failed to save custom font to IndexedDB:', error)
     throw error
   }
@@ -970,11 +1064,17 @@ export async function deleteCustomFont(name: string): Promise<void> {
 
 /**
  * カスタム背景画像を保存（共有DB）
+ *
+ * saveCustomFont と同様、blocked 時は静かに失敗させて UX を守る。
  */
 export async function saveCustomBackground(background: CustomBackground): Promise<void> {
   try {
     await putItemShared(BACKGROUNDS_STORE, background)
   } catch (error) {
+    if (isDbBlocked(error)) {
+      console.warn('Custom background save skipped: shared DB is blocked by another tab')
+      return
+    }
     console.error('Failed to save custom background to IndexedDB:', error)
     throw error
   }
