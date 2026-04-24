@@ -1,7 +1,7 @@
 import JSZip from 'jszip'
 import type { Note, Leaf, Metadata } from '../types'
 
-export type ImportSource = 'simplenote' | 'google-keep'
+export type ImportSource = 'simplenote' | 'google-keep' | 'cosense'
 
 export interface ImportedLeafData {
   title: string
@@ -49,6 +49,7 @@ function deriveTitleFromContent(
 const NOTE_NAMES: Record<ImportSource, string> = {
   simplenote: 'SimpleNote_1',
   'google-keep': 'GoogleKeep_1',
+  cosense: 'Cosense_1',
 }
 
 // ============================================
@@ -444,6 +445,179 @@ export async function parseGoogleKeepFile(file: File): Promise<ImportParseResult
 }
 
 // ============================================
+// Cosense (Scrapbox) パーサー
+// ============================================
+
+interface CosenseLine {
+  text?: string
+  created?: number
+  updated?: number
+  userId?: string
+}
+
+interface CosensePage {
+  title?: string
+  created?: number
+  updated?: number
+  id?: string
+  views?: number
+  image?: string | null
+  lines?: CosenseLine[]
+}
+
+interface CosenseExport {
+  name?: string
+  displayName?: string
+  exported?: number
+  users?: unknown[]
+  pages?: CosensePage[]
+}
+
+function isCosenseExport(obj: unknown): obj is CosenseExport {
+  if (!obj || typeof obj !== 'object') return false
+  const o = obj as Record<string, unknown>
+  return typeof o.name === 'string' && typeof o.exported === 'number' && Array.isArray(o.pages)
+}
+
+/**
+ * Cosense (Scrapbox) 記法を Markdown に寄せて変換する。
+ * - `[URL 説明]` / `[説明 URL]` → `[説明](URL)`
+ * - `[URL]` で画像拡張子 → `![](URL)` かつ hasExternalImage を立てる
+ * - `[URL]` で非画像 → `<URL>`
+ * - `[ページ名]`（URLを含まない） → そのまま残す
+ * - `#tag` → そのまま残す
+ *
+ * 行頭のインデント（空白/タブ）は保持する。
+ */
+export function convertCosenseNotation(text: string, flags: { hasExternalImage: boolean }): string {
+  const lines = text.split('\n')
+  const converted = lines.map((line) => {
+    const indentMatch = line.match(/^[ \t]*/)
+    const indent = indentMatch ? indentMatch[0] : ''
+    const body = line.slice(indent.length)
+
+    // ブラケット記法のグローバル置換
+    const replaced = body.replace(/\[([^\[\]\n]+)\]/g, (_match, inner: string) => {
+      const parts = inner.trim().split(/\s+/)
+      const urlRe = /^https?:\/\/\S+$/
+      const urlIdx = parts.findIndex((p) => urlRe.test(p))
+
+      if (urlIdx === -1) {
+        // URLなし → 内部リンク扱いでそのまま残す
+        return `[${inner}]`
+      }
+
+      const url = parts[urlIdx]
+      const others = parts.filter((_, i) => i !== urlIdx)
+
+      if (others.length === 0) {
+        // URL単独
+        const lower = url.toLowerCase()
+        if (/\.(png|jpe?g|gif|webp|svg)(\?|$)/.test(lower)) {
+          flags.hasExternalImage = true
+          return `![](${url})`
+        }
+        return `<${url}>`
+      }
+
+      // URL + 説明
+      const label = others.join(' ')
+      return `[${label}](${url})`
+    })
+
+    return indent + replaced
+  })
+
+  return converted.join('\n')
+}
+
+async function parseCosenseJson(buffer: ArrayBuffer): Promise<ImportParseResult | null> {
+  try {
+    const text = new TextDecoder().decode(buffer)
+    const parsed: unknown = JSON.parse(text)
+    if (!isCosenseExport(parsed)) return null
+    const pages = parsed.pages || []
+    if (!Array.isArray(pages)) return null
+
+    const leaves: ImportedLeafData[] = []
+    const errors: string[] = []
+    const sanitizedTitles: string[] = []
+    const unsupportedCollector = new Set<string>()
+    const conversionFlags = { hasExternalImage: false }
+    let hasThumbnail = false
+    let hasViews = false
+
+    pages.forEach((page, idx) => {
+      if (!page || typeof page !== 'object') {
+        errors.push(`page_${idx}: invalid`)
+        return
+      }
+      const rawTitle = typeof page.title === 'string' ? page.title : `Page ${idx + 1}`
+      const title = sanitizeTitle(rawTitle, sanitizedTitles)
+
+      const lines = Array.isArray(page.lines) ? page.lines : []
+      const texts = lines.map((l) => (l && typeof l.text === 'string' ? l.text : ''))
+
+      // Cosense は先頭行にタイトルを入れる慣習。title と完全一致なら削除。
+      if (texts.length > 0 && texts[0] === rawTitle) {
+        texts.shift()
+      }
+
+      const body = texts.join('\n')
+      const content = convertCosenseNotation(body, conversionFlags)
+
+      if (page.image) {
+        hasThumbnail = true
+      }
+      if (typeof page.views === 'number') {
+        hasViews = true
+      }
+
+      const updatedAt =
+        typeof page.updated === 'number' && Number.isFinite(page.updated)
+          ? page.updated * 1000
+          : undefined
+
+      leaves.push({ title, content, updatedAt })
+    })
+
+    if (hasThumbnail) {
+      unsupportedCollector.add('page thumbnails (page.image)')
+    }
+    if (hasViews) {
+      unsupportedCollector.add('page views count')
+    }
+    unsupportedCollector.add('user attribution and line timestamps')
+    unsupportedCollector.add('hashtags kept as plain text (no internal link target)')
+    unsupportedCollector.add('internal [page name] links kept as bracketed text')
+    if (conversionFlags.hasExternalImage) {
+      unsupportedCollector.add('external images (URLs preserved; host availability not guaranteed)')
+    }
+
+    return {
+      source: 'cosense',
+      leaves,
+      skipped: errors.length,
+      errors,
+      sanitizedTitles,
+      unsupported: Array.from(unsupportedCollector),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Cosense (Scrapbox) のエクスポート/バックアップ JSON をパースする。
+ */
+export async function parseCosenseFile(file: File): Promise<ImportParseResult | null> {
+  const lower = file.name.toLowerCase()
+  if (!lower.endsWith('.json')) return null
+  const buffer = await file.arrayBuffer()
+  return parseCosenseJson(buffer)
+}
+
+// ============================================
 // 統合パーサー（自動判定）
 // ============================================
 
@@ -459,6 +633,10 @@ async function parseImportFile(file: File): Promise<ImportParseResult | null> {
   // Try Google Keep
   const gkResult = await parseGoogleKeepFile(file)
   if (gkResult && gkResult.leaves.length > 0) return gkResult
+
+  // Try Cosense (Scrapbox)
+  const csResult = await parseCosenseFile(file)
+  if (csResult && csResult.leaves.length > 0) return csResult
 
   return null
 }
@@ -543,7 +721,9 @@ export async function processImportFile(
   const sourceLabel =
     source === 'google-keep'
       ? translate('settings.importExport.importReportSourceGoogleKeep')
-      : translate('settings.importExport.importReportSourceSimpleNote')
+      : source === 'cosense'
+        ? translate('settings.importExport.importReportSourceCosense')
+        : translate('settings.importExport.importReportSourceSimpleNote')
 
   const perItemLines = importedLeaves.map((leaf) =>
     translate('settings.importExport.importReportPerItemLine', { values: { title: leaf.title } })
