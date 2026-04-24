@@ -259,7 +259,22 @@ export async function pullFromGitHub(
   // pull開始と同時に「pull予約あり」バッジを落とす（進捗%に交代）
   appState.repoChangePending = false
   try {
+    // Staleチェックを先に行う。
+    // リモートに変更がない（= 実際のPullが走らない）場合にまで
+    // 「未保存の変更があります。Pullすると上書きされます」系の警告を出すと、
+    // インポート直後（ローカルはリモートと同一commitのまま、配下データだけ増えた
+    // 状態）の設定クローズなど「ローカル先行」状態でも誤った stale 警告
+    // が出てしまうため（#152）。
+    const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+
+    // リモートに変更なし & Pull完了済み → 実Pullは走らないので dirty 警告も不要
+    if (staleResult.status === 'up_to_date' && appState.isPullCompleted) {
+      showPullToast($_('github.noRemoteChanges'), 'success')
+      return
+    }
+
     // 未保存の変更がある場合は確認（PWA強制終了後の再起動も考慮）
+    // ここから先は実際にPullが走る可能性があるパスのみ
     if (isDirty.value || getPersistedDirtyFlag()) {
       if (isInitialStartup) {
         // 起動時: Push first は選べない（まだPullしていないため）ので従来通り
@@ -290,17 +305,9 @@ export async function pullFromGitHub(
       }
     }
 
-    // Staleチェック: リモートに変更があるか確認（共通関数で時刻も更新）
-    const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-
     switch (staleResult.status) {
       case 'up_to_date':
-        // リモートに変更なし
-        if (appState.isPullCompleted) {
-          showPullToast($_('github.noRemoteChanges'), 'success')
-          return
-        }
-        // 初回は続行
+        // リモートに変更なし（初回Pull前のみここに到達。実Pull処理を続行して初期化）
         break
 
       case 'stale':

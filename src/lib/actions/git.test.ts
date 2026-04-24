@@ -133,7 +133,7 @@ vi.mock('svelte', () => ({
   tick: vi.fn(async () => {}),
 }))
 
-const { pushToGitHub } = await import('./git')
+const { pushToGitHub, pullFromGitHub } = await import('./git')
 
 describe('pushToGitHub stale handling', () => {
   beforeEach(() => {
@@ -182,5 +182,65 @@ describe('pushToGitHub stale handling', () => {
     expect(stores.isStale.value).toBe(false)
     expect(mocks.clearAllChanges).not.toHaveBeenCalled()
     expect(mocks.setLastPushedSnapshot).not.toHaveBeenCalled()
+  })
+})
+
+describe('pullFromGitHub dirty-check order (#152)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isStale.value = false
+    stores.isDirty.value = true
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    appState.isPullCompleted = true
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.getPersistedDirtyFlag.mockReturnValue(false)
+  })
+
+  it('skips the overwrite confirmation when remote is up_to_date and pull is already completed', async () => {
+    // #152: インポート直後など「ローカル先行＆リモート差分なし」の状態で
+    // 誤った「Pullすると上書きされます」警告を出さない。
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+
+    await pullFromGitHub(false)
+
+    expect(mocks.choiceAsync).not.toHaveBeenCalled()
+    expect(mocks.confirmAsync).not.toHaveBeenCalled()
+    expect(mocks.executePull).not.toHaveBeenCalled()
+    expect(mocks.showPullToast).toHaveBeenCalledWith('github.noRemoteChanges', 'success')
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('still prompts on initial startup when dirty even if remote is up_to_date', async () => {
+    // 初回Pull（isPullCompleted=false）では up_to_date でも早期リターンせず
+    // ダーティ確認が走る（従来挙動を維持）。
+    appState.isPullCompleted = false
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.confirmAsync.mockResolvedValue(false)
+
+    await pullFromGitHub(true)
+
+    expect(mocks.confirmAsync).toHaveBeenCalledWith('modal.unsavedChangesOnStartup')
+    expect(mocks.executePull).not.toHaveBeenCalled()
+  })
+
+  it('prompts overwrite confirmation when remote is stale and local is dirty', async () => {
+    // stale かつ dirty の場合は従来どおり3択モーダル。
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+    mocks.choiceAsync.mockResolvedValue('cancel')
+
+    await pullFromGitHub(false)
+
+    expect(mocks.choiceAsync).toHaveBeenCalled()
+    expect(mocks.executePull).not.toHaveBeenCalled()
   })
 })
