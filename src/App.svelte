@@ -120,13 +120,6 @@
     document.title = settings.value.toolName
   })
 
-  // [#142] leftWorld / rightWorld 変化を単独で観測（paneState 反映とのタイムラグ確認用）
-  $effect(() => {
-    const lw = leftWorld.value
-    const rw = rightWorld.value
-    console.debug('[#142] world store changed', { leftWorld: lw, rightWorld: rw })
-  })
-
   // paneState をリアクティブに更新
   $effect(() => {
     paneStateStore.value = {
