@@ -6,36 +6,78 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 ### 用途
 
-設定情報の保存のみ
+設定情報、グローバル状態、リポジトリ単位の同期状態の保存
 
 ### キー定義
 
-`agasteer/settings`
+`agasteer`（単一キーに全データをJSONで保存）
 
-### データ構造
-
-#### `agasteer/settings`
+### データ構造（#131以降）
 
 ```json
 {
-  "token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "repoName": "yamada/my-notes",
-  "theme": "yomi",
-  "toolName": "Agasteer",
-  "locale": "ja",
-  "hasCustomFont": false,
-  "hasCustomBackgroundLeft": false,
-  "hasCustomBackgroundRight": false,
-  "backgroundOpacityLeft": 0.1,
-  "backgroundOpacityRight": 0.1
+  "settings": {
+    "token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "repoName": "yamada/my-notes",
+    "theme": "yomi",
+    "toolName": "Agasteer",
+    "locale": "ja",
+    "hasCustomFont": false,
+    "hasCustomBackgroundLeft": false,
+    "hasCustomBackgroundRight": false,
+    "backgroundOpacityLeft": 0.1,
+    "backgroundOpacityRight": 0.1
+  },
+  "globalState": {
+    "tourShown": false,
+    "saveGuideShown": false,
+    "pwaInstallDismissedAt": 1703000000000
+  },
+  "byRepo": {
+    "yamada/my-notes": {
+      "isDirty": false,
+      "lastKnownCommitSha": "a1b2c3d4...",
+      "pushInFlightAt": null
+    },
+    "yamada/other-repo": {
+      "isDirty": false,
+      "lastKnownCommitSha": "f6e5d4c3..."
+    }
+  },
+  "v131Migrated": true
 }
 ```
 
 **注意**: コミット時のユーザー名とメールアドレスは固定値（`agasteer` / `agasteer@example.com`）を使用するため、設定に含まれません。
 
+#### `settings`
+
+リポに依存しないユーザー設定。GitHubトークン、接続先リポ名、テーマ、ロケール、カスタムフォント/背景のフラグなど。
+
+#### `globalState`
+
+リポに依存しないUI状態。ツアー表示済みフラグ、保存ガイド表示済みフラグ、PWAインストールバナー却下時刻など。
+
+#### `byRepo`
+
+**リポジトリ単位の同期状態**（#131で導入）。キーは `"<owner>/<repo>"`。
+
+| フィールド           | 型             | 説明                                                                   |
+| -------------------- | -------------- | ---------------------------------------------------------------------- |
+| `isDirty`            | boolean        | 未保存の変更があるか（起動時のダーティ復元用）                         |
+| `lastKnownCommitSha` | string \| null | 最後にリモートと同期したHEAD commit SHA（stale検出用）                 |
+| `pushInFlightAt`     | number \| null | Push API呼び出し中のタイムスタンプ（スリープ時のレスポンス消失検出用） |
+
+リポを切り替えると、`currentRepoKey`（`settings.repoName`）から対応するスロットが読み書きされる。別リポの同期状態は維持されるため、戻ってきたときに差分Pullを再利用できる。
+
+#### `v131Migrated`
+
+#131の初回起動時に、旧グローバル `agasteer/db` を1度だけ削除したことを示すフラグ。後方互換なし・データ移行なし。
+
 ### 保存タイミング
 
 - 設定画面での入力時に即座に反映
+- `lastKnownCommitSha` / `isDirty` / `pushInFlightAt` は対応する状態変更時に自動保存
 
 ---
 
@@ -43,20 +85,38 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 ### 用途
 
-ノートとリーフのデータ保存
+ノート・リーフのキャッシュ、およびリポに依存しないユーザーアセット（フォント・背景画像）の保存。
 
-### データベース名
+### データベース構成（#131以降、リポ単位の名前空間化）
 
-`agasteer`
+IndexedDBは**リポジトリ単位のDB**と**共有DB**の2系統に分かれる。
 
-### オブジェクトストア
+#### リポ単位DB（per-repo DB）
 
-- `notes`: ノートデータ（Home用）
-- `leaves`: リーフデータ（Home用）
-- `archiveNotes`: ノートデータ（Archive用）
-- `archiveLeaves`: リーフデータ（Archive用）
-- `fonts`: カスタムフォントデータ
-- `backgrounds`: カスタム背景画像データ
+- **名前**: `agasteer/db/<sanitized>`（`<sanitized>` は `owner/repo` の `/` を `__` に置換したもの。例: `agasteer/db/kako-jun__notes`）
+- **用途**: そのリポから取得したノート・リーフのキャッシュ
+- **切り替え**: `settings.repoName` を変更すると旧DBを `close()` し、新リポ名から生成したDBを `open()` する（`rehydrateForRepo()`）
+- **オブジェクトストア**:
+  - `notes`: ノートデータ（Home用）
+  - `leaves`: リーフデータ（Home用）
+  - `archiveNotes`: ノートデータ（Archive用）
+  - `archiveLeaves`: リーフデータ（Archive用）
+  - `offline`: オフライン編集バッファ
+
+#### 共有DB（shared DB）
+
+- **名前**: `agasteer/shared`
+- **用途**: リポに依存しないユーザーアセットを保存する
+- **オブジェクトストア**:
+  - `fonts`: カスタムフォントデータ
+  - `backgrounds`: カスタム背景画像データ
+
+#### 設計意図（#131）
+
+- リポを切り替えても、前に開いたリポのキャッシュとSHAがそのまま残る
+- 初めて開くリポはDBが空 → `lastKnownCommitSha=null` となり、自然に初回フルPullが走る
+- 以前開いたリポはキャッシュとSHAが残っているため、差分Pullが効く
+- 初回起動時、旧グローバルDB `agasteer/db` は一度だけ削除される（`v131Migrated` フラグで制御。後方互換なし、旧データの移行はしない）
 
 ### データ構造
 

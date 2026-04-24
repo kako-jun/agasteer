@@ -567,7 +567,7 @@ sequenceDiagram
     Note over RFRS: 2. archiveLeafStatsStore.reset()
     Note over RFRS: 3. lastPushedNotes=[]<br/>  lastPushedLeaves=[]<br/>  lastPushedArchiveNotes=[]<br/>  lastPushedArchiveLeaves=[]
     Note over RFRS: 4. clearAllChanges()<br/>  isStructureDirty=false<br/>  dirtyNoteIds=∅, dirtyLeafIds=∅
-    Note over RFRS: 5. lastKnownCommitSha=null<br/>  lastPulledPushCount=0<br/>  isStale=false<br/>  lastPushTime=0<br/>  lastStaleCheckTime=0
+    Note over RFRS: 5. lastKnownCommitSha は新リポのスロットから<br/>  localStorage 経由で復元（#131）<br/>  lastPulledPushCount=0<br/>  isStale=false<br/>  lastPushTime=0<br/>  lastStaleCheckTime=0
     Note over RFRS: 6. leftWorld='home'<br/>  rightWorld='home'
 
     User->>Settings: 設定画面を閉じる（×ボタン）
@@ -580,7 +580,7 @@ sequenceDiagram
         Note over PFG: canSync OK, isArchiveLoading=false<br/>→ 処理開始
         PFG->>PFG: isPulling = true
         Note over PFG: isDirty=false（クリア済み）<br/>→ 確認ダイアログなし
-        Note over PFG: lastKnownCommitSha===null<br/>→ 初回Pull扱い → 続行
+        Note over PFG: 新リポが未初出なら lastKnownCommitSha===null<br/>→ 初回Pull扱い<br/>以前開いたリポなら保存済SHAがあり差分Pull可
         PFG->>PFG: clearAllData() + ストアクリア
         PFG->>PFG: executePull()
         Note over PFG: onStructure → notes表示可能<br/>onPriorityComplete →<br/>  isFirstPriorityFetched=true<br/>  isLoadingUI=false
@@ -618,26 +618,26 @@ sequenceDiagram
 
 #### stores.svelte.ts 内の変数
 
-| 変数名                     | 型                         | 初期値                                 | Pull時の変化                                  | Push時の変化                                  | リポ切替時のリセット値         | リセットしないと何が起きるか                                                  |
-| -------------------------- | -------------------------- | -------------------------------------- | --------------------------------------------- | --------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| `archiveNotes`             | `$state<Note[]>`           | `[]`                                   | 変化なし（Pull対象外）                        | そのままPush                                  | `[]`                           | 旧リポのアーカイブノートが新リポにPushされる（**データ破壊**）                |
-| `archiveLeaves`            | `$state<Leaf[]>`           | `[]`                                   | 変化なし                                      | そのままPush                                  | `[]`                           | 旧リポのアーカイブリーフが新リポにPushされる（**データ破壊**）                |
-| `archiveMetadata`          | `$state<Metadata>`         | `{version:1,...,pushCount:0}`          | 変化なし                                      | そのままPush                                  | `{version:1,...,pushCount:0}`  | 旧リポのメタデータで新リポが上書きされる                                      |
-| `isArchiveLoaded`          | `$state<boolean>`          | `false`                                | 変化なし                                      | 変化なし                                      | `false`                        | `true`のまま残ると、アーカイブ表示時にPullがスキップされ旧データが表示される  |
-| `lastPushedNotes`          | `Note[]`（モジュール変数） | `[]`                                   | `setLastPushedSnapshot()`でディープコピー保存 | `setLastPushedSnapshot()`でディープコピー保存 | `[]`                           | 新リポのノートと旧リポのスナップショットを比較し、全ノートが「dirty」と誤判定 |
-| `lastPushedLeaves`         | `Leaf[]`（モジュール変数） | `[]`                                   | 同上                                          | 同上                                          | `[]`                           | 同上（リーフ側）                                                              |
-| `lastPushedArchiveNotes`   | `Note[]`（モジュール変数） | `[]`                                   | 変化なし                                      | 同上                                          | `[]`                           | 同上（アーカイブ側）                                                          |
-| `lastPushedArchiveLeaves`  | `Leaf[]`（モジュール変数） | `[]`                                   | 変化なし                                      | 同上                                          | `[]`                           | 同上（アーカイブ側）                                                          |
-| `dirtyNoteIds`             | `$state<Set<string>>`      | `new Set()`                            | 変化なし（isDirty=falseならクリア）           | `clearAllChanges()`でクリア                   | `new Set()`                    | 旧リポのdirtyフラグが残りPushボタンに赤丸が表示される                         |
-| `dirtyLeafIds`             | `$state<Set<string>>`      | `new Set()`                            | 同上                                          | 同上                                          | `new Set()`                    | 同上（リーフ側）                                                              |
-| `isStructureDirty`         | `$state<boolean>`          | `false`                                | 同上                                          | `clearAllChanges()`で`false`                  | `false`                        | 旧リポの構造変更フラグが残り不要なdirty判定が発生                             |
-| `lastKnownCommitSha`       | `$state<string\|null>`     | LocalStorageから復元（なければ`null`） | `result.commitSha`をセット                    | `result.commitSha`をセット                    | `null`（LocalStorageもクリア） | 旧リポのSHAと新リポのHEADが比較され、必ず「stale」と誤判定                    |
-| `lastPulledPushCount`      | `$state<number>`           | `0`                                    | `result.metadata.pushCount`をセット           | `fetchRemotePushCount()`で更新                | `0`                            | 旧リポのPush回数が統計画面に表示される                                        |
-| `isStale`                  | `$state<boolean>`          | `false`                                | `false`にセット                               | `false`にセット                               | `false`                        | Pullボタンに赤丸（staleバッジ）が残る                                         |
-| `lastPushTime`             | `$state<number>`           | `0`                                    | 変化なし                                      | `Date.now()`をセット                          | `0`                            | 旧リポの最終Push時刻が残り自動Push間隔の計算が狂う                            |
-| `lastStaleCheckTime`       | `$state<number>`           | `0`                                    | 変化なし                                      | 変化なし                                      | `0`                            | 0にすることで`canPerformCheck()`がfalse→新Pull完了までstaleチェック抑制       |
-| `leftWorld` / `rightWorld` | `$state<WorldType>`        | `'home'`                               | 変化なし                                      | 変化なし                                      | `'home'`                       | `'archive'`のまま残るとクリア済みアーカイブストアを参照し空画面になる         |
-| `archiveLeafStatsStore`    | カスタムStore              | `reset()済み`                          | 変化なし                                      | 変化なし                                      | `.reset()`                     | 旧リポのリーフ統計（文字数等）がアーカイブ画面に表示される                    |
+| 変数名                     | 型                         | 初期値                                                 | Pull時の変化                                  | Push時の変化                                  | リポ切替時のリセット値                               | リセットしないと何が起きるか                                                  |
+| -------------------------- | -------------------------- | ------------------------------------------------------ | --------------------------------------------- | --------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `archiveNotes`             | `$state<Note[]>`           | `[]`                                                   | 変化なし（Pull対象外）                        | そのままPush                                  | `[]`                                                 | 旧リポのアーカイブノートが新リポにPushされる（**データ破壊**）                |
+| `archiveLeaves`            | `$state<Leaf[]>`           | `[]`                                                   | 変化なし                                      | そのままPush                                  | `[]`                                                 | 旧リポのアーカイブリーフが新リポにPushされる（**データ破壊**）                |
+| `archiveMetadata`          | `$state<Metadata>`         | `{version:1,...,pushCount:0}`                          | 変化なし                                      | そのままPush                                  | `{version:1,...,pushCount:0}`                        | 旧リポのメタデータで新リポが上書きされる                                      |
+| `isArchiveLoaded`          | `$state<boolean>`          | `false`                                                | 変化なし                                      | 変化なし                                      | `false`                                              | `true`のまま残ると、アーカイブ表示時にPullがスキップされ旧データが表示される  |
+| `lastPushedNotes`          | `Note[]`（モジュール変数） | `[]`                                                   | `setLastPushedSnapshot()`でディープコピー保存 | `setLastPushedSnapshot()`でディープコピー保存 | `[]`                                                 | 新リポのノートと旧リポのスナップショットを比較し、全ノートが「dirty」と誤判定 |
+| `lastPushedLeaves`         | `Leaf[]`（モジュール変数） | `[]`                                                   | 同上                                          | 同上                                          | `[]`                                                 | 同上（リーフ側）                                                              |
+| `lastPushedArchiveNotes`   | `Note[]`（モジュール変数） | `[]`                                                   | 変化なし                                      | 同上                                          | `[]`                                                 | 同上（アーカイブ側）                                                          |
+| `lastPushedArchiveLeaves`  | `Leaf[]`（モジュール変数） | `[]`                                                   | 変化なし                                      | 同上                                          | `[]`                                                 | 同上（アーカイブ側）                                                          |
+| `dirtyNoteIds`             | `$state<Set<string>>`      | `new Set()`                                            | 変化なし（isDirty=falseならクリア）           | `clearAllChanges()`でクリア                   | `new Set()`                                          | 旧リポのdirtyフラグが残りPushボタンに赤丸が表示される                         |
+| `dirtyLeafIds`             | `$state<Set<string>>`      | `new Set()`                                            | 同上                                          | 同上                                          | `new Set()`                                          | 同上（リーフ側）                                                              |
+| `isStructureDirty`         | `$state<boolean>`          | `false`                                                | 同上                                          | `clearAllChanges()`で`false`                  | `false`                                              | 旧リポの構造変更フラグが残り不要なdirty判定が発生                             |
+| `lastKnownCommitSha`       | `$state<string\|null>`     | LocalStorageの現リポスロットから復元（なければ`null`） | `result.commitSha`をセット                    | `result.commitSha`をセット                    | 新リポのスロットから再読込（#131、未初出なら`null`） | 旧リポのSHAと新リポのHEADが比較され、必ず「stale」と誤判定                    |
+| `lastPulledPushCount`      | `$state<number>`           | `0`                                                    | `result.metadata.pushCount`をセット           | `fetchRemotePushCount()`で更新                | `0`                                                  | 旧リポのPush回数が統計画面に表示される                                        |
+| `isStale`                  | `$state<boolean>`          | `false`                                                | `false`にセット                               | `false`にセット                               | `false`                                              | Pullボタンに赤丸（staleバッジ）が残る                                         |
+| `lastPushTime`             | `$state<number>`           | `0`                                                    | 変化なし                                      | `Date.now()`をセット                          | `0`                                                  | 旧リポの最終Push時刻が残り自動Push間隔の計算が狂う                            |
+| `lastStaleCheckTime`       | `$state<number>`           | `0`                                                    | 変化なし                                      | 変化なし                                      | `0`                                                  | 0にすることで`canPerformCheck()`がfalse→新Pull完了までstaleチェック抑制       |
+| `leftWorld` / `rightWorld` | `$state<WorldType>`        | `'home'`                                               | 変化なし                                      | 変化なし                                      | `'home'`                                             | `'archive'`のまま残るとクリア済みアーカイブストアを参照し空画面になる         |
+| `archiveLeafStatsStore`    | カスタムStore              | `reset()済み`                                          | 変化なし                                      | 変化なし                                      | `.reset()`                                           | 旧リポのリーフ統計（文字数等）がアーカイブ画面に表示される                    |
 
 #### pane-actions-factory.svelte.ts 内の変数
 
@@ -669,15 +669,15 @@ sequenceDiagram
 
 #### Aランク（重大 — 誤動作の可能性）
 
-| #   | 操作シナリオ                               | 期待動作                                | 対応するガード/関数                                                                     | 深刻度 |
-| --- | ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------- | :----: |
-| 6   | Pull中にリポ切替                           | 進行中Pull完了後に新repo pullへ収束する | `handleCloseSettings()` → `pendingRepoSync=true` → Pull finally後に予約pull実行         |   A    |
-| 7   | Push中にリポ切替                           | Push完了後に新repo pullへ収束する       | `handleCloseSettings()` → `pendingRepoSync=true` → Push finally後に予約pull実行         |   A    |
-| 8   | アーカイブロード中にリポ切替               | archive完了後に新repo pullへ収束する    | `handleCloseSettings()` → `pendingRepoSync=true` → archive load finally後に予約pull実行 |   A    |
-| 9   | lastKnownCommitShaが旧リポのまま残る       | staleチェックが新リポのSHAと比較する    | `resetForRepoSwitch()` → `lastKnownCommitSha.set(null)` → 初回Pull扱い                  |   A    |
-| 10  | lastPushedSnapshotが旧リポのまま残る       | dirty検出が新リポ基準で動作する         | `resetForRepoSwitch()` → 全スナップショット配列を`[]`にクリア                           |   A    |
-| 11  | 自動Push（42秒タイマー）がリポ切替後に発火 | 旧データを新リポにPushしない            | `resetForRepoSwitch()` → `clearAllChanges()` → `isDirty=false` → 自動Push条件不成立     |   A    |
-| 12  | staleチェックがリポ切替をまたぐ            | 旧リポのSHAでstale判定しない            | `lastStaleCheckTime=0` → `canPerformCheck()=false` → 新Pull完了までチェック抑制         |   A    |
+| #   | 操作シナリオ                               | 期待動作                                | 対応するガード/関数                                                                                                               | 深刻度 |
+| --- | ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | :----: |
+| 6   | Pull中にリポ切替                           | 進行中Pull完了後に新repo pullへ収束する | `handleCloseSettings()` → `pendingRepoSync=true` → Pull finally後に予約pull実行                                                   |   A    |
+| 7   | Push中にリポ切替                           | Push完了後に新repo pullへ収束する       | `handleCloseSettings()` → `pendingRepoSync=true` → Push finally後に予約pull実行                                                   |   A    |
+| 8   | アーカイブロード中にリポ切替               | archive完了後に新repo pullへ収束する    | `handleCloseSettings()` → `pendingRepoSync=true` → archive load finally後に予約pull実行                                           |   A    |
+| 9   | lastKnownCommitShaが旧リポのまま残る       | staleチェックが新リポのSHAと比較する    | #131以降、SHAはリポ単位で localStorage に保持。`rehydrateForRepo()` で新リポのスロットから再読込（未初出なら`null`→初回Pull扱い） |   A    |
+| 10  | lastPushedSnapshotが旧リポのまま残る       | dirty検出が新リポ基準で動作する         | `resetForRepoSwitch()` → 全スナップショット配列を`[]`にクリア                                                                     |   A    |
+| 11  | 自動Push（42秒タイマー）がリポ切替後に発火 | 旧データを新リポにPushしない            | `resetForRepoSwitch()` → `clearAllChanges()` → `isDirty=false` → 自動Push条件不成立                                               |   A    |
+| 12  | staleチェックがリポ切替をまたぐ            | 旧リポのSHAでstale判定しない            | `lastStaleCheckTime=0` → `canPerformCheck()=false` → 新Pull完了までチェック抑制                                                   |   A    |
 
 #### Bランク（UX問題 — 動作はするが改善が望ましい）
 
@@ -701,7 +701,7 @@ sequenceDiagram
 | 22  | 空のリポ名を設定して閉じる               | Pullせずリセット                 | `hasValidConfig=false` → `isPullCompleted=false` → リセット処理（初回Pull前の状態に戻す）                                           |   C    |
 | 23  | 存在しないリポ名を設定                   | 404エラー表示                    | `pullFromGitHub()` → `executePull()` → エラーハンドリング                                                                           |   C    |
 | 24  | アーカイブが空のリポに切替               | 空のアーカイブが表示される       | `pullArchive()`が空データで成功返却                                                                                                 |   C    |
-| 25  | 別端末でPush済み→リポ切替→Pull           | 最新データが取得される           | `lastKnownCommitSha=null` → staleチェックスキップ → 初回Pull扱い                                                                    |   C    |
+| 25  | 別端末でPush済み→リポ切替→Pull           | 最新データが取得される           | 新リポが未初出: `lastKnownCommitSha=null` → 初回Pull扱い / 以前開いたリポ: 保存済SHAからstaleチェック→差分Pull                      |   C    |
 | 26  | ネットワーク切断中にリポ切替             | エラー表示、バックアップから復元 | `pullFromGitHub()` → エラーハンドリング + バックアップ復元                                                                          |   C    |
 | 27  | APIレート制限中にリポ切替                | レート制限メッセージ表示         | `rateLimitInfo`をトーストに表示                                                                                                     |   C    |
 | 28  | トークン変更のみ（リポ名同じ）           | 新トークンで接続（Pullあり）     | `githubSettingsChangedInSettings=true` → リセットなし、Pull実行                                                                     |   B    |
@@ -760,11 +760,12 @@ sequenceDiagram
 
 **修正後:**
 
-- `resetForRepoSwitch()`で`lastKnownCommitSha = null`にリセット
+- `lastKnownCommitSha`は**リポ単位のlocalStorageスロット**に保存されている（#131）
+- リポ切替時は `rehydrateForRepo()` が新リポのスロットからSHAを読み直す（未初出なら`null`）
 - `lastStaleCheckTime = 0`にリセット → `canPerformCheck() = false`
 - 新Pull完了までstaleチェックが抑制される
-- Pull成功時に`lastKnownCommitSha`が新リポのSHAで更新される
-- **結果: 安全。staleチェックは新Pull完了後に新リポ基準で正しく動作**
+- Pull成功時に`lastKnownCommitSha`が新リポのSHAで更新され、そのリポのスロットに保存される
+- **結果: 安全。staleチェックは新Pull完了後に新リポ基準で正しく動作。以前開いたリポに戻ったときは保存済SHAで差分Pull可能**
 
 #### シナリオ4: 自動Pushがリポ切替後に発火
 
