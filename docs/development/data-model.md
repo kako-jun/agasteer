@@ -232,19 +232,23 @@ Agasteerは、データを2つの異なるストレージに保存します。
 
 #### IndexedDB
 
-**役割:** GitHubからPullしたデータの一時キャッシュ
+**役割:** GitHubからPullしたデータのキャッシュ + オフライン編集バッファ
 
 **重要な設計思想:**
 
 - **GitHubが唯一の真実の情報源（Single Source of Truth）**
-- IndexedDBは単なるキャッシュであり、GitHubから取得したデータを一時保存するだけ
-- 前回終了時のIndexedDBデータは意味を持たない
-- 毎回のPull成功時にIndexedDBは全削除→全作成される
+- IndexedDBはキャッシュであり、リモートとの差分Pullを効率化するための「前回状態」を保持する
+- #131以降は**リポジトリ単位のDB**（`agasteer/db/<owner>__<repo>`）に分かれており、リポを切り替えてもそのリポのキャッシュは維持される
+- リポに依存しないユーザーアセット（フォント・背景画像）は**共有DB** `agasteer/shared` に分離
+- Pull成功時は該当リポのDBの中身を全削除→全作成する（DB自体は削除しない）
 
 **保存対象:**
 
-- ノート（Note）データ
-- リーフ（Leaf）データ
+- ノート（Note）データ（per-repo DBの `notes` / `archiveNotes`）
+- リーフ（Leaf）データ（per-repo DBの `leaves` / `archiveLeaves`）
+- オフライン編集バッファ（per-repo DBの `offline`）
+- カスタムフォント（共有DBの `fonts`）
+- カスタム背景画像（共有DBの `backgrounds`）
 
 **保存タイミング:**
 
@@ -252,7 +256,14 @@ Agasteerは、データを2つの異なるストレージに保存します。
 - ノート名の変更時
 - リーフタイトル・コンテンツの変更時
 - ドラッグ&ドロップによる並び替え時
-- **Pull成功時に全削除→全作成（最重要）**
+- **Pull成功時に現リポDBの内容を全削除→全作成（最重要）**
+
+**リポ切替時の挙動（#131）:**
+
+- 旧リポのDBを `close()` し、新リポのDB（`agasteer/db/<sanitized>`）を `open()`
+- 新リポのDBからキャッシュ済みノート・リーフをメモリに復元し、ダーティ判定のベースラインに設定する
+- `lastKnownCommitSha` は**リポ単位で localStorage に保存されている**ため、新リポのスロットから復元される（`null` にリセットされない）
+- 未初出のリポはDBが空 → `lastKnownCommitSha=null` → 初回フルPullへ
 
 #### GitHub（リモートリポジトリ）
 

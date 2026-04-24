@@ -37,6 +37,7 @@ import {
   archiveLeaves,
   getDialogPositionForPane,
   resetForRepoSwitch,
+  rehydrateForRepo,
   isStructureDirty,
 } from './stores'
 import {
@@ -397,6 +398,24 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     appState.repoChangePending = true
     resetForRepoSwitch()
     archiveLeafStatsStore.reset()
+    // #131: 新リポの IndexedDB に切り替えてキャッシュ済みリーフをロード
+    // （キャッシュがあれば Pull 完了前でも表示可能。なければ空のまま Pull を待つ）
+    //
+    // ただし pull/push/archive load 実行中に rehydrate すると、進行中の
+    // 処理が新DBへ書き込みを行ってしまう。その場合は pendingRehydrateRepo に
+    // 退避し、pull/push 完了時の runPendingRepoSyncIfIdle 経路で rehydrate
+    // してから pending pull を走らせる。
+    if (payload.repoName) {
+      const syncBusy = isPulling.value || isPushing.value || appState.isArchiveLoading
+      if (syncBusy) {
+        appState.pendingRehydrateRepo = payload.repoName
+      } else {
+        appState.pendingRehydrateRepo = null
+        rehydrateForRepo(payload.repoName).catch((error) => {
+          console.error('Failed to rehydrate stores for new repo:', error)
+        })
+      }
+    }
   }
   if (repoChanged || tokenChanged) {
     githubSettingsChangedInSettings = true
@@ -419,6 +438,17 @@ export async function handleCloseSettings() {
       ) {
         appState.pendingRepoSync = true
       } else {
+        // 同期アイドル状態でも、rehydrate が保留されていたら先に走らせる
+        // （例: 保留rehydrate が立った直後に sync が完了し、即 close した場合）
+        if (appState.pendingRehydrateRepo) {
+          const pendingRehydrate = appState.pendingRehydrateRepo
+          appState.pendingRehydrateRepo = null
+          try {
+            await rehydrateForRepo(pendingRehydrate)
+          } catch (error) {
+            console.error('Failed to rehydrate stores before pull:', error)
+          }
+        }
         isClosingSettingsPull = true
         await pullFromGitHub(false)
         isClosingSettingsPull = false
@@ -428,6 +458,7 @@ export async function handleCloseSettings() {
       appState.pendingRepoSync = false
       // 無効設定（token/repoName 空）でpullが走らない経路では予約バッジも下ろす
       appState.repoChangePending = false
+      appState.pendingRehydrateRepo = null
     }
     // pull失敗または設定が不完全 → 初回pull前の状態に戻す
     if (!appState.isPullCompleted) {
