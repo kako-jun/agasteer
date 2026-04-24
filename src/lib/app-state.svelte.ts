@@ -208,6 +208,9 @@ let _importOccurredInSettings = $state(false)
 let _atGuardEntry = $state(false)
 let _pendingRepoSync = $state(false)
 let _repoChangePending = $state(false)
+// 他同期（pull/push/archive load）実行中に設定された新リポ名。同期完了後に
+// rehydrateForRepo を走らせてから pull を開始するため、ここで待機させる。
+let _pendingRehydrateRepo = $state<string | null>(null)
 
 export const appState = {
   get breadcrumbs() {
@@ -388,6 +391,12 @@ export const appState = {
   },
   set repoChangePending(v: boolean) {
     _repoChangePending = v
+  },
+  get pendingRehydrateRepo() {
+    return _pendingRehydrateRepo
+  },
+  set pendingRehydrateRepo(v: string | null) {
+    _pendingRehydrateRepo = v
   },
 }
 
@@ -707,6 +716,9 @@ export function initApp(deps: InitAppDeps): () => void {
     Object.assign(settings.value, loadedSettings)
 
     // #131: 設定済みのリポがあれば per-repo DB を先にオープン（以降の loadNotes/loadLeaves 等が使う）
+    // 遅延オープンにするとホーム画面の初期表示でノート/リーフ一覧を出す前に
+    // setCurrentRepo 完了を待つことになり、UI 表示がブロックされる。設定画面を
+    // 開く前にキャッシュから一覧を描画したいので eager open を維持する。
     if (loadedSettings.repoName) {
       try {
         await setCurrentRepo(loadedSettings.repoName)

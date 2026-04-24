@@ -33,6 +33,7 @@ import {
   flushPendingSaves,
   leafStatsStore,
   pullProgressStore,
+  rehydrateForRepo,
 } from '../stores'
 import {
   clearAllData,
@@ -73,6 +74,17 @@ async function runPendingRepoSyncIfIdle(): Promise<void> {
       appState.pendingRepoSync = false
     },
     async () => {
+      // 同期中にリポ切替された場合、予約pull開始前に新リポへ rehydrate する
+      // （旧 DB に新リポの pull 結果が書かれるのを防ぐ）
+      const pendingRehydrate = appState.pendingRehydrateRepo
+      if (pendingRehydrate) {
+        appState.pendingRehydrateRepo = null
+        try {
+          await rehydrateForRepo(pendingRehydrate)
+        } catch (error) {
+          console.error('Failed to rehydrate stores before queued pull:', error)
+        }
+      }
       await pullFromGitHub(false)
     }
   )
