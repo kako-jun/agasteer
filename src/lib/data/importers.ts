@@ -488,13 +488,45 @@ function isCosenseExport(obj: unknown): obj is CosenseExport {
  * - `#tag` → そのまま残す
  *
  * 行頭のインデント（空白/タブ）は保持する。
+ *
+ * flags:
+ * - hasExternalImage: 画像URLブラケットを検出したら立つ
+ * - hasDecoration: `[* ...]` `[** ...]` `[/ ...]` `[- ...]` を検出
+ * - hasMathBlock: `[$ ...]` を検出
+ * - hasCodeBlock: 行頭 `code:filename` を検出
+ * - hasTable: 行頭 `table:name` を検出
  */
-export function convertCosenseNotation(text: string, flags: { hasExternalImage: boolean }): string {
+export function convertCosenseNotation(
+  text: string,
+  flags: {
+    hasExternalImage: boolean
+    hasDecoration?: boolean
+    hasMathBlock?: boolean
+    hasCodeBlock?: boolean
+    hasTable?: boolean
+  }
+): string {
   const lines = text.split('\n')
   const converted = lines.map((line) => {
     const indentMatch = line.match(/^[ \t]*/)
     const indent = indentMatch ? indentMatch[0] : ''
     const body = line.slice(indent.length)
+
+    // 行頭 code:filename / table:name の検出（インデントの次に来ることがある）
+    if (/^code:\S/.test(body)) {
+      flags.hasCodeBlock = true
+    }
+    if (/^table:\S/.test(body)) {
+      flags.hasTable = true
+    }
+
+    // 装飾・数式ブラケットの検出
+    if (/\[\*{1,}\s/.test(body) || /\[\/\s/.test(body) || /\[-\s/.test(body)) {
+      flags.hasDecoration = true
+    }
+    if (/\[\$\s/.test(body)) {
+      flags.hasMathBlock = true
+    }
 
     // ブラケット記法のグローバル置換
     const replaced = body.replace(/\[([^\[\]\n]+)\]/g, (_match, inner: string) => {
@@ -507,13 +539,15 @@ export function convertCosenseNotation(text: string, flags: { hasExternalImage: 
         return `[${inner}]`
       }
 
-      const url = parts[urlIdx]
+      // 末尾句読点を URL から剥がす（Keep パーサーと同じ扱い）
+      let url = parts[urlIdx]
+      url = url.replace(/[.,;:!?]+$/, '')
       const others = parts.filter((_, i) => i !== urlIdx)
 
       if (others.length === 0) {
         // URL単独
         const lower = url.toLowerCase()
-        if (/\.(png|jpe?g|gif|webp|svg)(\?|$)/.test(lower)) {
+        if (/\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(lower)) {
           flags.hasExternalImage = true
           return `![](${url})`
         }
@@ -543,9 +577,16 @@ async function parseCosenseJson(buffer: ArrayBuffer): Promise<ImportParseResult 
     const errors: string[] = []
     const sanitizedTitles: string[] = []
     const unsupportedCollector = new Set<string>()
-    const conversionFlags = { hasExternalImage: false }
+    const conversionFlags: {
+      hasExternalImage: boolean
+      hasDecoration?: boolean
+      hasMathBlock?: boolean
+      hasCodeBlock?: boolean
+      hasTable?: boolean
+    } = { hasExternalImage: false }
     let hasThumbnail = false
     let hasViews = false
+    let skippedCount = 0
 
     pages.forEach((page, idx) => {
       if (!page || typeof page !== 'object') {
@@ -558,9 +599,16 @@ async function parseCosenseJson(buffer: ArrayBuffer): Promise<ImportParseResult 
       const lines = Array.isArray(page.lines) ? page.lines : []
       const texts = lines.map((l) => (l && typeof l.text === 'string' ? l.text : ''))
 
-      // Cosense は先頭行にタイトルを入れる慣習。title と完全一致なら削除。
-      if (texts.length > 0 && texts[0] === rawTitle) {
+      // Cosense は先頭行にタイトルを入れる慣習。title と一致（前後空白を無視）なら削除。
+      if (texts.length > 0 && texts[0].trim() === rawTitle.trim()) {
         texts.shift()
+      }
+
+      // Keep と挙動を統一: lines が空 or 全 text が空白/空ならスキップ
+      const hasAnyContent = texts.some((t) => t.trim().length > 0)
+      if (!hasAnyContent) {
+        skippedCount++
+        return
       }
 
       const body = texts.join('\n')
@@ -593,11 +641,23 @@ async function parseCosenseJson(buffer: ArrayBuffer): Promise<ImportParseResult 
     if (conversionFlags.hasExternalImage) {
       unsupportedCollector.add('external images (URLs preserved; host availability not guaranteed)')
     }
+    if (conversionFlags.hasDecoration) {
+      unsupportedCollector.add('Cosense decorations ([*, [**, [/, [-] kept as-is)')
+    }
+    if (conversionFlags.hasMathBlock) {
+      unsupportedCollector.add('math blocks ([$ ...]) kept as-is')
+    }
+    if (conversionFlags.hasCodeBlock) {
+      unsupportedCollector.add('code blocks (code:filename) kept as plain text')
+    }
+    if (conversionFlags.hasTable) {
+      unsupportedCollector.add('tables (table:name) kept as plain text')
+    }
 
     return {
       source: 'cosense',
       leaves,
-      skipped: errors.length,
+      skipped: errors.length + skippedCount,
       errors,
       sanitizedTitles,
       unsupported: Array.from(unsupportedCollector),
@@ -622,8 +682,8 @@ export async function parseCosenseFile(file: File): Promise<ImportParseResult | 
 // ============================================
 
 /**
- * ファイルの中身を見て SimpleNote / Google Keep を自動判定してパースする。
- * SimpleNote を先に試し、失敗したら Google Keep を試す。
+ * ファイルの中身を見て SimpleNote / Google Keep / Cosense を自動判定してパースする。
+ * SimpleNote → Google Keep → Cosense の順に試す。
  */
 async function parseImportFile(file: File): Promise<ImportParseResult | null> {
   // Try SimpleNote first (has activeNotes key → quick to reject if not)
@@ -678,7 +738,7 @@ export interface ImportOptions {
 
 /**
  * ファイルをインポートし、Note/Leafデータを生成する。
- * SimpleNote / Google Keep を自動判定する。
+ * SimpleNote / Google Keep / Cosense を自動判定する。
  */
 export async function processImportFile(
   file: File,

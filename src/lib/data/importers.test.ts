@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { convertCosenseNotation, parseCosenseFile, type ImportParseResult } from './importers'
+import {
+  convertCosenseNotation,
+  parseCosenseFile,
+  parseGoogleKeepFile,
+  parseSimpleNoteFile,
+  type ImportParseResult,
+} from './importers'
 
 function makeFile(obj: unknown, name = 'cosense.json'): File {
   const text = JSON.stringify(obj)
@@ -171,5 +177,173 @@ describe('parseCosenseFile', () => {
     const f = new File([JSON.stringify(baseExport)], 'cosense.txt')
     const result = await parseCosenseFile(f)
     expect(result).toBeNull()
+  })
+
+  it('skips a page whose lines array is empty (no leaf produced)', async () => {
+    const exp = {
+      ...baseExport,
+      pages: [
+        { title: 'Empty', created: 1, updated: 2, id: 'e', views: 0, image: null, lines: [] },
+        baseExport.pages[1],
+      ],
+    }
+    const file = makeFile(exp)
+    const result = (await parseCosenseFile(file)) as ImportParseResult
+    expect(result.leaves).toHaveLength(1)
+    expect(result.leaves[0].title).toBe('Page Two')
+    expect(result.skipped).toBeGreaterThanOrEqual(1)
+  })
+
+  it('skips a page whose texts are all whitespace/empty', async () => {
+    const exp = {
+      ...baseExport,
+      pages: [
+        {
+          title: 'BlankOnly',
+          created: 1,
+          updated: 2,
+          id: 'b',
+          views: 0,
+          image: null,
+          lines: [
+            { text: 'BlankOnly', created: 1, updated: 1, userId: 'u1' },
+            { text: '   ', created: 1, updated: 1, userId: 'u1' },
+            { text: '', created: 1, updated: 1, userId: 'u1' },
+          ],
+        },
+        baseExport.pages[1],
+      ],
+    }
+    const file = makeFile(exp)
+    const result = (await parseCosenseFile(file)) as ImportParseResult
+    expect(result.leaves.find((l) => l.title === 'BlankOnly')).toBeUndefined()
+    expect(result.skipped).toBeGreaterThanOrEqual(1)
+  })
+
+  it('leaves updatedAt undefined when page.updated is missing', async () => {
+    const exp = {
+      ...baseExport,
+      pages: [
+        {
+          title: 'NoUpdated',
+          created: 1,
+          id: 'n',
+          lines: [
+            { text: 'NoUpdated', created: 1, updated: 1, userId: 'u1' },
+            { text: 'content', created: 1, updated: 1, userId: 'u1' },
+          ],
+        },
+      ],
+    }
+    const file = makeFile(exp)
+    const result = (await parseCosenseFile(file)) as ImportParseResult
+    expect(result.leaves).toHaveLength(1)
+    expect(result.leaves[0].updatedAt).toBeUndefined()
+  })
+
+  it('uses fallback title when page.title is missing', async () => {
+    const exp = {
+      ...baseExport,
+      pages: [
+        {
+          created: 1,
+          updated: 2,
+          id: 'x',
+          lines: [{ text: 'body', created: 1, updated: 1, userId: 'u1' }],
+        },
+      ],
+    }
+    const file = makeFile(exp)
+    const result = (await parseCosenseFile(file)) as ImportParseResult
+    expect(result.leaves).toHaveLength(1)
+    expect(typeof result.leaves[0].title).toBe('string')
+    expect(result.leaves[0].title.length).toBeGreaterThan(0)
+  })
+
+  it('trims trailing punctuation from URL in bracket notation', async () => {
+    const flags = { hasExternalImage: false }
+    expect(convertCosenseNotation('see [https://ex.com, label]', flags)).toBe(
+      'see [label](https://ex.com)'
+    )
+    expect(convertCosenseNotation('see [label https://ex.com.]', flags)).toBe(
+      'see [label](https://ex.com)'
+    )
+  })
+
+  it('strips first line even with trailing whitespace differences from title', async () => {
+    const exp = {
+      ...baseExport,
+      pages: [
+        {
+          title: 'Spaced',
+          created: 1,
+          updated: 2,
+          id: 's',
+          lines: [
+            { text: 'Spaced   ', created: 1, updated: 1, userId: 'u1' },
+            { text: 'body line', created: 1, updated: 1, userId: 'u1' },
+          ],
+        },
+      ],
+    }
+    const file = makeFile(exp)
+    const result = (await parseCosenseFile(file)) as ImportParseResult
+    expect(result.leaves[0].content.startsWith('body line')).toBe(true)
+  })
+})
+
+describe('format auto-detection (parseCosenseFile / parseGoogleKeepFile / parseSimpleNoteFile)', () => {
+  it('Cosense JSON is detected only by parseCosenseFile', async () => {
+    const cosense = {
+      name: 'p',
+      exported: 1,
+      pages: [
+        {
+          title: 'T',
+          created: 1,
+          updated: 2,
+          id: 'a',
+          lines: [{ text: 'body', created: 1, updated: 1, userId: 'u' }],
+        },
+      ],
+    }
+    const file = new File([JSON.stringify(cosense)], 'cosense.json', { type: 'application/json' })
+    const cs = await parseCosenseFile(file)
+    const gk = await parseGoogleKeepFile(file)
+    const sn = await parseSimpleNoteFile(file)
+    expect(cs).not.toBeNull()
+    expect(gk).toBeNull()
+    // SimpleNote parser requires activeNotes array; Cosense JSON lacks it -> null
+    expect(sn).toBeNull()
+  })
+
+  it('SimpleNote JSON is detected as SimpleNote, not Cosense', async () => {
+    const sn = {
+      activeNotes: [{ id: 'a', content: 'hello', lastModified: '2024-01-01T00:00:00Z' }],
+    }
+    const file = new File([JSON.stringify(sn)], 'sn.json', { type: 'application/json' })
+    const csRes = await parseCosenseFile(file)
+    const snRes = await parseSimpleNoteFile(file)
+    expect(csRes).toBeNull()
+    expect(snRes).not.toBeNull()
+    expect(snRes?.source).toBe('simplenote')
+  })
+
+  it('Google Keep single JSON is detected as Keep, not Cosense', async () => {
+    const keep = {
+      color: 'DEFAULT',
+      isTrashed: false,
+      isArchived: false,
+      isPinned: false,
+      title: 'Keep Note',
+      textContent: 'hello',
+      userEditedTimestampUsec: 1653870913735000,
+    }
+    const file = new File([JSON.stringify(keep)], 'keep.json', { type: 'application/json' })
+    const csRes = await parseCosenseFile(file)
+    const gkRes = await parseGoogleKeepFile(file)
+    expect(csRes).toBeNull()
+    expect(gkRes).not.toBeNull()
+    expect(gkRes?.source).toBe('google-keep')
   })
 })
