@@ -171,15 +171,13 @@
 
     <!-- 検索結果 -->
     {#if localQuery}
-      <div class="search-results" role="listbox">
+      <div class="search-results">
         {#if searchResults.value.length > 0}
           {#each searchResults.value as result, index}
             <div
               class="result-row"
               class:selected={index === selectedResultIndex.value}
               class:dual={isDualPane}
-              role="option"
-              aria-selected={index === selectedResultIndex.value}
             >
               <button
                 class="result-item result-item-left"
@@ -200,7 +198,22 @@
                   onclick={() => handleResultClick(result, 'right')}
                   onmouseenter={() => (selectedResultIndex.value = index)}
                   aria-label={$_('search.openInRightPane')}
-                ></button>
+                  title={$_('search.openInRightPane')}
+                >
+                  <svg
+                    class="right-arrow"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
               {/if}
             </div>
           {/each}
@@ -373,19 +386,31 @@
   }
 
   .result-row.dual .result-item-left {
-    flex: 0 0 60%;
-    width: 60%;
+    flex: 0 0 50%;
+    width: 50%;
   }
 
   .result-item-right {
-    flex: 0 0 40%;
-    width: 40%;
+    flex: 0 0 50%;
+    width: 50%;
+    min-height: 44px; /* モバイルタップターゲット確保 */
     align-self: stretch;
     background: color-mix(in srgb, var(--accent) 10%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    opacity: 0.7;
   }
 
   .result-item-right:hover {
     background: color-mix(in srgb, var(--accent) 20%, transparent);
+    opacity: 1;
+  }
+
+  .right-arrow {
+    width: 18px;
+    height: 18px;
   }
 
   .result-item-left:hover {
