@@ -787,4 +787,13 @@ export function resetForRepoSwitch(): void {
   // ワールドをホームに戻す（旧リポのアーカイブ表示を防止）
   leftWorld.value = 'home'
   rightWorld.value = 'home'
+
+  // 旧リポのノート/リーフを開いたまま残さない
+  // （予約pull待ちや未設定経路でもペインが旧データを指さないよう即クリア）
+  _leftNote = null
+  _rightNote = null
+  _leftLeaf = null
+  _rightLeaf = null
+  _leftView = 'home'
+  _rightView = 'home'
 }
