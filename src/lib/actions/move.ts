@@ -541,24 +541,36 @@ export async function moveLeafToWorld(
   // IndexedDBに保存
   await saveLeaves(sourceWorld === 'home' ? newSourceLeaves : leaves.value)
 
-  // スケルトンマップから移動したリーフを削除（Homeからアーカイブ時のみ）
+  // スケルトンマップ / ロード中IDから移動したリーフを削除（Homeからアーカイブ時のみ）
   if (sourceWorld === 'home') {
     const leafSkeletonMap = appState.leafSkeletonMap
     if (leafSkeletonMap.has(leaf.id)) {
       leafSkeletonMap.delete(leaf.id)
       appState.leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
     }
-  }
-
-  // 移動したリーフを開いていた両ペインを親ノートに遷移（削除と同じ挙動）
-  const checkPane = (paneToCheck: Pane) => {
-    const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
-    if (currentLeaf?.id === leaf.id) {
-      appActions.selectNote(sourceNote, paneToCheck)
+    const loadingLeafIds = appState.loadingLeafIds
+    if (loadingLeafIds.has(leaf.id)) {
+      loadingLeafIds.delete(leaf.id)
+      appState.loadingLeafIds = new Set(loadingLeafIds)
     }
   }
-  checkPane('left')
-  checkPane('right')
+
+  // 移動したリーフを開いていた両ペインを移動先へ追従させる（リーフは開いたまま）
+  const followPane = (paneToCheck: Pane) => {
+    const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
+    if (currentLeaf?.id !== leaf.id) return
+    if (paneToCheck === 'left') {
+      leftWorld.value = targetWorld
+      leftNote.value = targetNote!
+      leftLeaf.value = movedLeaf
+    } else {
+      rightWorld.value = targetWorld
+      rightNote.value = targetNote!
+      rightLeaf.value = movedLeaf
+    }
+  }
+  followPane('left')
+  followPane('right')
   appActions.refreshBreadcrumbs()
   appActions.rebuildLeafStats(leaves.value, notes.value)
 
