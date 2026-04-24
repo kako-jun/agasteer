@@ -789,11 +789,15 @@ export function resetForRepoSwitch(): void {
   rightWorld.value = 'home'
 
   // 旧リポのノート/リーフを開いたまま残さない
-  // （予約pull待ちや未設定経路でもペインが旧データを指さないよう即クリア）
-  _leftNote = null
-  _rightNote = null
-  _leftLeaf = null
-  _rightLeaf = null
-  _leftView = 'home'
-  _rightView = 'home'
+  // pullFromGitHub 側でも pane クリアしているが、以下の経路ではそこに到達しない:
+  // 1. 設定確定〜pullFromGitHub 開始までの非同期ギャップ
+  // 2. 同期中 repo 切替による予約pull 待機中（#134）
+  // 3. token/repoName 未設定で pull が走らない無効経路
+  // view も 'home' に戻すことで、null leaf を edit しようとする reactive effect を防止
+  leftNote.value = null
+  rightNote.value = null
+  leftLeaf.value = null
+  rightLeaf.value = null
+  leftView.value = 'home'
+  rightView.value = 'home'
 }
