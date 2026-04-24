@@ -78,12 +78,15 @@ import {
   loadNotes,
   loadLeaves,
   loadOfflineLeaf,
+  getPersistedLastPulledPushCount,
+  getPersistedMetadata,
   shouldShowPwaInstallBanner,
   setPushInFlightAt,
   getPushInFlightAt,
   setCurrentRepo,
   syncRepoNameCache,
 } from './data'
+import { shouldUseStartupCache, type PersistedStartupCache } from './startup-cache'
 import {
   applyTheme,
   loadAndApplyCustomFont,
@@ -792,25 +795,43 @@ export function initApp(deps: InitAppDeps): () => void {
     // GitHub設定チェック
     const isConfigured = loadedSettings.token && loadedSettings.repoName
     if (isConfigured) {
-      // #158: IndexedDB → state 復元のヘルパー（スキップパスとキャンセル
-      // フォールバックで共通化）
-      // 返り値: 読み込んだノート数 + リーフ数。呼び出し元で 0 判定に使う。
-      const restoreFromIndexedDb = async (initialStartup: boolean): Promise<number> => {
+      // #158: IndexedDB / localStorage に保持したキャッシュをロードする。
+      // notes / leaves は IndexedDB、metadata / pushCount / dirty は per-repo
+      // localStorage slot から復元する。
+      const loadPersistedStartupCache = async (): Promise<PersistedStartupCache> => {
         // 保留中の変更を先に IndexedDB へ保存
         await flushPendingSaves()
-        // localStorage に保存されているダーティフラグを保存（後で復元するため）
-        const wasDirty = getPersistedDirtyFlag()
-        const savedNotes = await loadNotes()
-        const savedLeaves = await loadLeaves()
-        notes.value = savedNotes
-        leaves.value = savedLeaves
-        // IndexedDB のデータをベースラインとして記録（dirty 誤検出を防止）
-        setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
-        // ベースラインとローカルが同じなのでダーティをクリア
-        clearAllChanges()
-        // リーフの isDirty では検出できない構造変更があった場合、
-        // isStructureDirty を復元
-        if (wasDirty) {
+        return {
+          wasDirty: getPersistedDirtyFlag(),
+          notes: await loadNotes(),
+          leaves: await loadLeaves(),
+          metadata: getPersistedMetadata(),
+          lastPulledPushCount: getPersistedLastPulledPushCount(),
+        }
+      }
+
+      // ロード済みキャッシュを state に反映する。
+      // adoptAsBaseline=true: clean cache とみなし snapshot/dirty を更新
+      // adoptAsBaseline=false: dirty cache をそのまま開く（最低限 global dirty を維持）
+      const applyPersistedStartupCache = async (
+        cache: PersistedStartupCache,
+        initialStartup: boolean,
+        adoptAsBaseline: boolean
+      ): Promise<number> => {
+        notes.value = cache.notes
+        leaves.value = cache.leaves
+        if (cache.metadata) {
+          metadata.value = cache.metadata
+        }
+        if (cache.lastPulledPushCount !== null) {
+          lastPulledPushCount.value = cache.lastPulledPushCount
+        }
+        if (adoptAsBaseline) {
+          setLastPushedSnapshot(cache.notes, cache.leaves, [], [])
+          clearAllChanges()
+        } else if (cache.wasDirty) {
+          // 起動時 confirm をキャンセルした dirty cache は、差分の詳細までは
+          // 再構築できないため少なくとも全体 dirty を維持する。
           isStructureDirty.value = true
         }
         appState.isFirstPriorityFetched = true
@@ -825,7 +846,7 @@ export function initApp(deps: InitAppDeps): () => void {
         } else {
           await deps.restoreStateFromUrl(false)
         }
-        return savedNotes.length + savedLeaves.length
+        return cache.notes.length + cache.leaves.length
       }
 
       // #158: 起動時の stale 先行チェック
@@ -835,11 +856,16 @@ export function initApp(deps: InitAppDeps): () => void {
         lastKnownCommitSha.value !== null
           ? await executeStaleCheck(settings.value, lastKnownCommitSha.value)
           : null
-      const canSkipFullPull = staleResult?.status === 'up_to_date'
+      const persistedCache = await loadPersistedStartupCache()
+      const canSkipFullPull = shouldUseStartupCache({
+        lastKnownCommitSha: lastKnownCommitSha.value,
+        staleResult,
+        cache: persistedCache,
+      })
 
       if (canSkipFullPull) {
         try {
-          const restoredCount = await restoreFromIndexedDb(true)
+          const restoredCount = await applyPersistedStartupCache(persistedCache, true, true)
           if (restoredCount === 0) {
             // localStorage に SHA が残っているのに IndexedDB が空。
             // 2 つの可能性がある:
@@ -872,7 +898,7 @@ export function initApp(deps: InitAppDeps): () => void {
           true,
           async () => {
             try {
-              await restoreFromIndexedDb(false)
+              await applyPersistedStartupCache(persistedCache, false, !persistedCache.wasDirty)
             } catch (error) {
               console.error('Failed to load from IndexedDB:', error)
               // 失敗した場合は Pull を実行

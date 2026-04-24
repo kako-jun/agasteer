@@ -12,6 +12,7 @@ import type {
   Settings,
   Note,
   Leaf,
+  Metadata,
   ThemeType,
   CustomFont,
   CustomBackground,
@@ -84,6 +85,8 @@ export interface PerRepoState {
   isDirty: boolean
   lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
   pushInFlightAt?: number // Push API呼び出し中のタイムスタンプ（スリープによるレスポンス消失検出用）
+  metadata?: Metadata // 直近同期済みの home metadata（skip 起動時のバッジ復元用）
+  lastPulledPushCount?: number // 直近同期済みの pushCount（skip 起動時の統計復元用）
 }
 
 const defaultPerRepoState: PerRepoState = {
@@ -462,6 +465,38 @@ export function getPersistedCommitSha(): string | null {
  */
 export function setPersistedCommitSha(sha: string | null): void {
   updateCurrentRepoState({ lastKnownCommitSha: sha })
+}
+
+/**
+ * home metadata を取得（現在リポ。起動時の復元用）
+ */
+export function getPersistedMetadata(): Metadata | null {
+  const key = currentRepoKey()
+  if (!key) return null
+  return getPerRepoState(key).metadata ?? null
+}
+
+/**
+ * home metadata を保存（現在リポ）
+ */
+export function setPersistedMetadata(metadata: Metadata): void {
+  updateCurrentRepoState({ metadata })
+}
+
+/**
+ * Pull成功時の pushCount を取得（現在リポ。起動時の統計復元用）
+ */
+export function getPersistedLastPulledPushCount(): number | null {
+  const key = currentRepoKey()
+  if (!key) return null
+  return getPerRepoState(key).lastPulledPushCount ?? null
+}
+
+/**
+ * Pull成功時の pushCount を保存（現在リポ）
+ */
+export function setPersistedLastPulledPushCount(pushCount: number): void {
+  updateCurrentRepoState({ lastPulledPushCount: pushCount })
 }
 
 /**

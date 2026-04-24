@@ -286,7 +286,7 @@ Agasteerは、データを2つの異なるストレージに保存します。
 1. 初回Pull（アプリ起動時）
    - 処理フロー: 「Pullします」→ Pull実行 → **IndexedDB全削除** → **IndexedDB全作成** → 画面表示 → 結果表示
    - **初回Pull成功まで、画面にノート・リーフは表示されない**
-   - **#158 以降**: 起動時にまず `executeStaleCheck()` を実行し、リモート HEAD SHA が `lastKnownCommitSha` と一致するなら full pull を省略して IndexedDB から復元する。SHA が異なる / `null`（初回接続）/ チェック失敗の場合は従来通り full pull。これにより Cloudflare Pages デプロイでアプリのバージョンバンドルだけ変わった場合に、GitHub への全リーフ再取得が発生しなくなる。
+   - **#158 以降**: 起動時にまず `executeStaleCheck()` を実行し、リモート HEAD SHA が `lastKnownCommitSha` と一致し、かつローカルキャッシュが clean（未Push変更なし）で `metadata` / `pushCount` も永続化済みなら、full pull を省略して IndexedDB + per-repo localStorage から復元する。SHA が異なる / `null`（初回接続）/ チェック失敗 / dirty cache / 復元に必要なメタ情報欠落の場合は従来通り full pull。これにより Cloudflare Pages デプロイでアプリのバージョンバンドルだけ変わった場合に、GitHub への全リーフ再取得が発生しなくなる。
 2. Pullテストボタンを押したとき
    - 処理フロー: 「Pullします」→ Pull実行 → **IndexedDB全削除** → **IndexedDB全作成** → 結果表示
 3. 設定画面を閉じたとき
@@ -295,7 +295,7 @@ Agasteerは、データを2つの異なるストレージに保存します。
 **重要な仕様:**
 
 - **full pull** 成功のたびに、IndexedDBは完全にクリアされ、GitHubから取得したデータで再構築される
-- **#158 以降**: 起動時にリモート HEAD SHA が `lastKnownCommitSha` と一致する場合は、前回終了時の IndexedDB データを復元して full pull を省略する。SHA が異なる / `null`（初回接続）/ チェック失敗の場合は従来通り full pull
+- **#158 以降**: 起動時にリモート HEAD SHA が `lastKnownCommitSha` と一致し、キャッシュが clean かつ `metadata` / `pushCount` も復元できる場合は、前回終了時の IndexedDB データを復元して full pull を省略する。SHA が異なる / `null`（初回接続）/ チェック失敗 / dirty cache / メタ情報欠落の場合は従来通り full pull
 - 設定情報（LocalStorage）はGitHubには含まれない
 - ノートとリーフのMarkdownファイルのみが同期される
 
@@ -337,13 +337,13 @@ UI Re-render
 
 1. LocalStorageから設定の読み込み
 2. テーマ適用、タイトル設定
-3. **#158**: `executeStaleCheck()` でリモート HEAD SHA を取得し、`lastKnownCommitSha` と一致するなら IndexedDB から復元して pull をスキップ。一致しない / `null` / チェック失敗なら full pull を実行
+3. **#158**: `executeStaleCheck()` でリモート HEAD SHA を取得し、`lastKnownCommitSha` と一致し、かつ clean cache + 復元用 `metadata` / `pushCount` が揃っているなら IndexedDB から復元して pull をスキップ。一致しない / `null` / チェック失敗 / dirty cache / メタ情報欠落なら full pull を実行
 4. Pull成功（またはスキップパスでの復元成功）後、URLから状態を復元（ディープリンク対応）
 5. popstateイベントリスナー設定（ブラウザの戻る/進む対応）
 
 **重要な仕様:**
 
-- アプリ起動時、リモートHEAD SHAが`lastKnownCommitSha`と一致するなら IndexedDB から復元（#158）。一致しない／SHA未設定／チェック失敗なら full pull を実行
+- アプリ起動時、リモートHEAD SHAが`lastKnownCommitSha`と一致し、clean cache + 復元用 `metadata` / `pushCount` が揃っているなら IndexedDB から復元（#158）。一致しない／SHA未設定／チェック失敗／dirty cache／メタ情報欠落なら full pull を実行
 - full pull 成功時に、IndexedDBを全削除→GitHubから取得したデータで全作成
 - full pull 完了またはIndexedDB復元完了まで、画面にノート・リーフは表示されない（`isOperationsLocked = true`）
 - Pull失敗時は、ユーザーに設定確認を促すアラートを表示

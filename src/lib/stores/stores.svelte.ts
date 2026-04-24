@@ -12,7 +12,11 @@ import {
   setPersistedDirtyFlag,
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
   getPersistedCommitSha,
+  getPersistedLastPulledPushCount,
+  getPersistedMetadata,
   setPersistedCommitSha,
+  setPersistedLastPulledPushCount,
+  setPersistedMetadata,
   clearArchiveData,
   setCurrentRepo,
   closeCurrentRepoDb,
@@ -61,7 +65,9 @@ export const leaves = {
   },
 }
 
-let _metadata = $state<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
+let _metadata = $state<Metadata>(
+  getPersistedMetadata() ?? { version: 1, notes: {}, leaves: {}, pushCount: 0 }
+)
 export const metadata = {
   get value() {
     return _metadata
@@ -390,6 +396,18 @@ export function initStoreEffects(): () => void {
       if (isRehydrating) return
       setPersistedCommitSha(value)
     })
+    // metadata → LocalStorage永続化
+    $effect(() => {
+      const value = metadata.value
+      if (isRehydrating) return
+      setPersistedMetadata(value)
+    })
+    // lastPulledPushCount → LocalStorage永続化
+    $effect(() => {
+      const value = lastPulledPushCount.value
+      if (isRehydrating) return
+      setPersistedLastPulledPushCount(value)
+    })
   })
 }
 
@@ -538,7 +556,7 @@ export function clearAllChanges(): void {
 }
 
 // Pull成功時のリモートpushCountを保持（stale編集検出用）
-let _lastPulledPushCount = $state<number>(0)
+let _lastPulledPushCount = $state<number>(getPersistedLastPulledPushCount() ?? 0)
 export const lastPulledPushCount = {
   get value() {
     return _lastPulledPushCount
@@ -799,7 +817,7 @@ export function resetForRepoSwitch(): void {
   // lastKnownCommitSha は per-repo slot から rehydrateForRepo で復元するため、
   // ここでは触らない（null で上書きすると新リポ slot に null が書き込まれて
   // 復元できなくなる — stores.svelte.ts の $effect が検知してしまう）。
-  lastPulledPushCount.value = 0
+  // lastPulledPushCount も同様に per-repo slot から復元するため触らない。
   isStale.value = false
   lastPushTime.value = 0
   lastStaleCheckTime.value = 0
@@ -879,10 +897,11 @@ export async function rehydrateForRepo(repoKey: string): Promise<void> {
     // （この代入は $effect を発火させるが、isRehydrating ガードで
     // setPersistedCommitSha への書き込みはスキップされる）
     lastKnownCommitSha.value = getPersistedCommitSha()
+    metadata.value = getPersistedMetadata() ?? { version: 1, notes: {}, leaves: {}, pushCount: 0 }
     isStale.value = false
     lastPushTime.value = 0
     lastStaleCheckTime.value = 0
-    lastPulledPushCount.value = 0
+    lastPulledPushCount.value = getPersistedLastPulledPushCount() ?? 0
   } finally {
     // ガードを解除。以降の変更は通常通り per-repo slot に永続化される。
     setRehydrating(false)
