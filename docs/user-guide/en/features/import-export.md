@@ -49,15 +49,16 @@ Import export files.
 
 ### Supported Formats
 
-| Format             | File Type                                                |
-| ------------------ | -------------------------------------------------------- |
-| Agasteer format    | Exported file                                            |
-| SimpleNote format  | .json (or .zip containing it)                            |
-| Google Keep format | Google Takeout .zip, or individual .json after unzipping |
+| Format                    | File Type                                                |
+| ------------------------- | -------------------------------------------------------- |
+| Agasteer format           | Exported file                                            |
+| SimpleNote format         | .json (or .zip containing it)                            |
+| Google Keep format        | Google Takeout .zip, or individual .json after unzipping |
+| Cosense (Scrapbox) format | Project export .json                                     |
 
 ### Behavior After Import
 
-- A note named after the source (`SimpleNote_1`, `GoogleKeep_1`) is created with leaves placed flat inside
+- A note named after the source (`SimpleNote_1` / `GoogleKeep_1` / `Cosense_1`) is created with leaves placed flat inside
 - An "Import Summary" report leaf is generated as the first leaf (records what was imported and what was skipped)
 - Unsupported elements are skipped and recorded in the report
 
@@ -68,6 +69,28 @@ Import export files.
 - Image attachments, colors, labels, pinned state are not supported (recorded in report)
 - HTML files and image files are not used (JSON only)
 - Notes with `isTrashed: true` are skipped
+
+### Cosense (Scrapbox) Notes
+
+Cosense does not offer a ZIP export, so select the project's `.json` export directly.
+
+**Notation conversion**:
+
+- `[URL label]` / `[label URL]` → `[label](URL)` Markdown link
+- `[image URL]` (.png / .jpg / .jpeg / .gif / .webp / .svg) → `![](URL)` Markdown image
+- `[URL]` (non-image, standalone) → `<URL>` autolink
+- `[page name]` (no URL) → kept as `[page name]` (no resolution target)
+- `#tag` → kept as plain text
+- Leading whitespace / tabs → preserved so outline structure is not lost
+
+**Not imported (recorded in report)**:
+
+- External images (URLs are preserved; host availability is not guaranteed)
+- Page thumbnails (`page.image`)
+- Page view counts
+- Per-line editor attribution and timestamps
+- Hashtag `#tag` internal link resolution
+- `[page name]` internal page link resolution
 
 ### When Same Name Exists
 

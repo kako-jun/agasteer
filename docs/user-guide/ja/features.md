@@ -23,7 +23,7 @@
 ## データ管理
 
 - **[アーカイブ](./features/archive.md)** - 使わなくなったノート/リーフを別の場所に保管
-- **[インポート/エクスポート](./features/import-export.md)** - ZIPバックアップ、他アプリからの移行
+- **[インポート/エクスポート](./features/import-export.md)** - ZIPバックアップ、他アプリ（SimpleNote / Google Keep / Cosense (Scrapbox)）からの移行
 
 ## アプリ
 
