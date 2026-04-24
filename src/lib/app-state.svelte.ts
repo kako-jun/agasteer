@@ -770,10 +770,16 @@ export function initApp(deps: InitAppDeps): () => void {
       })
     }
 
-    // 初回Pull（GitHubから最新データを取得）
-    // 重要: IndexedDBからは読み込まない
-    // Pull成功時にIndexedDBは全削除→全作成される
-    // Pull成功後、URLから状態を復元（handlePull内で実行）
+    // 初回起動時のデータ復元。
+    //
+    // #158: リモート HEAD の SHA が lastKnownCommitSha と一致するなら
+    // full pull を省略して IndexedDB から復元する（= アプリのバージョンが
+    // 変わっただけでリロードされた場合に、GitHub への全リーフ再取得を
+    // 避ける）。SHA が異なるか、まだ一度も同期していない（SHA=null）
+    // 場合、またはチェックに失敗した場合は従来通り full pull。
+    //
+    // Pull 成功時は IndexedDB 全削除→全作成される（GitHub が唯一の真実）。
+    // キャンセル時は IndexedDB から読み込んで操作可能にする。
 
     // PWA更新チェック完了を待つ（更新があればリロードされる）
     await waitForSwCheck
@@ -781,34 +787,75 @@ export function initApp(deps: InitAppDeps): () => void {
     // GitHub設定チェック
     const isConfigured = loadedSettings.token && loadedSettings.repoName
     if (isConfigured) {
-      // 初回Pull実行（pullFromGitHub内でdirtyチェック、staleチェックを行う）
-      // キャンセル時はIndexedDBから読み込んで操作可能にする
-      await deps.pullFromGitHub(true, async () => {
-        try {
-          // 保留中の変更を先にIndexedDBへ保存
-          await flushPendingSaves()
-          // localStorage に保存されているダーティフラグを保存（後で復元するため）
-          const wasDirty = getPersistedDirtyFlag()
-          const savedNotes = await loadNotes()
-          const savedLeaves = await loadLeaves()
-          notes.value = savedNotes
-          leaves.value = savedLeaves
-          // IndexedDBのデータをベースラインとして記録（dirty誤検出を防止）
-          setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
-          // ベースラインとローカルが同じなのでダーティをクリア
-          clearAllChanges()
-          // リーフのisDirtyでは検出できない構造変更があった場合、isStructureDirtyを復元
-          if (wasDirty) {
-            isStructureDirty.value = true
-          }
-          appState.isFirstPriorityFetched = true
+      // #158: IndexedDB → state 復元のヘルパー（スキップパスとキャンセル
+      // フォールバックで共通化）
+      const restoreFromIndexedDb = async (initialStartup: boolean) => {
+        // 保留中の変更を先に IndexedDB へ保存
+        await flushPendingSaves()
+        // localStorage に保存されているダーティフラグを保存（後で復元するため）
+        const wasDirty = getPersistedDirtyFlag()
+        const savedNotes = await loadNotes()
+        const savedLeaves = await loadLeaves()
+        notes.value = savedNotes
+        leaves.value = savedLeaves
+        // IndexedDB のデータをベースラインとして記録（dirty 誤検出を防止）
+        setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
+        // ベースラインとローカルが同じなのでダーティをクリア
+        clearAllChanges()
+        // リーフの isDirty では検出できない構造変更があった場合、
+        // isStructureDirty を復元
+        if (wasDirty) {
+          isStructureDirty.value = true
+        }
+        appState.isFirstPriorityFetched = true
+        if (initialStartup) {
+          appState.isRestoringFromUrl = true
+          deps.restoreStateFromUrl(true)
+          appState.isRestoringFromUrl = false
+        } else {
           deps.restoreStateFromUrl(false)
+        }
+      }
+
+      // #158: 起動時の stale 先行チェック
+      // lastKnownCommitSha が null（初回）の場合は up_to_date 判定になっても
+      // 手元に何もないので full pull が必要。SHA が非 null かつ一致したときだけ
+      // スキップする。
+      const staleResult =
+        lastKnownCommitSha.value !== null
+          ? await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+          : null
+      const canSkipFullPull =
+        staleResult !== null &&
+        staleResult.status === 'up_to_date' &&
+        lastKnownCommitSha.value !== null
+
+      if (canSkipFullPull) {
+        try {
+          await restoreFromIndexedDb(true)
+          // pull をスキップしたので以降の stale チェックで「リモート変更なし」が
+          // 正しく判定されるよう isPullCompleted を立てる
+          appState.isPullCompleted = true
         } catch (error) {
-          console.error('Failed to load from IndexedDB:', error)
-          // 失敗した場合はPullを実行
+          console.error(
+            'Failed to restore from IndexedDB on up_to_date startup, falling back to full pull:',
+            error
+          )
           await deps.pullFromGitHub(true)
         }
-      })
+      } else {
+        // 初回 Pull 実行（pullFromGitHub 内で dirty チェック、stale チェックを行う）
+        // キャンセル時は IndexedDB から読み込んで操作可能にする
+        await deps.pullFromGitHub(true, async () => {
+          try {
+            await restoreFromIndexedDb(false)
+          } catch (error) {
+            console.error('Failed to load from IndexedDB:', error)
+            // 失敗した場合は Pull を実行
+            await deps.pullFromGitHub(true)
+          }
+        })
+      }
     } else {
       // 未設定の場合はウェルカムモーダルを表示
       appState.showWelcome = true

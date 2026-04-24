@@ -286,6 +286,7 @@ Agasteerは、データを2つの異なるストレージに保存します。
 1. 初回Pull（アプリ起動時）
    - 処理フロー: 「Pullします」→ Pull実行 → **IndexedDB全削除** → **IndexedDB全作成** → 画面表示 → 結果表示
    - **初回Pull成功まで、画面にノート・リーフは表示されない**
+   - **#158 以降**: 起動時にまず `executeStaleCheck()` を実行し、リモート HEAD SHA が `lastKnownCommitSha` と一致するなら full pull を省略して IndexedDB から復元する。SHA が異なる / `null`（初回接続）/ チェック失敗の場合は従来通り full pull。これにより Cloudflare Pages デプロイでアプリのバージョンバンドルだけ変わった場合に、GitHub への全リーフ再取得が発生しなくなる。
 2. Pullテストボタンを押したとき
    - 処理フロー: 「Pullします」→ Pull実行 → **IndexedDB全削除** → **IndexedDB全作成** → 結果表示
 3. 設定画面を閉じたとき
@@ -342,10 +343,9 @@ UI Re-render
 
 **重要な仕様:**
 
-- アプリ起動時、IndexedDBからの読み込みは行わない
-- 必ず最初にPullを実行し、GitHubから最新データを取得する
-- Pull成功時に、IndexedDBを全削除→GitHubから取得したデータで全作成
-- 初回Pull成功まで、画面にノート・リーフは表示されない（`isOperationsLocked = true`）
+- アプリ起動時、リモートHEAD SHAが`lastKnownCommitSha`と一致するなら IndexedDB から復元（#158）。一致しない／SHA未設定／チェック失敗なら full pull を実行
+- full pull 成功時に、IndexedDBを全削除→GitHubから取得したデータで全作成
+- full pull 完了またはIndexedDB復元完了まで、画面にノート・リーフは表示されない（`isOperationsLocked = true`）
 - Pull失敗時は、ユーザーに設定確認を促すアラートを表示
 
 ### CRUD操作のパターン
