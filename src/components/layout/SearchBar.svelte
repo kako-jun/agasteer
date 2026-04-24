@@ -194,26 +194,12 @@
               </button>
               {#if isDualPane}
                 <button
-                  class="result-item result-item-right"
+                  class="result-item-right"
                   onclick={() => handleResultClick(result, 'right')}
                   onmouseenter={() => (selectedResultIndex.value = index)}
                   aria-label={$_('search.openInRightPane')}
                   title={$_('search.openInRightPane')}
-                >
-                  <svg
-                    class="right-arrow"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </button>
+                ></button>
               {/if}
             </div>
           {/each}
@@ -351,6 +337,7 @@
   }
 
   .result-row {
+    position: relative;
     display: flex;
     width: 100%;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
@@ -382,35 +369,24 @@
 
   .result-item-left {
     flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
   }
 
-  .result-row.dual .result-item-left {
-    flex: 0 0 50%;
-    width: 50%;
-  }
-
   .result-item-right {
-    flex: 0 0 50%;
+    position: absolute;
+    top: 0;
+    right: 0;
     width: 50%;
-    min-height: 44px; /* モバイルタップターゲット確保 */
-    align-self: stretch;
+    height: 100%;
+    border: none;
+    padding: 0;
+    cursor: pointer;
     background: color-mix(in srgb, var(--accent) 10%, transparent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--accent);
-    opacity: 0.7;
   }
 
   .result-item-right:hover {
     background: color-mix(in srgb, var(--accent) 20%, transparent);
-    opacity: 1;
-  }
-
-  .right-arrow {
-    width: 18px;
-    height: 18px;
   }
 
   .result-item-left:hover {
