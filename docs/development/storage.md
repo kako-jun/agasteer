@@ -37,7 +37,7 @@ Agasteerのデータ永続化スキーマについて説明します。
     "yamada/my-notes": {
       "isDirty": false,
       "lastKnownCommitSha": "a1b2c3d4...",
-      "pushInFlightAt": null
+      "pushInFlightAt": 1703000000000
     },
     "yamada/other-repo": {
       "isDirty": false,
@@ -62,13 +62,18 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 **リポジトリ単位の同期状態**（#131で導入）。キーは `"<owner>/<repo>"`。
 
-| フィールド           | 型             | 説明                                                                   |
-| -------------------- | -------------- | ---------------------------------------------------------------------- |
-| `isDirty`            | boolean        | 未保存の変更があるか（起動時のダーティ復元用）                         |
-| `lastKnownCommitSha` | string \| null | 最後にリモートと同期したHEAD commit SHA（stale検出用）                 |
-| `pushInFlightAt`     | number \| null | Push API呼び出し中のタイムスタンプ（スリープ時のレスポンス消失検出用） |
+| フィールド           | 型                  | 説明                                                                   |
+| -------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `isDirty`            | boolean             | 未保存の変更があるか（起動時のダーティ復元用）                         |
+| `lastKnownCommitSha` | string \| null      | 最後にリモートと同期したHEAD commit SHA（stale検出用）                 |
+| `pushInFlightAt`     | number \| undefined | Push API呼び出し中のタイムスタンプ（スリープ時のレスポンス消失検出用） |
+
+`pushInFlightAt` は飛行中でない場合は JSON から **欠損** する（`null` ではなく undefined のため）。サンプルでは飛行中の時刻を示している。
 
 リポを切り替えると、`currentRepoKey`（`settings.repoName`）から対応するスロットが読み書きされる。別リポの同期状態は維持されるため、戻ってきたときに差分Pullを再利用できる。
+
+- 起動時に `settings.repoName` が未設定の場合、`getPersistedDirtyFlag()` は `false` を返す（dirty復元はスキップ）。ユーザーが設定画面からリポを指定した後に改めて per-repo slot が参照される。
+- 起動直後にアプリは eager に `setCurrentRepo(settings.repoName)` を呼んで per-repo DB を開く。設定画面を開く前にノート/リーフ一覧を表示するためで、遅延オープンにするとホーム画面表示までブロックされるためこの方式を採用している。
 
 #### `v131Migrated`
 
