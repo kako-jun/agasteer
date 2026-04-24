@@ -19,6 +19,8 @@ import {
   rightNote,
   leftLeaf,
   rightLeaf,
+  leftView,
+  rightView,
   updateNotes,
   updateLeaves,
   updateArchiveNotes,
@@ -541,34 +543,47 @@ export async function moveLeafToWorld(
 
   // IndexedDBに保存
   await saveLeaves(sourceWorld === 'home' ? newSourceLeaves : leaves.value)
+  // ターゲットがアーカイブなら archive 側も必ず永続化（表示の state は更新済みだが
+  // IndexedDB が古いと再起動後に不整合が残るため）
+  if (targetWorld === 'archive') {
+    await saveArchiveNotes(archiveNotes.value)
+    await saveArchiveLeaves(archiveLeaves.value)
+  }
 
-  // スケルトンマップ / ロード中IDから移動したリーフを削除（Homeからアーカイブ時のみ）
+  // スケルトンマップ / ロード中IDから移動したリーフを無条件で除去し、
+  // 常に新しい Map/Set を再代入してリアクティブ更新を保証する
+  // (has() ガードで map 再代入をスキップすると、古い参照を見続けるビューで
+  // スケルトン残像が消えないケースがあるため)
   if (sourceWorld === 'home') {
-    const leafSkeletonMap = appState.leafSkeletonMap
-    if (leafSkeletonMap.has(leaf.id)) {
-      leafSkeletonMap.delete(leaf.id)
-      appState.leafSkeletonMap = new Map(leafSkeletonMap) // リアクティブ更新をトリガー
-    }
-    const loadingLeafIds = appState.loadingLeafIds
-    if (loadingLeafIds.has(leaf.id)) {
-      loadingLeafIds.delete(leaf.id)
-      appState.loadingLeafIds = new Set(loadingLeafIds)
-    }
+    const nextSkeletonMap = new Map(appState.leafSkeletonMap)
+    nextSkeletonMap.delete(leaf.id)
+    appState.leafSkeletonMap = nextSkeletonMap
+
+    const nextLoadingIds = new Set(appState.loadingLeafIds)
+    nextLoadingIds.delete(leaf.id)
+    appState.loadingLeafIds = nextLoadingIds
   }
 
   // 移動したリーフを開いていた両ペインを移動先へ追従させる（リーフは開いたまま）
-  // note/leaf を先に差し替えてから world を切り替えることで、$derived 経由の
-  // ノート探索が一時的に旧ペアで空振りするのを避ける
+  // ペインの現在リーフが一致する場合に加え、現在ノートが移動元ノートのままの
+  // 場合もペインを追従させる（await 中に leftLeaf が別値に差し替わった
+  // 場合でも、パンくずが Home 側のまま取り残されるのを防ぐ）
   const followPane = (paneToCheck: Pane) => {
     const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
-    if (currentLeaf?.id !== leaf.id) return
+    const currentNote = paneToCheck === 'left' ? leftNote.value : rightNote.value
+    const paneWorld = paneToCheck === 'left' ? leftWorld.value : rightWorld.value
+    const leafMatches = currentLeaf?.id === leaf.id
+    const noteMatches = paneWorld === sourceWorld && currentNote?.id === sourceNote.id
+    if (!leafMatches && !noteMatches) return
     if (paneToCheck === 'left') {
       leftNote.value = resolvedTargetNote
-      leftLeaf.value = movedLeaf
+      leftLeaf.value = leafMatches ? movedLeaf : null
+      leftView.value = leafMatches ? leftView.value : 'note'
       leftWorld.value = targetWorld
     } else {
       rightNote.value = resolvedTargetNote
-      rightLeaf.value = movedLeaf
+      rightLeaf.value = leafMatches ? movedLeaf : null
+      rightView.value = leafMatches ? rightView.value : 'note'
       rightWorld.value = targetWorld
     }
   }
