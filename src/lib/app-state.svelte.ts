@@ -377,6 +377,11 @@ export const appState = {
   set pendingRepoSync(v: boolean) {
     _pendingRepoSync = v
   },
+  /**
+   * リポジトリ設定変更直後〜新repoのpullが開始されるまでの「予約中」フラグ。
+   * pendingRepoSync（他同期完了を待つキュー）とは別概念で、
+   * どちらも立っていたらユーザーには同じ青丸バッジで見せる（App.svelte）。
+   */
   get repoChangePending() {
     return _repoChangePending
   },

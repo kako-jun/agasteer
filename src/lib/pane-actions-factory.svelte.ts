@@ -426,10 +426,14 @@ export async function handleCloseSettings() {
     } else {
       appState.isPullCompleted = false
       appState.pendingRepoSync = false
+      // 無効設定（token/repoName 空）でpullが走らない経路では予約バッジも下ろす
+      appState.repoChangePending = false
     }
     // pull失敗または設定が不完全 → 初回pull前の状態に戻す
     if (!appState.isPullCompleted) {
       appState.isFirstPriorityFetched = false
+      // pull失敗時も青丸を残さない（「予約中」の見かけのまま永続するのを防ぐ）
+      appState.repoChangePending = false
       resetForRepoSwitch()
       archiveLeafStatsStore.reset()
     }
