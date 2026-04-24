@@ -33,7 +33,9 @@
     "clear": "Clear",
     "close": "Close",
     "archivePrefix": "Archive",
-    "archiveNotLoaded": "Archive is not searched (not loaded)"
+    "archiveNotLoaded": "Archive is not searched (not loaded)",
+    "openInLeftPane": "Open in left pane",
+    "openInRightPane": "Open in right pane"
   },
   "breadcrumbs": {
     "goHome": "Go to home",

@@ -266,30 +266,30 @@ async function scrollLeafLineWhenReady(
   }
 }
 
-export async function handleSearchResultClick(result: SearchMatch) {
+export async function handleSearchResultClick(result: SearchMatch, pane: Pane = 'left') {
   const targetNotes = result.world === 'archive' ? archiveNotes.value : notes.value
   const targetLeaves = result.world === 'archive' ? archiveLeaves.value : leaves.value
 
-  if (result.world === 'archive') {
-    leftWorld.value = 'archive'
+  if (pane === 'left') {
+    leftWorld.value = result.world === 'archive' ? 'archive' : 'home'
   } else {
-    leftWorld.value = 'home'
+    rightWorld.value = result.world === 'archive' ? 'archive' : 'home'
   }
 
   if (result.matchType === 'note') {
     const note = targetNotes.find((n) => n.id === result.noteId)
     if (note) {
-      selectNote(note, 'left')
+      selectNote(note, pane)
     }
   } else {
     if (isOfflineLeaf(result.leafId)) {
-      openOfflineView('left')
-      await scrollLeafLineWhenReady('left', result.leafId, result.line)
+      openOfflineView(pane)
+      await scrollLeafLineWhenReady(pane, result.leafId, result.line)
     } else {
       const leaf = targetLeaves.find((l) => l.id === result.leafId)
       if (leaf) {
-        selectLeaf(leaf, 'left')
-        await scrollLeafLineWhenReady('left', leaf.id, result.line)
+        selectLeaf(leaf, pane)
+        await scrollLeafLineWhenReady(pane, leaf.id, result.line)
       }
     }
   }
