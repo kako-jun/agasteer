@@ -244,6 +244,8 @@ export async function pullFromGitHub(
 
   // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
   isPulling.value = true
+  // pull開始と同時に「pull予約あり」バッジを落とす（進捗%に交代）
+  appState.repoChangePending = false
   try {
     // 未保存の変更がある場合は確認（PWA強制終了後の再起動も考慮）
     if (isDirty.value || getPersistedDirtyFlag()) {

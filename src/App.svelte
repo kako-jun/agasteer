@@ -212,6 +212,7 @@
       pullDisabled={!derivedState.canPull}
       isStale={isStale.value}
       pullProgress={pullProgressInfo.value}
+      pendingPull={appState.repoChangePending || appState.pendingRepoSync}
       onPullProgressClick={() => {
         if (pullProgressInfo.value) {
           showPullToast(

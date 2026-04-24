@@ -25,7 +25,8 @@
     "pull": "Pull",
     "push": "Push",
     "swapPanes": "Swap Panes",
-    "staleRemote": "Remote has newer changes"
+    "staleRemote": "Remote has newer changes",
+    "pendingPull": "Pull is queued after repository change"
   },
   "search": {
     "placeholder": "Search...",

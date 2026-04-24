@@ -206,6 +206,7 @@ let _isRestoringFromUrl = $state(false)
 let _importOccurredInSettings = $state(false)
 let _atGuardEntry = $state(false)
 let _pendingRepoSync = $state(false)
+let _repoChangePending = $state(false)
 
 export const appState = {
   get breadcrumbs() {
@@ -375,6 +376,12 @@ export const appState = {
   },
   set pendingRepoSync(v: boolean) {
     _pendingRepoSync = v
+  },
+  get repoChangePending() {
+    return _repoChangePending
+  },
+  set repoChangePending(v: boolean) {
+    _repoChangePending = v
   },
 }
 

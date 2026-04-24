@@ -394,6 +394,7 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     repoChangedInSettings = true
     appState.isPullCompleted = false
     appState.isFirstPriorityFetched = false
+    appState.repoChangePending = true
     resetForRepoSwitch()
     archiveLeafStatsStore.reset()
   }

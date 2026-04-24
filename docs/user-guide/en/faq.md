@@ -150,7 +150,8 @@ Agasteer suppresses the immediate tap-triggered auto-scroll and then keeps the c
 
 - Automatically checks for remote changes every 5 minutes
 - When the bar is full (5 minutes elapsed), a check is performed
-- If changes were made on another device, a red dot appears on the Pull button
+- If changes were made on another device, a red dot appears on the top-right of the Pull button
+- After switching repositories in Settings, a blue dot appears on the top-left until the new Pull runs (covers both the immediate case and the queued case while another sync is in flight)
 
 ---
 

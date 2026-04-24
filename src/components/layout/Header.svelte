@@ -22,6 +22,7 @@
     isStale?: boolean
     pullProgress?: { percent: number; fetched: number; total: number } | null
     onPullProgressClick?: () => void
+    pendingPull?: boolean
     onSearchClick: () => void
     onHelpClick: () => void
     isDualPane?: boolean
@@ -41,6 +42,7 @@
     isStale = false,
     pullProgress = null,
     onPullProgressClick = () => {},
+    pendingPull = false,
     onSearchClick,
     onHelpClick,
     isDualPane = false,
@@ -120,6 +122,7 @@
       {isStale}
       progress={pullProgress}
       onProgressClick={onPullProgressClick}
+      {pendingPull}
       id="tour-pull"
     />
   </div>
