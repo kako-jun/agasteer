@@ -294,8 +294,8 @@ Agasteerは、データを2つの異なるストレージに保存します。
 
 **重要な仕様:**
 
-- Pull成功のたびに、IndexedDBは完全にクリアされ、GitHubから取得したデータで再構築される
-- 前回終了時のIndexedDBデータは使用されない（次のPullで必ず上書きされる）
+- **full pull** 成功のたびに、IndexedDBは完全にクリアされ、GitHubから取得したデータで再構築される
+- **#158 以降**: 起動時にリモート HEAD SHA が `lastKnownCommitSha` と一致する場合は、前回終了時の IndexedDB データを復元して full pull を省略する。SHA が異なる / `null`（初回接続）/ チェック失敗の場合は従来通り full pull
 - 設定情報（LocalStorage）はGitHubには含まれない
 - ノートとリーフのMarkdownファイルのみが同期される
 
@@ -337,8 +337,8 @@ UI Re-render
 
 1. LocalStorageから設定の読み込み
 2. テーマ適用、タイトル設定
-3. 初回Pull（GitHubからデータを取得） - **IndexedDBからは読み込まない**
-4. Pull成功後、URLから状態を復元（ディープリンク対応）
+3. **#158**: `executeStaleCheck()` でリモート HEAD SHA を取得し、`lastKnownCommitSha` と一致するなら IndexedDB から復元して pull をスキップ。一致しない / `null` / チェック失敗なら full pull を実行
+4. Pull成功（またはスキップパスでの復元成功）後、URLから状態を復元（ディープリンク対応）
 5. popstateイベントリスナー設定（ブラウザの戻る/進む対応）
 
 **重要な仕様:**

@@ -421,7 +421,8 @@ export interface AppActionsRegistry {
   pushToGitHub: () => Promise<void>
   pullFromGitHub: (
     isInitialStartup?: boolean,
-    onCancel?: () => void | Promise<void>
+    onCancel?: () => void | Promise<void>,
+    precomputedStale?: import('./types').StaleCheckResult
   ) => Promise<void>
   showPrompt: (
     message: string,
@@ -657,7 +658,11 @@ export const paneStateStore = {
 // App.svelte 側で定義されている関数は deps 経由で受け取る。
 
 export interface InitAppDeps {
-  pullFromGitHub: (isInitial: boolean, onCancel?: () => void | Promise<void>) => Promise<void>
+  pullFromGitHub: (
+    isInitial: boolean,
+    onCancel?: () => void | Promise<void>,
+    precomputedStale?: import('./types').StaleCheckResult
+  ) => Promise<void>
   pushToGitHub: () => Promise<void>
   restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
   handleGlobalKeyDown: (e: KeyboardEvent) => void
@@ -789,7 +794,8 @@ export function initApp(deps: InitAppDeps): () => void {
     if (isConfigured) {
       // #158: IndexedDB → state 復元のヘルパー（スキップパスとキャンセル
       // フォールバックで共通化）
-      const restoreFromIndexedDb = async (initialStartup: boolean) => {
+      // 返り値: 読み込んだノート数 + リーフ数。呼び出し元で 0 判定に使う。
+      const restoreFromIndexedDb = async (initialStartup: boolean): Promise<number> => {
         // 保留中の変更を先に IndexedDB へ保存
         await flushPendingSaves()
         // localStorage に保存されているダーティフラグを保存（後で復元するため）
@@ -810,17 +816,21 @@ export function initApp(deps: InitAppDeps): () => void {
         appState.isFirstPriorityFetched = true
         if (initialStartup) {
           appState.isRestoringFromUrl = true
-          deps.restoreStateFromUrl(true)
-          appState.isRestoringFromUrl = false
+          try {
+            deps.restoreStateFromUrl(true)
+          } finally {
+            // restoreStateFromUrl が例外を投げてもフラグが残らないようにする
+            appState.isRestoringFromUrl = false
+          }
         } else {
           deps.restoreStateFromUrl(false)
         }
+        return savedNotes.length + savedLeaves.length
       }
 
       // #158: 起動時の stale 先行チェック
-      // lastKnownCommitSha が null（初回）の場合は up_to_date 判定になっても
-      // 手元に何もないので full pull が必要。SHA が非 null かつ一致したときだけ
-      // スキップする。
+      // lastKnownCommitSha が null（初回）の場合は手元に何もないので必ず full pull。
+      // 非 null かつ remote HEAD と一致したときだけスキップする。
       const staleResult =
         lastKnownCommitSha.value !== null
           ? await executeStaleCheck(settings.value, lastKnownCommitSha.value)
@@ -832,29 +842,42 @@ export function initApp(deps: InitAppDeps): () => void {
 
       if (canSkipFullPull) {
         try {
-          await restoreFromIndexedDb(true)
-          // pull をスキップしたので以降の stale チェックで「リモート変更なし」が
-          // 正しく判定されるよう isPullCompleted を立てる
-          appState.isPullCompleted = true
+          const restoredCount = await restoreFromIndexedDb(true)
+          if (restoredCount === 0) {
+            // localStorage に SHA が残っているのに IndexedDB が空になっている
+            // 不整合ケース（クォータ圧でブラウザが IndexedDB だけ evict した、
+            // devtools で手動削除した等）。SHA が古いまま空画面を表示するより、
+            // full pull でリモートから取り直す。
+            console.warn(
+              'IndexedDB is empty despite non-null lastKnownCommitSha; falling back to full pull'
+            )
+            await deps.pullFromGitHub(true)
+          } else {
+            // pull をスキップしたので以降の stale チェックで「リモート変更なし」が
+            // 正しく判定されるよう isPullCompleted を立てる
+            appState.isPullCompleted = true
+          }
         } catch (error) {
-          console.error(
-            'Failed to restore from IndexedDB on up_to_date startup, falling back to full pull:',
-            error
-          )
+          console.error('Failed to restore from IndexedDB, falling back to full pull:', error)
           await deps.pullFromGitHub(true)
         }
       } else {
-        // 初回 Pull 実行（pullFromGitHub 内で dirty チェック、stale チェックを行う）
+        // 初回 Pull 実行（pullFromGitHub 内で dirty チェックを行う）
+        // stale チェックは既に実行済みなら pullFromGitHub に渡して再取得を省略（#158）
         // キャンセル時は IndexedDB から読み込んで操作可能にする
-        await deps.pullFromGitHub(true, async () => {
-          try {
-            await restoreFromIndexedDb(false)
-          } catch (error) {
-            console.error('Failed to load from IndexedDB:', error)
-            // 失敗した場合は Pull を実行
-            await deps.pullFromGitHub(true)
-          }
-        })
+        await deps.pullFromGitHub(
+          true,
+          async () => {
+            try {
+              await restoreFromIndexedDb(false)
+            } catch (error) {
+              console.error('Failed to load from IndexedDB:', error)
+              // 失敗した場合は Pull を実行
+              await deps.pullFromGitHub(true)
+            }
+          },
+          staleResult ?? undefined
+        )
       }
     } else {
       // 未設定の場合はウェルカムモーダルを表示

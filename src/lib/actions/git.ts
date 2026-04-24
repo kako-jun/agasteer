@@ -1,4 +1,4 @@
-import { type Note, type Leaf, buildBlobShaCache } from '../types'
+import { type Note, type Leaf, type StaleCheckResult, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
 import { showPushToast, showPullToast, confirmAsync, choiceAsync } from '../ui'
 import {
@@ -244,10 +244,17 @@ export async function pushToGitHub(): Promise<void> {
 
 /**
  * Pull処理の統合関数
+ *
+ * @param isInitialStartup - 起動時の初回 Pull か
+ * @param onCancel - Pull キャンセル時のフォールバック処理
+ * @param precomputedStale - 呼び出し元で既に実行した stale check の結果。
+ *   指定した場合は内部で再取得せずそれを使う（#158: app-state の起動時
+ *   スキップ判定で先行実行した結果を流用し、GitHub Refs API の二重呼び出しを避ける）。
  */
 export async function pullFromGitHub(
   isInitialStartup = false,
-  onCancel?: () => void | Promise<void>
+  onCancel?: () => void | Promise<void>,
+  precomputedStale?: StaleCheckResult
 ): Promise<void> {
   const $_ = get(_)
 
@@ -265,7 +272,8 @@ export async function pullFromGitHub(
     // インポート直後（ローカルはリモートと同一commitのまま、配下データだけ増えた
     // 状態）の設定クローズなど「ローカル先行」状態でも誤った stale 警告
     // が出てしまうため（#152）。
-    const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+    const staleResult =
+      precomputedStale ?? (await executeStaleCheck(settings.value, lastKnownCommitSha.value))
 
     // リモートに変更なし & Pull完了済み → 実Pullは走らないので dirty 警告も不要
     if (staleResult.status === 'up_to_date' && appState.isPullCompleted) {

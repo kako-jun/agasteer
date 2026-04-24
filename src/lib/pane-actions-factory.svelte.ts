@@ -281,9 +281,10 @@ export async function pushToGitHub() {
 
 export async function pullFromGitHub(
   isInitialStartup = false,
-  onCancel?: () => void | Promise<void>
+  onCancel?: () => void | Promise<void>,
+  precomputedStale?: import('./types').StaleCheckResult
 ) {
-  return pullFromGitHubAction(isInitialStartup, onCancel)
+  return pullFromGitHubAction(isInitialStartup, onCancel, precomputedStale)
 }
 
 export async function exportNotesAsZip() {
