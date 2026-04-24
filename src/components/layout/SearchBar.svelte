@@ -343,6 +343,10 @@
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   }
 
+  .result-row.dual {
+    border-bottom-color: transparent;
+  }
+
   .result-row:last-child {
     border-bottom: none;
   }
@@ -380,13 +384,14 @@
     width: 50%;
     height: 100%;
     border: none;
+    border-radius: 0;
     padding: 0;
     cursor: pointer;
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
   }
 
   .result-item-right:hover {
-    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .result-item-left:hover {
