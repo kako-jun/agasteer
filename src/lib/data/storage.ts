@@ -792,11 +792,24 @@ function getAllFromStore<T>(db: IDBDatabase, storeName: string): Promise<T[]> {
   })
 }
 
+/**
+ * IndexedDB put に渡す前に Svelte 5 の $state proxy を剥がす。
+ * proxy のまま store.put() に渡すと structuredClone が内部シンボルを
+ * 辿ってしまい DataCloneError: #<Object> could not be cloned が出る。
+ * Note/Leaf/Settings 等の保存データは JSON セーフな素データなので、
+ * JSON ラウンドトリップで安全にプレーン化できる（undefined フィールド
+ * は落ちるがスキーマ上問題なし）。
+ */
+function toPlain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 function replaceAllInStore<T extends { id: string }>(
   db: IDBDatabase,
   storeName: string,
   items: T[]
 ): Promise<void> {
+  const plainItems = toPlain(items)
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')
     const store = tx.objectStore(storeName)
@@ -807,7 +820,7 @@ function replaceAllInStore<T extends { id: string }>(
 
     const clearReq = store.clear()
     clearReq.onsuccess = () => {
-      for (const item of items) {
+      for (const item of plainItems) {
         store.put(item)
       }
     }
@@ -955,8 +968,9 @@ async function putItemRepo<T>(storeName: string, item: T): Promise<void> {
   const db = await getCurrentDb()
   const tx = db.transaction(storeName, 'readwrite')
   const store = tx.objectStore(storeName)
+  const plainItem = toPlain(item)
   await new Promise<void>((resolve, reject) => {
-    const request = store.put(item)
+    const request = store.put(plainItem)
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error)
   })
@@ -983,8 +997,9 @@ async function putItemShared<T>(storeName: string, item: T): Promise<void> {
   const db = await openSharedDB()
   const tx = db.transaction(storeName, 'readwrite')
   const store = tx.objectStore(storeName)
+  const plainItem = toPlain(item)
   await new Promise<void>((resolve, reject) => {
-    const request = store.put(item)
+    const request = store.put(plainItem)
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error)
   })
