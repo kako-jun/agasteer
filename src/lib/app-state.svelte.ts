@@ -6,7 +6,7 @@
  * Phase 4: onMount ロジックを initApp() に抽出。
  */
 
-import type { Note, Leaf, Breadcrumb, WorldType } from './types'
+import type { Note, Leaf, Breadcrumb, WorldType, StaleCheckResult } from './types'
 import type { Pane } from './navigation'
 import type { LeafSkeleton } from './api'
 import type { ModalPosition } from './ui'
@@ -78,12 +78,15 @@ import {
   loadNotes,
   loadLeaves,
   loadOfflineLeaf,
+  getPersistedLastPulledPushCount,
+  getPersistedMetadata,
   shouldShowPwaInstallBanner,
   setPushInFlightAt,
   getPushInFlightAt,
   setCurrentRepo,
   syncRepoNameCache,
 } from './data'
+import { shouldUseStartupCache, type PersistedStartupCache } from './startup-cache'
 import {
   applyTheme,
   loadAndApplyCustomFont,
@@ -421,7 +424,8 @@ export interface AppActionsRegistry {
   pushToGitHub: () => Promise<void>
   pullFromGitHub: (
     isInitialStartup?: boolean,
-    onCancel?: () => void | Promise<void>
+    onCancel?: () => void | Promise<void>,
+    precomputedStale?: StaleCheckResult
   ) => Promise<void>
   showPrompt: (
     message: string,
@@ -657,7 +661,11 @@ export const paneStateStore = {
 // App.svelte 側で定義されている関数は deps 経由で受け取る。
 
 export interface InitAppDeps {
-  pullFromGitHub: (isInitial: boolean, onCancel?: () => void | Promise<void>) => Promise<void>
+  pullFromGitHub: (
+    isInitial: boolean,
+    onCancel?: () => void | Promise<void>,
+    precomputedStale?: StaleCheckResult
+  ) => Promise<void>
   pushToGitHub: () => Promise<void>
   restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
   handleGlobalKeyDown: (e: KeyboardEvent) => void
@@ -675,7 +683,9 @@ export function initApp(deps: InitAppDeps): () => void {
   )
 
   // ストア副作用の初期化（isDirty → LocalStorage永続化など）
-  const cleanupStoreEffects = initStoreEffects()
+  // #158: 起動時の skip 判定前に有効化すると、旧バージョン由来で未保存だった
+  // metadata / pushCount のデフォルト値を書き戻してしまうため、初期復元後まで遅延する。
+  let cleanupStoreEffects = () => {}
 
   // ユーザーアクティビティ検知を初期化（自動保存のデバウンス用）
   const cleanupActivityDetection = initActivityDetection()
@@ -770,10 +780,16 @@ export function initApp(deps: InitAppDeps): () => void {
       })
     }
 
-    // 初回Pull（GitHubから最新データを取得）
-    // 重要: IndexedDBからは読み込まない
-    // Pull成功時にIndexedDBは全削除→全作成される
-    // Pull成功後、URLから状態を復元（handlePull内で実行）
+    // 初回起動時のデータ復元。
+    //
+    // #158: リモート HEAD の SHA が lastKnownCommitSha と一致するなら
+    // full pull を省略して IndexedDB から復元する（= アプリのバージョンが
+    // 変わっただけでリロードされた場合に、GitHub への全リーフ再取得を
+    // 避ける）。SHA が異なるか、まだ一度も同期していない（SHA=null）
+    // 場合、またはチェックに失敗した場合は従来通り full pull。
+    //
+    // Pull 成功時は IndexedDB 全削除→全作成される（GitHub が唯一の真実）。
+    // キャンセル時は IndexedDB から読み込んで操作可能にする。
 
     // PWA更新チェック完了を待つ（更新があればリロードされる）
     await waitForSwCheck
@@ -781,39 +797,127 @@ export function initApp(deps: InitAppDeps): () => void {
     // GitHub設定チェック
     const isConfigured = loadedSettings.token && loadedSettings.repoName
     if (isConfigured) {
-      // 初回Pull実行（pullFromGitHub内でdirtyチェック、staleチェックを行う）
-      // キャンセル時はIndexedDBから読み込んで操作可能にする
-      await deps.pullFromGitHub(true, async () => {
-        try {
-          // 保留中の変更を先にIndexedDBへ保存
-          await flushPendingSaves()
-          // localStorage に保存されているダーティフラグを保存（後で復元するため）
-          const wasDirty = getPersistedDirtyFlag()
-          const savedNotes = await loadNotes()
-          const savedLeaves = await loadLeaves()
-          notes.value = savedNotes
-          leaves.value = savedLeaves
-          // IndexedDBのデータをベースラインとして記録（dirty誤検出を防止）
-          setLastPushedSnapshot(savedNotes, savedLeaves, [], [])
-          // ベースラインとローカルが同じなのでダーティをクリア
+      // #158: IndexedDB / localStorage に保持したキャッシュをロードする。
+      // notes / leaves は IndexedDB、metadata / pushCount / dirty は per-repo
+      // localStorage slot から復元する。
+      const loadPersistedStartupCache = async (): Promise<PersistedStartupCache> => {
+        // 保留中の変更を先に IndexedDB へ保存
+        await flushPendingSaves()
+        return {
+          wasDirty: getPersistedDirtyFlag(),
+          notes: await loadNotes(),
+          leaves: await loadLeaves(),
+          metadata: getPersistedMetadata(),
+          lastPulledPushCount: getPersistedLastPulledPushCount(),
+        }
+      }
+
+      // ロード済みキャッシュを state に反映する。
+      // adoptAsBaseline=true: clean cache とみなし snapshot/dirty を更新
+      // adoptAsBaseline=false: dirty cache をそのまま開く（最低限 global dirty を維持）
+      const applyPersistedStartupCache = async (
+        cache: PersistedStartupCache,
+        initialStartup: boolean,
+        adoptAsBaseline: boolean
+      ): Promise<number> => {
+        notes.value = cache.notes
+        leaves.value = cache.leaves
+        if (cache.metadata) {
+          metadata.value = cache.metadata
+        }
+        if (cache.lastPulledPushCount !== null) {
+          lastPulledPushCount.value = cache.lastPulledPushCount
+        }
+        if (adoptAsBaseline) {
+          setLastPushedSnapshot(cache.notes, cache.leaves, [], [])
           clearAllChanges()
-          // リーフのisDirtyでは検出できない構造変更があった場合、isStructureDirtyを復元
-          if (wasDirty) {
-            isStructureDirty.value = true
+        } else if (cache.wasDirty) {
+          // 起動時 confirm をキャンセルした dirty cache は、差分の詳細までは
+          // 再構築できないため少なくとも全体 dirty を維持する。
+          isStructureDirty.value = true
+        }
+        appState.isFirstPriorityFetched = true
+        if (initialStartup) {
+          appState.isRestoringFromUrl = true
+          try {
+            await deps.restoreStateFromUrl(true)
+          } finally {
+            // restoreStateFromUrl が例外を投げてもフラグが残らないようにする
+            appState.isRestoringFromUrl = false
           }
-          appState.isFirstPriorityFetched = true
-          deps.restoreStateFromUrl(false)
+        } else {
+          await deps.restoreStateFromUrl(false)
+        }
+        return cache.notes.length + cache.leaves.length
+      }
+
+      // #158: 起動時の stale 先行チェック
+      // lastKnownCommitSha が null（初回）の場合は手元に何もないので必ず full pull。
+      // 非 null かつ remote HEAD と一致したときだけスキップする。
+      const staleResult =
+        lastKnownCommitSha.value !== null
+          ? await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+          : null
+      const persistedCache = await loadPersistedStartupCache()
+      const canSkipFullPull = shouldUseStartupCache({
+        lastKnownCommitSha: lastKnownCommitSha.value,
+        staleResult,
+        cache: persistedCache,
+      })
+
+      if (canSkipFullPull) {
+        try {
+          const restoredCount = await applyPersistedStartupCache(persistedCache, true, true)
+          if (restoredCount === 0) {
+            // localStorage に SHA が残っているのに IndexedDB が空。
+            // 2 つの可能性がある:
+            //   (a) 本当に空リポ（リーフ 0 件で push 済みの状態）
+            //   (b) ブラウザが IndexedDB だけ evict した / devtools で手動削除した
+            //       等の不整合ケース
+            // SHA だけで両者を区別できないため、安全側に倒して full pull する。
+            // (a) の場合はリモートも 0 件なので軽量（tree API 1 回 + 空応答）。
+            // ノートが 1 つでも入っていれば次回起動からは skip パスに戻る。
+            const shaPrefix = lastKnownCommitSha.value?.slice(0, 7) ?? '<null>'
+            console.warn(
+              `IndexedDB empty despite lastKnownCommitSha=${shaPrefix}; falling back to full pull ` +
+                '(either truly empty repo, or local DB was evicted)'
+            )
+            await deps.pullFromGitHub(true)
+          } else {
+            // pull をスキップしたので以降の stale チェックで「リモート変更なし」が
+            // 正しく判定されるよう isPullCompleted を立てる
+            appState.isPullCompleted = true
+          }
         } catch (error) {
-          console.error('Failed to load from IndexedDB:', error)
-          // 失敗した場合はPullを実行
+          console.error('Failed to restore from IndexedDB, falling back to full pull:', error)
           await deps.pullFromGitHub(true)
         }
-      })
+      } else {
+        // 初回 Pull 実行（pullFromGitHub 内で dirty チェックを行う）
+        // stale チェックは既に実行済みなら pullFromGitHub に渡して再取得を省略（#158）
+        // キャンセル時は IndexedDB から読み込んで操作可能にする
+        await deps.pullFromGitHub(
+          true,
+          async () => {
+            try {
+              await applyPersistedStartupCache(persistedCache, false, !persistedCache.wasDirty)
+            } catch (error) {
+              console.error('Failed to load from IndexedDB:', error)
+              // 失敗した場合は Pull を実行
+              await deps.pullFromGitHub(true)
+            }
+          },
+          staleResult ?? undefined
+        )
+      }
     } else {
       // 未設定の場合はウェルカムモーダルを表示
       appState.showWelcome = true
       // GitHub設定が未完了の間は操作をロックしたまま
     }
+
+    // 初期復元が終わってから per-repo 永続化の副作用を有効化する。
+    cleanupStoreEffects = initStoreEffects()
 
     // Stale定期チェッカーを開始（5分ごと、前回Pullから5分経過後にチェック）
     startStaleChecker()

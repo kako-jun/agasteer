@@ -243,4 +243,14 @@ describe('pullFromGitHub dirty-check order (#152)', () => {
     expect(mocks.choiceAsync).toHaveBeenCalled()
     expect(mocks.executePull).not.toHaveBeenCalled()
   })
+
+  it('reuses precomputedStale and does not execute a second stale check', async () => {
+    appState.isPullCompleted = false
+    mocks.confirmAsync.mockResolvedValue(false)
+
+    await pullFromGitHub(true, undefined, { status: 'up_to_date' })
+
+    expect(mocks.executeStaleCheck).not.toHaveBeenCalled()
+    expect(mocks.confirmAsync).toHaveBeenCalledWith('modal.unsavedChangesOnStartup')
+  })
 })
