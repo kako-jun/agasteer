@@ -358,8 +358,25 @@ export async function moveLeafToWorld(
 ): Promise<void> {
   const $_ = get(_)
 
+  // [#142] エントリ時の状態を記録（パンくずが world 切替に追従しない問題の診断用）
+  console.debug('[#142] moveLeafToWorld entry', {
+    leafId: leaf.id,
+    leafTitle: leaf.title,
+    targetWorld,
+    pane,
+    leftWorld: leftWorld.value,
+    rightWorld: rightWorld.value,
+    leftLeafId: leftLeaf.value?.id ?? null,
+    rightLeafId: rightLeaf.value?.id ?? null,
+    leftNoteId: leftNote.value?.id ?? null,
+    rightNoteId: rightNote.value?.id ?? null,
+  })
+
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
+  if (isPulling.value || isPushing.value || appState.isArchiveLoading) {
+    console.debug('[#142] moveLeafToWorld blocked (syncing)')
+    return
+  }
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
@@ -574,6 +591,20 @@ export async function moveLeafToWorld(
     const paneWorld = paneToCheck === 'left' ? leftWorld.value : rightWorld.value
     const leafMatches = currentLeaf?.id === leaf.id
     const noteMatches = paneWorld === sourceWorld && currentNote?.id === sourceNote.id
+    // [#142] 追従判定の入出力を記録
+    console.debug('[#142] followPane decision', {
+      paneToCheck,
+      paneWorld,
+      sourceWorld,
+      currentLeafId: currentLeaf?.id ?? null,
+      currentNoteId: currentNote?.id ?? null,
+      sourceNoteId: sourceNote.id,
+      leafMatches,
+      noteMatches,
+      willFollow: leafMatches || noteMatches,
+      targetWorld,
+      resolvedTargetNoteId: resolvedTargetNote.id,
+    })
     if (!leafMatches && !noteMatches) return
     if (paneToCheck === 'left') {
       leftNote.value = resolvedTargetNote
@@ -586,6 +617,12 @@ export async function moveLeafToWorld(
       rightView.value = leafMatches ? rightView.value : 'note'
       rightWorld.value = targetWorld
     }
+    // [#142] 書き込み後の world 値を確認
+    console.debug('[#142] followPane after write', {
+      paneToCheck,
+      leftWorld: leftWorld.value,
+      rightWorld: rightWorld.value,
+    })
   }
   followPane('left')
   followPane('right')
