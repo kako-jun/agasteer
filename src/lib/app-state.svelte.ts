@@ -683,7 +683,9 @@ export function initApp(deps: InitAppDeps): () => void {
   )
 
   // ストア副作用の初期化（isDirty → LocalStorage永続化など）
-  const cleanupStoreEffects = initStoreEffects()
+  // #158: 起動時の skip 判定前に有効化すると、旧バージョン由来で未保存だった
+  // metadata / pushCount のデフォルト値を書き戻してしまうため、初期復元後まで遅延する。
+  let cleanupStoreEffects = () => {}
 
   // ユーザーアクティビティ検知を初期化（自動保存のデバウンス用）
   const cleanupActivityDetection = initActivityDetection()
@@ -913,6 +915,9 @@ export function initApp(deps: InitAppDeps): () => void {
       appState.showWelcome = true
       // GitHub設定が未完了の間は操作をロックしたまま
     }
+
+    // 初期復元が終わってから per-repo 永続化の副作用を有効化する。
+    cleanupStoreEffects = initStoreEffects()
 
     // Stale定期チェッカーを開始（5分ごと、前回Pullから5分経過後にチェック）
     startStaleChecker()

@@ -385,6 +385,14 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
   const repoChanged = payload.repoName !== undefined && payload.repoName !== settings.value.repoName
   const tokenChanged = payload.token !== undefined && payload.token !== settings.value.token
   const next = { ...settings.value, ...payload }
+  if (repoChanged) {
+    repoChangedInSettings = true
+    appState.isPullCompleted = false
+    appState.isFirstPriorityFetched = false
+    appState.repoChangePending = true
+    resetForRepoSwitch()
+  }
+
   updateSettings(next)
   if (payload.theme) {
     applyTheme(payload.theme, next)
@@ -392,12 +400,8 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
   if (payload.toolName) {
     document.title = payload.toolName
   }
+
   if (repoChanged) {
-    repoChangedInSettings = true
-    appState.isPullCompleted = false
-    appState.isFirstPriorityFetched = false
-    appState.repoChangePending = true
-    resetForRepoSwitch()
     archiveLeafStatsStore.reset()
     // #131: 新リポの IndexedDB に切り替えてキャッシュ済みリーフをロード
     // （キャッシュがあれば Pull 完了前でも表示可能。なければ空のまま Pull を待つ）
