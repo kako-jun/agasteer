@@ -7,6 +7,9 @@
     supportedLabel?: string
   }
 
+  // supportedLabel は親から settings.importExport.supported の文字列が渡される。
+  // SimpleNote / Google Keep / Cosense 等のソースが追加された場合、i18n 側の文字列を
+  // 更新するだけでこのコンポーネント自体は変更不要。
   let { onImport, importing = false, supportedLabel = '' }: Props = $props()
 </script>
 
