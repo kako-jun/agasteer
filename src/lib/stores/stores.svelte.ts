@@ -14,12 +14,17 @@ import {
   getPersistedCommitSha,
   setPersistedCommitSha,
   clearArchiveData,
+  setCurrentRepo,
+  closeCurrentRepoDb,
+  loadLeaves,
+  loadNotes,
 } from '../data/storage'
 import {
   scheduleLeavesSave,
   scheduleNotesSave,
   scheduleArchiveLeavesSave,
   scheduleArchiveNotesSave,
+  flushPendingSaves,
 } from './auto-save.svelte'
 
 // ============================================
@@ -800,4 +805,62 @@ export function resetForRepoSwitch(): void {
   rightLeaf.value = null
   leftView.value = 'home'
   rightView.value = 'home'
+}
+
+/**
+ * 指定リポの IndexedDB に切り替え、キャッシュ済みのノート/リーフを
+ * Svelte ストアへロードする（#131）。
+ *
+ * - 切り替え前に保留中の保存を flush する
+ * - 新リポの per-repo DB を open し、ノート/リーフ/アーカイブをロード
+ * - ロード結果を「最後にPushしたスナップショット」として扱い、ダーティ判定の基準にする
+ * - 新リポの lastKnownCommitSha を localStorage から復元する
+ *
+ * 初回（キャッシュなし）の場合はストアが空のままになり、
+ * 既存の Pull ロジックが commitSha=null を見て初回 Pull を実行する。
+ */
+export async function rehydrateForRepo(repoKey: string): Promise<void> {
+  // 旧リポの保留保存を先に flush（データ損失防止）
+  try {
+    await flushPendingSaves()
+  } catch (error) {
+    console.error('Failed to flush pending saves before repo switch:', error)
+  }
+
+  // 旧リポのインメモリをクリア（視覚的な残留を防ぐ）
+  notes.value = []
+  leaves.value = []
+  archiveNotes.value = []
+  archiveLeaves.value = []
+
+  // 新リポの DB に切り替え
+  try {
+    await setCurrentRepo(repoKey)
+  } catch (error) {
+    console.error('Failed to open per-repo DB:', error)
+    // 失敗時は何もしない（Pull が走れば復旧する）
+    closeCurrentRepoDb()
+    return
+  }
+
+  // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
+  // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
+  try {
+    const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
+    notes.value = loadedNotes
+    leaves.value = loadedLeaves
+    // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
+    setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
+    clearAllChanges()
+  } catch (error) {
+    console.error('Failed to load cached data for new repo:', error)
+  }
+
+  // lastKnownCommitSha を新リポの localStorage スロットから復元
+  // （setPersistedCommitSha は $effect で自動追従するため、ここで直接セットする）
+  lastKnownCommitSha.value = getPersistedCommitSha()
+  isStale.value = false
+  lastPushTime.value = 0
+  lastStaleCheckTime.value = 0
+  lastPulledPushCount.value = 0
 }
