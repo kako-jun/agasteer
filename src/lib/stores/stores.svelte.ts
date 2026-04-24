@@ -366,16 +366,29 @@ export const isDirty = {
   },
 }
 
+// リポジトリ切替中は in-memory への一時的な代入が localStorage に
+// 書き戻されないようにするためのガード。rehydrateForRepo が true/false
+// をセットする。読み取り時はリアクティブ依存を作らないよう素の変数を使う。
+let isRehydrating = false
+
+export function setRehydrating(v: boolean): void {
+  isRehydrating = v
+}
+
 // LocalStorage永続化のための副作用初期化
 export function initStoreEffects(): () => void {
   return $effect.root(() => {
     // isDirty → LocalStorage永続化
     $effect(() => {
-      setPersistedDirtyFlag(isDirty.value)
+      const value = isDirty.value
+      if (isRehydrating) return
+      setPersistedDirtyFlag(value)
     })
     // lastKnownCommitSha → LocalStorage永続化
     $effect(() => {
-      setPersistedCommitSha(lastKnownCommitSha.value)
+      const value = lastKnownCommitSha.value
+      if (isRehydrating) return
+      setPersistedCommitSha(value)
     })
   })
 }
@@ -783,7 +796,9 @@ export function resetForRepoSwitch(): void {
   clearAllChanges()
 
   // Git参照をクリア（旧リポのSHAで誤判定しないように）
-  lastKnownCommitSha.value = null
+  // lastKnownCommitSha は per-repo slot から rehydrateForRepo で復元するため、
+  // ここでは触らない（null で上書きすると新リポ slot に null が書き込まれて
+  // 復元できなくなる — stores.svelte.ts の $effect が検知してしまう）。
   lastPulledPushCount.value = 0
   isStale.value = false
   lastPushTime.value = 0
@@ -820,47 +835,56 @@ export function resetForRepoSwitch(): void {
  * 既存の Pull ロジックが commitSha=null を見て初回 Pull を実行する。
  */
 export async function rehydrateForRepo(repoKey: string): Promise<void> {
-  // 旧リポの保留保存を先に flush（データ損失防止）
+  // rehydrate 実行中は、ストアへの一時的な代入（null リセット等）が
+  // localStorage の新リポ slot に書き戻されないようガードする。
+  setRehydrating(true)
   try {
-    await flushPendingSaves()
-  } catch (error) {
-    console.error('Failed to flush pending saves before repo switch:', error)
+    // 旧リポの保留保存を先に flush（データ損失防止）
+    try {
+      await flushPendingSaves()
+    } catch (error) {
+      console.error('Failed to flush pending saves before repo switch:', error)
+    }
+
+    // 旧リポのインメモリをクリア（視覚的な残留を防ぐ）
+    notes.value = []
+    leaves.value = []
+    archiveNotes.value = []
+    archiveLeaves.value = []
+
+    // 新リポの DB に切り替え
+    try {
+      await setCurrentRepo(repoKey)
+    } catch (error) {
+      console.error('Failed to open per-repo DB:', error)
+      // 失敗時は何もしない（Pull が走れば復旧する）
+      closeCurrentRepoDb()
+      return
+    }
+
+    // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
+    // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
+    try {
+      const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
+      notes.value = loadedNotes
+      leaves.value = loadedLeaves
+      // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
+      setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
+      clearAllChanges()
+    } catch (error) {
+      console.error('Failed to load cached data for new repo:', error)
+    }
+
+    // lastKnownCommitSha を新リポの localStorage スロットから復元
+    // （この代入は $effect を発火させるが、isRehydrating ガードで
+    // setPersistedCommitSha への書き込みはスキップされる）
+    lastKnownCommitSha.value = getPersistedCommitSha()
+    isStale.value = false
+    lastPushTime.value = 0
+    lastStaleCheckTime.value = 0
+    lastPulledPushCount.value = 0
+  } finally {
+    // ガードを解除。以降の変更は通常通り per-repo slot に永続化される。
+    setRehydrating(false)
   }
-
-  // 旧リポのインメモリをクリア（視覚的な残留を防ぐ）
-  notes.value = []
-  leaves.value = []
-  archiveNotes.value = []
-  archiveLeaves.value = []
-
-  // 新リポの DB に切り替え
-  try {
-    await setCurrentRepo(repoKey)
-  } catch (error) {
-    console.error('Failed to open per-repo DB:', error)
-    // 失敗時は何もしない（Pull が走れば復旧する）
-    closeCurrentRepoDb()
-    return
-  }
-
-  // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
-  // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
-  try {
-    const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
-    notes.value = loadedNotes
-    leaves.value = loadedLeaves
-    // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
-    setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
-    clearAllChanges()
-  } catch (error) {
-    console.error('Failed to load cached data for new repo:', error)
-  }
-
-  // lastKnownCommitSha を新リポの localStorage スロットから復元
-  // （setPersistedCommitSha は $effect で自動追従するため、ここで直接セットする）
-  lastKnownCommitSha.value = getPersistedCommitSha()
-  isStale.value = false
-  lastPushTime.value = 0
-  lastStaleCheckTime.value = 0
-  lastPulledPushCount.value = 0
 }
