@@ -40,7 +40,7 @@
 
 **A:** はい、2つの方法があります。
 
-1. **インポート機能**: 設定画面から Agasteer形式（ZIP）またはSimpleNote形式（JSON）をインポート
+1. **インポート機能**: 設定画面から Agasteer形式（ZIP）、SimpleNote形式（JSON）、Google Keep形式（Takeout ZIP / JSON）、Cosense (Scrapbox) 形式（JSON）をインポート
 2. **手動配置**: GitHub上の `.agasteer/notes/` にMarkdownファイルを配置し、Pullを実行
 
 ### Q: データのバックアップは必要ですか？

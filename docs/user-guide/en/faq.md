@@ -40,7 +40,7 @@
 
 **A:** Yes, there are 2 ways:
 
-1. **Import feature**: Import Agasteer format (ZIP) or SimpleNote format (JSON) from the settings screen
+1. **Import feature**: Import Agasteer format (ZIP), SimpleNote format (JSON), Google Keep format (Takeout ZIP / JSON), or Cosense (Scrapbox) format (JSON) from the settings screen
 2. **Manual placement**: Place Markdown files in `.agasteer/notes/` on GitHub and perform a Pull
 
 ### Q: Do I need to backup my data?

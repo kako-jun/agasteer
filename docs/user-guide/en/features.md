@@ -23,7 +23,7 @@
 ## Data Management
 
 - **[Archive](./features/archive.md)** - Store unused notes/leaves in a separate location
-- **[Import/Export](./features/import-export.md)** - ZIP backup, migration from other apps
+- **[Import/Export](./features/import-export.md)** - ZIP backup, migration from other apps (SimpleNote / Google Keep / Cosense (Scrapbox))
 
 ## App
 
