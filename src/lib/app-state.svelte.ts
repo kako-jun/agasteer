@@ -82,6 +82,7 @@ import {
   setPushInFlightAt,
   getPushInFlightAt,
   setCurrentRepo,
+  syncRepoNameCache,
 } from './data'
 import {
   applyTheme,
@@ -714,6 +715,8 @@ export function initApp(deps: InitAppDeps): () => void {
   ;(async () => {
     const loadedSettings = await loadSettings()
     Object.assign(settings.value, loadedSettings)
+    // Object.assign は saveStorageData を経由しないため、cachedRepoName を明示同期する
+    syncRepoNameCache(loadedSettings.repoName)
 
     // #131: 設定済みのリポがあれば per-repo DB を先にオープン（以降の loadNotes/loadLeaves 等が使う）
     // 遅延オープンにするとホーム画面の初期表示でノート/リーフ一覧を出す前に

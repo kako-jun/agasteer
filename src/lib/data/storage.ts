@@ -125,6 +125,15 @@ function updateRepoNameCache(repoName: string | null | undefined): void {
 }
 
 /**
+ * settings.value を loadStorageData/saveStorageData を経由せずに直接代入した場合
+ * （例: 起動時の Object.assign(settings.value, loadedSettings)）に呼び、
+ * cachedRepoName が stale にならないようにするための外部入口。
+ */
+export function syncRepoNameCache(repoName: string | null | undefined): void {
+  updateRepoNameCache(repoName)
+}
+
+/**
  * LocalStorage全体を読み込む
  */
 function loadStorageData(): StorageData {
