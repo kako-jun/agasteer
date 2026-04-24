@@ -496,16 +496,15 @@ function isCosenseExport(obj: unknown): obj is CosenseExport {
  * - hasCodeBlock: 行頭 `code:filename` を検出
  * - hasTable: 行頭 `table:name` を検出
  */
-export function convertCosenseNotation(
-  text: string,
-  flags: {
-    hasExternalImage: boolean
-    hasDecoration?: boolean
-    hasMathBlock?: boolean
-    hasCodeBlock?: boolean
-    hasTable?: boolean
-  }
-): string {
+export interface CosenseConversionFlags {
+  hasExternalImage: boolean
+  hasDecoration?: boolean
+  hasMathBlock?: boolean
+  hasCodeBlock?: boolean
+  hasTable?: boolean
+}
+
+export function convertCosenseNotation(text: string, flags: CosenseConversionFlags): string {
   const lines = text.split('\n')
   const converted = lines.map((line) => {
     const indentMatch = line.match(/^[ \t]*/)
@@ -540,8 +539,7 @@ export function convertCosenseNotation(
       }
 
       // 末尾句読点を URL から剥がす（Keep パーサーと同じ扱い）
-      let url = parts[urlIdx]
-      url = url.replace(/[.,;:!?]+$/, '')
+      const url = parts[urlIdx].replace(/[.,;:!?]+$/, '')
       const others = parts.filter((_, i) => i !== urlIdx)
 
       if (others.length === 0) {
@@ -577,13 +575,7 @@ async function parseCosenseJson(buffer: ArrayBuffer): Promise<ImportParseResult 
     const errors: string[] = []
     const sanitizedTitles: string[] = []
     const unsupportedCollector = new Set<string>()
-    const conversionFlags: {
-      hasExternalImage: boolean
-      hasDecoration?: boolean
-      hasMathBlock?: boolean
-      hasCodeBlock?: boolean
-      hasTable?: boolean
-    } = { hasExternalImage: false }
+    const conversionFlags: CosenseConversionFlags = { hasExternalImage: false }
     let hasThumbnail = false
     let hasViews = false
     let skippedCount = 0
