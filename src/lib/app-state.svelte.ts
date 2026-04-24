@@ -81,6 +81,7 @@ import {
   shouldShowPwaInstallBanner,
   setPushInFlightAt,
   getPushInFlightAt,
+  setCurrentRepo,
 } from './data'
 import {
   applyTheme,
@@ -704,6 +705,15 @@ export function initApp(deps: InitAppDeps): () => void {
   ;(async () => {
     const loadedSettings = await loadSettings()
     Object.assign(settings.value, loadedSettings)
+
+    // #131: 設定済みのリポがあれば per-repo DB を先にオープン（以降の loadNotes/loadLeaves 等が使う）
+    if (loadedSettings.repoName) {
+      try {
+        await setCurrentRepo(loadedSettings.repoName)
+      } catch (error) {
+        console.error('Failed to open per-repo DB on startup:', error)
+      }
+    }
 
     // i18n初期化（翻訳読み込み完了を待機）
     await initI18n(loadedSettings.locale)

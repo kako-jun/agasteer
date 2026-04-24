@@ -37,6 +37,7 @@ import {
   archiveLeaves,
   getDialogPositionForPane,
   resetForRepoSwitch,
+  rehydrateForRepo,
   isStructureDirty,
 } from './stores'
 import {
@@ -397,6 +398,13 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     appState.repoChangePending = true
     resetForRepoSwitch()
     archiveLeafStatsStore.reset()
+    // #131: 新リポの IndexedDB に切り替えてキャッシュ済みリーフをロード
+    // （キャッシュがあれば Pull 完了前でも表示可能。なければ空のまま Pull を待つ）
+    if (payload.repoName) {
+      rehydrateForRepo(payload.repoName).catch((error) => {
+        console.error('Failed to rehydrate stores for new repo:', error)
+      })
+    }
   }
   if (repoChanged || tokenChanged) {
     githubSettingsChangedInSettings = true
