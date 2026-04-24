@@ -15,13 +15,15 @@
   } from '../../lib/utils'
   import { isArchiveLoaded } from '../../lib/stores'
   import type { SearchMatch } from '../../lib/types'
+  import type { Pane } from '../../lib/navigation'
 
   // マッチタイプに応じたジャンプ処理
   interface Props {
-    onResultClick: (result: SearchMatch) => void
+    onResultClick: (result: SearchMatch, pane?: Pane) => void
+    isDualPane?: boolean
   }
 
-  let { onResultClick }: Props = $props()
+  let { onResultClick, isDualPane = false }: Props = $props()
 
   let inputElement: HTMLInputElement | undefined = $state(undefined)
   let containerElement: HTMLDivElement | undefined = $state(undefined)
@@ -66,8 +68,8 @@
     inputElement?.focus()
   }
 
-  function handleResultClick(result: SearchMatch) {
-    onResultClick(result)
+  function handleResultClick(result: SearchMatch, pane: Pane = 'left') {
+    onResultClick(result, pane)
     // 検索結果は閉じずに開いたままにする
   }
 
@@ -172,21 +174,35 @@
       <div class="search-results" role="listbox">
         {#if searchResults.value.length > 0}
           {#each searchResults.value as result, index}
-            <button
-              class="result-item"
+            <div
+              class="result-row"
               class:selected={index === selectedResultIndex.value}
+              class:dual={isDualPane}
               role="option"
               aria-selected={index === selectedResultIndex.value}
-              onclick={() => handleResultClick(result)}
-              onmouseenter={() => (selectedResultIndex.value = index)}
             >
-              <div class="result-path">{result.path}</div>
-              <div class="result-snippet">
-                {result.snippet.slice(0, result.matchStart)}<mark
-                  >{result.snippet.slice(result.matchStart, result.matchEnd)}</mark
-                >{result.snippet.slice(result.matchEnd)}
-              </div>
-            </button>
+              <button
+                class="result-item result-item-left"
+                onclick={() => handleResultClick(result, 'left')}
+                onmouseenter={() => (selectedResultIndex.value = index)}
+                aria-label={$_('search.openInLeftPane')}
+              >
+                <div class="result-path">{result.path}</div>
+                <div class="result-snippet">
+                  {result.snippet.slice(0, result.matchStart)}<mark
+                    >{result.snippet.slice(result.matchStart, result.matchEnd)}</mark
+                  >{result.snippet.slice(result.matchEnd)}
+                </div>
+              </button>
+              {#if isDualPane}
+                <button
+                  class="result-item result-item-right"
+                  onclick={() => handleResultClick(result, 'right')}
+                  onmouseenter={() => (selectedResultIndex.value = index)}
+                  aria-label={$_('search.openInRightPane')}
+                ></button>
+              {/if}
+            </div>
           {/each}
         {:else}
           <div class="no-results">
@@ -321,33 +337,64 @@
     border-top-color: rgba(255, 255, 255, 0.05);
   }
 
+  .result-row {
+    display: flex;
+    width: 100%;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .result-row:last-child {
+    border-bottom: none;
+  }
+
+  .result-row.selected {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  :global([data-theme='greenboard']) .result-row.selected,
+  :global([data-theme='dotsD']) .result-row.selected,
+  :global([data-theme='dotsF']) .result-row.selected {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
   .result-item {
     display: block;
-    width: 100%;
     padding: 0.75rem 1rem;
     border: none;
     background: none;
     text-align: left;
     cursor: pointer;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     color: var(--text);
   }
 
-  .result-item:last-child {
-    border-bottom: none;
+  .result-item-left {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
-  .result-item:hover,
-  .result-item.selected {
+  .result-row.dual .result-item-left {
+    flex: 0 0 60%;
+    width: 60%;
+  }
+
+  .result-item-right {
+    flex: 0 0 40%;
+    width: 40%;
+    align-self: stretch;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  .result-item-right:hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .result-item-left:hover {
     background: rgba(0, 0, 0, 0.05);
   }
 
-  :global([data-theme='greenboard']) .result-item:hover,
-  :global([data-theme='greenboard']) .result-item.selected,
-  :global([data-theme='dotsD']) .result-item:hover,
-  :global([data-theme='dotsD']) .result-item.selected,
-  :global([data-theme='dotsF']) .result-item:hover,
-  :global([data-theme='dotsF']) .result-item.selected {
+  :global([data-theme='greenboard']) .result-item-left:hover,
+  :global([data-theme='dotsD']) .result-item-left:hover,
+  :global([data-theme='dotsF']) .result-item-left:hover {
     background: rgba(255, 255, 255, 0.1);
   }
 

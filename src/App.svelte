@@ -233,7 +233,7 @@
       onCopyRightToLeft={copyRightToLeft}
     />
     <!-- 検索ドロップダウン（ヘッダー右上、検索ボタンの下） -->
-    <SearchBar onResultClick={handleSearchResultClick} />
+    <SearchBar onResultClick={handleSearchResultClick} isDualPane={appState.isDualPane} />
 
     <div class="content-wrapper" class:single-pane={!appState.isDualPane}>
       <div class="pane-divider" class:hidden={!appState.isDualPane}></div>

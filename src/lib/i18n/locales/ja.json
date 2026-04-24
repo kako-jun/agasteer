@@ -33,7 +33,9 @@
     "clear": "クリア",
     "close": "閉じる",
     "archivePrefix": "アーカイブ",
-    "archiveNotLoaded": "アーカイブは検索対象外です（未読み込み）"
+    "archiveNotLoaded": "アーカイブは検索対象外です（未読み込み）",
+    "openInLeftPane": "左ペインで開く",
+    "openInRightPane": "右ペインで開く"
   },
   "breadcrumbs": {
     "goHome": "ホームへ移動",
