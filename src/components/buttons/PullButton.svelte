@@ -8,6 +8,7 @@
     isStale?: boolean
     progress?: { percent: number; fetched: number; total: number } | null
     onProgressClick?: () => void
+    pendingPull?: boolean
     id?: string
   }
 
@@ -17,6 +18,7 @@
     isStale = false,
     progress = null,
     onProgressClick = () => {},
+    pendingPull = false,
     id = '',
   }: Props = $props()
 </script>
@@ -39,6 +41,9 @@
   </div>
   {#if isStale}
     <span class="notification-badge" title={$_('header.staleRemote')}></span>
+  {/if}
+  {#if pendingPull && progress === null}
+    <span class="pending-badge" title={$_('header.pendingPull')}></span>
   {/if}
 </div>
 
@@ -107,6 +112,17 @@
     width: 8px;
     height: 8px;
     background: #ef4444;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .pending-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 8px;
+    height: 8px;
+    background: #3b82f6;
     border-radius: 50%;
     pointer-events: none;
   }

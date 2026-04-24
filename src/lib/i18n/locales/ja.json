@@ -25,7 +25,8 @@
     "pull": "Pullする",
     "push": "Pushする",
     "swapPanes": "君の名は",
-    "staleRemote": "リモートに新しい変更があります"
+    "staleRemote": "リモートに新しい変更があります",
+    "pendingPull": "リポジトリ切替のPullが予約されています"
   },
   "search": {
     "placeholder": "検索...",

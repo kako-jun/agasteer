@@ -206,6 +206,7 @@ let _isRestoringFromUrl = $state(false)
 let _importOccurredInSettings = $state(false)
 let _atGuardEntry = $state(false)
 let _pendingRepoSync = $state(false)
+let _repoChangePending = $state(false)
 
 export const appState = {
   get breadcrumbs() {
@@ -375,6 +376,17 @@ export const appState = {
   },
   set pendingRepoSync(v: boolean) {
     _pendingRepoSync = v
+  },
+  /**
+   * リポジトリ設定変更直後〜新repoのpullが開始されるまでの「予約中」フラグ。
+   * pendingRepoSync（他同期完了を待つキュー）とは別概念で、
+   * どちらも立っていたらユーザーには同じ青丸バッジで見せる（App.svelte）。
+   */
+  get repoChangePending() {
+    return _repoChangePending
+  },
+  set repoChangePending(v: boolean) {
+    _repoChangePending = v
   },
 }
 
