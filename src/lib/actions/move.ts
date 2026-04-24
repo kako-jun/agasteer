@@ -489,7 +489,6 @@ export async function moveLeafToWorld(
   }
 
   if (!targetNote) return
-  const resolvedTargetNote = targetNote
 
   // 同じ名前のリーフがあるかチェック
   const targetLeavesInNote = targetLeaves.filter((l) => l.noteId === targetNote!.id)
@@ -564,27 +563,23 @@ export async function moveLeafToWorld(
     appState.loadingLeafIds = nextLoadingIds
   }
 
-  // 移動したリーフを開いていた両ペインを移動先へ追従させる（リーフは開いたまま）
-  // ペインの現在リーフが一致する場合に加え、現在ノートが移動元ノートのままの
-  // 場合もペインを追従させる（await 中に leftLeaf が別値に差し替わった
-  // 場合でも、パンくずが Home 側のまま取り残されるのを防ぐ）
+  // リーフを開いていたペインはソース側の親ノートに遷移する（削除・ノートアーカイブと同じ挙動）。
+  // 連続アーカイブ運用のため、移動先 world への追従はしない（#160）。
+  // 親ノート一覧でそのリーフを表示していた別ペインは world を保ったままリアクティブに
+  // リーフが消えるので明示的な操作は不要。
   const followPane = (paneToCheck: Pane) => {
     const currentLeaf = paneToCheck === 'left' ? leftLeaf.value : rightLeaf.value
-    const currentNote = paneToCheck === 'left' ? leftNote.value : rightNote.value
     const paneWorld = paneToCheck === 'left' ? leftWorld.value : rightWorld.value
-    const leafMatches = currentLeaf?.id === leaf.id
-    const noteMatches = paneWorld === sourceWorld && currentNote?.id === sourceNote.id
-    if (!leafMatches && !noteMatches) return
+    const leafMatches = currentLeaf?.id === leaf.id && paneWorld === sourceWorld
+    if (!leafMatches) return
     if (paneToCheck === 'left') {
-      leftNote.value = resolvedTargetNote
-      leftLeaf.value = leafMatches ? movedLeaf : null
-      leftView.value = leafMatches ? leftView.value : 'note'
-      leftWorld.value = targetWorld
+      leftNote.value = sourceNote
+      leftLeaf.value = null
+      leftView.value = 'note'
     } else {
-      rightNote.value = resolvedTargetNote
-      rightLeaf.value = leafMatches ? movedLeaf : null
-      rightView.value = leafMatches ? rightView.value : 'note'
-      rightWorld.value = targetWorld
+      rightNote.value = sourceNote
+      rightLeaf.value = null
+      rightView.value = 'note'
     }
   }
   followPane('left')
