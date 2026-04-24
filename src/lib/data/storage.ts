@@ -1,6 +1,11 @@
 /**
  * LocalStorage操作
  * アプリケーションデータの永続化を担当
+ *
+ * #131: リポジトリ単位の名前空間化
+ * - IndexedDB は per-repo DB (`agasteer/db/<sanitized>`) に分割
+ * - fonts / backgrounds は共有DB (`agasteer/shared`) に分離
+ * - localStorage は `{ settings, globalState, byRepo }` 構造
  */
 
 import type {
@@ -58,30 +63,49 @@ const STORAGE_KEY = 'agasteer'
 const THEME_OPTIONS: ThemeType[] = ['yomi', 'campus', 'greenboard', 'whiteboard', 'dotsD', 'dotsF']
 
 /**
- * アプリ状態（settings以外の永続化データ）
+ * グローバル状態（リポに依存しない永続化データ）
  */
-export interface AppState {
-  isDirty: boolean
+export interface GlobalState {
   tourShown: boolean
   saveGuideShown: boolean
   pwaInstallDismissedAt?: number // PWAインストールバナー却下時刻（7日間cooldown用）
-  lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
-  pushInFlightAt?: number // Push API呼び出し中のタイムスタンプ（スリープによるレスポンス消失検出用）
 }
 
-const defaultState: AppState = {
-  isDirty: false,
+const defaultGlobalState: GlobalState = {
   tourShown: false,
   saveGuideShown: false,
   pwaInstallDismissedAt: undefined,
 }
 
 /**
- * LocalStorage全体の構造
+ * リポジトリ単位の永続化状態
+ */
+export interface PerRepoState {
+  isDirty: boolean
+  lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
+  pushInFlightAt?: number // Push API呼び出し中のタイムスタンプ（スリープによるレスポンス消失検出用）
+}
+
+const defaultPerRepoState: PerRepoState = {
+  isDirty: false,
+}
+
+/**
+ * LocalStorage全体の構造（#131以降）
  */
 interface StorageData {
   settings: Settings
-  state: AppState
+  globalState: GlobalState
+  byRepo: Record<string, PerRepoState>
+  v131Migrated?: boolean
+}
+
+/**
+ * repoName を DB 名に使える形にサニタイズする
+ * 例: "kako-jun/notes" -> "kako-jun__notes"
+ */
+function sanitizeRepoKey(repoName: string): string {
+  return repoName.replace(/\//g, '__')
 }
 
 /**
@@ -91,7 +115,16 @@ function loadStorageData(): StorageData {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
-      return JSON.parse(stored) as StorageData
+      const parsed = JSON.parse(stored) as Partial<StorageData> & {
+        state?: Partial<PerRepoState & GlobalState>
+      }
+      // 新形式を優先。旧形式は state を捨てる（#131 で後方互換なし）
+      return {
+        settings: { ...defaultSettings, ...(parsed.settings ?? {}) } as Settings,
+        globalState: { ...defaultGlobalState, ...(parsed.globalState ?? {}) },
+        byRepo: parsed.byRepo ?? {},
+        v131Migrated: parsed.v131Migrated,
+      }
     } catch {
       // パース失敗時はデフォルト値
     }
@@ -102,7 +135,8 @@ function loadStorageData(): StorageData {
 
   return {
     settings: { ...defaultSettings, locale: detectedLocale },
-    state: { ...defaultState },
+    globalState: { ...defaultGlobalState },
+    byRepo: {},
   }
 }
 
@@ -112,15 +146,19 @@ function loadStorageData(): StorageData {
 function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
-const DB_NAME = 'agasteer/db'
-const DB_VERSION = 5
+
+// IndexedDB 設定
+const DB_VERSION = 1 // #131 でリセット（既存データは破棄）
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
-const FONTS_STORE = 'fonts'
-const BACKGROUNDS_STORE = 'backgrounds'
 const OFFLINE_STORE = 'offline'
 const ARCHIVE_LEAVES_STORE = 'archiveLeaves'
 const ARCHIVE_NOTES_STORE = 'archiveNotes'
+const FONTS_STORE = 'fonts'
+const BACKGROUNDS_STORE = 'backgrounds'
+
+const SHARED_DB_NAME = 'agasteer/shared'
+const SHARED_DB_VERSION = 1
 
 export const defaultSettings: Settings = {
   token: '',
@@ -142,6 +180,32 @@ function normalizeTheme(theme: string): ThemeType {
   if (theme === 'dots2') return 'dotsF'
   if (!THEME_OPTIONS.includes(theme as ThemeType)) return defaultSettings.theme
   return theme as ThemeType
+}
+
+/**
+ * #131 移行処理: 初回起動時に旧DB `agasteer/db` を削除する
+ * ユーザー決定により後方互換なし、ローカルデータは破棄
+ */
+function runV131MigrationIfNeeded(): void {
+  const data = loadStorageData()
+  if (data.v131Migrated) return
+  try {
+    // 旧グローバルDBを削除（blocked になっても無視）
+    indexedDB.deleteDatabase('agasteer/db')
+  } catch (error) {
+    console.warn('Failed to delete legacy agasteer/db:', error)
+  }
+  data.v131Migrated = true
+  saveStorageData(data)
+}
+
+// 初回評価時に旧DB削除を試みる（ブラウザ環境でのみ）
+if (typeof indexedDB !== 'undefined' && typeof localStorage !== 'undefined') {
+  try {
+    runV131MigrationIfNeeded()
+  } catch (error) {
+    console.warn('v131 migration check failed:', error)
+  }
 }
 
 /**
@@ -206,104 +270,56 @@ export function saveSettings(settings: Settings): void {
   }
 }
 
-/**
- * アプリ状態を読み込む
- */
-export function loadAppState(): AppState {
-  return loadStorageData().state
-}
+// ============================================
+// グローバル状態アクセサ
+// ============================================
 
-/**
- * アプリ状態の一部を更新
- */
-export function updateAppState(partial: Partial<AppState>): void {
+function updateGlobalState(partial: Partial<GlobalState>): void {
   const data = loadStorageData()
-  data.state = { ...data.state, ...partial }
+  data.globalState = { ...data.globalState, ...partial }
   saveStorageData(data)
-}
-
-/**
- * ダーティフラグを取得（起動時チェック用）
- */
-export function getPersistedDirtyFlag(): boolean {
-  return loadStorageData().state.isDirty
-}
-
-/**
- * ダーティフラグを設定
- */
-export function setPersistedDirtyFlag(isDirty: boolean): void {
-  updateAppState({ isDirty })
 }
 
 /**
  * ツアー表示済みフラグを取得
  */
 export function isTourShown(): boolean {
-  return loadStorageData().state.tourShown
+  return loadStorageData().globalState.tourShown
 }
 
 /**
  * ツアー表示済みフラグを設定
  */
 export function setTourShown(shown: boolean): void {
-  updateAppState({ tourShown: shown })
-}
-
-/**
- * lastKnownCommitShaを取得（起動時の復元用）
- */
-export function getPersistedCommitSha(): string | null {
-  return loadStorageData().state.lastKnownCommitSha ?? null
-}
-
-/**
- * lastKnownCommitShaを保存
- */
-export function setPersistedCommitSha(sha: string | null): void {
-  updateAppState({ lastKnownCommitSha: sha })
+  updateGlobalState({ tourShown: shown })
 }
 
 /**
  * 保存ガイド表示済みフラグを取得
  */
 export function isSaveGuideShown(): boolean {
-  return loadStorageData().state.saveGuideShown ?? false
+  return loadStorageData().globalState.saveGuideShown ?? false
 }
 
 /**
  * 保存ガイド表示済みフラグを設定
  */
 export function setSaveGuideShown(shown: boolean): void {
-  updateAppState({ saveGuideShown: shown })
+  updateGlobalState({ saveGuideShown: shown })
 }
 
 /**
  * PWAインストールバナー却下時刻を取得
  */
 export function getPwaInstallDismissedAt(): number | undefined {
-  return loadStorageData().state.pwaInstallDismissedAt
+  return loadStorageData().globalState.pwaInstallDismissedAt
 }
 
 /**
  * PWAインストールバナー却下時刻を設定
  */
 export function setPwaInstallDismissedAt(timestamp: number | undefined): void {
-  updateAppState({ pwaInstallDismissedAt: timestamp })
-}
-
-/**
- * Push飛行中フラグを取得（スリープによるレスポンス消失検出用）
- */
-export function getPushInFlightAt(): number | undefined {
-  return loadStorageData().state.pushInFlightAt
-}
-
-/**
- * Push飛行中フラグを設定
- */
-export function setPushInFlightAt(timestamp: number | undefined): void {
-  updateAppState({ pushInFlightAt: timestamp })
+  updateGlobalState({ pwaInstallDismissedAt: timestamp })
 }
 
 /**
@@ -319,6 +335,97 @@ export function shouldShowPwaInstallBanner(): boolean {
   return true
 }
 
+// ============================================
+// リポ単位の状態アクセサ
+// ============================================
+
+/**
+ * 現在のリポ (settings.repoName) のキーを返す。未設定時は null。
+ */
+function currentRepoKey(): string | null {
+  const repoName = loadStorageData().settings.repoName
+  return repoName ? repoName : null
+}
+
+/**
+ * 指定リポの状態を読む。存在しなければデフォルト。
+ */
+export function getPerRepoState(repoKey: string): PerRepoState {
+  const data = loadStorageData()
+  return { ...defaultPerRepoState, ...(data.byRepo[repoKey] ?? {}) }
+}
+
+/**
+ * 指定リポの状態を部分更新する。
+ */
+export function setPerRepoState(repoKey: string, patch: Partial<PerRepoState>): void {
+  const data = loadStorageData()
+  const current = { ...defaultPerRepoState, ...(data.byRepo[repoKey] ?? {}) }
+  data.byRepo[repoKey] = { ...current, ...patch }
+  saveStorageData(data)
+}
+
+/**
+ * 現在リポの状態を部分更新する。repoName 未設定なら何もしない。
+ */
+function updateCurrentRepoState(patch: Partial<PerRepoState>): void {
+  const key = currentRepoKey()
+  if (!key) return
+  setPerRepoState(key, patch)
+}
+
+/**
+ * ダーティフラグを取得（現在リポ。起動時チェック用）
+ */
+export function getPersistedDirtyFlag(): boolean {
+  const key = currentRepoKey()
+  if (!key) return false
+  return getPerRepoState(key).isDirty
+}
+
+/**
+ * ダーティフラグを設定（現在リポ）
+ */
+export function setPersistedDirtyFlag(isDirty: boolean): void {
+  updateCurrentRepoState({ isDirty })
+}
+
+/**
+ * lastKnownCommitShaを取得（現在リポ。起動時の復元用）
+ */
+export function getPersistedCommitSha(): string | null {
+  const key = currentRepoKey()
+  if (!key) return null
+  return getPerRepoState(key).lastKnownCommitSha ?? null
+}
+
+/**
+ * lastKnownCommitShaを保存（現在リポ）
+ */
+export function setPersistedCommitSha(sha: string | null): void {
+  updateCurrentRepoState({ lastKnownCommitSha: sha })
+}
+
+/**
+ * Push飛行中フラグを取得（現在リポ。スリープによるレスポンス消失検出用）
+ */
+export function getPushInFlightAt(): number | undefined {
+  const key = currentRepoKey()
+  if (!key) return undefined
+  return getPerRepoState(key).pushInFlightAt
+}
+
+/**
+ * Push飛行中フラグを設定（現在リポ）
+ */
+export function setPushInFlightAt(timestamp: number | undefined): void {
+  updateCurrentRepoState({ pushInFlightAt: timestamp })
+}
+
+// ============================================
+// IndexedDB (per-repo + shared)
+// ============================================
+
 // DB接続監視用のコールバック
 let onDbClosedCallback: (() => void) | null = null
 
@@ -329,16 +436,102 @@ export function setOnDbClosed(callback: (() => void) | null): void {
   onDbClosedCallback = callback
 }
 
+// 現在の per-repo DB ハンドル（キャッシュ）
+let currentDb: IDBDatabase | null = null
+let currentDbRepoKey: string | null = null
+let currentDbPromise: Promise<IDBDatabase> | null = null
+
+// 共有DB (fonts, backgrounds)
+let sharedDb: IDBDatabase | null = null
+let sharedDbPromise: Promise<IDBDatabase> | null = null
+
+function perRepoDbName(repoKey: string): string {
+  return `agasteer/db/${sanitizeRepoKey(repoKey)}`
+}
+
 /**
- * IndexedDBを開く（note/leaves/fonts/backgrounds用）
+ * 現在アクティブなリポの DB ハンドルを取得する
+ * setCurrentRepo 未呼び出しの場合は settings.repoName から自動で設定する
+ */
+async function getCurrentDb(): Promise<IDBDatabase> {
+  if (currentDb && currentDbRepoKey) {
+    return currentDb
+  }
+  if (currentDbPromise) {
+    return currentDbPromise
+  }
+  const key = currentDbRepoKey ?? currentRepoKey()
+  if (!key) {
+    throw new StorageError('db_open', 'No repository configured: cannot open per-repo IndexedDB')
+  }
+  currentDbRepoKey = key
+  currentDbPromise = openPerRepoDB(key).then((db) => {
+    currentDb = db
+    currentDbPromise = null
+    return db
+  })
+  try {
+    return await currentDbPromise
+  } catch (error) {
+    currentDbPromise = null
+    throw error
+  }
+}
+
+/**
+ * 現在の per-repo DB を指定リポに切り替える
+ * 既に開いている DB は閉じ、新しい DB を開く
+ */
+export async function setCurrentRepo(repoKey: string): Promise<void> {
+  if (currentDbRepoKey === repoKey && currentDb) {
+    return
+  }
+  // 既存 DB をクローズ
+  if (currentDb) {
+    try {
+      currentDb.close()
+    } catch (error) {
+      console.warn('Failed to close previous DB:', error)
+    }
+  }
+  currentDb = null
+  currentDbPromise = null
+  currentDbRepoKey = repoKey
+  // 次の get で開く（ここでは preload のみ）
+  currentDbPromise = openPerRepoDB(repoKey).then((db) => {
+    currentDb = db
+    currentDbPromise = null
+    return db
+  })
+  await currentDbPromise
+}
+
+/**
+ * 現在の per-repo DB を閉じてハンドルをクリアする
+ */
+export function closeCurrentRepoDb(): void {
+  if (currentDb) {
+    try {
+      currentDb.close()
+    } catch (error) {
+      console.warn('Failed to close current DB:', error)
+    }
+  }
+  currentDb = null
+  currentDbPromise = null
+  currentDbRepoKey = null
+}
+
+/**
+ * per-repo IndexedDBを開く（leaves / notes / offline / archive 用）
  * エラー時は最大3回リトライする
- * マイグレーション処理を明示化し、既存データを保護する
  * タイムアウト付きでハングを防止
  */
-async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
+async function openPerRepoDB(repoKey: string, retryCount = 0): Promise<IDBDatabase> {
   const MAX_RETRIES = 3
   const RETRY_DELAY_MS = 100 // 100ms, 200ms, 300ms
   const TIMEOUT_MS = 5000 // 5秒でタイムアウト
+  const dbName = perRepoDbName(repoKey)
 
   return new Promise((resolve, reject) => {
     let settled = false
@@ -354,16 +547,14 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
       fn()
     }
 
-    // タイムアウト処理
     timeoutId = setTimeout(() => {
       settle(() => {
         console.error(`IndexedDB open timed out after ${TIMEOUT_MS}ms (attempt ${retryCount + 1})`)
         if (retryCount < MAX_RETRIES) {
-          // リトライ
           setTimeout(
             async () => {
               try {
-                const db = await openAppDB(retryCount + 1)
+                const db = await openPerRepoDB(repoKey, retryCount + 1)
                 resolve(db)
               } catch (retryError) {
                 reject(retryError)
@@ -382,9 +573,8 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
       })
     }, TIMEOUT_MS)
 
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
+    const request = indexedDB.open(dbName, DB_VERSION)
 
-    // ブロック時（他のタブで古いバージョンが開いている場合）
     request.onblocked = () => {
       settle(() => {
         console.warn('IndexedDB is blocked by another tab')
@@ -392,54 +582,23 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
       })
     }
 
-    // マイグレーション処理（既存データを保護しながらストアを追加）
-    request.onupgradeneeded = (event) => {
+    request.onupgradeneeded = () => {
       const db = request.result
-      const oldVersion = event.oldVersion
-
-      console.log(`IndexedDB upgrade: ${oldVersion} -> ${DB_VERSION}`)
-
       try {
-        // バージョン0（新規）または1からのアップグレード
-        if (oldVersion < 1) {
-          // 初回作成
-          if (!db.objectStoreNames.contains(LEAVES_STORE)) {
-            db.createObjectStore(LEAVES_STORE, { keyPath: 'id' })
-          }
-          if (!db.objectStoreNames.contains(NOTES_STORE)) {
-            db.createObjectStore(NOTES_STORE, { keyPath: 'id' })
-          }
+        if (!db.objectStoreNames.contains(LEAVES_STORE)) {
+          db.createObjectStore(LEAVES_STORE, { keyPath: 'id' })
         }
-
-        // バージョン2からのアップグレード（fontsストア追加）
-        if (oldVersion < 2) {
-          if (!db.objectStoreNames.contains(FONTS_STORE)) {
-            db.createObjectStore(FONTS_STORE, { keyPath: 'name' })
-          }
+        if (!db.objectStoreNames.contains(NOTES_STORE)) {
+          db.createObjectStore(NOTES_STORE, { keyPath: 'id' })
         }
-
-        // バージョン3からのアップグレード（backgroundsストア追加）
-        if (oldVersion < 3) {
-          if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
-            db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
-          }
+        if (!db.objectStoreNames.contains(OFFLINE_STORE)) {
+          db.createObjectStore(OFFLINE_STORE, { keyPath: 'id' })
         }
-
-        // バージョン4: offline store追加（leaves storeから完全分離）
-        if (oldVersion < 4) {
-          if (!db.objectStoreNames.contains(OFFLINE_STORE)) {
-            db.createObjectStore(OFFLINE_STORE, { keyPath: 'id' })
-          }
+        if (!db.objectStoreNames.contains(ARCHIVE_LEAVES_STORE)) {
+          db.createObjectStore(ARCHIVE_LEAVES_STORE, { keyPath: 'id' })
         }
-
-        // バージョン5: archive stores追加（アーカイブのIndexedDB永続化）
-        if (oldVersion < 5) {
-          if (!db.objectStoreNames.contains(ARCHIVE_LEAVES_STORE)) {
-            db.createObjectStore(ARCHIVE_LEAVES_STORE, { keyPath: 'id' })
-          }
-          if (!db.objectStoreNames.contains(ARCHIVE_NOTES_STORE)) {
-            db.createObjectStore(ARCHIVE_NOTES_STORE, { keyPath: 'id' })
-          }
+        if (!db.objectStoreNames.contains(ARCHIVE_NOTES_STORE)) {
+          db.createObjectStore(ARCHIVE_NOTES_STORE, { keyPath: 'id' })
         }
       } catch (upgradeError) {
         console.error('IndexedDB upgrade failed:', upgradeError)
@@ -452,20 +611,20 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
     request.onsuccess = () => {
       settle(() => {
         const db = request.result
-
-        // DB接続監視: 予期しない切断を検知
         db.onclose = () => {
           console.warn('IndexedDB connection closed unexpectedly')
+          // 当該 DB が現在の current DB なら参照をクリア
+          if (db === currentDb) {
+            currentDb = null
+            currentDbPromise = null
+          }
           if (onDbClosedCallback) {
             onDbClosedCallback()
           }
         }
-
-        // エラー監視
         db.onerror = (event) => {
           console.error('IndexedDB error:', event)
         }
-
         resolve(db)
       })
     }
@@ -477,12 +636,10 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
           `IndexedDB open failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`,
           error
         )
-
         if (retryCount < MAX_RETRIES) {
-          // リトライ前に少し待機（エクスポネンシャルバックオフ）
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (retryCount + 1)))
           try {
-            const db = await openAppDB(retryCount + 1)
+            const db = await openPerRepoDB(repoKey, retryCount + 1)
             resolve(db)
           } catch (retryError) {
             reject(retryError)
@@ -499,6 +656,43 @@ async function openAppDB(retryCount = 0): Promise<IDBDatabase> {
       })
     }
   })
+}
+
+/**
+ * 共有DBを開く（fonts, backgrounds 用）
+ */
+async function openSharedDB(): Promise<IDBDatabase> {
+  if (sharedDb) return sharedDb
+  if (sharedDbPromise) return sharedDbPromise
+  sharedDbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(SHARED_DB_NAME, SHARED_DB_VERSION)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(FONTS_STORE)) {
+        db.createObjectStore(FONTS_STORE, { keyPath: 'name' })
+      }
+      if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
+        db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
+      }
+    }
+    request.onsuccess = () => {
+      sharedDb = request.result
+      sharedDbPromise = null
+      sharedDb.onclose = () => {
+        sharedDb = null
+      }
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      sharedDbPromise = null
+      reject(new StorageError('db_open', 'Shared IndexedDB failed to open', request.error))
+    }
+    request.onblocked = () => {
+      sharedDbPromise = null
+      reject(new StorageError('db_blocked', 'Shared database is blocked by another tab'))
+    }
+  })
+  return sharedDbPromise
 }
 
 function getAllFromStore<T>(db: IDBDatabase, storeName: string): Promise<T[]> {
@@ -539,7 +733,7 @@ function replaceAllInStore<T extends { id: string }>(
  */
 export async function loadLeaves(): Promise<Leaf[]> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     return await getAllFromStore<Leaf>(db, LEAVES_STORE)
   } catch (error) {
     console.error('Failed to load leaves from IndexedDB:', error)
@@ -552,7 +746,7 @@ export async function loadLeaves(): Promise<Leaf[]> {
  */
 export async function saveLeaves(newLeaves: Leaf[]): Promise<void> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, newLeaves)
   } catch (error) {
     console.error('Failed to save leaves to IndexedDB:', error)
@@ -565,7 +759,7 @@ export async function saveLeaves(newLeaves: Leaf[]): Promise<void> {
  */
 export async function loadNotes(): Promise<Note[]> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     const notes = await getAllFromStore<Note>(db, NOTES_STORE)
     // orderが欠けていたら付与
     return notes.map((note, index) => (note.order === undefined ? { ...note, order: index } : note))
@@ -580,7 +774,7 @@ export async function loadNotes(): Promise<Note[]> {
  */
 export async function saveNotes(notes: Note[]): Promise<void> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Note>(db, NOTES_STORE, notes)
   } catch (error) {
     console.error('Failed to save notes to IndexedDB:', error)
@@ -589,12 +783,12 @@ export async function saveNotes(notes: Note[]): Promise<void> {
 }
 
 /**
- * 全データを削除（notes/leavesストアをクリア）
- * オフラインリーフは別storeなので影響なし
+ * 全データを削除（現在リポの notes/leaves ストアをクリア）
+ * オフラインリーフ・共有ストア(fonts/bg)は影響なし
  */
 export async function clearAllData(): Promise<void> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, [])
     await replaceAllInStore<Note>(db, NOTES_STORE, [])
   } catch (error) {
@@ -607,7 +801,7 @@ export async function clearAllData(): Promise<void> {
  */
 export async function loadArchiveLeaves(): Promise<Leaf[]> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     return await getAllFromStore<Leaf>(db, ARCHIVE_LEAVES_STORE)
   } catch (error) {
     console.error('Failed to load archive leaves from IndexedDB:', error)
@@ -620,7 +814,7 @@ export async function loadArchiveLeaves(): Promise<Leaf[]> {
  */
 export async function saveArchiveLeaves(newLeaves: Leaf[]): Promise<void> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Leaf>(db, ARCHIVE_LEAVES_STORE, newLeaves)
   } catch (error) {
     console.error('Failed to save archive leaves to IndexedDB:', error)
@@ -633,7 +827,7 @@ export async function saveArchiveLeaves(newLeaves: Leaf[]): Promise<void> {
  */
 export async function loadArchiveNotes(): Promise<Note[]> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     const notes = await getAllFromStore<Note>(db, ARCHIVE_NOTES_STORE)
     return notes.map((note, index) => (note.order === undefined ? { ...note, order: index } : note))
   } catch (error) {
@@ -647,7 +841,7 @@ export async function loadArchiveNotes(): Promise<Note[]> {
  */
 export async function saveArchiveNotes(notes: Note[]): Promise<void> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Note>(db, ARCHIVE_NOTES_STORE, notes)
   } catch (error) {
     console.error('Failed to save archive notes to IndexedDB:', error)
@@ -660,7 +854,7 @@ export async function saveArchiveNotes(notes: Note[]): Promise<void> {
  */
 export async function clearArchiveData(): Promise<void> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Leaf>(db, ARCHIVE_LEAVES_STORE, [])
     await replaceAllInStore<Note>(db, ARCHIVE_NOTES_STORE, [])
   } catch (error) {
@@ -669,10 +863,10 @@ export async function clearArchiveData(): Promise<void> {
 }
 
 /**
- * 汎用: アイテムを保存
+ * 汎用: per-repo ストアへアイテム保存
  */
-async function putItem<T>(storeName: string, item: T): Promise<void> {
-  const db = await openAppDB()
+async function putItemRepo<T>(storeName: string, item: T): Promise<void> {
+  const db = await getCurrentDb()
   const tx = db.transaction(storeName, 'readwrite')
   const store = tx.objectStore(storeName)
   await new Promise<void>((resolve, reject) => {
@@ -683,22 +877,10 @@ async function putItem<T>(storeName: string, item: T): Promise<void> {
 }
 
 /**
- * カスタムフォントを保存
+ * 汎用: per-repo ストアからアイテム読み込み
  */
-export async function saveCustomFont(font: CustomFont): Promise<void> {
-  try {
-    await putItem(FONTS_STORE, font)
-  } catch (error) {
-    console.error('Failed to save custom font to IndexedDB:', error)
-    throw error
-  }
-}
-
-/**
- * 汎用: アイテムを読み込む
- */
-async function getItem<T>(storeName: string, key: string): Promise<T | null> {
-  const db = await openAppDB()
+async function getItemRepo<T>(storeName: string, key: string): Promise<T | null> {
+  const db = await getCurrentDb()
   const tx = db.transaction(storeName, 'readonly')
   const store = tx.objectStore(storeName)
   return await new Promise<T | null>((resolve, reject) => {
@@ -709,22 +891,38 @@ async function getItem<T>(storeName: string, key: string): Promise<T | null> {
 }
 
 /**
- * カスタムフォントを読み込む
+ * 汎用: 共有DBへアイテム保存
  */
-export async function loadCustomFont(name: string): Promise<CustomFont | null> {
-  try {
-    return await getItem<CustomFont>(FONTS_STORE, name)
-  } catch (error) {
-    console.error('Failed to load custom font from IndexedDB:', error)
-    return null
-  }
+async function putItemShared<T>(storeName: string, item: T): Promise<void> {
+  const db = await openSharedDB()
+  const tx = db.transaction(storeName, 'readwrite')
+  const store = tx.objectStore(storeName)
+  await new Promise<void>((resolve, reject) => {
+    const request = store.put(item)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+  })
 }
 
 /**
- * 汎用: アイテムを削除
+ * 汎用: 共有DBからアイテム読み込み
  */
-async function deleteItem(storeName: string, key: string): Promise<void> {
-  const db = await openAppDB()
+async function getItemShared<T>(storeName: string, key: string): Promise<T | null> {
+  const db = await openSharedDB()
+  const tx = db.transaction(storeName, 'readonly')
+  const store = tx.objectStore(storeName)
+  return await new Promise<T | null>((resolve, reject) => {
+    const request = store.get(key)
+    request.onsuccess = () => resolve((request.result as T) || null)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+/**
+ * 汎用: 共有DBからアイテム削除
+ */
+async function deleteItemShared(storeName: string, key: string): Promise<void> {
+  const db = await openSharedDB()
   const tx = db.transaction(storeName, 'readwrite')
   const store = tx.objectStore(storeName)
   await new Promise<void>((resolve, reject) => {
@@ -735,11 +933,35 @@ async function deleteItem(storeName: string, key: string): Promise<void> {
 }
 
 /**
- * カスタムフォントを削除
+ * カスタムフォントを保存（共有DB）
+ */
+export async function saveCustomFont(font: CustomFont): Promise<void> {
+  try {
+    await putItemShared(FONTS_STORE, font)
+  } catch (error) {
+    console.error('Failed to save custom font to IndexedDB:', error)
+    throw error
+  }
+}
+
+/**
+ * カスタムフォントを読み込む（共有DB）
+ */
+export async function loadCustomFont(name: string): Promise<CustomFont | null> {
+  try {
+    return await getItemShared<CustomFont>(FONTS_STORE, name)
+  } catch (error) {
+    console.error('Failed to load custom font from IndexedDB:', error)
+    return null
+  }
+}
+
+/**
+ * カスタムフォントを削除（共有DB）
  */
 export async function deleteCustomFont(name: string): Promise<void> {
   try {
-    await deleteItem(FONTS_STORE, name)
+    await deleteItemShared(FONTS_STORE, name)
   } catch (error) {
     console.error('Failed to delete custom font from IndexedDB:', error)
     throw error
@@ -747,11 +969,11 @@ export async function deleteCustomFont(name: string): Promise<void> {
 }
 
 /**
- * カスタム背景画像を保存
+ * カスタム背景画像を保存（共有DB）
  */
 export async function saveCustomBackground(background: CustomBackground): Promise<void> {
   try {
-    await putItem(BACKGROUNDS_STORE, background)
+    await putItemShared(BACKGROUNDS_STORE, background)
   } catch (error) {
     console.error('Failed to save custom background to IndexedDB:', error)
     throw error
@@ -759,11 +981,11 @@ export async function saveCustomBackground(background: CustomBackground): Promis
 }
 
 /**
- * カスタム背景画像を読み込む
+ * カスタム背景画像を読み込む（共有DB）
  */
 export async function loadCustomBackground(name: string): Promise<CustomBackground | null> {
   try {
-    return await getItem<CustomBackground>(BACKGROUNDS_STORE, name)
+    return await getItemShared<CustomBackground>(BACKGROUNDS_STORE, name)
   } catch (error) {
     console.error('Failed to load custom background from IndexedDB:', error)
     return null
@@ -771,11 +993,11 @@ export async function loadCustomBackground(name: string): Promise<CustomBackgrou
 }
 
 /**
- * カスタム背景画像を削除
+ * カスタム背景画像を削除（共有DB）
  */
 export async function deleteCustomBackground(name: string): Promise<void> {
   try {
-    await deleteItem(BACKGROUNDS_STORE, name)
+    await deleteItemShared(BACKGROUNDS_STORE, name)
   } catch (error) {
     console.error('Failed to delete custom background from IndexedDB:', error)
     throw error
@@ -783,11 +1005,11 @@ export async function deleteCustomBackground(name: string): Promise<void> {
 }
 
 /**
- * オフラインリーフを保存（専用storeに保存、Pull/Pushの影響を受けない）
+ * オフラインリーフを保存（per-repo専用store、Pull/Pushの影響を受けない）
  */
 export async function saveOfflineLeaf(leaf: Leaf): Promise<void> {
   try {
-    await putItem(OFFLINE_STORE, leaf)
+    await putItemRepo(OFFLINE_STORE, leaf)
   } catch (error) {
     console.error('Failed to save offline leaf to IndexedDB:', error)
     throw error
@@ -795,11 +1017,11 @@ export async function saveOfflineLeaf(leaf: Leaf): Promise<void> {
 }
 
 /**
- * オフラインリーフを読み込む（専用storeから読み込み）
+ * オフラインリーフを読み込む（per-repo専用storeから読み込み）
  */
 export async function loadOfflineLeaf(id: string): Promise<Leaf | null> {
   try {
-    return await getItem<Leaf>(OFFLINE_STORE, id)
+    return await getItemRepo<Leaf>(OFFLINE_STORE, id)
   } catch (error) {
     console.error('Failed to load offline leaf from IndexedDB:', error)
     return null
@@ -821,7 +1043,7 @@ export interface IndexedDBBackup {
  */
 export async function createBackup(): Promise<IndexedDBBackup> {
   try {
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     const [notes, leaves] = await Promise.all([
       getAllFromStore<Note>(db, NOTES_STORE),
       getAllFromStore<Leaf>(db, LEAVES_STORE),
@@ -853,7 +1075,7 @@ export async function restoreFromBackup(backup: IndexedDBBackup): Promise<void> 
     console.log(
       `Restoring from backup (${backup.notes.length} notes, ${backup.leaves.length} leaves)`
     )
-    const db = await openAppDB()
+    const db = await getCurrentDb()
     await replaceAllInStore<Note>(db, NOTES_STORE, backup.notes)
     await replaceAllInStore<Leaf>(db, LEAVES_STORE, backup.leaves)
   } catch (error) {
