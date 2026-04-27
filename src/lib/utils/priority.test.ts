@@ -103,6 +103,16 @@ describe('extractPriorityItems (#177 リストの各項目を独立した priori
     expect(items[1].content).toBe('段落B')
   })
 
+  it('境界マーカー + 中間マーカーが混在する段落は line-level で全行抽出', () => {
+    const leaf = makeLeaf('[1] first\nmiddle [2]\nlast')
+    const items = extractPriorityItems(leaf, 'note', 'note/Test', 0)
+    expect(items).toHaveLength(2)
+    expect(items[0].priority).toBe(1)
+    expect(items[0].content).toBe('first')
+    expect(items[1].priority).toBe(2)
+    expect(items[1].content).toBe('middle')
+  })
+
   it('マーカーがなければ何も抽出しない', () => {
     const leaf = makeLeaf('これは普通のテキスト\n何もマーカーなし')
     expect(extractPriorityItems(leaf, 'note', 'note/Test', 0)).toEqual([])
