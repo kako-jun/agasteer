@@ -34,6 +34,7 @@ import {
   leafStatsStore,
   pullProgressStore,
   rehydrateForRepo,
+  flushAllEditors,
 } from '../stores'
 import {
   clearAllData,
@@ -124,6 +125,14 @@ export async function pushToGitHub(): Promise<void> {
 
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
   if (!canSync(isPulling.value, isPushing.value).canPush || appState.isArchiveLoading) return
+
+  // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
+  // pendingCompositionChange が立ったまま onChange が呼ばれず、leaves.value が
+  // IME 確定前の古い content のまま push されてしまう（Android で特に顕著）。
+  // 全エディタに composition flush を促し、tick() で Svelte の reactive 更新を
+  // 1 サイクル待ってから push 処理に入る。
+  flushAllEditors()
+  await tick()
 
   // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
   isPushing.value = true

@@ -13,7 +13,12 @@
     isMobilePointerScrollActive as isMobilePointerScrollWindowActive,
     shouldSuppressMobileScrollIntoView,
   } from '../../lib/editor/mobile-cursor-scroll'
-  import { getLastPushedContent, dirtyLeafIds } from '../../lib/stores'
+  import {
+    getLastPushedContent,
+    dirtyLeafIds,
+    registerEditorFlusher,
+    unregisterEditorFlusher,
+  } from '../../lib/stores'
   import { clampSelectionRanges } from '../../lib/editor/clamp-selection'
 
   interface Props {
@@ -824,9 +829,13 @@
   onMount(async () => {
     await loadCodeMirror()
     initializeEditor()
+    // #186: push 直前に全エディタの IME composition を flush するためのレジストリ登録。
+    // 引数なしで呼ぶと editorView をデフォルト使用する。
+    registerEditorFlusher(pane, () => flushPendingCompositionChange())
   })
 
   onDestroy(() => {
+    unregisterEditorFlusher(pane)
     flushPendingCompositionChange(editorView)
     isComposing = false
     // dirtyLeafIdsストアの購読解除

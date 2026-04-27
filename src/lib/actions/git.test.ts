@@ -73,6 +73,7 @@ vi.mock('../stores', () => ({
   flushPendingSaves: mocks.flushPendingSaves,
   leafStatsStore: { addLeaf: vi.fn() },
   pullProgressStore: { start: vi.fn(), increment: vi.fn(), reset: vi.fn() },
+  flushAllEditors: vi.fn(),
 }))
 
 vi.mock('../api', () => ({
