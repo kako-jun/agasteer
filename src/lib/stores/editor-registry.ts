@@ -17,7 +17,14 @@ export function registerEditorFlusher(pane: Pane, fn: () => void): void {
   flushers.set(pane, fn)
 }
 
-export function unregisterEditorFlusher(pane: Pane): void {
+/**
+ * pane の flusher を解除する。
+ * `expectedFn` を渡すと「自分が登録した関数と一致するときだけ削除」する
+ * 防御的解除になる（同じ pane で旧コンポーネント destroy 前に新コンポーネント
+ * mount が走った場合に、新登録を旧 destroy が消すのを防ぐ）。
+ */
+export function unregisterEditorFlusher(pane: Pane, expectedFn?: () => void): void {
+  if (expectedFn !== undefined && flushers.get(pane) !== expectedFn) return
   flushers.delete(pane)
 }
 
@@ -26,11 +33,11 @@ export function unregisterEditorFlusher(pane: Pane): void {
  * push 直前に呼び、IME 確定前の入力で leaf.content が更新されない状況を解消する（#186）。
  */
 export function flushAllEditors(): void {
-  for (const fn of flushers.values()) {
+  for (const [pane, fn] of flushers) {
     try {
       fn()
     } catch (e) {
-      console.error('[editor-registry] flusher failed', e)
+      console.error('[editor-registry] flusher failed for pane', pane, e)
     }
   }
 }

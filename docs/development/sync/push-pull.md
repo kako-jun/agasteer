@@ -36,8 +36,8 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 **処理ステップ:**
 
 1. 交通整理: Pull/Push中またはアーカイブロード中は不可
-2. **全エディタの IME composition を強制 flush** + `tick()` で reactive 更新を 1 サイクル待つ（#186）
-3. 即座にロック取得（非同期処理の前に取得することが重要）
+2. 即座にロック取得（非同期処理の前に取得することが重要）
+3. **全エディタの IME composition を強制 flush** + `tick()` で reactive 更新を 1 サイクル待つ（#186）
 4. 保留中の自動保存をフラッシュ
 5. Staleチェック（共通関数で時刻も更新）
 6. Stale編集の場合は確認（ロックを保持したまま await）
@@ -47,11 +47,13 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 10. 結果処理（成功時はダーティクリア、リモートからpushCount取得）
 11. ロック解放（finallyで必ず実行）
 
-**ステップ 2（IME flush）の意義（#186）:**
+**ステップ 3（IME flush）の意義（#186）:**
 
 Android (Gboard 等) の IME 確定前に push が押されると、`MarkdownEditor.svelte` の `pendingCompositionChange` フラグが立ったまま `onChange` が呼ばれず、`leaves.value` が IME 確定前の古い content のまま push されてしまう問題があった。
 
-`src/lib/stores/editor-registry.svelte.ts` で各エディタが pane ごとに自身の `flushPendingCompositionChange` をレジストリに登録し、`pushToGitHub` 冒頭の `flushAllEditors()` が一括で flush を促す。`tick()` で Svelte の reactive 更新を 1 サイクル待ってから push 処理に入ることで、最新の content が `leaves.value` に反映される。
+`src/lib/stores/editor-registry.ts` で各エディタが pane ごとに自身の `flushPendingCompositionChange` をレジストリに登録し、`pushToGitHub` がロック取得後に `flushAllEditors()` で一括 flush を促す。`tick()` で Svelte の reactive 更新を 1 サイクル待ってから push 本処理に入ることで、最新の content が `leaves.value` に反映される。
+
+**重要**: `flushAllEditors()` と `tick()` は **ロック取得の後** に置く必要がある。canSync 通過からロック取得までの間に await を挟むと、その隙に別の push/pull が canSync を通過する競合窓ができる（過去の `flushPendingSaves` がロック前にあった頃のリグレッションと同類）。
 
 ### Push処理フロー
 
@@ -59,9 +61,9 @@ Android (Gboard 等) の IME 確定前に push が押されると、`MarkdownEdi
 flowchart TD
     Start[Push開始] --> Check1{canSync?}
     Check1 -->|No: Pull中/Archive中| End1[スキップ]
-    Check1 -->|Yes| FlushIME[全エディタのIME composition flush<br/>+ tick]
-    FlushIME --> Lock[isPushing = true]
-    Lock --> Flush[保留中の保存をフラッシュ]
+    Check1 -->|Yes| Lock[isPushing = true]
+    Lock --> FlushIME[全エディタのIME composition flush<br/>+ tick]
+    FlushIME --> Flush[保留中の保存をフラッシュ]
     Flush --> Stale[Staleチェック]
     Stale --> Check2{Stale?}
     Check2 -->|Yes| Confirm[3択ダイアログ<br/>ロック保持]

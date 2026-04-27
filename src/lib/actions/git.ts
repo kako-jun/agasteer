@@ -126,17 +126,21 @@ export async function pushToGitHub(): Promise<void> {
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
   if (!canSync(isPulling.value, isPushing.value).canPush || appState.isArchiveLoading) return
 
-  // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
-  // pendingCompositionChange が立ったまま onChange が呼ばれず、leaves.value が
-  // IME 確定前の古い content のまま push されてしまう（Android で特に顕著）。
-  // 全エディタに composition flush を促し、tick() で Svelte の reactive 更新を
-  // 1 サイクル待ってから push 処理に入る。
-  flushAllEditors()
-  await tick()
-
   // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
+  // 不変条件: ロック取得は canSync 直後・全 await の前に行う。
+  // この前に await を挟むと、その隙に別の push/pull が canSync を通過して
+  // しまう競合窓ができる（過去に flushPendingSaves をロック前に置いていた
+  // ことで発生したリグレッションと同じクラスのバグ）。
   isPushing.value = true
   try {
+    // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
+    // pendingCompositionChange が立ったまま onChange が呼ばれず、leaves.value
+    // が IME 確定前の古い content のまま push されてしまう（Android で特に
+    // 顕著）。全エディタに composition flush を促し、tick() で Svelte の
+    // reactive 更新（dirty line 用の $effect 等）を 1 サイクル待つ。
+    // ロック取得後に置くことで、待機中の競合を防ぐ。
+    flushAllEditors()
+    await tick()
     // 保留中の自動保存を即座に実行してからPush
     await flushPendingSaves()
 

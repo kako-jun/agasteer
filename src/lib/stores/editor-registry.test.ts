@@ -1,23 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 
 import type { Pane } from '../navigation'
-
-// 他のテスト同様 jsdom を有効にしていないため、storage 系モジュールが
-// トップレベルで参照する localStorage をスタブしてから動的 import する。
-const store = new Map<string, string>()
-;(globalThis as any).localStorage = {
-  getItem: (k: string) => store.get(k) ?? null,
-  setItem: (k: string, v: string) => void store.set(k, v),
-  removeItem: (k: string) => void store.delete(k),
-  clear: () => store.clear(),
-  key: (i: number) => Array.from(store.keys())[i] ?? null,
-  get length() {
-    return store.size
-  },
-}
-
-const { registerEditorFlusher, unregisterEditorFlusher, flushAllEditors } =
-  await import('./editor-registry.svelte')
+import { registerEditorFlusher, unregisterEditorFlusher, flushAllEditors } from './editor-registry'
 
 describe('editor-registry', () => {
   beforeEach(() => {
@@ -72,5 +56,24 @@ describe('editor-registry', () => {
     expect(ok).toHaveBeenCalledTimes(1)
     expect(errorSpy).toHaveBeenCalled()
     errorSpy.mockRestore()
+  })
+
+  it('expectedFn を渡した unregister は登録関数と一致した時のみ削除する', () => {
+    const fn1 = vi.fn()
+    const fn2 = vi.fn()
+    registerEditorFlusher('left' as Pane, fn1)
+    // fn2 を expected に渡す → 一致しないので削除されない
+    unregisterEditorFlusher('left' as Pane, fn2)
+    flushAllEditors()
+    expect(fn1).toHaveBeenCalledTimes(1)
+    // fn1 を expected に渡す → 一致するので削除される
+    unregisterEditorFlusher('left' as Pane, fn1)
+    fn1.mockClear()
+    flushAllEditors()
+    expect(fn1).not.toHaveBeenCalled()
+  })
+
+  it('登録なしで flushAllEditors を呼んでも例外にならない（#186 push 直前の no-op 保証）', () => {
+    expect(() => flushAllEditors()).not.toThrow()
   })
 })
