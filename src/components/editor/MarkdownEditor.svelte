@@ -812,6 +812,25 @@
     cursorTrailEnabled: any
   } | null = null
 
+  // [#183-diag] 各 prop を単独で読む $effect を 4 つ並べて、どの prop の signal が
+  // 発火したのかを切り分ける。ガードは入れない（調査のため）。
+  $effect(() => {
+    const v = theme
+    console.warn(`[#183-diag] signal:theme pane=${pane} v=${JSON.stringify(v)}`)
+  })
+  $effect(() => {
+    const v = vimMode
+    console.warn(`[#183-diag] signal:vimMode pane=${pane} v=${JSON.stringify(v)}`)
+  })
+  $effect(() => {
+    const v = linedMode
+    console.warn(`[#183-diag] signal:linedMode pane=${pane} v=${JSON.stringify(v)}`)
+  })
+  $effect(() => {
+    const v = cursorTrailEnabled
+    console.warn(`[#183-diag] signal:cursorTrailEnabled pane=${pane} v=${JSON.stringify(v)}`)
+  })
+
   // テーマ・Vimモード・罫線モード・カーソルトレイル変更時にエディタを再初期化
   $effect(() => {
     // 各 prop を読み取ることでリアクティブ追跡に登録する
