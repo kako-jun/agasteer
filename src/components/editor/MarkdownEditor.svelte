@@ -831,8 +831,16 @@
     console.warn(`[#183-diag] signal:cursorTrailEnabled pane=${pane} v=${JSON.stringify(v)}`)
   })
 
+  // [#183-diag] reinit effect の発火カウンタ
+  let _reinitFireCount = 0
+
   // テーマ・Vimモード・罫線モード・カーソルトレイル変更時にエディタを再初期化
   $effect(() => {
+    _reinitFireCount += 1
+    // [#183-diag] effect が走った瞬間に必ずログ。editorView 有無に関わらず出す。
+    console.warn(
+      `[#183-diag] reinit effect FIRED #${_reinitFireCount} pane=${pane} editorViewExists=${!!editorView}`
+    )
     // 各 prop を読み取ることでリアクティブ追跡に登録する
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
