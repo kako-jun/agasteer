@@ -14,6 +14,7 @@
     shouldSuppressMobileScrollIntoView,
   } from '../../lib/editor/mobile-cursor-scroll'
   import { getLastPushedContent, dirtyLeafIds } from '../../lib/stores'
+  import { clampSelectionRanges } from '../../lib/editor/clamp-selection'
 
   interface Props {
     content: string
@@ -72,6 +73,7 @@
   // 動的インポート用の変数
   let EditorState: any
   let EditorView: any
+  let EditorSelection: any
   let StateEffect: any
   let StateField: any
   let keymap: any
@@ -247,7 +249,7 @@
   // CodeMirrorモジュールを動的ロード
   async function loadCodeMirror() {
     const [
-      { EditorState: ES, StateEffect: SE, StateField: SF },
+      { EditorState: ES, StateEffect: SE, StateField: SF, EditorSelection: ESel },
       {
         EditorView: EV,
         keymap: km,
@@ -279,6 +281,7 @@
 
     EditorState = ES
     EditorView = EV
+    EditorSelection = ESel
     StateEffect = SE
     StateField = SF
     keymap = km
@@ -724,13 +727,17 @@
     // カーソルを doc 先頭にリセットする。非Vim モードで自分の入力が
     // 親→子で echo され updateEditorContent に到達したケースで、
     // 1文字打つたびにカーソルが (0,0) へ飛ぶ問題を防ぐため、
-    // 既存の selection を新しい doc 長にクランプして保持する。
+    // 既存の全 selection range を新しい doc 長にクランプして保持する
+    // （マルチカーソルや Vim ビジュアル選択も含む）。
     const prevSelection = editorView.state.selection
-    const newLength = newContent.length
-    const clampedRanges = prevSelection.ranges.map((range: { anchor: number; head: number }) => ({
-      anchor: Math.min(range.anchor, newLength),
-      head: Math.min(range.head, newLength),
-    }))
+    const clamped = clampSelectionRanges(prevSelection.ranges, newContent.length)
+    const nextSelection =
+      clamped.length > 0
+        ? EditorSelection.create(
+            clamped.map((r) => EditorSelection.range(r.anchor, r.head)),
+            prevSelection.mainIndex
+          )
+        : EditorSelection.single(0)
 
     // スクロール位置を保持するため、setState()ではなくdispatch()で差分更新する
     // setState()はエディタ状態全体を置き換えるため、スクロール位置がリセットされてしまう
@@ -740,10 +747,7 @@
         to: currentContent.length,
         insert: newContent,
       },
-      selection: {
-        anchor: clampedRanges[0]?.anchor ?? 0,
-        head: clampedRanges[0]?.head ?? 0,
-      },
+      selection: nextSelection,
     })
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
