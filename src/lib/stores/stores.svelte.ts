@@ -887,6 +887,8 @@ export async function rehydrateForRepo(repoKey: string): Promise<void> {
       const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
       notes.value = loadedNotes
       leaves.value = loadedLeaves
+      // #168: リポ切替直後はキャッシュからのロードのみで pull が走らない経路もあるため、
+      // ホーム右下の統計が 0 にならないよう明示的に再計算する
       leafStatsStore.rebuild(loadedLeaves, loadedNotes)
       // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
       setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])

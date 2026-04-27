@@ -821,6 +821,8 @@ export function initApp(deps: InitAppDeps): () => void {
       ): Promise<number> => {
         notes.value = cache.notes
         leaves.value = cache.leaves
+        // #168: pull スキップ経路でホーム右下のリーフ数・文字数が 0 のままに
+        // ならないよう、pull 完了経路と同じ集計をここで通す。
         leafStatsStore.rebuild(cache.leaves, cache.notes)
         if (cache.metadata) {
           metadata.value = cache.metadata
