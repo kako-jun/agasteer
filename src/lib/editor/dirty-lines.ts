@@ -187,11 +187,22 @@ export function createDirtyLineExtension(
   const extension: Extension = [
     dirtyLinesField,
     dirtyLineGutter,
-    // ドキュメント変更時にデバウンス付きで更新
+    // ドキュメント変更時にデバウンス付きで更新。
+    // composition 中の dispatch は IME を確定させてしまう（#136）ため抑止する。
     EditorView.updateListener.of((update) => {
       if (update.docChanged && !update.view.composing) {
         debouncedUpdate(update.view)
       }
+    }),
+    // #172: composition 終了時にもダーティ判定を再計算する。
+    // 上のガードで composition 中は全てスキップされるため、composition が終わった
+    // タイミングで明示的に更新しないと、Gboard 等で既存行のダーティマーカーが
+    // 反映されず、次の docChanged（改行など）まで持ち越されて既存行＋新規行が
+    // まとめてダーティ化されるように見える。
+    EditorView.domEventHandlers({
+      compositionend: (_event, view) => {
+        debouncedUpdate(view)
+      },
     }),
   ]
 
