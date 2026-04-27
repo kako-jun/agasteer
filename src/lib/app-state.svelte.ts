@@ -821,6 +821,7 @@ export function initApp(deps: InitAppDeps): () => void {
       ): Promise<number> => {
         notes.value = cache.notes
         leaves.value = cache.leaves
+        leafStatsStore.rebuild(cache.leaves, cache.notes)
         if (cache.metadata) {
           metadata.value = cache.metadata
         }
