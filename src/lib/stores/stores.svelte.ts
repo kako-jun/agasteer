@@ -30,6 +30,7 @@ import {
   scheduleArchiveNotesSave,
   flushPendingSaves,
 } from './auto-save.svelte'
+import { leafStatsStore } from './leaf-stats.svelte'
 
 // ============================================
 // 基本ストア（Home用）
@@ -886,6 +887,7 @@ export async function rehydrateForRepo(repoKey: string): Promise<void> {
       const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
       notes.value = loadedNotes
       leaves.value = loadedLeaves
+      leafStatsStore.rebuild(loadedLeaves, loadedNotes)
       // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
       setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
       clearAllChanges()
