@@ -460,7 +460,7 @@
     )
   }
 
-  function initializeEditor() {
+  function initializeEditor(initialSelection?: any) {
     if (!editorContainer || editorView || isLoading) return
 
     const extensions = [
@@ -668,8 +668,23 @@
 
     currentExtensions = extensions
 
+    // #176: 再初期化のとき、新 EditorState の selection が暗黙的に (0,0) に
+    //  なるのを避けるため、可能なら呼び出し元から受け取った初期 selection を
+    //  doc 長にクランプして渡す。これで初期化後に追加の dispatch を発行せずに
+    //  カーソル位置を復元でき、vim 拡張の update が余計に走らない（#183）。
+    let resolvedSelection: any = undefined
+    if (initialSelection && EditorSelection) {
+      const clamped = clampSelectionRanges(initialSelection.ranges ?? [], content.length)
+      if (clamped.length > 0) {
+        resolvedSelection = EditorSelection.create(
+          clamped.map((r) => EditorSelection.range(r.anchor, r.head)),
+          initialSelection.mainIndex ?? 0
+        )
+      }
+    }
     const startState = EditorState.create({
       doc: content,
+      ...(resolvedSelection ? { selection: resolvedSelection } : {}),
       extensions: currentExtensions,
     })
 
@@ -780,26 +795,16 @@
         pendingVimScrollFrame = null
       }
       clearPendingMobileCursorScroll()
-      // #176: 再初期化前に selection を退避し、新しい view に復元する。
-      // 新規 EditorState は selection が暗黙的に (0,0) になるため、これを
-      // しないと vim/theme/罫線/cursorTrail を切り替えた直後に updateEditorContent が
-      // 呼ばれた際、PR #171 のクランプ経路で (0,0) を保持してしまい、入力1文字
-      // ごとにカーソルが先頭行に張り付く症状（#170 と同型）が再発する。
+      // #176/#183: 再初期化前に selection を退避し、新しい view を作るときの
+      // EditorState.create に「直接渡す」ことで復元する。
+      // 旧実装は initializeEditor 後に追加の dispatch を発行していたが、
+      // その dispatch が vim 拡張の update に経由されると、ある条件下で insert
+      // モードが解除される現象が観測された（#183）。dispatch を発行せず、
+      // 初期 state に selection を埋め込めば余計な transaction が走らない。
       const prevSelection = editorView.state.selection
       editorView.destroy()
       editorView = null
-      initializeEditor()
-      if (editorView && prevSelection && EditorSelection) {
-        const clamped = clampSelectionRanges(prevSelection.ranges, editorView.state.doc.length)
-        if (clamped.length > 0) {
-          editorView.dispatch({
-            selection: EditorSelection.create(
-              clamped.map((r) => EditorSelection.range(r.anchor, r.head)),
-              prevSelection.mainIndex
-            ),
-          })
-        }
-      }
+      initializeEditor(prevSelection)
     }
   })
 
