@@ -463,6 +463,23 @@ export function setLastPushedSnapshot(
   archiveNotesData?: Note[],
   archiveLeavesData?: Leaf[]
 ): void {
+  // [#186-diag] スナップショット捕捉時点での dirty リーフ content 長を出す
+  console.warn('[#186-diag] setLastPushedSnapshot', {
+    homeLeavesCount: homeLeaves.length,
+    dirtyLeafIds: Array.from(dirtyLeafIds.value),
+    dirtySnapshot: homeLeaves
+      .filter((l) => dirtyLeafIds.value.has(l.id))
+      .map((l) => ({
+        id: l.id,
+        title: l.title,
+        contentLen: l.content?.length ?? 0,
+        head40: (l.content ?? '').slice(0, 40),
+        tail40: (l.content ?? '').slice(-40),
+        updatedAt: l.updatedAt,
+      })),
+    stack: new Error().stack,
+  })
+
   // ディープコピーして保存（参照を切る）
   lastPushedNotes = JSON.parse(JSON.stringify(homeNotes))
   lastPushedLeaves = JSON.parse(JSON.stringify(homeLeaves))
@@ -551,6 +568,13 @@ export function refreshDirtyState(): void {
 
 // 全変更をクリア
 export function clearAllChanges(): void {
+  // [#186-diag] クリア前の dirty 状態と呼び出し元を出す
+  console.warn('[#186-diag] clearAllChanges', {
+    prevDirtyLeafIds: Array.from(dirtyLeafIds.value),
+    prevDirtyNoteIds: Array.from(dirtyNoteIds.value),
+    prevStructureDirty: isStructureDirty.value,
+    stack: new Error().stack,
+  })
   isStructureDirty.value = false
   dirtyNoteIds.value = new Set()
   dirtyLeafIds.value = new Set()

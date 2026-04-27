@@ -804,12 +804,39 @@
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
+  // [#183-diag] 直前の deps 値を保持して「どの dep が変わって effect が走ったか」を特定する
+  let _prevReinitDeps: {
+    theme: any
+    vimMode: any
+    linedMode: any
+    cursorTrailEnabled: any
+  } | null = null
+
   // テーマ・Vimモード・罫線モード・カーソルトレイル変更時にエディタを再初期化
   $effect(() => {
     // 各 prop を読み取ることでリアクティブ追跡に登録する
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
     if (editorView) {
+      // [#183-diag] どの dep が前回と違うかを判定して出す
+      const cur = { theme, vimMode, linedMode, cursorTrailEnabled }
+      const changed: Record<string, { prev: any; cur: any }> = {}
+      if (_prevReinitDeps) {
+        for (const k of Object.keys(cur) as (keyof typeof cur)[]) {
+          if (_prevReinitDeps[k] !== cur[k]) {
+            changed[k] = { prev: _prevReinitDeps[k], cur: cur[k] }
+          }
+        }
+      }
+      console.warn('[#183-diag] reinit deps', {
+        pane,
+        first: _prevReinitDeps === null,
+        changed,
+        cur,
+        stack: new Error().stack,
+      })
+      _prevReinitDeps = cur
+
       // [#183-diag] 再 init 開始
       console.warn('[#183-diag] editor reinit START', {
         pane,

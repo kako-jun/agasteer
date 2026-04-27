@@ -7,6 +7,9 @@ import {
   leaves,
   metadata,
   isDirty,
+  dirtyLeafIds,
+  dirtyNoteIds,
+  isStructureDirty,
   isPulling,
   isPushing,
   isStale,
@@ -125,11 +128,33 @@ export async function pushToGitHub(): Promise<void> {
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
   if (!canSync(isPulling.value, isPushing.value).canPush || appState.isArchiveLoading) return
 
+  // [#186-diag] Push ボタン押下時の入り口
+  console.warn('[#186-diag] pushToGitHub ENTER', {
+    isDirty: isDirty.value,
+    dirtyLeafIds: Array.from(dirtyLeafIds.value),
+    dirtyNoteIds: Array.from(dirtyNoteIds.value),
+    isStructureDirty: isStructureDirty.value,
+    ts: Date.now(),
+  })
+
   // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
   isPushing.value = true
   try {
     // 保留中の自動保存を即座に実行してからPush
     await flushPendingSaves()
+    // [#186-diag] flushPendingSaves 直後の leaves スナップショット（dirty のものだけ）
+    const _flushedDirty = leaves.value.filter((l) => dirtyLeafIds.value.has(l.id))
+    console.warn('[#186-diag] pushToGitHub after flushPendingSaves', {
+      dirtyLeafSnapshots: _flushedDirty.map((l) => ({
+        id: l.id,
+        title: l.title,
+        contentLen: l.content?.length ?? 0,
+        head40: (l.content ?? '').slice(0, 40),
+        tail40: (l.content ?? '').slice(-40),
+        updatedAt: l.updatedAt,
+      })),
+      ts: Date.now(),
+    })
 
     // Stale編集かどうかチェック（共通関数で時刻も更新）
     const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
@@ -210,6 +235,15 @@ export async function pushToGitHub(): Promise<void> {
 
     // Push飛行中フラグをクリア（レスポンスを受信できた）
     setPushInFlightAt(undefined)
+
+    // [#186-diag] push 結果サマリ
+    console.warn('[#186-diag] pushToGitHub RESULT', {
+      variant: result.variant,
+      message: result.message,
+      changedLeafCount: result.changedLeafCount,
+      commitSha: result.commitSha,
+      ts: Date.now(),
+    })
 
     // Push成功時の後処理
     if (result.variant === 'success') {
