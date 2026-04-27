@@ -109,25 +109,6 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     }
   }
 
-  // [#186-diag] push 直前に「実際に送る leaves の内容」を出す
-  // dirty フラグを参照したいが sync.ts は store に直接依存しない方針なので、
-  // ここでは更新時刻が新しい上位 5 件をダンプして「push されたものが本当に
-  // 編集後の内容か」「途中スナップショットになっていないか」を確認する。
-  const recent = [...leaves].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, 5)
-  console.warn('[#186-diag] executePush sending', {
-    leavesCount: leaves.length,
-    notesCount: notes.length,
-    recentLeaves: recent.map((l) => ({
-      id: l.id,
-      title: l.title,
-      contentLen: l.content?.length ?? 0,
-      head40: (l.content ?? '').slice(0, 40),
-      tail40: (l.content ?? '').slice(-40),
-      updatedAt: l.updatedAt,
-    })),
-    ts: Date.now(),
-  })
-
   // Git Tree APIで一括Push（アーカイブデータも含む）
   const result = await pushAllWithTreeAPI({
     leaves,

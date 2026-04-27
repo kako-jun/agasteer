@@ -596,13 +596,6 @@
           // スペースキーでペイン切り替え
           Vim.defineAction('switchPane', function () {
             const paneId = getCurrentPane()
-            // [#183-diag] switchPane が想定外に呼ばれている疑いがあるためトレース
-            console.warn('[#183-diag] switchPane FIRED', {
-              paneId,
-              activeElement: document.activeElement?.tagName,
-              activeClass: (document.activeElement as HTMLElement)?.className,
-              stack: new Error().stack,
-            })
             const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
             if (callbacks?.onSwitchPane) {
               callbacks.onSwitchPane()
@@ -728,27 +721,6 @@
     // DOM要素にペイン情報をマーク（Vimコマンドで参照するため）
     editorView.dom.dataset.pane = pane
 
-    // [#183-diag] vim-mode-change を購読してモード遷移を全部ログ出力
-    if (vimMode && Vim) {
-      import('@replit/codemirror-vim')
-        .then(({ getCM }) => {
-          const cm = getCM(editorView)
-          if (cm && typeof (cm as any).on === 'function') {
-            ;(cm as any).on('vim-mode-change', (e: any) => {
-              console.warn('[#183-diag] vim-mode-change', {
-                pane,
-                mode: e?.mode,
-                subMode: e?.subMode,
-                stack: new Error().stack,
-              })
-            })
-          }
-        })
-        .catch((err) => {
-          console.warn('[#183-diag] failed to attach vim-mode-change listener', err)
-        })
-    }
-
     // 初回のダーティライン更新
     if (updateDirtyLinesFn && editorView) {
       updateDirtyLinesFn(editorView)
@@ -782,15 +754,6 @@
           )
         : EditorSelection.single(0)
 
-    // [#183-diag] content prop echo 経路の dispatch
-    console.warn('[#183-diag] updateEditorContent DISPATCH', {
-      pane,
-      vimMode,
-      curLen: currentContent.length,
-      newLen: newContent.length,
-      selection: JSON.stringify(prevSelection.main),
-    })
-
     // スクロール位置を保持するため、setState()ではなくdispatch()で差分更新する
     // setState()はエディタ状態全体を置き換えるため、スクロール位置がリセットされてしまう
     editorView.dispatch({
@@ -804,58 +767,8 @@
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
-  // [#183-diag] 直前の deps 値を保持して「どの dep が変わって effect が走ったか」を特定する
-  let _prevReinitDeps: {
-    theme: any
-    vimMode: any
-    linedMode: any
-    cursorTrailEnabled: any
-  } | null = null
-
-  // [#183-diag] 各 prop を単独で読む $effect を 4 つ並べて、どの prop の signal が
-  // 発火したのかを切り分ける。ガードは入れない（調査のため）。
-  $effect(() => {
-    const v = theme
-    console.warn(`[#183-diag] signal:theme pane=${pane} v=${JSON.stringify(v)}`)
-  })
-  $effect(() => {
-    const v = vimMode
-    console.warn(`[#183-diag] signal:vimMode pane=${pane} v=${JSON.stringify(v)}`)
-  })
-  $effect(() => {
-    const v = linedMode
-    console.warn(`[#183-diag] signal:linedMode pane=${pane} v=${JSON.stringify(v)}`)
-  })
-  $effect(() => {
-    const v = cursorTrailEnabled
-    console.warn(`[#183-diag] signal:cursorTrailEnabled pane=${pane} v=${JSON.stringify(v)}`)
-  })
-  // [#183-diag] 仮説検証: dirtyLeafIds.value の bump が reinit effect 発火の引き金か？
-  $effect(() => {
-    const size = dirtyLeafIds.value.size
-    console.warn(`[#183-diag] signal:dirtyLeafIds pane=${pane} size=${size}`)
-  })
-  // [#183-diag] content prop の変化追跡
-  $effect(() => {
-    const len = content?.length ?? 0
-    console.warn(`[#183-diag] signal:content pane=${pane} len=${len}`)
-  })
-  // [#183-diag] leafId prop の変化追跡
-  $effect(() => {
-    const id = leafId
-    console.warn(`[#183-diag] signal:leafId pane=${pane} id=${id}`)
-  })
-
-  // [#183-diag] reinit effect の発火カウンタ
-  let _reinitFireCount = 0
-
   // テーマ・Vimモード・罫線モード・カーソルトレイル変更時にエディタを再初期化
   $effect(() => {
-    _reinitFireCount += 1
-    // [#183-diag] effect が走った瞬間に必ずログ。editorView 有無に関わらず出す。
-    console.warn(
-      `[#183-diag] reinit effect FIRED #${_reinitFireCount} pane=${pane} editorViewExists=${!!editorView}`
-    )
     // 各 prop を読み取ることでリアクティブ追跡に登録する
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
@@ -865,31 +778,6 @@
     // などが bump して reinit が走り、vim 拡張の insert state が消える。
     untrack(() => {
       if (!editorView) return
-      // [#183-diag] どの dep が前回と違うかを判定して出す
-      const cur = { theme, vimMode, linedMode, cursorTrailEnabled }
-      const changed: Record<string, { prev: any; cur: any }> = {}
-      if (_prevReinitDeps) {
-        for (const k of Object.keys(cur) as (keyof typeof cur)[]) {
-          if (_prevReinitDeps[k] !== cur[k]) {
-            changed[k] = { prev: _prevReinitDeps[k], cur: cur[k] }
-          }
-        }
-      }
-      // [#183-diag] DevTools の collapsed 表示を回避するため文字列化して出す
-      console.warn(
-        `[#183-diag] reinit deps pane=${pane} first=${_prevReinitDeps === null} changed=${JSON.stringify(changed)} cur=${JSON.stringify(cur)}`
-      )
-      _prevReinitDeps = cur
-
-      // [#183-diag] 再 init 開始
-      console.warn('[#183-diag] editor reinit START', {
-        pane,
-        vimMode,
-        theme,
-        linedMode,
-        cursorTrailEnabled,
-        prevSelection: JSON.stringify(editorView.state.selection.main),
-      })
       flushPendingCompositionChange(editorView)
       isComposing = false
       // dirtyLeafIdsストアの購読解除
@@ -922,13 +810,6 @@
       editorView.destroy()
       editorView = null
       initializeEditor(prevSelection)
-      // [#183-diag] 再 init 完了
-      console.warn('[#183-diag] editor reinit DONE', {
-        pane,
-        vimMode,
-        editorViewExists: !!editorView,
-        newSelection: editorView ? JSON.stringify((editorView as any).state.selection.main) : null,
-      })
     })
   })
 

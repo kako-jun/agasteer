@@ -452,16 +452,6 @@ export async function updateLeafContent(
   leafId: string,
   pane: Pane
 ): Promise<void> {
-  // [#186-diag] エディタ→リーフへの content 書き込みを毎回ログ
-  console.warn('[#186-diag] updateLeafContent', {
-    leafId,
-    pane,
-    contentLen: content.length,
-    head40: content.slice(0, 40),
-    tail40: content.slice(-40),
-    ts: Date.now(),
-  })
-
   const $_ = get(_)
 
   // オフラインリーフは専用の自動保存処理
