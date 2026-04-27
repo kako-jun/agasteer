@@ -783,17 +783,16 @@
       // #176: 再初期化前に selection を退避し、新しい view に復元する。
       // 新規 EditorState は selection が暗黙的に (0,0) になるため、これを
       // しないと vim/theme/罫線/cursorTrail を切り替えた直後に updateEditorContent が
-      // 呼ばれた際、PR #171 のクランプ経路で (0,0) を保持してしまい入力位置が
-      // 先頭に張り付く症状が出る。
+      // 呼ばれた際、PR #171 のクランプ経路で (0,0) を保持してしまい、入力1文字
+      // ごとにカーソルが先頭行に張り付く症状（#170 と同型）が再発する。
       const prevSelection = editorView.state.selection
       editorView.destroy()
       editorView = null
       initializeEditor()
       if (editorView && prevSelection && EditorSelection) {
-        const _editorView: any = editorView
-        const clamped = clampSelectionRanges(prevSelection.ranges, _editorView.state.doc.length)
+        const clamped = clampSelectionRanges(prevSelection.ranges, editorView.state.doc.length)
         if (clamped.length > 0) {
-          _editorView.dispatch({
+          editorView.dispatch({
             selection: EditorSelection.create(
               clamped.map((r) => EditorSelection.range(r.anchor, r.head)),
               prevSelection.mainIndex
