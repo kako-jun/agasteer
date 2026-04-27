@@ -171,10 +171,15 @@ export function createDirtyLineExtension(
     }
     debounceTimer = setTimeout(() => {
       debounceTimer = null
-      // #172 + #136: タイマー満了時に新しい composition が始まっていた場合、
-      // ここで dispatch すると IME を確定させてしまうのでスキップする。
-      // 次の docChanged または compositionend で再スケジュールされる。
-      if (view.composing) return
+      // #172 + #136: タイマー満了時に composition 中なら dispatch すると
+      // IME を確定させてしまうので、その場では実行せず再度 debounce する。
+      // これで composition が落ちた瞬間に updateDirtyLines が走るため、
+      // compositionend を発火しない IME（#174: Gboard 日本語の変換確定など）
+      // でも追従する。
+      if (view.composing) {
+        debouncedUpdate(view)
+        return
+      }
       updateDirtyLines(view)
     }, debounceMs)
   }
@@ -191,18 +196,20 @@ export function createDirtyLineExtension(
   const extension: Extension = [
     dirtyLinesField,
     dirtyLineGutter,
-    // ドキュメント変更時にデバウンス付きで更新。
-    // composition 中の dispatch は IME を確定させてしまう（#136）ため抑止する。
+    // ドキュメント変更時にデバウンス付きで更新を「スケジュール」する。
+    // 実際の dispatch は debouncedUpdate のタイマー callback で view.composing を
+    // 再チェックしてから行うため、ここでは composition 中でもスケジュールしてよい。
+    // #136 で問題になった「dispatch が IME を確定させる」現象は debouncedUpdate
+    // 側の retry ロジックで防いでいる。
     EditorView.updateListener.of((update) => {
-      if (update.docChanged && !update.view.composing) {
+      if (update.docChanged) {
         debouncedUpdate(update.view)
       }
     }),
-    // #172: composition 終了時にもダーティ判定を再計算する。
-    // 上のガードで composition 中は全てスキップされるため、composition が終わった
-    // タイミングで明示的に更新しないと、Gboard 等で既存行のダーティマーカーが
-    // 反映されず、次の docChanged（改行など）まで持ち越されて既存行＋新規行が
-    // まとめてダーティ化されるように見える。
+    // #172: compositionend を発火する IME（Gboard 英語で半角スペース確定など）の
+    // 即応性を上げるための補助トリガー。Gboard 日本語の変換確定など
+    // compositionend が来ない／直後に新しい composition が始まる IME では
+    // 上の updateListener と debouncedUpdate の retry ループが追従する（#174）。
     EditorView.domEventHandlers({
       compositionend: (_event, view) => {
         debouncedUpdate(view)
