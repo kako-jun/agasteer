@@ -52,6 +52,7 @@ import {
   startStaleChecker,
   stopStaleChecker,
   executeStaleCheck,
+  applyStaleResult,
   shouldAutoPull,
   setLastPushedSnapshot,
   isArchiveLoaded,
@@ -81,8 +82,6 @@ import {
   getPersistedLastPulledPushCount,
   getPersistedMetadata,
   shouldShowPwaInstallBanner,
-  setPushInFlightAt,
-  getPushInFlightAt,
   setCurrentRepo,
   syncRepoNameCache,
 } from './data'
@@ -994,41 +993,9 @@ export function initApp(deps: InitAppDeps): () => void {
         // モーダルを表示し、閉じたら状態確認を実行
         const t = get(_)
         await alertAsync(t('modal.longBackground'), 'center')
-        // staleチェックを実行
+        // staleチェック → 共通ロジックで stale/up_to_date を処理（周期チェッカーと挙動を揃える）
         const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-        if (staleResult.status === 'stale') {
-          // Push飛行中フラグがある場合、スリープでPushレスポンスが消失した可能性がある
-          // （GitHub側ではPushが成功しているが、レスポンスが届かずSHAが未更新）
-          const pushInFlight = getPushInFlightAt()
-          const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000 // 1時間
-          if (pushInFlight && now - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
-            console.log('Stale detected with push-in-flight flag: resolving as interrupted push')
-            // SHAのみ更新し、スナップショットとダーティは変更しない。
-            // push後〜sleep前にユーザーが追加編集した場合、その編集がダーティとして残り、
-            // 次回pushで正しく送信される。既にpush済みの内容との差分がなければno-op pushになる。
-            lastKnownCommitSha.value = staleResult.remoteCommitSha
-            setPushInFlightAt(undefined)
-            isStale.value = false
-          } else {
-            // フラグが期限切れの場合はクリアして通常のstale処理
-            if (pushInFlight) {
-              setPushInFlightAt(undefined)
-            }
-            // 周期 stale-checker と同じ判定: ローカルがクリーンなら自動Pull、ダーティなら赤バッジ
-            if (isDirty.value) {
-              isStale.value = true
-            } else {
-              shouldAutoPull.value = true
-            }
-          }
-        } else if (staleResult.status === 'up_to_date') {
-          // PushがGitHubに届かなかった場合もここに来る（SHAが変わっていない）
-          // 飛行中フラグがあれば安全にクリア
-          if (getPushInFlightAt()) {
-            setPushInFlightAt(undefined)
-          }
-          isStale.value = false
-        }
+        applyStaleResult(staleResult, 'Long-background resume')
       }
       lastVisibleTime = now
 
