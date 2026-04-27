@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, untrack } from 'svelte'
   import LeafSpinner from '../icons/LeafSpinner.svelte'
 
   import type { ThemeType } from '../../lib/types'
@@ -859,7 +859,12 @@
     // 各 prop を読み取ることでリアクティブ追跡に登録する
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
-    if (editorView) {
+    // #183: destroy + initializeEditor は untrack で囲み、initializeEditor 内部の
+    // reactive 読み取り（content / leafId / dirtyLeafIds.value 等）が暗黙にこの
+    // effect の dep に追加されるのを防ぐ。これがないと 1 文字打つたびに content
+    // などが bump して reinit が走り、vim 拡張の insert state が消える。
+    untrack(() => {
+      if (!editorView) return
       // [#183-diag] どの dep が前回と違うかを判定して出す
       const cur = { theme, vimMode, linedMode, cursorTrailEnabled }
       const changed: Record<string, { prev: any; cur: any }> = {}
@@ -924,7 +929,7 @@
         editorViewExists: !!editorView,
         newSelection: editorView ? JSON.stringify((editorView as any).state.selection.main) : null,
       })
-    }
+    })
   })
 
   // contentが外部から変更された時にエディタを更新
