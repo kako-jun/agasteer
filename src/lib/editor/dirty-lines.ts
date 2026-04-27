@@ -63,6 +63,11 @@ export function computeDirtyLines(baseContent: string | null, currentContent: st
     return dirtyLines
   }
 
+  // 完全一致なら LCS をスキップ（O(n*m) を回避）
+  if (baseContent === currentContent) {
+    return dirtyLines
+  }
+
   const baseLines = baseContent.split('\n')
   const currentLines = currentContent.split('\n')
 
@@ -84,7 +89,6 @@ export function computeDirtyLines(baseContent: string | null, currentContent: st
  *
  * @param modules CodeMirrorモジュール
  * @param getBaseContent 基準コンテンツを取得する関数（毎回呼び出してPush後の更新を反映）
- * @param isLeafDirty リーフがダーティかどうかを返す関数（ダーティでなければ計算スキップ）
  * @param debounceMs デバウンス時間（ミリ秒）
  */
 export function createDirtyLineExtension(
@@ -96,7 +100,6 @@ export function createDirtyLineExtension(
     EditorView: typeof import('@codemirror/view').EditorView
   },
   getBaseContent: () => string | null,
-  isLeafDirty: () => boolean,
   debounceMs: number = 200
 ): {
   extension: Extension
@@ -151,14 +154,6 @@ export function createDirtyLineExtension(
 
   // ダーティ行を更新する関数
   function updateDirtyLines(view: InstanceType<typeof EditorView>) {
-    // リーフがダーティでなければ空のSetを設定（計算スキップ）
-    if (!isLeafDirty()) {
-      view.dispatch({
-        effects: setDirtyLines.of(new Set()),
-      })
-      return
-    }
-
     const currentContent = view.state.doc.toString()
     // baseContentを毎回動的に取得（Push後の更新を反映）
     const baseContent = getBaseContent()
