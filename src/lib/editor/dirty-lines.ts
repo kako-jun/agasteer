@@ -170,8 +170,12 @@ export function createDirtyLineExtension(
       clearTimeout(debounceTimer)
     }
     debounceTimer = setTimeout(() => {
-      updateDirtyLines(view)
       debounceTimer = null
+      // #172 + #136: タイマー満了時に新しい composition が始まっていた場合、
+      // ここで dispatch すると IME を確定させてしまうのでスキップする。
+      // 次の docChanged または compositionend で再スケジュールされる。
+      if (view.composing) return
+      updateDirtyLines(view)
     }, debounceMs)
   }
 
