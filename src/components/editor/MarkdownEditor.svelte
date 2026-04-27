@@ -720,6 +720,18 @@
     const currentContent = editorView.state.doc.toString()
     if (currentContent === newContent) return
 
+    // #170: full replace 時に selection を渡さないと CodeMirror が
+    // カーソルを doc 先頭にリセットする。非Vim モードで自分の入力が
+    // 親→子で echo され updateEditorContent に到達したケースで、
+    // 1文字打つたびにカーソルが (0,0) へ飛ぶ問題を防ぐため、
+    // 既存の selection を新しい doc 長にクランプして保持する。
+    const prevSelection = editorView.state.selection
+    const newLength = newContent.length
+    const clampedRanges = prevSelection.ranges.map((range: { anchor: number; head: number }) => ({
+      anchor: Math.min(range.anchor, newLength),
+      head: Math.min(range.head, newLength),
+    }))
+
     // スクロール位置を保持するため、setState()ではなくdispatch()で差分更新する
     // setState()はエディタ状態全体を置き換えるため、スクロール位置がリセットされてしまう
     editorView.dispatch({
@@ -727,6 +739,10 @@
         from: 0,
         to: currentContent.length,
         insert: newContent,
+      },
+      selection: {
+        anchor: clampedRanges[0]?.anchor ?? 0,
+        head: clampedRanges[0]?.head ?? 0,
       },
     })
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
