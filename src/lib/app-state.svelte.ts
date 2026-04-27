@@ -1014,7 +1014,12 @@ export function initApp(deps: InitAppDeps): () => void {
             if (pushInFlight) {
               setPushInFlightAt(undefined)
             }
-            isStale.value = true
+            // 周期 stale-checker と同じ判定: ローカルがクリーンなら自動Pull、ダーティなら赤バッジ
+            if (isDirty.value) {
+              isStale.value = true
+            } else {
+              shouldAutoPull.value = true
+            }
           }
         } else if (staleResult.status === 'up_to_date') {
           // PushがGitHubに届かなかった場合もここに来る（SHAが変わっていない）
