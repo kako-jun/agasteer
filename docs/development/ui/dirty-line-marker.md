@@ -120,7 +120,10 @@ const dirtyLinesField = StateField.define<Set<number>>({
     for (const effect of tr.effects) {
       if (effect.is(setDirtyLines)) return effect.value
     }
-    return value
+    // #175: doc 変更で line 番号がずれるのを純関数経由で再マッピングする。
+    // 挿入・削除で行が前後にずれた瞬間に、マーカーが視覚的に違う行へ
+    // 移動して見えるのを防ぐ（debouncedUpdate が走るまでのズレ対策）。
+    return remapDirtyLinesThroughChanges(value, tr)
   },
 })
 
