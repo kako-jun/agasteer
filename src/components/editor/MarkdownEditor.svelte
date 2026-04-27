@@ -596,6 +596,13 @@
           // スペースキーでペイン切り替え
           Vim.defineAction('switchPane', function () {
             const paneId = getCurrentPane()
+            // [#183-diag] switchPane が想定外に呼ばれている疑いがあるためトレース
+            console.warn('[#183-diag] switchPane FIRED', {
+              paneId,
+              activeElement: document.activeElement?.tagName,
+              activeClass: (document.activeElement as HTMLElement)?.className,
+              stack: new Error().stack,
+            })
             const callbacks = paneId ? window.editorCallbacks?.[paneId] : null
             if (callbacks?.onSwitchPane) {
               callbacks.onSwitchPane()
@@ -721,6 +728,27 @@
     // DOM要素にペイン情報をマーク（Vimコマンドで参照するため）
     editorView.dom.dataset.pane = pane
 
+    // [#183-diag] vim-mode-change を購読してモード遷移を全部ログ出力
+    if (vimMode && Vim) {
+      import('@replit/codemirror-vim')
+        .then(({ getCM }) => {
+          const cm = getCM(editorView)
+          if (cm && typeof (cm as any).on === 'function') {
+            ;(cm as any).on('vim-mode-change', (e: any) => {
+              console.warn('[#183-diag] vim-mode-change', {
+                pane,
+                mode: e?.mode,
+                subMode: e?.subMode,
+                stack: new Error().stack,
+              })
+            })
+          }
+        })
+        .catch((err) => {
+          console.warn('[#183-diag] failed to attach vim-mode-change listener', err)
+        })
+    }
+
     // 初回のダーティライン更新
     if (updateDirtyLinesFn && editorView) {
       updateDirtyLinesFn(editorView)
@@ -754,6 +782,15 @@
           )
         : EditorSelection.single(0)
 
+    // [#183-diag] content prop echo 経路の dispatch
+    console.warn('[#183-diag] updateEditorContent DISPATCH', {
+      pane,
+      vimMode,
+      curLen: currentContent.length,
+      newLen: newContent.length,
+      selection: JSON.stringify(prevSelection.main),
+    })
+
     // スクロール位置を保持するため、setState()ではなくdispatch()で差分更新する
     // setState()はエディタ状態全体を置き換えるため、スクロール位置がリセットされてしまう
     editorView.dispatch({
@@ -773,6 +810,15 @@
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
     if (editorView) {
+      // [#183-diag] 再 init 開始
+      console.warn('[#183-diag] editor reinit START', {
+        pane,
+        vimMode,
+        theme,
+        linedMode,
+        cursorTrailEnabled,
+        prevSelection: JSON.stringify(editorView.state.selection.main),
+      })
       flushPendingCompositionChange(editorView)
       isComposing = false
       // dirtyLeafIdsストアの購読解除
@@ -805,6 +851,13 @@
       editorView.destroy()
       editorView = null
       initializeEditor(prevSelection)
+      // [#183-diag] 再 init 完了
+      console.warn('[#183-diag] editor reinit DONE', {
+        pane,
+        vimMode,
+        editorViewExists: !!editorView,
+        newSelection: editorView ? JSON.stringify((editorView as any).state.selection.main) : null,
+      })
     }
   })
 
