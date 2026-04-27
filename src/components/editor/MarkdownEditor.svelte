@@ -628,13 +628,10 @@
     if (leafId && StateEffect && StateField && GutterMarker && gutter) {
       // 基準コンテンツを動的に取得する関数（Push後の更新を反映）
       const getBaseContent = () => getLastPushedContent(leafId)
-      // リーフがダーティかどうかをチェックする関数
-      const isLeafDirty = () => dirtyLeafIds.value.has(leafId)
 
       const { extension, updateDirtyLines, cleanup } = createDirtyLineExtension(
         { StateEffect, StateField, GutterMarker, gutter, EditorView },
-        getBaseContent,
-        isLeafDirty
+        getBaseContent
       )
       extensions.push(extension)
       updateDirtyLinesFn = updateDirtyLines
