@@ -828,13 +828,10 @@
           }
         }
       }
-      console.warn('[#183-diag] reinit deps', {
-        pane,
-        first: _prevReinitDeps === null,
-        changed,
-        cur,
-        stack: new Error().stack,
-      })
+      // [#183-diag] DevTools の collapsed 表示を回避するため文字列化して出す
+      console.warn(
+        `[#183-diag] reinit deps pane=${pane} first=${_prevReinitDeps === null} changed=${JSON.stringify(changed)} cur=${JSON.stringify(cur)}`
+      )
       _prevReinitDeps = cur
 
       // [#183-diag] 再 init 開始
