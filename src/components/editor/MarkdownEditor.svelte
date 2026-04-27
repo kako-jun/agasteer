@@ -830,6 +830,21 @@
     const v = cursorTrailEnabled
     console.warn(`[#183-diag] signal:cursorTrailEnabled pane=${pane} v=${JSON.stringify(v)}`)
   })
+  // [#183-diag] 仮説検証: dirtyLeafIds.value の bump が reinit effect 発火の引き金か？
+  $effect(() => {
+    const size = dirtyLeafIds.value.size
+    console.warn(`[#183-diag] signal:dirtyLeafIds pane=${pane} size=${size}`)
+  })
+  // [#183-diag] content prop の変化追跡
+  $effect(() => {
+    const len = content?.length ?? 0
+    console.warn(`[#183-diag] signal:content pane=${pane} len=${len}`)
+  })
+  // [#183-diag] leafId prop の変化追跡
+  $effect(() => {
+    const id = leafId
+    console.warn(`[#183-diag] signal:leafId pane=${pane} id=${id}`)
+  })
 
   // [#183-diag] reinit effect の発火カウンタ
   let _reinitFireCount = 0
