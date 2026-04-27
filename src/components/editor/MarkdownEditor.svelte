@@ -638,7 +638,7 @@
       updateDirtyLinesFnRef = updateDirtyLines // 参照を保持
       dirtyLineCleanup = cleanup
 
-      // dirtyLeafIdsの変更を監視（Push後にダーティ行をクリア）
+      // dirtyLeafIds 変更時に再計算（Push 完了で getBaseContent() が新スナップショットを返すようになるタイミングで LCS を再計算してマーカーを更新するため）
       if (dirtyLeafIdsUnsubscribe) {
         dirtyLeafIdsUnsubscribe()
       }

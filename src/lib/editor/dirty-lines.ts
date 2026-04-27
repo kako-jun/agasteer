@@ -63,6 +63,11 @@ export function computeDirtyLines(baseContent: string | null, currentContent: st
     return dirtyLines
   }
 
+  // 完全一致なら LCS をスキップ（O(n*m) を回避）
+  if (baseContent === currentContent) {
+    return dirtyLines
+  }
+
   const baseLines = baseContent.split('\n')
   const currentLines = currentContent.split('\n')
 
