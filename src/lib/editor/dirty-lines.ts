@@ -120,6 +120,23 @@ export function createDirtyLineExtension(
           return effect.value
         }
       }
+      // #175: doc が変更された transaction では、保持している line 番号を
+      // 新しい doc に合わせて再マッピングする。これをしないと挿入・削除で
+      // 行が前後にずれた瞬間にマーカーが視覚的に違う行へ移動して見える
+      // （次の debouncedUpdate が走るまで 200ms 程度ズレが残る）。
+      if (tr.docChanged && value.size > 0) {
+        const oldDoc = tr.startState.doc
+        const newDoc = tr.state.doc
+        const next = new Set<number>()
+        for (const lineNo of value) {
+          if (lineNo < 1 || lineNo > oldDoc.lines) continue
+          const oldLineFrom = oldDoc.line(lineNo).from
+          const newPos = tr.changes.mapPos(oldLineFrom, 1)
+          if (newPos < 0 || newPos > newDoc.length) continue
+          next.add(newDoc.lineAt(newPos).number)
+        }
+        return next
+      }
       return value
     },
   })
