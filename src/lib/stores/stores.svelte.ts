@@ -663,13 +663,46 @@ export const rightLeaf = {
  * reactive 読者（MarkdownEditor の reinit \$effect 等）まで再実行される。field mutation で
  * field-level signal だけ bump させ、id 等の不変フィールドの読者は再実行されないようにする。
  *
- * leaves.value 配列側は別途 updateLeaves 等で新配列に差し替えられる。OLD object（leftLeaf）と
- * NEW object（leaves[i]）は識別子は別だが値は同期。reference 比較は detectDirtyIds 等いずれの
- * 経路でも行わないため無害。
+ * leaves.value 配列側は mutateLeavesItem / mutateArchiveLeavesItem で同様に in-place mutation
+ * させると、leftLeaf と leaves[i] が同一プロキシのままになり、識別子が完全に保持される。
  */
 export function applyLeafFieldUpdate(leafId: string, partial: Partial<Leaf>): void {
   if (_leftLeaf?.id === leafId) Object.assign(_leftLeaf, partial)
   if (_rightLeaf?.id === leafId) Object.assign(_rightLeaf, partial)
+}
+
+/**
+ * Home の leaves 配列に対し、対象 id のリーフを in-place mutation で更新する。
+ * #187 Phase 2: updateLeaves(newArray) は outer array source を bump させ、leaves を
+ * 反復する全ての reactive reader を再評価させる（1000 リーフ × 1 文字編集 = 大量再評価）。
+ * 在地 mutation なら $state proxy の field-level signal だけが bump し、波及が必要最小限になる。
+ *
+ * scheduleLeavesSave / updateHomeDirtyIds の bookkeeping は updateLeaves と同じく実施する。
+ * detectDirtyIds は値比較ベース、lastPushedLeaves は JSON deep-copy snapshot なので
+ * in-place mutation でも正しく差分検出される。
+ *
+ * 戻り値: 対象が見つかれば true、見つからなければ false。
+ */
+export function mutateLeavesItem(leafId: string, partial: Partial<Leaf>): boolean {
+  const target = _leaves.find((l) => l.id === leafId)
+  if (!target) return false
+  Object.assign(target, partial)
+  scheduleLeavesSave()
+  updateHomeDirtyIds(_notes, _leaves)
+  return true
+}
+
+/**
+ * Archive の leaves 配列に対し、対象 id のリーフを in-place mutation で更新する。
+ * 詳細は mutateLeavesItem のコメント参照。
+ */
+export function mutateArchiveLeavesItem(leafId: string, partial: Partial<Leaf>): boolean {
+  const target = _archiveLeaves.find((l) => l.id === leafId)
+  if (!target) return false
+  Object.assign(target, partial)
+  scheduleArchiveLeavesSave()
+  updateArchiveDirtyIds(_archiveNotes, _archiveLeaves)
+  return true
 }
 
 /**

@@ -16,8 +16,20 @@ const store = new Map<string, string>()
   },
 }
 
-const { leftLeaf, rightLeaf, leftNote, rightNote, applyLeafFieldUpdate, applyNoteFieldUpdate } =
-  await import('./stores.svelte')
+const {
+  leftLeaf,
+  rightLeaf,
+  leftNote,
+  rightNote,
+  leaves,
+  archiveLeaves,
+  updateLeaves,
+  updateArchiveLeaves,
+  applyLeafFieldUpdate,
+  applyNoteFieldUpdate,
+  mutateLeavesItem,
+  mutateArchiveLeavesItem,
+} = await import('./stores.svelte')
 
 function makeLeaf(id: string, overrides: Partial<Leaf> = {}): Leaf {
   return {
@@ -102,6 +114,57 @@ describe('applyLeafFieldUpdate (#187 抜本対策)', () => {
     rightLeaf.value = null
 
     expect(() => applyLeafFieldUpdate('a', { content: 'new' })).not.toThrow()
+  })
+})
+
+describe('mutateLeavesItem (#187 Phase 2: 配列 in-place mutation)', () => {
+  beforeEach(() => {
+    updateLeaves([])
+    leftLeaf.value = null
+    rightLeaf.value = null
+  })
+
+  it('対象リーフを配列の identity を保ったまま mutate する', () => {
+    updateLeaves([makeLeaf('a', { content: 'old' }), makeLeaf('b', { content: 'old' })])
+    const arrBefore = leaves.value
+    const itemBefore = leaves.value[0]
+
+    const ok = mutateLeavesItem('a', { content: 'new', updatedAt: 42 })
+
+    expect(ok).toBe(true)
+    // 配列自体の identity も保たれる（Phase 2 の核心）
+    expect(Object.is(arrBefore, leaves.value)).toBe(true)
+    // 対象 leaf の identity も保たれる
+    expect(Object.is(itemBefore, leaves.value[0])).toBe(true)
+    expect(leaves.value[0].content).toBe('new')
+    expect(leaves.value[0].updatedAt).toBe(42)
+    expect(leaves.value[1].content).toBe('old')
+  })
+
+  it('id が見つからなければ false を返し、配列に変化なし', () => {
+    updateLeaves([makeLeaf('a', { content: 'old' })])
+
+    const ok = mutateLeavesItem('z', { content: 'new' })
+
+    expect(ok).toBe(false)
+    expect(leaves.value[0].content).toBe('old')
+  })
+})
+
+describe('mutateArchiveLeavesItem (#187 Phase 2)', () => {
+  beforeEach(() => {
+    updateArchiveLeaves([])
+  })
+
+  it('archive 配列も同様に in-place mutation', () => {
+    updateArchiveLeaves([makeLeaf('a', { content: 'old' })])
+    const itemBefore = archiveLeaves.value[0]
+
+    const ok = mutateArchiveLeavesItem('a', { content: 'new' })
+
+    expect(ok).toBe(true)
+    expect(Object.is(itemBefore, archiveLeaves.value[0])).toBe(true)
+    expect(archiveLeaves.value[0].content).toBe('new')
   })
 })
 

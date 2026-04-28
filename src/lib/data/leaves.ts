@@ -4,7 +4,7 @@
 
 import type { Note, Leaf } from '../types'
 import type { Pane } from '../navigation'
-import { notes, leaves, updateLeaves } from '../stores'
+import { notes, leaves, updateLeaves, mutateLeavesItem } from '../stores'
 import { showAlert, showConfirm, showPushToast } from '../ui'
 // 循環参照回避: utils/index.tsではなく、直接utils.tsからインポート
 import { generateUniqueName, normalizeBadgeValue } from '../utils/utils'
@@ -159,13 +159,14 @@ export function updateLeafContent(options: UpdateLeafContentOptions): {
     }
   }
 
-  // グローバルストアを更新（isDirtyはスナップショット比較で自動検出）
-  const updatedLeaves = allLeaves.map((n) =>
-    n.id === leafId ? { ...n, content, title: newTitle, updatedAt: Date.now() } : n
-  )
-  updateLeaves(updatedLeaves)
+  // #187 Phase 2: in-place mutation で leaves[i] を更新（outer array source の bump を回避）。
+  // 識別子は保持されるため leftLeaf/rightLeaf と leaves[i] が同一プロキシのままになる。
+  const updatedAt = Date.now()
+  mutateLeavesItem(leafId, { content, title: newTitle, updatedAt })
 
-  const updatedLeaf = updatedLeaves.find((n) => n.id === leafId) || null
+  // 戻り値の updatedLeaf は呼び出し元の applyLeafFieldUpdate の安全網と
+  // refreshBreadcrumbs 判定用。leaves.value から取得した同一プロキシを返す。
+  const updatedLeaf = leaves.value.find((n) => n.id === leafId) || null
   return { updatedLeaf, titleChanged }
 }
 
@@ -191,14 +192,14 @@ export function updateLeafBadge(
     return null
   }
 
-  const updatedLeaves = allLeaves.map((n) =>
-    n.id === leafId
-      ? { ...n, badgeIcon: nextIcon, badgeColor: nextColor, updatedAt: Date.now() }
-      : n
-  )
-  updateLeaves(updatedLeaves)
+  // #187 Phase 2: in-place mutation（理由は updateLeafContent 参照）
+  mutateLeavesItem(leafId, {
+    badgeIcon: nextIcon,
+    badgeColor: nextColor,
+    updatedAt: Date.now(),
+  })
 
-  return updatedLeaves.find((l) => l.id === leafId) || null
+  return leaves.value.find((l) => l.id === leafId) || null
 }
 
 /**

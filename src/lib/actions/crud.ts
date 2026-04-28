@@ -27,6 +27,7 @@ import {
   getDialogPositionForPane,
   applyLeafFieldUpdate,
   applyNoteFieldUpdate,
+  mutateArchiveLeavesItem,
 } from '../stores'
 import {
   createNote as createNoteLib,
@@ -498,19 +499,11 @@ export async function updateLeafContent(
       }
     }
 
-    const updatedLeaf: Leaf = {
-      ...targetLeaf,
-      title: newTitle,
-      content,
-      updatedAt: Date.now(),
-    }
-    updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
-
-    applyLeafFieldUpdate(leafId, {
-      title: updatedLeaf.title,
-      content: updatedLeaf.content,
-      updatedAt: updatedLeaf.updatedAt,
-    })
+    // #187 Phase 2: in-place mutation で archive leaves[i] を更新（outer array source bump 回避）。
+    // applyLeafFieldUpdate は leftLeaf/rightLeaf が leaves[i] と別プロキシだった場合の安全網。
+    const partial = { title: newTitle, content, updatedAt: Date.now() }
+    mutateArchiveLeavesItem(leafId, partial)
+    applyLeafFieldUpdate(leafId, partial)
     if (titleChanged) appActions.refreshBreadcrumbs()
     return
   }
@@ -551,19 +544,14 @@ export function updateLeafBadge(
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
-    const updatedLeaf: Leaf = {
-      ...targetLeaf,
+    // #187 Phase 2: in-place mutation
+    const partial = {
       badgeIcon: normalizeBadgeValue(badgeIcon),
       badgeColor: normalizeBadgeValue(badgeColor),
       updatedAt: Date.now(),
     }
-    updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
-
-    applyLeafFieldUpdate(leafId, {
-      badgeIcon: updatedLeaf.badgeIcon,
-      badgeColor: updatedLeaf.badgeColor,
-      updatedAt: updatedLeaf.updatedAt,
-    })
+    mutateArchiveLeavesItem(leafId, partial)
+    applyLeafFieldUpdate(leafId, partial)
     return
   }
 

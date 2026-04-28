@@ -772,10 +772,16 @@
     // 各 prop を読み取ることでリアクティブ追跡に登録する
     const _deps = [theme, vimMode, linedMode, cursorTrailEnabled]
     if (!editorView || _deps.length === 0) return
-    // #183: destroy + initializeEditor は untrack で囲み、initializeEditor 内部の
-    // reactive 読み取り（content / leafId / dirtyLeafIds.value 等）が暗黙にこの
-    // effect の dep に追加されるのを防ぐ。これがないと 1 文字打つたびに content
-    // などが bump して reinit が走り、vim 拡張の insert state が消える。
+    // #183/#187: destroy + initializeEditor は untrack で囲み、initializeEditor 内部の
+    // reactive 読み取り（content / leafId / dirtyLeafIds.value 等）が暗黙にこの effect の
+    // dep に追加されるのを防ぐ。これがないと 1 文字打つたびに content が bump して reinit が
+    // 走り、vim 拡張の insert state が消える。
+    //
+    // #187 で leftLeaf/leaves[i] を field mutation 化したことで leafId の無駄 bump は止まった
+    // が、content は新しい EditorState を seed するために initializeEditor 内で読む必要があり、
+    // 同時に keystroke 毎の bump は legitimate（外部から content prop が変わったときに
+    // updateEditorContent で反映するための signal）。よって untrack は構造上必須であり、
+    // 撤去できない。
     untrack(() => {
       if (!editorView) return
       flushPendingCompositionChange(editorView)
