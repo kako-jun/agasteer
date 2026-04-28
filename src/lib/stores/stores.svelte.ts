@@ -657,6 +657,30 @@ export const rightLeaf = {
   },
 }
 
+/**
+ * 左右ペインに表示中の同 id のリーフに対し、指定フィールドだけを mutate する。
+ * #187: object 全体を再代入すると $state の outer source が bump し、不変な id を読む
+ * reactive 読者（MarkdownEditor の reinit \$effect 等）まで再実行される。field mutation で
+ * field-level signal だけ bump させ、id 等の不変フィールドの読者は再実行されないようにする。
+ *
+ * leaves.value 配列側は別途 updateLeaves 等で新配列に差し替えられる。OLD object（leftLeaf）と
+ * NEW object（leaves[i]）は識別子は別だが値は同期。reference 比較は detectDirtyIds 等いずれの
+ * 経路でも行わないため無害。
+ */
+export function applyLeafFieldUpdate(leafId: string, partial: Partial<Leaf>): void {
+  if (_leftLeaf?.id === leafId) Object.assign(_leftLeaf, partial)
+  if (_rightLeaf?.id === leafId) Object.assign(_rightLeaf, partial)
+}
+
+/**
+ * 左右ペインに表示中の同 id のノートに対し、指定フィールドだけを mutate する。
+ * 詳細は applyLeafFieldUpdate のコメント参照。
+ */
+export function applyNoteFieldUpdate(noteId: string, partial: Partial<Note>): void {
+  if (_leftNote?.id === noteId) Object.assign(_leftNote, partial)
+  if (_rightNote?.id === noteId) Object.assign(_rightNote, partial)
+}
+
 let _leftView = $state<View>('home')
 export const leftView = {
   get value() {

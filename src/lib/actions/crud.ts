@@ -25,6 +25,8 @@ import {
   updateNotes,
   updateLeaves,
   getDialogPositionForPane,
+  applyLeafFieldUpdate,
+  applyNoteFieldUpdate,
 } from '../stores'
 import {
   createNote as createNoteLib,
@@ -96,14 +98,16 @@ export async function saveEditBreadcrumb(
 
     const updatedNote = updatedNotes.find((f) => f.id === actualId)
     if (updatedNote) {
-      // #187: 同じ id のノートが既に左右ペインに居る場合、object 全体を再代入すると
-      // $state の outer source が bump し、id 等の不変フィールドの読者まで再実行される。
-      // 変わったフィールド（name）だけを mutate して field-level signal だけ bump する。
-      if (leftNote.value?.id === actualId) {
-        leftNote.value.name = updatedNote.name
+      // #187: object 全体を再代入すると outer source が bump して不変な id の読者まで
+      // 再実行されるため、フィールド単位で mutate する。既存の左右非対称ガード
+      // （右ペイン側 edit 起動時のみ右ペインを更新）はそのまま踏襲する。
+      const $leftNote = leftNote.value
+      const $rightNote = rightNote.value
+      if ($leftNote?.id === actualId) {
+        $leftNote.name = updatedNote.name
       }
-      if (isRight && rightNote.value?.id === actualId) {
-        rightNote.value!.name = updatedNote.name
+      if (isRight && $rightNote?.id === actualId) {
+        $rightNote.name = updatedNote.name
       }
     }
     if (!paneNotes.some((f) => f.id === leftNote.value?.id)) {
@@ -147,17 +151,17 @@ export async function saveEditBreadcrumb(
 
     const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
     if (updatedLeaf) {
-      // #187: field mutation で同じ id のリーフを更新（理由は上の updatedNote コメント参照）
-      if (leftLeaf.value?.id === actualId) {
-        leftLeaf.value.title = updatedLeaf.title
-        leftLeaf.value.content = updatedLeaf.content
-        leftLeaf.value.updatedAt = updatedLeaf.updatedAt
+      // #187: field mutation で同じ id のリーフを更新（理由は上の updatedNote コメント参照）。
+      // 既存の左右非対称ガード（isRight 時のみ右ペイン更新）を踏襲。
+      const $leftLeaf = leftLeaf.value
+      const $rightLeaf = rightLeaf.value
+      const partial = {
+        title: updatedLeaf.title,
+        content: updatedLeaf.content,
+        updatedAt: updatedLeaf.updatedAt,
       }
-      if (isRight && rightLeaf.value?.id === actualId) {
-        rightLeaf.value!.title = updatedLeaf.title
-        rightLeaf.value!.content = updatedLeaf.content
-        rightLeaf.value!.updatedAt = updatedLeaf.updatedAt
-      }
+      if ($leftLeaf?.id === actualId) Object.assign($leftLeaf, partial)
+      if (isRight && $rightLeaf?.id === actualId) Object.assign($rightLeaf, partial)
     }
     if (!paneLeaves.some((n) => n.id === leftLeaf.value?.id)) {
       leftLeaf.value = null
@@ -502,18 +506,11 @@ export async function updateLeafContent(
     }
     updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
 
-    // #187: field mutation で同じ id のリーフを更新。object 再代入だと $state outer source が bump し、
-    // 不変な id を読む reactive 読者（MarkdownEditor の reinit $effect 等）まで再実行されてしまう。
-    if (leftLeaf.value?.id === leafId) {
-      leftLeaf.value.title = updatedLeaf.title
-      leftLeaf.value.content = updatedLeaf.content
-      leftLeaf.value.updatedAt = updatedLeaf.updatedAt
-    }
-    if (rightLeaf.value?.id === leafId) {
-      rightLeaf.value.title = updatedLeaf.title
-      rightLeaf.value.content = updatedLeaf.content
-      rightLeaf.value.updatedAt = updatedLeaf.updatedAt
-    }
+    applyLeafFieldUpdate(leafId, {
+      title: updatedLeaf.title,
+      content: updatedLeaf.content,
+      updatedAt: updatedLeaf.updatedAt,
+    })
     if (titleChanged) appActions.refreshBreadcrumbs()
     return
   }
@@ -529,17 +526,11 @@ export async function updateLeafContent(
     },
   })
   if (result.updatedLeaf) {
-    // #187: field mutation（理由は archive 経路と同じ）
-    if (leftLeaf.value?.id === leafId) {
-      leftLeaf.value.title = result.updatedLeaf.title
-      leftLeaf.value.content = result.updatedLeaf.content
-      leftLeaf.value.updatedAt = result.updatedLeaf.updatedAt
-    }
-    if (rightLeaf.value?.id === leafId) {
-      rightLeaf.value.title = result.updatedLeaf.title
-      rightLeaf.value.content = result.updatedLeaf.content
-      rightLeaf.value.updatedAt = result.updatedLeaf.updatedAt
-    }
+    applyLeafFieldUpdate(leafId, {
+      title: result.updatedLeaf.title,
+      content: result.updatedLeaf.content,
+      updatedAt: result.updatedLeaf.updatedAt,
+    })
     if (result.titleChanged) appActions.refreshBreadcrumbs()
   }
 }
@@ -568,34 +559,22 @@ export function updateLeafBadge(
     }
     updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
 
-    // #187: field mutation（理由は updateLeafContent のコメント参照）
-    if (leftLeaf.value?.id === leafId) {
-      leftLeaf.value.badgeIcon = updatedLeaf.badgeIcon
-      leftLeaf.value.badgeColor = updatedLeaf.badgeColor
-      leftLeaf.value.updatedAt = updatedLeaf.updatedAt
-    }
-    if (rightLeaf.value?.id === leafId) {
-      rightLeaf.value.badgeIcon = updatedLeaf.badgeIcon
-      rightLeaf.value.badgeColor = updatedLeaf.badgeColor
-      rightLeaf.value.updatedAt = updatedLeaf.updatedAt
-    }
+    applyLeafFieldUpdate(leafId, {
+      badgeIcon: updatedLeaf.badgeIcon,
+      badgeColor: updatedLeaf.badgeColor,
+      updatedAt: updatedLeaf.updatedAt,
+    })
     return
   }
 
   // Home内の場合は既存処理
   const updated = updateLeafBadgeLib(leafId, badgeIcon, badgeColor)
   if (updated) {
-    // #187: field mutation
-    if (leftLeaf.value?.id === leafId) {
-      leftLeaf.value.badgeIcon = updated.badgeIcon
-      leftLeaf.value.badgeColor = updated.badgeColor
-      leftLeaf.value.updatedAt = updated.updatedAt
-    }
-    if (rightLeaf.value?.id === leafId) {
-      rightLeaf.value.badgeIcon = updated.badgeIcon
-      rightLeaf.value.badgeColor = updated.badgeColor
-      rightLeaf.value.updatedAt = updated.updatedAt
-    }
+    applyLeafFieldUpdate(leafId, {
+      badgeIcon: updated.badgeIcon,
+      badgeColor: updated.badgeColor,
+      updatedAt: updated.updatedAt,
+    })
   }
 }
 

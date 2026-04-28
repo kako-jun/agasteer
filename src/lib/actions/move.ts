@@ -27,6 +27,7 @@ import {
   updateArchiveLeaves,
   archiveLeafStatsStore,
   setArchiveBaseline,
+  applyLeafFieldUpdate,
 } from '../stores'
 import {
   saveNotes,
@@ -637,16 +638,15 @@ export async function moveLeafTo(
     updateArchiveLeaves([...remaining, movedLeaf])
     isStructureDirty.value = true
 
-    const $leftLeaf = leftLeaf.value
-    const $rightLeaf = rightLeaf.value
-    if ($leftLeaf?.id === targetLeaf.id) {
-      leftLeaf.value = movedLeaf
-      leftNote.value = destinationNote
-    }
-    if ($rightLeaf?.id === targetLeaf.id) {
-      rightLeaf.value = movedLeaf
-      rightNote.value = destinationNote
-    }
+    // #187: leaf は同 id（noteId/order/updatedAt のみ変化）→ field mutation。
+    // note は destinationNote へ識別子が変わる切替なので reassignment が正しい。
+    applyLeafFieldUpdate(targetLeaf.id, {
+      noteId: movedLeaf.noteId,
+      order: movedLeaf.order,
+      updatedAt: movedLeaf.updatedAt,
+    })
+    if (leftLeaf.value?.id === targetLeaf.id) leftNote.value = destinationNote
+    if (rightLeaf.value?.id === targetLeaf.id) rightNote.value = destinationNote
     showPushToast($_('toast.moved'), 'success')
     appActions.closeMoveModal()
     return
@@ -655,16 +655,14 @@ export async function moveLeafTo(
   // Home内の場合は既存処理
   const result = moveLeafToLib(targetLeaf, destNoteId, $_)
   if (result.success && result.movedLeaf && result.destNote) {
-    const $leftLeaf = leftLeaf.value
-    const $rightLeaf = rightLeaf.value
-    if ($leftLeaf?.id === targetLeaf.id) {
-      leftLeaf.value = result.movedLeaf
-      leftNote.value = result.destNote
-    }
-    if ($rightLeaf?.id === targetLeaf.id) {
-      rightLeaf.value = result.movedLeaf
-      rightNote.value = result.destNote
-    }
+    // #187: leaf は同 id → field mutation、note は識別子変更 → reassignment（理由は archive 経路と同じ）
+    applyLeafFieldUpdate(targetLeaf.id, {
+      noteId: result.movedLeaf.noteId,
+      order: result.movedLeaf.order,
+      updatedAt: result.movedLeaf.updatedAt,
+    })
+    if (leftLeaf.value?.id === targetLeaf.id) leftNote.value = result.destNote
+    if (rightLeaf.value?.id === targetLeaf.id) rightNote.value = result.destNote
     // スケルトンマップから移動したリーフを削除（noteIdが古いままになるため）
     const leafSkeletonMap = appState.leafSkeletonMap
     if (leafSkeletonMap.has(targetLeaf.id)) {
