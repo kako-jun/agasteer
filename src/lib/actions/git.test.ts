@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   translateGitHubMessage: vi.fn((message: string) => message),
   clearAllChanges: vi.fn(),
   flushPendingSaves: vi.fn(),
+  flushAllEditors: vi.fn(),
   getPersistedDirtyFlag: vi.fn(() => false),
   setLastPushedSnapshot: vi.fn(),
   setPushInFlightAt: vi.fn(),
@@ -73,6 +74,7 @@ vi.mock('../stores', () => ({
   flushPendingSaves: mocks.flushPendingSaves,
   leafStatsStore: { addLeaf: vi.fn() },
   pullProgressStore: { start: vi.fn(), increment: vi.fn(), reset: vi.fn() },
+  flushAllEditors: mocks.flushAllEditors,
 }))
 
 vi.mock('../api', () => ({
@@ -182,6 +184,38 @@ describe('pushToGitHub stale handling', () => {
     expect(stores.isStale.value).toBe(false)
     expect(mocks.clearAllChanges).not.toHaveBeenCalled()
     expect(mocks.setLastPushedSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('flushAllEditors is invoked before flushPendingSaves on push (#186)', async () => {
+    // staleではなくup_to_dateにして通常の push パスを通す
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    const callOrder: string[] = []
+    mocks.flushAllEditors.mockImplementation(() => callOrder.push('flushAllEditors'))
+    mocks.flushPendingSaves.mockImplementation(async () => {
+      callOrder.push('flushPendingSaves')
+    })
+
+    await pushToGitHub()
+
+    expect(mocks.flushAllEditors).toHaveBeenCalledTimes(1)
+    expect(callOrder).toEqual(['flushAllEditors', 'flushPendingSaves'])
+  })
+
+  it('does not call flushAllEditors when push is blocked at the entry guard (#186 lock invariant)', async () => {
+    // canSync は常に true を返すモックなので、archive loading 経路で entry guard を発動させる
+    appState.isArchiveLoading = true
+
+    await pushToGitHub()
+
+    expect(mocks.flushAllEditors).not.toHaveBeenCalled()
+    expect(mocks.flushPendingSaves).not.toHaveBeenCalled()
   })
 })
 
