@@ -25,6 +25,9 @@ import {
   updateNotes,
   updateLeaves,
   getDialogPositionForPane,
+  applyLeafFieldUpdate,
+  applyNoteFieldUpdate,
+  mutateArchiveLeavesItem,
 } from '../stores'
 import {
   createNote as createNoteLib,
@@ -96,11 +99,16 @@ export async function saveEditBreadcrumb(
 
     const updatedNote = updatedNotes.find((f) => f.id === actualId)
     if (updatedNote) {
-      if (leftNote.value?.id === actualId) {
-        leftNote.value = updatedNote
+      // #187: object 全体を再代入すると outer source が bump して不変な id の読者まで
+      // 再実行されるため、フィールド単位で mutate する。既存の左右非対称ガード
+      // （右ペイン側 edit 起動時のみ右ペインを更新）はそのまま踏襲する。
+      const $leftNote = leftNote.value
+      const $rightNote = rightNote.value
+      if ($leftNote?.id === actualId) {
+        $leftNote.name = updatedNote.name
       }
-      if (isRight && rightNote.value?.id === actualId) {
-        rightNote.value = updatedNote
+      if (isRight && $rightNote?.id === actualId) {
+        $rightNote.name = updatedNote.name
       }
     }
     if (!paneNotes.some((f) => f.id === leftNote.value?.id)) {
@@ -144,12 +152,17 @@ export async function saveEditBreadcrumb(
 
     const updatedLeaf = updatedLeaves.find((n) => n.id === actualId)
     if (updatedLeaf) {
-      if (leftLeaf.value?.id === actualId) {
-        leftLeaf.value = updatedLeaf
+      // #187: field mutation で同じ id のリーフを更新（理由は上の updatedNote コメント参照）。
+      // 既存の左右非対称ガード（isRight 時のみ右ペイン更新）を踏襲。
+      const $leftLeaf = leftLeaf.value
+      const $rightLeaf = rightLeaf.value
+      const partial = {
+        title: updatedLeaf.title,
+        content: updatedLeaf.content,
+        updatedAt: updatedLeaf.updatedAt,
       }
-      if (isRight && rightLeaf.value?.id === actualId) {
-        rightLeaf.value = updatedLeaf
-      }
+      if ($leftLeaf?.id === actualId) Object.assign($leftLeaf, partial)
+      if (isRight && $rightLeaf?.id === actualId) Object.assign($rightLeaf, partial)
     }
     if (!paneLeaves.some((n) => n.id === leftLeaf.value?.id)) {
       leftLeaf.value = null
@@ -486,16 +499,11 @@ export async function updateLeafContent(
       }
     }
 
-    const updatedLeaf: Leaf = {
-      ...targetLeaf,
-      title: newTitle,
-      content,
-      updatedAt: Date.now(),
-    }
-    updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
-
-    if (leftLeaf.value?.id === leafId) leftLeaf.value = updatedLeaf
-    if (rightLeaf.value?.id === leafId) rightLeaf.value = updatedLeaf
+    // #187 Phase 2: in-place mutation で archive leaves[i] を更新（outer array source bump 回避）。
+    // applyLeafFieldUpdate は leftLeaf/rightLeaf が leaves[i] と別プロキシだった場合の安全網。
+    const partial = { title: newTitle, content, updatedAt: Date.now() }
+    mutateArchiveLeavesItem(leafId, partial)
+    applyLeafFieldUpdate(leafId, partial)
     if (titleChanged) appActions.refreshBreadcrumbs()
     return
   }
@@ -511,8 +519,11 @@ export async function updateLeafContent(
     },
   })
   if (result.updatedLeaf) {
-    if (leftLeaf.value?.id === leafId) leftLeaf.value = result.updatedLeaf
-    if (rightLeaf.value?.id === leafId) rightLeaf.value = result.updatedLeaf
+    applyLeafFieldUpdate(leafId, {
+      title: result.updatedLeaf.title,
+      content: result.updatedLeaf.content,
+      updatedAt: result.updatedLeaf.updatedAt,
+    })
     if (result.titleChanged) appActions.refreshBreadcrumbs()
   }
 }
@@ -533,24 +544,25 @@ export function updateLeafBadge(
     const targetLeaf = allLeaves.find((l) => l.id === leafId)
     if (!targetLeaf) return
 
-    const updatedLeaf: Leaf = {
-      ...targetLeaf,
+    // #187 Phase 2: in-place mutation
+    const partial = {
       badgeIcon: normalizeBadgeValue(badgeIcon),
       badgeColor: normalizeBadgeValue(badgeColor),
       updatedAt: Date.now(),
     }
-    updateArchiveLeaves(allLeaves.map((l) => (l.id === leafId ? updatedLeaf : l)))
-
-    if (leftLeaf.value?.id === leafId) leftLeaf.value = updatedLeaf
-    if (rightLeaf.value?.id === leafId) rightLeaf.value = updatedLeaf
+    mutateArchiveLeavesItem(leafId, partial)
+    applyLeafFieldUpdate(leafId, partial)
     return
   }
 
   // Home内の場合は既存処理
   const updated = updateLeafBadgeLib(leafId, badgeIcon, badgeColor)
   if (updated) {
-    if (leftLeaf.value?.id === leafId) leftLeaf.value = updated
-    if (rightLeaf.value?.id === leafId) rightLeaf.value = updated
+    applyLeafFieldUpdate(leafId, {
+      badgeIcon: updated.badgeIcon,
+      badgeColor: updated.badgeColor,
+      updatedAt: updated.updatedAt,
+    })
   }
 }
 
