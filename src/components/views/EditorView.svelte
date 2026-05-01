@@ -10,6 +10,7 @@
     linedMode?: boolean
     cursorTrailEnabled?: boolean
     pane: Pane
+    initialLine?: number
     onContentChange: (content: string, leafId: string) => void
     onPush: () => void
     onClose?: (() => void) | null
@@ -26,6 +27,7 @@
     linedMode = true,
     cursorTrailEnabled = true,
     pane,
+    initialLine = 0,
     onContentChange,
     onPush,
     onClose = null,
@@ -101,6 +103,7 @@
     {cursorTrailEnabled}
     leafId={leaf.id}
     {pane}
+    {initialLine}
     onChange={handleContentChange}
     {onPush}
     {onClose}

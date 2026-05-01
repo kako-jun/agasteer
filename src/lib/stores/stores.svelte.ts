@@ -734,6 +734,27 @@ export const rightView = {
   },
 }
 
+// 検索結果クリック時に直接ジャンプする行番号（0 = ジャンプなし）
+let _leftInitialLine = $state<number>(0)
+export const leftInitialLine = {
+  get value() {
+    return _leftInitialLine
+  },
+  set value(v: number) {
+    _leftInitialLine = v
+  },
+}
+
+let _rightInitialLine = $state<number>(0)
+export const rightInitialLine = {
+  get value() {
+    return _rightInitialLine
+  },
+  set value(v: number) {
+    _rightInitialLine = v
+  },
+}
+
 // 同期状態ストア
 let _isPulling = $state<boolean>(false)
 export const isPulling = {

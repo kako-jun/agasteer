@@ -31,6 +31,8 @@
     leftView,
     rightView,
     focusedPane,
+    leftInitialLine,
+    rightInitialLine,
   } from '../../lib/stores'
 
   // ビューコンポーネント
@@ -241,6 +243,7 @@
         linedMode={settings.value.linedMode ?? true}
         cursorTrailEnabled={settings.value.cursorTrailEnabled ?? true}
         {pane}
+        initialLine={pane === 'left' ? leftInitialLine.value : rightInitialLine.value}
         onContentChange={(content, leafId) => actions.updateLeafContent(content, leafId, pane)}
         onPush={actions.handlePushToGitHub}
         onClose={() => actions.closeLeaf(pane)}
