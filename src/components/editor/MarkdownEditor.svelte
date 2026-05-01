@@ -18,6 +18,8 @@
     dirtyLeafIds,
     registerEditorFlusher,
     unregisterEditorFlusher,
+    leftInitialLine,
+    rightInitialLine,
   } from '../../lib/stores'
   import { clampSelectionRanges } from '../../lib/editor/clamp-selection'
 
@@ -842,9 +844,15 @@
     await loadCodeMirror()
     initializeEditor()
     registerEditorFlusher(pane, flushForRegistry)
-    // 検索結果クリック時など、マウント直後に特定行へジャンプする場合
+    // 検索結果クリック時など、マウント直後に特定行へジャンプする場合。
+    // 使用後はストアをリセットして、後続の再マウント時に誤ジャンプしないようにする。
     if (initialLine > 0) {
       scrollToLine(initialLine)
+      if (pane === 'left') {
+        leftInitialLine.value = 0
+      } else {
+        rightInitialLine.value = 0
+      }
     }
   })
 

@@ -290,15 +290,22 @@ export async function handleSearchResultClick(result: SearchMatch, pane: Pane = 
     } else {
       const leaf = targetLeaves.find((l) => l.id === result.leafId)
       if (leaf) {
-        // initialLine をセットしてから selectLeaf する。
-        // EditorView が {#key} で再マウントされる際に initialLine を読み取り、
-        // CodeMirror 初期化完了直後に自分でスクロールする（ポーリング不要）。
-        if (pane === 'left') {
-          leftInitialLine.value = result.line
+        const currentLeafId = pane === 'left' ? leftLeaf.value?.id : rightLeaf.value?.id
+        if (currentLeafId === leaf.id) {
+          // 同一リーフが既に開いている場合: {#key} は変わらず再マウントされないため、
+          // 既存エディタに直接スクロール命令を送る（旧方式）。
+          await scrollLeafLineWhenReady(pane, leaf.id, result.line)
         } else {
-          rightInitialLine.value = result.line
+          // 別リーフに切り替わる場合: {#key} が変わり EditorView が再マウントされるため、
+          // initialLine をセットしておけば onMount 完了直後に自動スクロールする。
+          // ポーリング不要でネットワーク速度・デバイス性能に依存しない。
+          if (pane === 'left') {
+            leftInitialLine.value = result.line
+          } else {
+            rightInitialLine.value = result.line
+          }
+          selectLeaf(leaf, pane)
         }
-        selectLeaf(leaf, pane)
       }
     }
   }
