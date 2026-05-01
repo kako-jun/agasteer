@@ -29,6 +29,7 @@
     cursorTrailEnabled?: boolean
     leafId?: string
     pane: Pane
+    initialLine?: number
     onChange: (newContent: string) => void
     onPush?: (() => void) | null
     onClose?: (() => void) | null
@@ -44,6 +45,7 @@
     cursorTrailEnabled = true,
     leafId = '',
     pane,
+    initialLine = 0,
     onChange,
     onPush = null,
     onClose = null,
@@ -840,6 +842,10 @@
     await loadCodeMirror()
     initializeEditor()
     registerEditorFlusher(pane, flushForRegistry)
+    // 検索結果クリック時など、マウント直後に特定行へジャンプする場合
+    if (initialLine > 0) {
+      scrollToLine(initialLine)
+    }
   })
 
   onDestroy(() => {

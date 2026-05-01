@@ -33,6 +33,8 @@ import {
   rightLeaf,
   leftView,
   rightView,
+  leftInitialLine,
+  rightInitialLine,
   focusedPane,
   leftWorld,
   rightWorld,
@@ -288,8 +290,15 @@ export async function handleSearchResultClick(result: SearchMatch, pane: Pane = 
     } else {
       const leaf = targetLeaves.find((l) => l.id === result.leafId)
       if (leaf) {
+        // initialLine をセットしてから selectLeaf する。
+        // EditorView が {#key} で再マウントされる際に initialLine を読み取り、
+        // CodeMirror 初期化完了直後に自分でスクロールする（ポーリング不要）。
+        if (pane === 'left') {
+          leftInitialLine.value = result.line
+        } else {
+          rightInitialLine.value = result.line
+        }
         selectLeaf(leaf, pane)
-        await scrollLeafLineWhenReady(pane, leaf.id, result.line)
       }
     }
   }
