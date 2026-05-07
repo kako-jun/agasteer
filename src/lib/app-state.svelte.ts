@@ -97,7 +97,9 @@ import {
   alertAsync,
 } from './ui'
 import { showConflictDialog } from './actions/conflict-dialog'
-import { PUSH_HANG_THRESHOLD_MS } from './sync/constants'
+import { PUSH_HANG_THRESHOLD_MS, RESUME_RETRY_BACKOFFS_MS } from './sync/constants'
+import { runResumeStaleCheckRetry } from './sync/resume-retry'
+import type { ApplyStaleResultOutcome } from './stores/stale-checker.svelte'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
 import { pullArchive, translateGitHubMessage } from './api'
@@ -1043,11 +1045,34 @@ export function initApp(deps: InitAppDeps): () => void {
       // stale check を走らせ、outcome === 'stale-dirty' のときのみ push-hang 判断ダイアログを出す。
       // applyStaleResult の救済ブランチ（'rescued'）が走った場合はユーザー判断不要なので
       // ダイアログを抑制する（救済との二重発火を回避: #204 must）。
-      const runStaleCheckAndMaybePromptHang = async (logContext: string) => {
+      const runStaleCheckAndMaybePromptHang = async (
+        logContext: string
+      ): Promise<ApplyStaleResultOutcome> => {
         const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
         const outcome = applyStaleResult(staleResult, logContext)
         if (consumePushHangFlag && outcome === 'stale-dirty') {
           await promptPushHangRecovery(staleResult)
+        }
+        return outcome
+      }
+
+      // #203: 復帰直後は回線復帰の都合で 1 回目の stale check が check_failed になりがち。
+      // そのまま放置すると次の周期チェック（5 分後）まで沈黙するので、短期リトライで救う。
+      // push-hang フラグはここでは引き継がない（1 回目で消費済み）。
+      const retryStaleCheckOnResume = async () => {
+        const finalOutcome = await runResumeStaleCheckRetry({
+          backoffsMs: RESUME_RETRY_BACKOFFS_MS,
+          isVisible: () => document.visibilityState === 'visible',
+          runStaleCheck: async (attemptIndex) => {
+            const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+            return applyStaleResult(
+              result,
+              `Resume stale-check retry #${attemptIndex + 1} (after ${RESUME_RETRY_BACKOFFS_MS[attemptIndex]}ms)`
+            )
+          },
+        })
+        if (finalOutcome === 'check-failed') {
+          console.warn('Resume stale-check retry exhausted; user may need to pull manually')
         }
       }
 
@@ -1057,10 +1082,16 @@ export function initApp(deps: InitAppDeps): () => void {
           // モーダルを表示し、閉じたら状態確認を実行
           const t = get(_)
           await alertAsync(t('modal.longBackground'), 'center')
-          await runStaleCheckAndMaybePromptHang('Long-background resume')
+          const outcome = await runStaleCheckAndMaybePromptHang('Long-background resume')
+          if (outcome === 'check-failed') {
+            await retryStaleCheckOnResume()
+          }
         } else if (consumePushHangFlag) {
           // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
-          await runStaleCheckAndMaybePromptHang('Push hang resume')
+          const outcome = await runStaleCheckAndMaybePromptHang('Push hang resume')
+          if (outcome === 'check-failed') {
+            await retryStaleCheckOnResume()
+          }
         }
       } finally {
         if (consumePushHangFlag) appState.pushHangRecovered = false
