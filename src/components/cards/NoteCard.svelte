@@ -84,8 +84,8 @@
 <style>
   .note-card {
     position: relative;
-    /* #209: 左辺バインダー綴じ模様の帯（4px 幅、左端から 8px の領域）を確保するため、
-       左 padding を増やす。他方向は 1rem 維持 */
+    /* #209: 左辺バインダー綴じ模様の帯（4px 幅、左端 0 に密着）と本文の間に
+       余白を取るため、左 padding を増やす。他方向は 1rem 維持 */
     padding: 1rem 1rem 1rem 1.4rem;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -93,7 +93,7 @@
     cursor: pointer;
     transition: all 0.2s;
     /* overflow: visible は維持（BadgeButton 等のドロップダウンが外に出る場合に備え）。
-       バインダー模様は absolute で left:4px / width:4px なのでカード内に収まる */
+       バインダー模様は absolute で left:0 / width:4px なのでカード内に収まる */
     overflow: visible;
     /* 高さ固定: タイトル1行 + 4行のアイテム（3行+...）を表示できる高さ */
     height: 150px;
