@@ -102,17 +102,18 @@
   }
 
   /* #209: バインダー綴じ風模様
-     ノートカードの左辺内側に「2 本の細線 + 余白」を縦に反復させ、
+     ノートカードの**左辺に密着**させた帯（左端 0px）に「2 本の細線 + 余白」を縦に反復させ、
      リングノートの綴じを連想させる。リーフカードには付けないことで識別性を高める。
-     - カード矩形の外には絶対にはみ出さない（width 4px + 内側 left:4px の absolute 配置）
+     - 矩形の左端からそのまま生やす（border 上に重ねるのでカードの輪郭と一体化）
      - 色はテーマ accent の半透明で控えめに
+     - 縦範囲はほぼ全長（top:4 / bottom:4、border-radius:8px の角丸内に収まる）
      - 細線 1px x 2 本（間 2px）で 1 セット、セット周期 14px */
   .note-card::before {
     content: '';
     position: absolute;
-    left: 4px;
-    top: 10px;
-    bottom: 10px;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
     width: 4px;
     background-image: repeating-linear-gradient(
       to bottom,
@@ -123,7 +124,6 @@
     );
     opacity: 0.35;
     pointer-events: none;
-    border-radius: 1px;
   }
 
   /* スマホでは帯幅を細めにして本文幅を圧迫しないようにする */
@@ -132,7 +132,6 @@
       padding-left: 1.2rem;
     }
     .note-card::before {
-      left: 3px;
       width: 3px;
     }
   }
