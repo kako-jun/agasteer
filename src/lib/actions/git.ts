@@ -224,6 +224,11 @@ export async function pushToGitHub(): Promise<void> {
     const $leaves = leaves.value
     const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
     const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
+    console.log('[push#206] preflight: snapshot fixing', {
+      notesCount: saveableNotes.length,
+      leavesCount: saveableLeaves.length,
+      isArchiveLoaded: isArchiveLoaded.value,
+    })
     snapshot = {
       notes: structuredClone(saveableNotes),
       leaves: structuredClone(saveableLeaves),
@@ -232,6 +237,7 @@ export async function pushToGitHub(): Promise<void> {
       archiveLeaves: isArchiveLoaded.value ? structuredClone(archiveLeaves.value) : undefined,
       archiveMetadata: isArchiveLoaded.value ? structuredClone(archiveMetadata.value) : undefined,
     }
+    console.log('[push#206] preflight: snapshot fixed')
 
     // Push開始を通知
     showPushToast($_('loading.pushing'))
@@ -246,10 +252,12 @@ export async function pushToGitHub(): Promise<void> {
     // のレース窓を作らない。
     isPushingBackground.value = true
     isPushing.value = false
+    console.log('[push#206] preflight: flags switched -> background phase')
   } finally {
     // preflight phase 終了時、snapshot が設定できなかった経路（cancel / pull-first / 例外）
     // では isPushing が true のまま残るので必ず false に戻す。
     // snapshot が設定できた経路では既に false に切り替え済みなので no-op。
+    console.log('[push#206] preflight finally', { snapshotIsNull: snapshot === null })
     if (snapshot === null) {
       isPushing.value = false
       await runPendingRepoSyncIfIdle()
@@ -257,7 +265,11 @@ export async function pushToGitHub(): Promise<void> {
   }
 
   // snapshot が null（cancel / pull-first / 例外）ならここで終了
-  if (snapshot === null) return
+  if (snapshot === null) {
+    console.log('[push#206] early return (snapshot null)')
+    return
+  }
+  console.log('[push#206] entering background phase')
 
   // ====================================================================
   // Phase 2: background — UI は編集可能、送信は裏で続ける
@@ -274,6 +286,7 @@ export async function pushToGitHub(): Promise<void> {
         reject(new PushTimeoutError())
       }, PUSH_TIMEOUT_MS)
     })
+    console.log('[push#206] background: about to call executePush')
     let result
     try {
       result = await Promise.race([
@@ -296,6 +309,11 @@ export async function pushToGitHub(): Promise<void> {
         timeoutPromise,
       ])
     } catch (e) {
+      console.log('[push#206] background: executePush threw', {
+        timeoutFired,
+        isPushTimeoutError: e instanceof PushTimeoutError,
+        message: e instanceof Error ? e.message : String(e),
+      })
       if (timeoutFired || e instanceof PushTimeoutError) {
         // #204: タイムアウト時は isPushingBackground を finally で false に戻し
         // 別 Push / Pull のロックを解除する。pushInFlightAt は意図的に残す:
@@ -316,6 +334,13 @@ export async function pushToGitHub(): Promise<void> {
       if (timeoutId !== undefined) clearTimeout(timeoutId)
     }
 
+    console.log('[push#206] background: executePush resolved', {
+      variant: result.variant,
+      message: result.message,
+      hasCommitSha: !!result.commitSha,
+      changedLeafCount: result.changedLeafCount,
+    })
+
     // 結果を通知（GitHub APIのメッセージキーを翻訳、変更件数を含める）
     // リーフ変更件数が0の場合はundefinedを渡し、メタデータのみの変更としてトースト表示する
     const totalLeafCount = (result.changedLeafCount ?? 0) + (result.changedArchiveLeafCount ?? 0)
@@ -327,6 +352,10 @@ export async function pushToGitHub(): Promise<void> {
       result.errorCode,
       result.httpStatus
     )
+    console.log('[push#206] background: showing result toast', {
+      variant: result.variant,
+      translatedMessage,
+    })
     showPushToast(translatedMessage, result.variant)
 
     // Push飛行中フラグをクリア（レスポンスを受信できた）
@@ -334,12 +363,18 @@ export async function pushToGitHub(): Promise<void> {
 
     // Push成功時の後処理
     if (result.variant === 'success') {
+      console.log('[push#206] background: success path')
       // commit SHAはリモートHEADの外的事実なので、noChangesでも常に更新する。
       // noChangesで更新しないと、lastKnownCommitShaがドリフトして次回のstaleチェックで
       // 誤検出（pull/push選択ダイアログの誤表示）につながる。
       if (result.commitSha) {
+        console.log('[push#206] background: updating lastKnownCommitSha', {
+          newSha: result.commitSha.slice(0, 7),
+        })
         lastKnownCommitSha.value = result.commitSha
         isStale.value = false
+      } else {
+        console.log('[push#206] background: result.commitSha is falsy, skipping SHA update')
       }
 
       // スナップショット更新は実際にPushしたときだけ行う。
@@ -347,6 +382,7 @@ export async function pushToGitHub(): Promise<void> {
       // ベースラインに吸収されてダーティ追跡から消える（データ損失リスク）。
       // 参照: docs/development/sync/stale-detection.md
       if (result.message !== 'github.noChanges') {
+        console.log('[push#206] background: applying baseline (snapshot-based)')
         // ★ #206: ベースラインは「Push 開始時に固定した snapshot」で更新する。
         // live state（notes.value 等）を渡すと、Push 中にユーザーが書いた追記が
         // ベースラインに吸収されて dirty が消える（データ損失リスク）。
@@ -373,10 +409,12 @@ export async function pushToGitHub(): Promise<void> {
       }
     }
   } finally {
+    console.log('[push#206] background finally: clearing isPushingBackground')
     isPushingBackground.value = false
     // runPendingRepoSyncIfIdle は preflight finally でも呼ぶため、pull-first 再帰経路では
     // 計 3 回発火するが、内部 idle 判定で no-op になるため冪等。
     await runPendingRepoSyncIfIdle()
+    console.log('[push#206] background finally: done')
   }
 }
 
