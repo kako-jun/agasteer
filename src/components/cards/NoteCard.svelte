@@ -84,8 +84,8 @@
 <style>
   .note-card {
     position: relative;
-    /* #209: 左辺バインダー綴じ模様の帯（8px）を確保するため、左 padding を増やす。
-       他方向は 1rem 維持 */
+    /* #209: 左辺バインダー綴じ模様の帯（4px 幅、左端から 8px の領域）を確保するため、
+       左 padding を増やす。他方向は 1rem 維持 */
     padding: 1rem 1rem 1rem 1.4rem;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -106,7 +106,7 @@
      リングノートの綴じを連想させる。リーフカードには付けないことで識別性を高める。
      - カード矩形の外には絶対にはみ出さない（width 4px + 内側 left:4px の absolute 配置）
      - 色はテーマ accent の半透明で控えめに
-     - 細線 1px x 2 本（間 1px）で 1 セット、セット間隔 12px */
+     - 細線 1px x 2 本（間 2px）で 1 セット、セット周期 14px */
   .note-card::before {
     content: '';
     position: absolute;
