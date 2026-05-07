@@ -84,6 +84,7 @@ import {
   shouldShowPwaInstallBanner,
   setCurrentRepo,
   syncRepoNameCache,
+  getPushInFlightAt,
 } from './data'
 import { shouldUseStartupCache, type PersistedStartupCache } from './startup-cache'
 import {
@@ -96,6 +97,7 @@ import {
   alertAsync,
 } from './ui'
 import { showConflictDialog } from './actions/conflict-dialog'
+import { PUSH_HANG_THRESHOLD_MS } from './sync/constants'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
 import { pullArchive, translateGitHubMessage } from './api'
@@ -212,6 +214,9 @@ let _repoChangePending = $state(false)
 // 他同期（pull/push/archive load）実行中に設定された新リポ名。同期完了後に
 // rehydrateForRepo を走らせてから pull を開始するため、ここで待機させる。
 let _pendingRehydrateRepo = $state<string | null>(null)
+// #204/#205: visibility 復帰時に「Push 中ハング」を検出して isPushing を強制解除した場合に立つフラグ。
+// 直後の stale check で showConflictDialog('push-hang') を表示するために使う（1 度だけ消費）。
+let _pushHangRecovered = $state(false)
 
 export const appState = {
   get breadcrumbs() {
@@ -398,6 +403,12 @@ export const appState = {
   },
   set pendingRehydrateRepo(v: string | null) {
     _pendingRehydrateRepo = v
+  },
+  get pushHangRecovered() {
+    return _pushHangRecovered
+  },
+  set pushHangRecovered(v: boolean) {
+    _pushHangRecovered = v
   },
 }
 
@@ -985,18 +996,74 @@ export function initApp(deps: InitAppDeps): () => void {
   let lastVisibleTime = Date.now()
   const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
 
+  /**
+   * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
+   * stale-push と同じ並び（pull primary / push secondary / cancel）。
+   * cancel/null は何もしない（applyStaleResult で立てた赤バッジに任せる）。
+   */
+  const promptPushHangRecovery = async (staleResult: StaleCheckResult) => {
+    const choice = await showConflictDialog({
+      kind: 'push-hang',
+      staleResult,
+      localPushCount: metadata.value.pushCount,
+      settings: settings.value,
+    })
+    if (choice === 'pull') {
+      await deps.pullFromGitHub(false)
+    } else if (choice === 'push') {
+      await deps.pushToGitHub()
+    }
+  }
+
   const handleVisibilityChange = async () => {
     if (document.visibilityState === 'visible') {
       const now = Date.now()
       const elapsed = now - lastVisibleTime
-      if (elapsed > BACKGROUND_THRESHOLD_MS) {
-        console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
-        // モーダルを表示し、閉じたら状態確認を実行
-        const t = get(_)
-        await alertAsync(t('modal.longBackground'), 'center')
-        // staleチェック → 共通ロジックで stale/up_to_date を処理（周期チェッカーと挙動を揃える）
+
+      // #204: Push 中にスリープ → 復帰、で isPushing が true のまま固まっているケースを救う。
+      // Phase A の Promise.race タイムアウトでもなお isPushing が true のままになるパス
+      // （バックグラウンドで JS タイマー停止 → 復帰時に reject も発火する前 など）の保険。
+      const inFlight = getPushInFlightAt()
+      if (isPushing.value && inFlight && now - inFlight > PUSH_HANG_THRESHOLD_MS) {
+        console.warn(
+          `Push hang detected on visibility resume (inFlight age: ${now - inFlight}ms); clearing isPushing`
+        )
+        isPushing.value = false
+        // pushInFlightAt は意図的に残す: 直後の stale check で
+        //   - Push が成功していた場合 → applyStaleResult が SHA だけ更新して救済
+        //   - Push が成功していなかった場合 → push-hang ダイアログでユーザー判断
+        appState.pushHangRecovered = true
+      }
+
+      // #205: Push ハング復旧フラグは visibility 復帰時に必ず 1 回で消費する。
+      // 例外（alertAsync reject、stale check throw 等）が起きても残留しないよう
+      // try/finally で確実にクリアする。フラグはこのブロック先頭で取り出して
+      // ローカル変数化し、後段の判定はそちらで行う（race を避ける）。
+      const consumePushHangFlag = appState.pushHangRecovered
+      // stale check を走らせ、outcome === 'stale-dirty' のときのみ push-hang 判断ダイアログを出す。
+      // applyStaleResult の救済ブランチ（'rescued'）が走った場合はユーザー判断不要なので
+      // ダイアログを抑制する（救済との二重発火を回避: #204 must）。
+      const runStaleCheckAndMaybePromptHang = async (logContext: string) => {
         const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-        applyStaleResult(staleResult, 'Long-background resume')
+        const outcome = applyStaleResult(staleResult, logContext)
+        if (consumePushHangFlag && outcome === 'stale-dirty') {
+          await promptPushHangRecovery(staleResult)
+        }
+      }
+
+      try {
+        if (elapsed > BACKGROUND_THRESHOLD_MS) {
+          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
+          // モーダルを表示し、閉じたら状態確認を実行
+          const t = get(_)
+          await alertAsync(t('modal.longBackground'), 'center')
+          await runStaleCheckAndMaybePromptHang('Long-background resume')
+        } else if (consumePushHangFlag) {
+          // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
+          await runStaleCheckAndMaybePromptHang('Push hang resume')
+        }
+      } finally {
+        if (consumePushHangFlag) appState.pushHangRecovered = false
       }
       lastVisibleTime = now
 

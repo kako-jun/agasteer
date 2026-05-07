@@ -184,6 +184,33 @@ describe('showConflictDialog', () => {
     expect(body).toContain('localSha=null')
   })
 
+  it('push-hang: 本文に modal.pushHangRecovery を含み、stale-push と同じ並び（pull/push/cancel）', async () => {
+    // #205: Push ハング復旧後の判断は専用 UI ではなく共通 3 択に寄せる。
+    // ボタン配置は stale-push と同一（pullFirst primary / pushOverwrite secondary / cancel）。
+    const staleResult: StaleCheckResult = {
+      status: 'stale',
+      localCommitSha: '4444444455',
+      remoteCommitSha: '6666666677',
+    }
+
+    await showConflictDialog({
+      kind: 'push-hang',
+      staleResult,
+      localPushCount: 9,
+      settings,
+    })
+
+    const [body, options] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.pushHangRecovery')
+    expect(body).toContain('localSha=4444444')
+    expect(body).toContain('remoteSha=6666666')
+    expect(body).toContain('localCount=9')
+    expect(options).toHaveLength(3)
+    expect(options.map((o: { value: string }) => o.value)).toEqual(['pull', 'push', 'cancel'])
+    expect(options[0].label).toBe('modal.pullFirst')
+    expect(options[1].label).toBe('modal.pushOverwrite')
+  })
+
   it('choiceAsync の戻り値をそのまま返す', async () => {
     mocks.choiceAsync.mockResolvedValue('pull')
 

@@ -62,6 +62,17 @@ import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
 import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from '../sync/repo-sync-queue'
+// #204: Push タイムアウト定数は sync/constants.ts に集約（docs / 実装 / コメントの
+// 数値発散を防ぐため）。AbortController を fetch 層まで通すコストは大きいので採らず、
+// Promise.race による上限制御 + pushInFlightAt 経由の救済機構（applyStaleResult）に委ねる。
+import { PUSH_TIMEOUT_MS } from '../sync/constants'
+
+class PushTimeoutError extends Error {
+  constructor() {
+    super('PUSH_TIMEOUT')
+    this.name = 'PushTimeoutError'
+  }
+}
 
 async function runPendingRepoSyncIfIdle(): Promise<void> {
   const hasValidConfig = !!(settings.value.token && settings.value.repoName)
@@ -187,18 +198,51 @@ export async function pushToGitHub(): Promise<void> {
     const $leaves = leaves.value
     const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
     const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
-    const result = await executePush({
-      leaves: saveableLeaves,
-      notes: saveableNotes,
-      settings: settings.value,
-      isOperationsLocked: !appState.isFirstPriorityFetched,
-      localMetadata: metadata.value,
-      // アーカイブがロード済みの場合のみアーカイブデータを渡す
-      archiveLeaves: isArchiveLoaded.value ? archiveLeaves.value : undefined,
-      archiveNotes: isArchiveLoaded.value ? archiveNotes.value : undefined,
-      archiveMetadata: isArchiveLoaded.value ? archiveMetadata.value : undefined,
-      isArchiveLoaded: isArchiveLoaded.value,
+
+    // #204: Push 全体に 30 秒のタイムアウトを設ける。Promise.race の loser 側
+    // （setTimeout）はタイムアウト未発火なら clearTimeout でクリーンアップする
+    // （タイマーがイベントループに残らないように）。
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let timeoutFired = false
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeoutId = setTimeout(() => {
+        timeoutFired = true
+        reject(new PushTimeoutError())
+      }, PUSH_TIMEOUT_MS)
     })
+    let result
+    try {
+      result = await Promise.race([
+        executePush({
+          leaves: saveableLeaves,
+          notes: saveableNotes,
+          settings: settings.value,
+          isOperationsLocked: !appState.isFirstPriorityFetched,
+          localMetadata: metadata.value,
+          // アーカイブがロード済みの場合のみアーカイブデータを渡す
+          archiveLeaves: isArchiveLoaded.value ? archiveLeaves.value : undefined,
+          archiveNotes: isArchiveLoaded.value ? archiveNotes.value : undefined,
+          archiveMetadata: isArchiveLoaded.value ? archiveMetadata.value : undefined,
+          isArchiveLoaded: isArchiveLoaded.value,
+        }),
+        timeoutPromise,
+      ])
+    } catch (e) {
+      if (timeoutFired || e instanceof PushTimeoutError) {
+        // #204: タイムアウト時は isPushing は finally で false に戻し UI ロックを解除する。
+        // pushInFlightAt は意図的に残す: orphan になった executePush が裏で成功した場合、
+        // 次回の stale check で applyStaleResult が SHA のみ更新して救済する。
+        console.warn('Push response timed out after', PUSH_TIMEOUT_MS, 'ms; releasing UI lock')
+        showPushToast(
+          translateGitHubMessage('toast.pushTimeout', $_, undefined, undefined, 'E-5101'),
+          'error'
+        )
+        return
+      }
+      throw e
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId)
+    }
 
     // 結果を通知（GitHub APIのメッセージキーを翻訳、変更件数を含める）
     // リーフ変更件数が0の場合はundefinedを渡し、メタデータのみの変更としてトースト表示する

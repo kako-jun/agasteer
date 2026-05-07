@@ -31,6 +31,17 @@ After editing, if you're idle for **42 seconds**, changes are automatically push
 
 > **Tip**: If you need to save urgently, press the save button manually or use Ctrl+S.
 
+### When Push doesn't respond (auto-recovery)
+
+If you tap Push on a phone and turn the screen off immediately, the Push response can occasionally be lost and the UI may stay stuck in the syncing state. The app recovers automatically in two stages:
+
+- **30-second timeout**: If no response arrives within 30 seconds, a toast is shown and the UI lock is released
+- **On screen resume**: When the device wakes, if a Push-in-flight flag is still set, the lock is released and the app re-checks the state with GitHub
+  - If the Push had already arrived → the state returns to normal silently
+  - If the remote has moved on → a 3-way dialog appears (pull / overwrite with push / cancel)
+
+In short, the syncing overlay will not stay forever even if you sleep your phone during a Push.
+
 ---
 
 ## Retrieving from GitHub (Pull)
