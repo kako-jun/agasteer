@@ -241,11 +241,11 @@ export async function pushToGitHub(): Promise<void> {
 
     // ★ #206: ここで preflight phase を終了し UI ロックを解除する。
     // background phase は finally の外で実行する（編集再開のため）。
-    isPushing.value = false
+    // 順序が重要: 先に isPushingBackground を true にしてから isPushing を false に
+    // することで、両方 false になる瞬間（_canPush $derived が一瞬 true → 別 Push 受付）
+    // のレース窓を作らない。
     isPushingBackground.value = true
-  } catch (e) {
-    // preflight 中の例外は finally で isPushing=false に戻す
-    throw e
+    isPushing.value = false
   } finally {
     // preflight phase 終了時、snapshot が設定できなかった経路（cancel / pull-first / 例外）
     // では isPushing が true のまま残るので必ず false に戻す。
@@ -281,6 +281,9 @@ export async function pushToGitHub(): Promise<void> {
           // ★ live state ではなく固定済み snapshot を渡す（#206）
           leaves: snapshot.leaves,
           notes: snapshot.notes,
+          // settings.value / isFirstPriorityFetched は preflight 通過時点から
+          // 変わらないことが canSync / pendingRehydrateRepo キューで保証されている
+          // ため live 参照で OK。snapshot に含めても等価。
           settings: settings.value,
           isOperationsLocked: !appState.isFirstPriorityFetched,
           localMetadata: snapshot.metadata,
@@ -305,6 +308,9 @@ export async function pushToGitHub(): Promise<void> {
         )
         return
       }
+      // 通常の HTTP 4xx/5xx 等の reject: pushInFlightAt は確実にクリアしてから rethrow。
+      // クリアしないと次回 visibility resume で pushHangRecovered=true が誤発火する（#204）。
+      setPushInFlightAt(undefined)
       throw e
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId)
@@ -344,11 +350,15 @@ export async function pushToGitHub(): Promise<void> {
         // ★ #206: ベースラインは「Push 開始時に固定した snapshot」で更新する。
         // live state（notes.value 等）を渡すと、Push 中にユーザーが書いた追記が
         // ベースラインに吸収されて dirty が消える（データ損失リスク）。
+        // archive 系は snapshot に含まれない（= isArchiveLoaded=false の経路）なら
+        // undefined を渡し、setLastPushedSnapshot 側のガードで no-op にする。
+        // live state へフォールバックすると、Phase 2 中に archive がアンロードされた
+        // 場合に空配列でベースラインを上書きしてしまう（archive 全件 dirty 化リスク）。
         setLastPushedSnapshot(
           snapshot.notes,
           snapshot.leaves,
-          snapshot.archiveNotes ?? archiveNotes.value,
-          snapshot.archiveLeaves ?? archiveLeaves.value
+          snapshot.archiveNotes,
+          snapshot.archiveLeaves
         )
         // ★ #206: clearAllChanges() ではなく refreshDirtyState() を使う。
         // 固定 snapshot との差分を再計算するので、Push 中の追記は dirty として残り、
