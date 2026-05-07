@@ -1,6 +1,7 @@
 import { type Note, type Leaf, type StaleCheckResult, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
-import { showPushToast, showPullToast, confirmAsync, choiceAsync } from '../ui'
+import { showPushToast, showPullToast } from '../ui'
+import { showConflictDialog } from './conflict-dialog'
 import {
   settings,
   notes,
@@ -44,6 +45,8 @@ import {
   saveLeaves,
   setPushInFlightAt,
 } from '../data'
+// fetchRemotePushCount は Push 成功後の lastPulledPushCount 更新（統計表示用）で
+// 直接使うため残す。衝突ダイアログ内での pushCount/SHA 表示は showConflictDialog に集約済み。
 import {
   executePush,
   executePull,
@@ -58,7 +61,6 @@ import * as nav from '../navigation'
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
-import { PULL_ICON, PUSH_ICON } from '../ui/icons'
 import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from '../sync/repo-sync-queue'
 
 async function runPendingRepoSyncIfIdle(): Promise<void> {
@@ -153,23 +155,13 @@ export async function pushToGitHub(): Promise<void> {
       console.log(
         `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
       )
-      // 診断情報: ローカル/リモートのpushCountとSHAを付与し、誤検出に気付けるようにする
-      const remotePushCountResult = await fetchRemotePushCount(settings.value)
-      const remotePushCount =
-        remotePushCountResult.status === 'success' ? remotePushCountResult.pushCount : '?'
-      const diagnostic = $_('modal.staleEditDiagnostic', {
-        values: {
-          localSha: (staleResult.localCommitSha ?? 'null').slice(0, 7),
-          remoteSha: staleResult.remoteCommitSha.slice(0, 7),
-          localCount: metadata.value.pushCount,
-          remoteCount: remotePushCount,
-        },
+      // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
+      const choice = await showConflictDialog({
+        kind: 'stale-push',
+        staleResult,
+        localPushCount: metadata.value.pushCount,
+        settings: settings.value,
       })
-      const choice = await choiceAsync($_('modal.staleEdit') + diagnostic, [
-        { label: $_('modal.pullFirst'), value: 'pull', variant: 'primary', icon: PULL_ICON },
-        { label: $_('modal.pushOverwrite'), value: 'push', variant: 'secondary', icon: PUSH_ICON },
-        { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
-      ])
 
       if (choice === 'pull') {
         // Pull first: isPushingロックを解放してPull→Push
@@ -300,19 +292,30 @@ export async function pullFromGitHub(
     // ここから先は実際にPullが走る可能性があるパスのみ
     if (isDirty.value || getPersistedDirtyFlag()) {
       if (isInitialStartup) {
-        // 起動時: Push first は選べない（まだPullしていないため）ので従来通り
-        const confirmed = await confirmAsync($_('modal.unsavedChangesOnStartup'))
-        if (!confirmed) {
+        // 起動時: push first は選べない（まだPullしていないため disablePush=true）。
+        // 共通ヘルパー経由で他経路と本文・診断情報を統一する（#201）。
+        // disablePush=true により戻り値から 'push' が型レベルで除外される。
+        // staleResult は precomputedStale 経由で「やや古い」値が来る可能性があるが、
+        // 影響は本文 SHA の表示のみ（判定ロジックには使わない）ため受容範囲。
+        const choice = await showConflictDialog({
+          kind: 'startup-dirty',
+          staleResult,
+          localPushCount: metadata.value.pushCount,
+          settings: settings.value,
+          disablePush: true,
+        })
+        if (choice !== 'pull') {
           await onCancel?.()
           return
         }
       } else {
         // 通常時: Push first / Pull (overwrite) / Cancel の3択
-        const choice = await choiceAsync($_('modal.unsavedChangesChoice'), [
-          { label: $_('modal.pullOverwrite'), value: 'pull', variant: 'primary', icon: PULL_ICON },
-          { label: $_('modal.pushFirst'), value: 'push', variant: 'secondary', icon: PUSH_ICON },
-          { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' },
-        ])
+        const choice = await showConflictDialog({
+          kind: 'pull-dirty',
+          staleResult,
+          localPushCount: metadata.value.pushCount,
+          settings: settings.value,
+        })
 
         if (choice === 'push') {
           // Push first: isPullingロックを解放してPush→Pull

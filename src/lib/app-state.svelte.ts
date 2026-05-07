@@ -94,10 +94,8 @@ import {
   showPushToast,
   showPullToast,
   alertAsync,
-  choiceAsync,
-  PULL_ICON,
-  PUSH_ICON,
 } from './ui'
+import { showConflictDialog } from './actions/conflict-dialog'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
 import { pullArchive, translateGitHubMessage } from './api'
@@ -1072,19 +1070,15 @@ export function initApp(deps: InitAppDeps): () => void {
             console.log(
               `Auto-push stale: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
             )
-            // ユーザーに確認（手動Pushと同じモーダル）
+            // ユーザーに確認（手動Pushと同じモーダル / 同じ診断情報）
+            // #200: 共通ヘルパー経由にすることで、auto-push でも SHA / pushCount を表示する。
             {
-              const t = get(_)
-              const choice = await choiceAsync(t('modal.staleEdit'), [
-                { label: t('modal.pullFirst'), value: 'pull', variant: 'primary', icon: PULL_ICON },
-                {
-                  label: t('modal.pushOverwrite'),
-                  value: 'push',
-                  variant: 'secondary',
-                  icon: PUSH_ICON,
-                },
-                { label: t('modal.cancel'), value: 'cancel', variant: 'cancel' },
-              ])
+              const choice = await showConflictDialog({
+                kind: 'stale-push',
+                staleResult,
+                localPushCount: metadata.value.pushCount,
+                settings: settings.value,
+              })
 
               if (choice === 'pull') {
                 // Pull first: Pull→Push

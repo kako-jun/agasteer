@@ -23,6 +23,12 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 - `choiceAsync(message, options)` - 選択肢ダイアログ（選択値/null を返す）
 - `promptAsync(message, placeholder)` - 入力ダイアログ（string/null を返す）
 
+push/pull の衝突警告は、上記プリミティブを直接呼ばず、共通ヘルパー
+`showConflictDialog({ kind, ... })`（`src/lib/actions/conflict-dialog.ts`）を経由する。
+`kind` は `'stale-push' | 'pull-dirty' | 'startup-dirty'` の3種で、
+ヘルパー内部で `fetchRemotePushCount` を呼びローカル/リモートの SHA + pushCount を
+本文末尾に常時付与する（#200 / #201 / #202）。
+
 従来のコールバック版（`showConfirm`）では、ダイアログ表示中にロックを解放する必要がありましたが、Promise版では`await`で待機することでロックを保持したまま処理を継続できます。
 
 ---

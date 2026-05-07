@@ -252,14 +252,22 @@ describe('pullFromGitHub dirty-check order (#152)', () => {
 
   it('still prompts on initial startup when dirty even if remote is up_to_date', async () => {
     // 初回Pull（isPullCompleted=false）では up_to_date でも早期リターンせず
-    // ダーティ確認が走る（従来挙動を維持）。
+    // ダーティ確認が走る（従来挙動を維持）。#201 で confirmAsync 2択から
+    // showConflictDialog ('startup-dirty', disablePush:true) の choiceAsync 2択に統一。
     appState.isPullCompleted = false
     mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
-    mocks.confirmAsync.mockResolvedValue(false)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.choiceAsync.mockResolvedValue('cancel')
 
     await pullFromGitHub(true)
 
-    expect(mocks.confirmAsync).toHaveBeenCalledWith('modal.unsavedChangesOnStartup')
+    // body 文字列は modal.unsavedChangesOnStartup + diagnostic で、key 連結のためマッチを部分一致で
+    expect(mocks.choiceAsync).toHaveBeenCalled()
+    const [body, options] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.unsavedChangesOnStartup')
+    // disablePush:true のためボタンは pull / cancel の 2 択
+    expect(options).toHaveLength(2)
+    expect(options.map((o: { value: string }) => o.value)).toEqual(['pull', 'cancel'])
     expect(mocks.executePull).not.toHaveBeenCalled()
   })
 
@@ -280,11 +288,14 @@ describe('pullFromGitHub dirty-check order (#152)', () => {
 
   it('reuses precomputedStale and does not execute a second stale check', async () => {
     appState.isPullCompleted = false
-    mocks.confirmAsync.mockResolvedValue(false)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.choiceAsync.mockResolvedValue('cancel')
 
     await pullFromGitHub(true, undefined, { status: 'up_to_date' })
 
     expect(mocks.executeStaleCheck).not.toHaveBeenCalled()
-    expect(mocks.confirmAsync).toHaveBeenCalledWith('modal.unsavedChangesOnStartup')
+    expect(mocks.choiceAsync).toHaveBeenCalled()
+    const [body] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.unsavedChangesOnStartup')
   })
 })

@@ -55,6 +55,15 @@ Remote changes are automatically checked every 5 minutes. If there are new chang
 
 > **Tip**: If you've been idle for 5 minutes and have no unsaved changes, changes from other devices are automatically synced.
 
+### Conflict Confirmation Dialog
+
+When local and remote states diverge, a unified dialog appears across all paths
+(manual push / auto-push / pull / startup unsaved-change check):
+
+- The body always shows **local/remote commit SHAs and push numbers**
+- Buttons are a 3-way choice: "Pull to fetch", "Push to overwrite", "Cancel" (Push is disabled on startup)
+- The push numbers help you decide which side is newer
+
 ---
 
 ## Data Protection Features
