@@ -1059,20 +1059,24 @@ export function initApp(deps: InitAppDeps): () => void {
       // #203: 復帰直後は回線復帰の都合で 1 回目の stale check が check_failed になりがち。
       // そのまま放置すると次の周期チェック（5 分後）まで沈黙するので、短期リトライで救う。
       // push-hang フラグはここでは引き継がない（1 回目で消費済み）。
-      const retryStaleCheckOnResume = async () => {
+      // shouldContinue は visibility だけでなく pull/push が走り始めていないかも見る。
+      // ユーザーが手動 Pull を押した直後にバックグラウンドで stale check が裏走りするのを防ぐ。
+      const canContinueResumeRetry = () =>
+        document.visibilityState === 'visible' && !isPulling.value && !isPushing.value
+      const retryStaleCheckOnResume = async (logPrefix: string) => {
         const finalOutcome = await runResumeStaleCheckRetry({
           backoffsMs: RESUME_RETRY_BACKOFFS_MS,
-          isVisible: () => document.visibilityState === 'visible',
-          runStaleCheck: async (attemptIndex) => {
+          shouldContinue: canContinueResumeRetry,
+          runStaleCheck: async (attemptIndex, backoffMs) => {
             const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
             return applyStaleResult(
               result,
-              `Resume stale-check retry #${attemptIndex + 1} (after ${RESUME_RETRY_BACKOFFS_MS[attemptIndex]}ms)`
+              `${logPrefix} retry #${attemptIndex + 1} (after ${backoffMs}ms)`
             )
           },
         })
         if (finalOutcome === 'check-failed') {
-          console.warn('Resume stale-check retry exhausted; user may need to pull manually')
+          console.warn(`${logPrefix}: stale-check retry exhausted; user may need to pull manually`)
         }
       }
 
@@ -1084,13 +1088,13 @@ export function initApp(deps: InitAppDeps): () => void {
           await alertAsync(t('modal.longBackground'), 'center')
           const outcome = await runStaleCheckAndMaybePromptHang('Long-background resume')
           if (outcome === 'check-failed') {
-            await retryStaleCheckOnResume()
+            await retryStaleCheckOnResume('Long-background resume')
           }
         } else if (consumePushHangFlag) {
           // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
           const outcome = await runStaleCheckAndMaybePromptHang('Push hang resume')
           if (outcome === 'check-failed') {
-            await retryStaleCheckOnResume()
+            await retryStaleCheckOnResume('Push hang resume')
           }
         }
       } finally {
@@ -1127,6 +1131,9 @@ export function initApp(deps: InitAppDeps): () => void {
 
   // オンライン復帰時の自動Pull リトライ
   // 初回Pull失敗（オフライン起動）後、ネットワーク復帰で自動的にPullを再試行する
+  // #203: online イベントは DHCP 再取得・キャリア切替などで短時間に複数回発火することが
+  // あるため、in-flight ガードで stale check の二重発火を防ぐ。
+  let onlineStaleCheckInFlight = false
   const handleOnline = () => {
     if (!appState.isFirstPriorityFetched && !isPulling.value) {
       console.log('Online detected: retrying initial pull')
@@ -1143,14 +1150,45 @@ export function initApp(deps: InitAppDeps): () => void {
       !isPulling.value &&
       !isPushing.value &&
       !appState.isArchiveLoading &&
-      githubConfigured.value
+      githubConfigured.value &&
+      !onlineStaleCheckInFlight
     ) {
+      onlineStaleCheckInFlight = true
       console.log(
         'Online detected (post-startup): running stale check to recover from offline silence'
       )
-      void executeStaleCheck(settings.value, lastKnownCommitSha.value).then((result) => {
-        applyStaleResult(result, 'Online resume')
-      })
+      void (async () => {
+        try {
+          const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+          const outcome = applyStaleResult(result, 'Online resume')
+          // visibility 経路と同じく check-failed なら短期リトライをかける（ポリシー統一）。
+          // online → 即 visibilitychange のシーケンスでない、純粋な online 復帰ケースの救済。
+          if (outcome === 'check-failed') {
+            const finalOutcome = await runResumeStaleCheckRetry({
+              backoffsMs: RESUME_RETRY_BACKOFFS_MS,
+              shouldContinue: () =>
+                document.visibilityState === 'visible' &&
+                !isPulling.value &&
+                !isPushing.value &&
+                !appState.isArchiveLoading,
+              runStaleCheck: async (attemptIndex, backoffMs) => {
+                const r = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+                return applyStaleResult(
+                  r,
+                  `Online resume retry #${attemptIndex + 1} (after ${backoffMs}ms)`
+                )
+              },
+            })
+            if (finalOutcome === 'check-failed') {
+              console.warn(
+                'Online resume: stale-check retry exhausted; user may need to pull manually'
+              )
+            }
+          }
+        } finally {
+          onlineStaleCheckInFlight = false
+        }
+      })()
     }
   }
   window.addEventListener('online', handleOnline)
