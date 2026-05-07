@@ -248,7 +248,8 @@
     "archived": "Archived successfully",
     "restored": "Restored successfully",
     "noteCreated": "Note created",
-    "leafCreated": "Leaf created"
+    "leafCreated": "Leaf created",
+    "pushTimeout": "Push response timed out. The next sync check will recover the state."
   },
   "ocr": {
     "title": "Text Recognition",
