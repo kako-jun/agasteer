@@ -84,16 +84,16 @@
 <style>
   .note-card {
     position: relative;
-    /* #209: 左辺バインダー綴じ模様の帯（4px 幅、左端 0 に密着）と本文の間に
+    /* #209: 左辺バインダー綴じ模様の帯（8px 幅、左端 0 に密着）と本文の間に
        余白を取るため、左 padding を増やす。他方向は 1rem 維持 */
-    padding: 1rem 1rem 1rem 1.4rem;
+    padding: 1rem 1rem 1rem 1.7rem;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface-1);
     cursor: pointer;
     transition: all 0.2s;
     /* overflow: visible は維持（BadgeButton 等のドロップダウンが外に出る場合に備え）。
-       バインダー模様は absolute で left:0 / width:4px なのでカード内に収まる */
+       バインダー模様は absolute で left:0 / width:8px なのでカード内に収まる */
     overflow: visible;
     /* 高さ固定: タイトル1行 + 4行のアイテム（3行+...）を表示できる高さ */
     height: 150px;
@@ -106,15 +106,17 @@
      リングノートの綴じを連想させる。リーフカードには付けないことで識別性を高める。
      - 矩形の左端からそのまま生やす（border 上に重ねるのでカードの輪郭と一体化）
      - 色はテーマ accent の半透明で控えめに
-     - 縦範囲はほぼ全長（top:4 / bottom:4、border-radius:8px の角丸内に収まる）
+     - 縦範囲は border-radius:8px の角丸が終わってから 5px 下を起点にし、対称に下も同じ余白
+       （角丸を線で切ってしまうと不格好なので 13px = 角丸 8px + 余白 5px）
+     - 横棒は 8px と長めにとってリングノートの綴じらしく（短いと「=」に見える）
      - 細線 1px x 2 本（間 2px）で 1 セット、セット周期 14px */
   .note-card::before {
     content: '';
     position: absolute;
     left: 0;
-    top: 4px;
-    bottom: 4px;
-    width: 4px;
+    top: 13px;
+    bottom: 13px;
+    width: 8px;
     background-image: repeating-linear-gradient(
       to bottom,
       var(--accent) 0 1px,
