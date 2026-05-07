@@ -97,6 +97,7 @@ import {
   alertAsync,
 } from './ui'
 import { showConflictDialog } from './actions/conflict-dialog'
+import { PUSH_HANG_THRESHOLD_MS } from './sync/constants'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
 import { pullArchive, translateGitHubMessage } from './api'
@@ -994,12 +995,6 @@ export function initApp(deps: InitAppDeps): () => void {
   // 長時間バックグラウンドにいた場合は、Service Workerの状態やIndexedDBが不安定になる可能性があるためリロード
   let lastVisibleTime = Date.now()
   const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
-  /**
-   * #204: visibility 復帰時に Push が「ハング中」と判定する閾値。
-   * Phase A の PUSH_TIMEOUT_MS (30 秒) より長くして、通常の Push 完了経路と
-   * 確実に区別できるようにする。
-   */
-  const PUSH_HANG_THRESHOLD_MS = 60 * 1000
 
   /**
    * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
@@ -1040,31 +1035,39 @@ export function initApp(deps: InitAppDeps): () => void {
         appState.pushHangRecovered = true
       }
 
-      if (elapsed > BACKGROUND_THRESHOLD_MS) {
-        console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
-        // モーダルを表示し、閉じたら状態確認を実行
-        const t = get(_)
-        await alertAsync(t('modal.longBackground'), 'center')
-        // staleチェック → 共通ロジックで stale/up_to_date を処理（周期チェッカーと挙動を揃える）
-        const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-        applyStaleResult(staleResult, 'Long-background resume')
+      // #205: Push ハング復旧フラグは visibility 復帰時に必ず 1 回で消費する。
+      // 例外（alertAsync reject、stale check throw 等）が起きても残留しないよう
+      // try/finally で確実にクリアする。フラグはこのブロック先頭で取り出して
+      // ローカル変数化し、後段の判定はそちらで行う（race を避ける）。
+      const consumePushHangFlag = appState.pushHangRecovered
+      try {
+        if (elapsed > BACKGROUND_THRESHOLD_MS) {
+          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
+          // モーダルを表示し、閉じたら状態確認を実行
+          const t = get(_)
+          await alertAsync(t('modal.longBackground'), 'center')
+          // staleチェック → 共通ロジックで stale/up_to_date を処理（周期チェッカーと挙動を揃える）
+          const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+          const outcome = applyStaleResult(staleResult, 'Long-background resume')
 
-        // #205: Push ハング復旧後にリモートが進んでいたら共通 3 択 (push-hang) で判断を仰ぐ。
-        // up_to_date の場合は applyStaleResult が pushInFlightAt をクリア済み（救済成功）。
-        if (appState.pushHangRecovered) {
-          appState.pushHangRecovered = false
-          if (staleResult.status === 'stale') {
+          // #205: Push ハング復旧後にリモートが進んでいたら共通 3 択 (push-hang) で判断を仰ぐ。
+          // ただし applyStaleResult の救済ブランチ（pushInFlightAt 期限内 stale →
+          // Push 成功とみなして SHA 更新）が走った場合は、ユーザー判断は不要なので
+          // ダイアログは出さない（システム側で復旧済み）。dirty 状態でユーザー判断が
+          // 必要な 'stale-dirty' の場合のみダイアログを出す。
+          if (consumePushHangFlag && outcome === 'stale-dirty') {
+            await promptPushHangRecovery(staleResult)
+          }
+        } else if (consumePushHangFlag) {
+          // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
+          const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+          const outcome = applyStaleResult(staleResult, 'Push hang resume')
+          if (outcome === 'stale-dirty') {
             await promptPushHangRecovery(staleResult)
           }
         }
-      } else if (appState.pushHangRecovered) {
-        // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
-        appState.pushHangRecovered = false
-        const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-        applyStaleResult(staleResult, 'Push hang resume')
-        if (staleResult.status === 'stale') {
-          await promptPushHangRecovery(staleResult)
-        }
+      } finally {
+        if (consumePushHangFlag) appState.pushHangRecovered = false
       }
       lastVisibleTime = now
 

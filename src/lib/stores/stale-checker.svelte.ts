@@ -93,8 +93,26 @@ const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000
  * - stale + ダーティ → `isStale = true`（赤バッジ）
  * - up_to_date → `isStale = false`
  * - check_failed → 何もしない
+ *
+ * @returns 適用後の遷移種別。push-hang 復旧経路（#204/#205）など、後続処理で
+ *   「救済済みか / dirty のまま stale バッジか / 自動 Pull か」を分岐したい呼び出し元向け。
+ *   - `rescued`: stale + push-in-flight 期限内 → SHA だけ更新して救済済み
+ *   - `stale-dirty`: stale + dirty → 赤バッジ（ユーザー判断待ち）
+ *   - `stale-auto-pull`: stale + クリーン → 自動 Pull がスケジュール
+ *   - `up-to-date`: 変化なし
+ *   - `check-failed`: ネットワーク/認証エラー等で判定不能
  */
-export function applyStaleResult(result: StaleCheckResult, logContext: string): void {
+export type ApplyStaleResultOutcome =
+  | 'rescued'
+  | 'stale-dirty'
+  | 'stale-auto-pull'
+  | 'up-to-date'
+  | 'check-failed'
+
+export function applyStaleResult(
+  result: StaleCheckResult,
+  logContext: string
+): ApplyStaleResultOutcome {
   if (result.status === 'stale') {
     const pushInFlight = getPushInFlightAt()
     if (pushInFlight && Date.now() - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
@@ -104,25 +122,29 @@ export function applyStaleResult(result: StaleCheckResult, logContext: string): 
       lastKnownCommitSha.value = result.remoteCommitSha
       setPushInFlightAt(undefined)
       isStale.value = false
-    } else {
-      // フラグが期限切れの場合はクリア
-      if (pushInFlight) {
-        setPushInFlightAt(undefined)
-      }
-      if (isDirty.value) {
-        isStale.value = true
-      } else {
-        shouldAutoPull.value = true
-      }
+      return 'rescued'
     }
-  } else if (result.status === 'up_to_date') {
+    // フラグが期限切れの場合はクリア
+    if (pushInFlight) {
+      setPushInFlightAt(undefined)
+    }
+    if (isDirty.value) {
+      isStale.value = true
+      return 'stale-dirty'
+    }
+    shouldAutoPull.value = true
+    return 'stale-auto-pull'
+  }
+  if (result.status === 'up_to_date') {
     // PushがGitHubに届かなかった場合も安全にフラグをクリア
     if (getPushInFlightAt()) {
       setPushInFlightAt(undefined)
     }
     isStale.value = false
+    return 'up-to-date'
   }
   // check_failed は現状維持
+  return 'check-failed'
 }
 
 /**

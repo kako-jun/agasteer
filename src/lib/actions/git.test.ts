@@ -217,6 +217,40 @@ describe('pushToGitHub stale handling', () => {
     expect(mocks.flushAllEditors).not.toHaveBeenCalled()
     expect(mocks.flushPendingSaves).not.toHaveBeenCalled()
   })
+
+  it('releases isPushing lock when executePush hangs past PUSH_TIMEOUT_MS (#204)', async () => {
+    // #204: executePush が永遠に pending のままになるケースを fake timers で再現する。
+    // Promise.race 内のタイムアウト Promise が reject → finally で isPushing=false → UI ロック解除。
+    // pushInFlightAt はクリアされず、次回の stale-check で救済される設計のため、
+    // setPushInFlightAt(undefined) はタイムアウト経路では呼ばれないことを確認する。
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    let resolveExecute: ((v: unknown) => void) | undefined
+    mocks.executePush.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveExecute = res
+        })
+    )
+
+    vi.useFakeTimers()
+    try {
+      const pushPromise = pushToGitHub()
+      // 30 秒進めてタイムアウトを発火
+      await vi.advanceTimersByTimeAsync(30_000)
+      await pushPromise
+
+      expect(stores.isPushing.value).toBe(false)
+      // タイムアウト経路では setPushInFlightAt(undefined) は呼ばない（救済機構のためフラグを残す）
+      expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(expect.any(Number)) // start 時の 1 回のみ
+      expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+      // タイムアウト時の警告トーストが出ている
+      expect(mocks.showPushToast).toHaveBeenCalledWith(expect.any(String), 'error')
+    } finally {
+      vi.useRealTimers()
+      // ぶらさがった executePush を resolve してメモリリークを避ける
+      resolveExecute?.({ success: false, message: 'github.cancelled', variant: 'error' })
+    }
+  })
 })
 
 describe('pullFromGitHub dirty-check order (#152)', () => {

@@ -62,20 +62,10 @@ import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
 import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from '../sync/repo-sync-queue'
-
-/**
- * Push 全体のタイムアウト（ミリ秒）。
- *
- * #204: スマホスリープ等で `executePush` が永遠に pending したままになると
- * `finally` の `isPushing.value = false` まで到達せず、UI（ガラス効果＋inert）が
- * 永久にロックされる。Promise.race で 30 秒を上限にして UI を取り戻す。
- *
- * AbortController を fetch 層まで通すコストは大きいので採らない。
- * orphan になった executePush Promise が後から完了しても、`pushInFlightAt` が
- * 期限内（1 時間、PUSH_IN_FLIGHT_EXPIRY_MS）なら次回の stale-check で
- * `applyStaleResult` が SHA だけ更新して救済する。
- */
-const PUSH_TIMEOUT_MS = 30_000
+// #204: Push タイムアウト定数は sync/constants.ts に集約（docs / 実装 / コメントの
+// 数値発散を防ぐため）。AbortController を fetch 層まで通すコストは大きいので採らず、
+// Promise.race による上限制御 + pushInFlightAt 経由の救済機構（applyStaleResult）に委ねる。
+import { PUSH_TIMEOUT_MS } from '../sync/constants'
 
 class PushTimeoutError extends Error {
   constructor() {
