@@ -26,6 +26,7 @@ import {
 } from './stores.svelte'
 import { checkStaleStatus as checkStaleStatusRaw } from '../api/sync'
 import { getPushInFlightAt, setPushInFlightAt } from '../data/storage'
+import { PUSH_IN_FLIGHT_EXPIRY_MS } from '../sync/constants'
 
 /**
  * staleチェックを実行し、時刻を更新する共通関数
@@ -79,9 +80,6 @@ export const shouldAutoPull = {
 
 let progressIntervalId: ReturnType<typeof setInterval> | null = null
 let isChecking = false
-
-/** Push 飛行中フラグの有効期限（1時間） */
-const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000
 
 /**
  * staleチェック結果に対する共通の状態遷移

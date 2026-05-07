@@ -1040,31 +1040,27 @@ export function initApp(deps: InitAppDeps): () => void {
       // try/finally で確実にクリアする。フラグはこのブロック先頭で取り出して
       // ローカル変数化し、後段の判定はそちらで行う（race を避ける）。
       const consumePushHangFlag = appState.pushHangRecovered
+      // stale check を走らせ、outcome === 'stale-dirty' のときのみ push-hang 判断ダイアログを出す。
+      // applyStaleResult の救済ブランチ（'rescued'）が走った場合はユーザー判断不要なので
+      // ダイアログを抑制する（救済との二重発火を回避: #204 must）。
+      const runStaleCheckAndMaybePromptHang = async (logContext: string) => {
+        const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+        const outcome = applyStaleResult(staleResult, logContext)
+        if (consumePushHangFlag && outcome === 'stale-dirty') {
+          await promptPushHangRecovery(staleResult)
+        }
+      }
+
       try {
         if (elapsed > BACKGROUND_THRESHOLD_MS) {
           console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
           // モーダルを表示し、閉じたら状態確認を実行
           const t = get(_)
           await alertAsync(t('modal.longBackground'), 'center')
-          // staleチェック → 共通ロジックで stale/up_to_date を処理（周期チェッカーと挙動を揃える）
-          const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-          const outcome = applyStaleResult(staleResult, 'Long-background resume')
-
-          // #205: Push ハング復旧後にリモートが進んでいたら共通 3 択 (push-hang) で判断を仰ぐ。
-          // ただし applyStaleResult の救済ブランチ（pushInFlightAt 期限内 stale →
-          // Push 成功とみなして SHA 更新）が走った場合は、ユーザー判断は不要なので
-          // ダイアログは出さない（システム側で復旧済み）。dirty 状態でユーザー判断が
-          // 必要な 'stale-dirty' の場合のみダイアログを出す。
-          if (consumePushHangFlag && outcome === 'stale-dirty') {
-            await promptPushHangRecovery(staleResult)
-          }
+          await runStaleCheckAndMaybePromptHang('Long-background resume')
         } else if (consumePushHangFlag) {
           // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
-          const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-          const outcome = applyStaleResult(staleResult, 'Push hang resume')
-          if (outcome === 'stale-dirty') {
-            await promptPushHangRecovery(staleResult)
-          }
+          await runStaleCheckAndMaybePromptHang('Push hang resume')
         }
       } finally {
         if (consumePushHangFlag) appState.pushHangRecovered = false

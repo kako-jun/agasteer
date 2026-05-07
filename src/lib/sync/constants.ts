@@ -25,3 +25,14 @@ export const PUSH_TIMEOUT_MS = 30_000
  * の保険として機能する。
  */
 export const PUSH_HANG_THRESHOLD_MS = 60_000
+
+/**
+ * `pushInFlightAt` フラグの有効期限。
+ *
+ * Push API 呼び出し中に立てた飛行中フラグが、この期間を超えても残っていたら
+ * 「期限切れ」とみなして無視する。期限内の stale 判定では `applyStaleResult`
+ * が「Push 成功でレスポンスだけロスト」とみなして SHA 更新で救済する。
+ *
+ * 1 時間: ユーザーがスマホをスリープして翌朝開く程度のユースケースをカバー。
+ */
+export const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000
