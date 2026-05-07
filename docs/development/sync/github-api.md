@@ -340,6 +340,7 @@ blob SHAが変わるため、次回Pull時にTree APIが新しいSHAを返し、
 - pullIncomplete時: 取得済みリーフをIndexedDBに保存してからメモリをクリア
 - UIはガラス状（ロック状態）を維持し、Pushもブロックされるため安全
 - 次回Pull時にcreateBackup() → buildBlobShaCache()で部分キャッシュが利用される
+- **#207**: partial save は `await` してからこの Pull サイクルを閉じる。fire-and-forget だと、次回 Pull の `createBackup()` が空の IndexedDB を読み、`buildBlobShaCache()` がヒットせず毎回ゼロから再取得する事故が起きる（`saveLeaves` / `saveNotes` を `Promise.all` で並列に await し、失敗しても続行する）
 
 **効果:**
 

@@ -398,7 +398,7 @@ Pull中に一部のリーフ取得が失敗すると、不完全な状態でPull
 3. **UIロック維持**: `isFirstPriorityFetched = false`でガラス効果を維持
 4. **isPullCompleted = false**: Pull失敗パス全体で`isPullCompleted`を`false`に設定し、フッタボタンを無効化
 5. **メモリ上のストアクリア**: 不完全なデータでのPushを防ぐ
-6. **IndexedDBには取得済みリーフを保持**: 次回Pullのblob SHAキャッシュとして再利用し、API呼び出し数を削減する
+6. **IndexedDBには取得済みリーフを保持**: 次回Pullのblob SHAキャッシュとして再利用し、API呼び出し数を削減する。**#207**: `saveLeaves` / `saveNotes` は `await` してから Pull サイクルを閉じる（fire-and-forget だと次回 Pull の `createBackup()` が空 IndexedDB を読み、毎回ゼロから再取得してしまうため）
 
 ### 不完全Pull時の動作
 
