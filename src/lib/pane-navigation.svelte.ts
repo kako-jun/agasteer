@@ -40,6 +40,7 @@ import {
   rightWorld,
   isPulling,
   isPushing,
+  isPushingBackground,
   settings,
   offlineLeafStore,
   archiveNotes,
@@ -138,7 +139,8 @@ async function runPendingRepoSyncIfIdle(): Promise<void> {
   await runPendingRepoSyncIfIdleShared(
     {
       isPulling: isPulling.value,
-      isPushing: isPushing.value,
+      // #206: 背景 Push 中も busy として扱う
+      isPushing: isPushing.value || isPushingBackground.value,
       isArchiveLoading: appState.isArchiveLoading,
     },
     hasValidConfig,
@@ -356,7 +358,9 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
   const currentPaneWorld = pane === 'left' ? leftWorld.value : rightWorld.value
   if (world === currentPaneWorld) return
 
-  if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
+  // #206: 背景 Push 中もワールド切替は禁止（archive 関連の編集と整合性を保つため）
+  if (isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading)
+    return
 
   if (pane === 'left') {
     leftWorld.value = world
