@@ -60,6 +60,11 @@ const mocks = vi.hoisted(() => ({
   setLastPushedSnapshot: vi.fn(),
   setPushInFlightAt: vi.fn(),
   pushToGitHub: vi.fn(),
+  saveNotes: vi.fn(),
+  saveLeaves: vi.fn(),
+  createBackup: vi.fn(async () => ({ notes: [], leaves: [] })),
+  restoreFromBackup: vi.fn(),
+  clearAllData: vi.fn(),
 }))
 
 vi.mock('../stores', () => ({
@@ -94,11 +99,11 @@ vi.mock('../ui', () => ({
 }))
 
 vi.mock('../data', () => ({
-  clearAllData: vi.fn(),
-  createBackup: vi.fn(async () => ({ notes: [], leaves: [] })),
-  restoreFromBackup: vi.fn(),
-  saveNotes: vi.fn(),
-  saveLeaves: vi.fn(),
+  clearAllData: mocks.clearAllData,
+  createBackup: mocks.createBackup,
+  restoreFromBackup: mocks.restoreFromBackup,
+  saveNotes: mocks.saveNotes,
+  saveLeaves: mocks.saveLeaves,
   setPushInFlightAt: mocks.setPushInFlightAt,
 }))
 
@@ -331,5 +336,114 @@ describe('pullFromGitHub dirty-check order (#152)', () => {
     expect(mocks.choiceAsync).toHaveBeenCalled()
     const [body] = mocks.choiceAsync.mock.calls[0]
     expect(body).toContain('modal.unsavedChangesOnStartup')
+  })
+})
+
+describe('pullFromGitHub pullIncomplete partial cache (#207)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isStale.value = false
+    stores.isDirty.value = false
+    stores.lastKnownCommitSha.value = null
+    stores.lastPushTime.value = 0
+    stores.notes.value = []
+    stores.leaves.value = []
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = false
+    appState.isPullCompleted = false
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.getPersistedDirtyFlag.mockReturnValue(false)
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 1 })
+  })
+
+  it('awaits saveLeaves/saveNotes before closing the pull cycle so next pull can use blobSha cache', async () => {
+    // #207: partial save が fire-and-forget だと、次回 Pull の createBackup() が
+    // 空の IndexedDB を読んでしまい blobSha キャッシュが効かない。
+    // ここでは saveLeaves が遅延 Promise でも、関数戻り値前に解決していることを確認する。
+
+    const partialLeaf = { id: 'leaf-A', noteId: 'note-A', content: 'partial', order: 0 }
+    const partialNote = { id: 'note-A', name: 'NoteA', parentId: null, order: 0 }
+
+    let saveLeavesResolved = false
+    let saveNotesResolved = false
+
+    mocks.saveLeaves.mockImplementation(async () => {
+      // 遅延を入れて await されているか検出
+      await new Promise((r) => setTimeout(r, 10))
+      saveLeavesResolved = true
+    })
+    mocks.saveNotes.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+      saveNotesResolved = true
+    })
+
+    mocks.executePull.mockImplementation(async (_settings, options) => {
+      // 部分的に取得：onLeaf を1件呼んでから pullIncomplete を返す
+      options.onStructure?.([partialNote], { pushCount: 1 }, [
+        { id: partialLeaf.id, noteId: 'note-A' },
+      ])
+      options.onLeaf?.(partialLeaf)
+      return {
+        success: false,
+        message: 'github.pullIncomplete',
+        leaves: [],
+        notes: [],
+        metadata: { pushCount: 1 },
+        variant: 'error',
+      }
+    })
+
+    await pullFromGitHub(true)
+
+    // partial save が await された結果、戻り時点で必ず resolve されている
+    expect(saveLeavesResolved).toBe(true)
+    expect(saveNotesResolved).toBe(true)
+    expect(mocks.saveLeaves).toHaveBeenCalledWith([partialLeaf])
+    expect(mocks.saveNotes).toHaveBeenCalledWith([partialNote])
+  })
+
+  it('does not throw when saveLeaves rejects (graceful degradation)', async () => {
+    // partial save が失敗しても次回 Pull に再試行されるので、ここで throw せず続行する
+    mocks.saveLeaves.mockRejectedValue(new Error('IndexedDB quota exceeded'))
+    mocks.saveNotes.mockResolvedValue(undefined)
+
+    mocks.executePull.mockImplementation(async (_settings, options) => {
+      options.onStructure?.([{ id: 'n1', name: 'N', parentId: null, order: 0 }], { pushCount: 1 }, [
+        { id: 'l1', noteId: 'n1' },
+      ])
+      options.onLeaf?.({ id: 'l1', noteId: 'n1', content: 'x', order: 0 })
+      return {
+        success: false,
+        message: 'github.pullIncomplete',
+        leaves: [],
+        notes: [],
+        metadata: { pushCount: 1 },
+        variant: 'error',
+      }
+    })
+
+    await expect(pullFromGitHub(true)).resolves.toBeUndefined()
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('skips partial save calls when no partial data was received', async () => {
+    // 取得 0 件で pullIncomplete になった場合、saveLeaves/saveNotes は呼ばない
+    mocks.executePull.mockImplementation(async () => ({
+      success: false,
+      message: 'github.pullIncomplete',
+      leaves: [],
+      notes: [],
+      metadata: { pushCount: 1 },
+      variant: 'error',
+    }))
+
+    await pullFromGitHub(true)
+
+    expect(mocks.saveLeaves).not.toHaveBeenCalled()
+    expect(mocks.saveNotes).not.toHaveBeenCalled()
   })
 })
