@@ -123,7 +123,8 @@ Object.keys(localStorage).filter((k) => k.startsWith('agasteer-corrupt-'))
 
 `decryptToken()` は復号失敗時に従来通り `''` を返す（呼び出し側の互換性維持）が、
 **「未設定（getItem が null や空文字）」と「復号失敗（暗号文があるが鍵 / WebCrypto エラー）」**
-を区別できるよう、失敗時に `console.warn('Token decrypt failed; treating as unset', { reason })`
+を区別できるよう、失敗時に
+`console.warn('Token decrypt failed; treating as unset (re-input required)', { reason })`
 を出す。次に同様の症状が起きたとき切り分けに使える。
 
 **注意（セキュリティ）**: `reason` には WebCrypto/DOMException の `error.message` を入れているが、
