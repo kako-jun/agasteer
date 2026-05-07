@@ -53,8 +53,8 @@ import {
   canSync,
   fetchRemotePushCount,
 } from '../api'
-// fetchRemotePushCount は L246 周辺の Push 成功後ハンドリングで使うため残す。
-// 衝突ダイアログ内での pushCount/SHA 表示は showConflictDialog に集約済み。
+// fetchRemotePushCount は Push 成功後の lastPulledPushCount 更新（統計表示用）で
+// 直接使うため残す。衝突ダイアログ内での pushCount/SHA 表示は showConflictDialog に集約済み。
 import { isNoteSaveable, isLeafSaveable } from '../utils'
 import { appState, appActions } from '../app-state.svelte'
 import * as nav from '../navigation'
@@ -294,14 +294,14 @@ export async function pullFromGitHub(
       if (isInitialStartup) {
         // 起動時: push first は選べない（まだPullしていないため disablePush=true）。
         // 共通ヘルパー経由で他経路と本文・診断情報を統一する（#201）。
+        // disablePush=true により戻り値から 'push' が型レベルで除外される。
         const choice = await showConflictDialog({
           kind: 'startup-dirty',
+          staleResult,
           localPushCount: metadata.value.pushCount,
           settings: settings.value,
           disablePush: true,
         })
-        // disablePush=true のためヘルパーは 'push' を返さないが、
-        // 型上は来うるのでキャンセル相当として安全側に倒す。
         if (choice !== 'pull') {
           await onCancel?.()
           return
@@ -310,6 +310,7 @@ export async function pullFromGitHub(
         // 通常時: Push first / Pull (overwrite) / Cancel の3択
         const choice = await showConflictDialog({
           kind: 'pull-dirty',
+          staleResult,
           localPushCount: metadata.value.pushCount,
           settings: settings.value,
         })

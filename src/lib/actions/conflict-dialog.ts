@@ -1,10 +1,10 @@
 import { get } from 'svelte/store'
-import { _ } from 'svelte-i18n'
 import type { Settings, StaleCheckResult } from '../types'
 import { fetchRemotePushCount } from '../api'
-import { choiceAsync } from '../ui'
+import { choiceAsync, type ChoiceOption } from '../ui'
 import { PULL_ICON, PUSH_ICON } from '../ui/icons'
 import { lastKnownCommitSha } from '../stores'
+import { _ } from '../i18n'
 
 /**
  * 衝突ダイアログの種別
@@ -17,25 +17,31 @@ export type ConflictDialogKind = 'stale-push' | 'pull-dirty' | 'startup-dirty'
 
 export type ConflictDialogChoice = 'pull' | 'push' | 'cancel' | null
 
-export interface ShowConflictDialogParams {
-  kind: ConflictDialogKind
-  /** stale-push の場合に必須。SHA を本文の診断情報に流用する */
+interface BaseParams {
+  /**
+   * stale 判定の結果。stale-push 経路では必須（リモート SHA を本文の診断情報に流用する）。
+   * pull-dirty / startup-dirty でも、呼び出し側で stale 結果を持っている場合は渡すこと。
+   * 未指定や `'stale'` 以外のときは remote SHA を `?` で表示する。
+   */
   staleResult?: StaleCheckResult
   /** ローカル側の pushCount（メタデータの pushCount を渡す） */
-  localPushCount: number | string
+  localPushCount: number
   /** リモート pushCount を取得するための GitHub 設定 */
   settings: Settings
-  /**
-   * push first を選ばせない場合 true（起動時の startup-dirty 経路で使う）。
-   * true のときボタンは pull / cancel の 2 択になる。
-   */
-  disablePush?: boolean
 }
 
-interface DiagnosticValues {
+/**
+ * `disablePush: true` のとき、ヘルパーは push ボタンを生成しないため
+ * 戻り値は `'pull' | 'cancel' | null` に絞られる（型レベルで保証）。
+ */
+export type ShowConflictDialogParams =
+  | (BaseParams & { kind: 'stale-push' | 'pull-dirty'; disablePush?: false })
+  | (BaseParams & { kind: 'startup-dirty'; disablePush: true })
+
+interface DiagnosticValues extends Record<string, string | number> {
   localSha: string
   remoteSha: string
-  localCount: number | string
+  localCount: number
   remoteCount: number | string
 }
 
@@ -44,12 +50,20 @@ function shortSha(sha: string | null | undefined): string {
   return sha.slice(0, 7)
 }
 
+function assertNever(x: never): never {
+  throw new Error(`Unhandled ConflictDialogKind: ${String(x)}`)
+}
+
 async function buildDiagnostic(
   staleResult: StaleCheckResult | undefined,
   settings: Settings,
-  localPushCount: number | string,
+  localPushCount: number,
   $_: (key: string, options?: { values?: Record<string, unknown> }) => string
 ): Promise<string> {
+  // 注意: 衝突ダイアログ表示のたびに fetchRemotePushCount を呼ぶ。
+  // pull-dirty / startup-dirty 経路では本 PR (#200) で新たに発生する API 呼び出しだが、
+  // 認証済み GitHub API は 5000 req/h なので、衝突確認頻度では実害なし。
+  // rate-limit / ネットワークエラー時は '?' で表示にフォールバックする。
   const remotePushCountResult = await fetchRemotePushCount(settings)
   const remoteCount =
     remotePushCountResult.status === 'success' ? remotePushCountResult.pushCount : '?'
@@ -60,7 +74,7 @@ async function buildDiagnostic(
     localSha = shortSha(staleResult.localCommitSha)
     remoteSha = shortSha(staleResult.remoteCommitSha)
   } else {
-    // pull-dirty / startup-dirty 経路: stale 結果がない or stale でない。
+    // pull-dirty / startup-dirty で staleResult が無い or 'stale' でない場合。
     // 手元で確実に分かる localCommitSha だけ表示し、remote は '?' とする。
     // remote SHA を別 API で改めて取りに行くのは無駄＆失敗時のフォールバックも増えるため避ける。
     localSha = shortSha(lastKnownCommitSha.value)
@@ -73,7 +87,7 @@ async function buildDiagnostic(
     localCount: localPushCount,
     remoteCount,
   }
-  return $_('modal.staleEditDiagnostic', { values: values as unknown as Record<string, unknown> })
+  return $_('modal.staleEditDiagnostic', { values })
 }
 
 function bodyKey(kind: ConflictDialogKind): string {
@@ -84,34 +98,29 @@ function bodyKey(kind: ConflictDialogKind): string {
       return 'modal.unsavedChangesChoice'
     case 'startup-dirty':
       return 'modal.unsavedChangesOnStartup'
+    default:
+      return assertNever(kind)
   }
-}
-
-interface DialogButton {
-  label: string
-  value: 'pull' | 'push' | 'cancel'
-  variant: 'primary' | 'secondary' | 'cancel'
-  icon?: string
 }
 
 function buttonsFor(
   kind: ConflictDialogKind,
   disablePush: boolean,
   $_: (key: string) => string
-): DialogButton[] {
-  const cancel: DialogButton = { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' }
+): ChoiceOption[] {
+  const cancel: ChoiceOption = { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' }
 
   // stale-push: 「リモートが新しい」状況。pull で取り込むのが安全な primary。
   // pull-dirty / startup-dirty: 「ローカルに未保存変更あり」。pull すると失う。
   //   pullOverwrite が primary（明示的な上書き選択）、pushFirst が secondary。
   if (kind === 'stale-push') {
-    const pull: DialogButton = {
+    const pull: ChoiceOption = {
       label: $_('modal.pullFirst'),
       value: 'pull',
       variant: 'primary',
       icon: PULL_ICON,
     }
-    const push: DialogButton = {
+    const push: ChoiceOption = {
       label: $_('modal.pushOverwrite'),
       value: 'push',
       variant: 'secondary',
@@ -120,13 +129,13 @@ function buttonsFor(
     return disablePush ? [pull, cancel] : [pull, push, cancel]
   }
 
-  const pull: DialogButton = {
+  const pull: ChoiceOption = {
     label: $_('modal.pullOverwrite'),
     value: 'pull',
     variant: 'primary',
     icon: PULL_ICON,
   }
-  const push: DialogButton = {
+  const push: ChoiceOption = {
     label: $_('modal.pushFirst'),
     value: 'push',
     variant: 'secondary',
@@ -141,12 +150,14 @@ function buttonsFor(
  * 全経路（手動 push stale / auto-push stale / pull dirty / 起動時 dirty）が
  * このヘルパー経由になるため、本文・ボタン文言・診断情報の表示揺れがなくなる。
  *
- * @returns ユーザーの選択。`cancel` または `null`（モーダル外クリック等）はキャンセル扱い
+ * @returns ユーザーの選択。`cancel` または `null`（モーダル外クリック等）はキャンセル扱い。
+ *   `disablePush: true` のときは戻り値から `'push'` が型レベルで除外される。
  */
 export async function showConflictDialog(
   params: ShowConflictDialogParams
 ): Promise<ConflictDialogChoice> {
-  const { kind, staleResult, localPushCount, settings, disablePush = false } = params
+  const { kind, staleResult, localPushCount, settings } = params
+  const disablePush = params.disablePush === true
   const $_ = get(_)
 
   const diagnostic = await buildDiagnostic(staleResult, settings, localPushCount, $_)
