@@ -10,6 +10,7 @@ import {
   isDirty,
   isPulling,
   isPushing,
+  isPushingBackground,
   isStale,
   lastPushTime,
   lastKnownCommitSha,
@@ -24,7 +25,6 @@ import {
   rightLeaf,
   leftView,
   leftWorld,
-  clearAllChanges,
   getPersistedDirtyFlag,
   executeStaleCheck,
   setLastPushedSnapshot,
@@ -79,7 +79,8 @@ async function runPendingRepoSyncIfIdle(): Promise<void> {
   await runPendingRepoSyncIfIdleShared(
     {
       isPulling: isPulling.value,
-      isPushing: isPushing.value,
+      // #206: 背景 Push 中も busy として扱う
+      isPushing: isPushing.value || isPushingBackground.value,
       isArchiveLoading: appState.isArchiveLoading,
     },
     hasValidConfig,
@@ -132,12 +133,27 @@ export async function handleTestConnection(): Promise<void> {
 /**
  * GitHubにPush（統合版）
  * すべてのPush処理がこの1つの関数を通る
+ *
+ * #206: 2 段階構成
+ *   1. preflight phase（同期的・UI ロック）: IME flush / 自動保存 flush / stale check /
+ *      競合ダイアログ。`isPushing=true` の間だけ PaneView のガラス効果オーバーレイが出て
+ *      編集不可になる。
+ *   2. background phase: stale check を通過した時点で送信用 snapshot を deep copy で
+ *      固定し、`isPushing=false` / `isPushingBackground=true` に切り替える。これ以降は
+ *      編集可能だが、追加の Push / Pull は canSync で禁止される。
+ *
+ *   成功時のベースライン更新は **固定 snapshot** に対して行うため、Push 中の追記は
+ *   refreshDirtyState() で再検出され dirty として残る。
  */
 export async function pushToGitHub(): Promise<void> {
   const $_ = get(_)
 
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
-  if (!canSync(isPulling.value, isPushing.value).canPush || appState.isArchiveLoading) return
+  if (
+    !canSync(isPulling.value, isPushing.value, isPushingBackground.value).canPush ||
+    appState.isArchiveLoading
+  )
+    return
 
   // 即座にロック取得（この後の非同期処理中にPullが開始されるのを防止）
   // 不変条件: ロック取得は canSync 直後・全 await の前に行う。
@@ -145,6 +161,20 @@ export async function pushToGitHub(): Promise<void> {
   // しまう競合窓ができる（過去に flushPendingSaves をロック前に置いていた
   // ことで発生したリグレッションと同じクラスのバグ）。
   isPushing.value = true
+
+  // ====================================================================
+  // Phase 1: preflight — UI ロックを保持したまま IME flush / stale check
+  // ====================================================================
+  // 送信用 snapshot を保持する変数。preflight 通過時に deep copy で固定する。
+  let snapshot: {
+    notes: Note[]
+    leaves: Leaf[]
+    metadata: typeof metadata.value
+    archiveNotes: Note[] | undefined
+    archiveLeaves: Leaf[] | undefined
+    archiveMetadata: typeof archiveMetadata.value | undefined
+  } | null = null
+
   try {
     // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
     // pendingCompositionChange が立ったまま onChange が呼ばれず、leaves.value
@@ -187,18 +217,64 @@ export async function pushToGitHub(): Promise<void> {
     }
     // check_failedやup_to_dateの場合はそのまま続行
 
+    // ★ #206: preflight 通過 → 送信用 snapshot を deep copy で固定する。
+    // これ以降に live state（notes / leaves など）を編集しても、送信内容と
+    // ベースライン更新には影響しない。構造的変更（追加・削除・並べ替え）も保護される。
+    const $notes = notes.value
+    const $leaves = leaves.value
+    const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
+    const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
+    console.log('[push#206] preflight: snapshot fixing', {
+      notesCount: saveableNotes.length,
+      leavesCount: saveableLeaves.length,
+      isArchiveLoaded: isArchiveLoaded.value,
+    })
+    snapshot = {
+      notes: structuredClone(saveableNotes),
+      leaves: structuredClone(saveableLeaves),
+      metadata: structuredClone(metadata.value),
+      archiveNotes: isArchiveLoaded.value ? structuredClone(archiveNotes.value) : undefined,
+      archiveLeaves: isArchiveLoaded.value ? structuredClone(archiveLeaves.value) : undefined,
+      archiveMetadata: isArchiveLoaded.value ? structuredClone(archiveMetadata.value) : undefined,
+    }
+    console.log('[push#206] preflight: snapshot fixed')
+
     // Push開始を通知
     showPushToast($_('loading.pushing'))
 
     // Push飛行中フラグを設定（スリープによるレスポンス消失検出用）
     setPushInFlightAt(Date.now())
 
-    // ホーム直下のリーフ・仮想ノートを除外してからPush
-    const $notes = notes.value
-    const $leaves = leaves.value
-    const saveableNotes = $notes.filter((n) => isNoteSaveable(n))
-    const saveableLeaves = $leaves.filter((l) => isLeafSaveable(l, saveableNotes))
+    // ★ #206: ここで preflight phase を終了し UI ロックを解除する。
+    // background phase は finally の外で実行する（編集再開のため）。
+    // 順序が重要: 先に isPushingBackground を true にしてから isPushing を false に
+    // することで、両方 false になる瞬間（_canPush $derived が一瞬 true → 別 Push 受付）
+    // のレース窓を作らない。
+    isPushingBackground.value = true
+    isPushing.value = false
+    console.log('[push#206] preflight: flags switched -> background phase')
+  } finally {
+    // preflight phase 終了時、snapshot が設定できなかった経路（cancel / pull-first / 例外）
+    // では isPushing が true のまま残るので必ず false に戻す。
+    // snapshot が設定できた経路では既に false に切り替え済みなので no-op。
+    console.log('[push#206] preflight finally', { snapshotIsNull: snapshot === null })
+    if (snapshot === null) {
+      isPushing.value = false
+      await runPendingRepoSyncIfIdle()
+    }
+  }
 
+  // snapshot が null（cancel / pull-first / 例外）ならここで終了
+  if (snapshot === null) {
+    console.log('[push#206] early return (snapshot null)')
+    return
+  }
+  console.log('[push#206] entering background phase')
+
+  // ====================================================================
+  // Phase 2: background — UI は編集可能、送信は裏で続ける
+  // ====================================================================
+  try {
     // #204: Push 全体に 30 秒のタイムアウトを設ける。Promise.race の loser 側
     // （setTimeout）はタイムアウト未発火なら clearTimeout でクリーンアップする
     // （タイマーがイベントループに残らないように）。
@@ -210,28 +286,39 @@ export async function pushToGitHub(): Promise<void> {
         reject(new PushTimeoutError())
       }, PUSH_TIMEOUT_MS)
     })
+    console.log('[push#206] background: about to call executePush')
     let result
     try {
       result = await Promise.race([
         executePush({
-          leaves: saveableLeaves,
-          notes: saveableNotes,
+          // ★ live state ではなく固定済み snapshot を渡す（#206）
+          leaves: snapshot.leaves,
+          notes: snapshot.notes,
+          // settings.value / isFirstPriorityFetched は preflight 通過時点から
+          // 変わらないことが canSync / pendingRehydrateRepo キューで保証されている
+          // ため live 参照で OK。snapshot に含めても等価。
           settings: settings.value,
           isOperationsLocked: !appState.isFirstPriorityFetched,
-          localMetadata: metadata.value,
+          localMetadata: snapshot.metadata,
           // アーカイブがロード済みの場合のみアーカイブデータを渡す
-          archiveLeaves: isArchiveLoaded.value ? archiveLeaves.value : undefined,
-          archiveNotes: isArchiveLoaded.value ? archiveNotes.value : undefined,
-          archiveMetadata: isArchiveLoaded.value ? archiveMetadata.value : undefined,
+          archiveLeaves: snapshot.archiveLeaves,
+          archiveNotes: snapshot.archiveNotes,
+          archiveMetadata: snapshot.archiveMetadata,
           isArchiveLoaded: isArchiveLoaded.value,
         }),
         timeoutPromise,
       ])
     } catch (e) {
+      console.log('[push#206] background: executePush threw', {
+        timeoutFired,
+        isPushTimeoutError: e instanceof PushTimeoutError,
+        message: e instanceof Error ? e.message : String(e),
+      })
       if (timeoutFired || e instanceof PushTimeoutError) {
-        // #204: タイムアウト時は isPushing は finally で false に戻し UI ロックを解除する。
-        // pushInFlightAt は意図的に残す: orphan になった executePush が裏で成功した場合、
-        // 次回の stale check で applyStaleResult が SHA のみ更新して救済する。
+        // #204: タイムアウト時は isPushingBackground を finally で false に戻し
+        // 別 Push / Pull のロックを解除する。pushInFlightAt は意図的に残す:
+        // orphan になった executePush が裏で成功した場合、次回の stale check で
+        // applyStaleResult が SHA のみ更新して救済する。
         console.warn('Push response timed out after', PUSH_TIMEOUT_MS, 'ms; releasing UI lock')
         showPushToast(
           translateGitHubMessage('toast.pushTimeout', $_, undefined, undefined, 'E-5101'),
@@ -239,10 +326,20 @@ export async function pushToGitHub(): Promise<void> {
         )
         return
       }
+      // 通常の HTTP 4xx/5xx 等の reject: pushInFlightAt は確実にクリアしてから rethrow。
+      // クリアしないと次回 visibility resume で pushHangRecovered=true が誤発火する（#204）。
+      setPushInFlightAt(undefined)
       throw e
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId)
     }
+
+    console.log('[push#206] background: executePush resolved', {
+      variant: result.variant,
+      message: result.message,
+      hasCommitSha: !!result.commitSha,
+      changedLeafCount: result.changedLeafCount,
+    })
 
     // 結果を通知（GitHub APIのメッセージキーを翻訳、変更件数を含める）
     // リーフ変更件数が0の場合はundefinedを渡し、メタデータのみの変更としてトースト表示する
@@ -255,6 +352,10 @@ export async function pushToGitHub(): Promise<void> {
       result.errorCode,
       result.httpStatus
     )
+    console.log('[push#206] background: showing result toast', {
+      variant: result.variant,
+      translatedMessage,
+    })
     showPushToast(translatedMessage, result.variant)
 
     // Push飛行中フラグをクリア（レスポンスを受信できた）
@@ -262,21 +363,43 @@ export async function pushToGitHub(): Promise<void> {
 
     // Push成功時の後処理
     if (result.variant === 'success') {
+      console.log('[push#206] background: success path')
       // commit SHAはリモートHEADの外的事実なので、noChangesでも常に更新する。
       // noChangesで更新しないと、lastKnownCommitShaがドリフトして次回のstaleチェックで
       // 誤検出（pull/push選択ダイアログの誤表示）につながる。
       if (result.commitSha) {
+        console.log('[push#206] background: updating lastKnownCommitSha', {
+          newSha: result.commitSha.slice(0, 7),
+        })
         lastKnownCommitSha.value = result.commitSha
         isStale.value = false
+      } else {
+        console.log('[push#206] background: result.commitSha is falsy, skipping SHA update')
       }
 
-      // スナップショット更新とダーティクリアは実際にPushしたときだけ行う。
+      // スナップショット更新は実際にPushしたときだけ行う。
       // noChangesで更新すると、executePushをawaitしている間にユーザーが加えた編集が
       // ベースラインに吸収されてダーティ追跡から消える（データ損失リスク）。
       // 参照: docs/development/sync/stale-detection.md
       if (result.message !== 'github.noChanges') {
-        setLastPushedSnapshot(notes.value, leaves.value, archiveNotes.value, archiveLeaves.value)
-        clearAllChanges()
+        console.log('[push#206] background: applying baseline (snapshot-based)')
+        // ★ #206: ベースラインは「Push 開始時に固定した snapshot」で更新する。
+        // live state（notes.value 等）を渡すと、Push 中にユーザーが書いた追記が
+        // ベースラインに吸収されて dirty が消える（データ損失リスク）。
+        // archive 系は snapshot に含まれない（= isArchiveLoaded=false の経路）なら
+        // undefined を渡し、setLastPushedSnapshot 側のガードで no-op にする。
+        // live state へフォールバックすると、Phase 2 中に archive がアンロードされた
+        // 場合に空配列でベースラインを上書きしてしまう（archive 全件 dirty 化リスク）。
+        setLastPushedSnapshot(
+          snapshot.notes,
+          snapshot.leaves,
+          snapshot.archiveNotes,
+          snapshot.archiveLeaves
+        )
+        // ★ #206: clearAllChanges() ではなく refreshDirtyState() を使う。
+        // 固定 snapshot との差分を再計算するので、Push 中の追記は dirty として残り、
+        // Push 開始前から残っていた変更だけが clean になる。
+        refreshDirtyState()
         lastPushTime.value = Date.now() // 自動Push用に最終Push時刻を記録
         // Push成功後にリモートから最新のpushCountを取得して更新（統計表示用）
         const remoteResult = await fetchRemotePushCount(settings.value)
@@ -286,8 +409,12 @@ export async function pushToGitHub(): Promise<void> {
       }
     }
   } finally {
-    isPushing.value = false
+    console.log('[push#206] background finally: clearing isPushingBackground')
+    isPushingBackground.value = false
+    // runPendingRepoSyncIfIdle は preflight finally でも呼ぶため、pull-first 再帰経路では
+    // 計 3 回発火するが、内部 idle 判定で no-op になるため冪等。
     await runPendingRepoSyncIfIdle()
+    console.log('[push#206] background finally: done')
   }
 }
 
@@ -310,7 +437,11 @@ export async function pullFromGitHub(
   const $_ = get(_)
 
   // 交通整理: Pull/Push中またはアーカイブロード中は不可
-  if (!canSync(isPulling.value, isPushing.value).canPull || appState.isArchiveLoading) return
+  if (
+    !canSync(isPulling.value, isPushing.value, isPushingBackground.value).canPull ||
+    appState.isArchiveLoading
+  )
+    return
 
   // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
   isPulling.value = true

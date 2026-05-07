@@ -10,6 +10,11 @@
     disabledReason?: string
     onDisabledClick?: ((reason: string) => void) | null
     id?: string
+    /**
+     * #206: 背景 Push 実行中。true の間は小さなスピナーバッジを表示し、
+     * ボタン自体は disabled で操作不可（canPush 側でロック）。
+     */
+    isPushingBackground?: boolean
   }
 
   let {
@@ -19,6 +24,7 @@
     disabledReason = '',
     onDisabledClick = null,
     id = '',
+    isPushingBackground = false,
   }: Props = $props()
 
   // 初めてダーティになった時かつガイド未表示かつボタンが有効なら吹き出しを表示
@@ -64,7 +70,10 @@
   >
     <OctocatPushIcon />
   </button>
-  {#if isDirty}
+  {#if isPushingBackground}
+    <!-- #206: 背景 Push 中は小さなスピナーで進行中を示す -->
+    <span class="bg-push-spinner" aria-label="background-push" title={$_('header.push')}></span>
+  {:else if isDirty}
     <span class="notification-badge"></span>
   {/if}
   {#if showGuide}
@@ -131,6 +140,29 @@
     background: #ef4444;
     border-radius: 50%;
     pointer-events: none;
+  }
+
+  /* #206: 背景 Push 中スピナー */
+  .bg-push-spinner {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: bg-push-spin 0.9s linear infinite;
+  }
+
+  @keyframes bg-push-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .guide-tooltip {
