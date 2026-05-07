@@ -271,6 +271,7 @@
     "unsavedChanges": "未保存の変更があります。Pullすると上書きされます。続行しますか？",
     "unsavedChangesOnStartup": "前回の編集内容がGitHubに保存されていません。\nPullすると失われます。Pullしますか？\n\n「キャンセル」を選ぶとローカルの変更を保持します。",
     "unsavedChangesChoice": "未保存の変更があります。\nPullすると上書きされます。",
+    "pushHangRecovery": "Pushの応答が途切れたため、状態が不明です。\nリモートの最新を取り込むか、ローカルで上書きするかを選んでください。",
     "pushFirst": "Pushでリモートを上書き",
     "pullOverwrite": "Pullでローカルを上書き",
     "pullFirst": "Pullでリモートを取得",

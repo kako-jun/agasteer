@@ -270,6 +270,7 @@
     "unsavedChanges": "You have unsaved changes. Pull will overwrite them. Continue?",
     "unsavedChangesOnStartup": "Your previous edits were not saved to GitHub.\nPulling will lose them. Pull anyway?\n\nSelect 'Cancel' to keep local changes.",
     "unsavedChangesChoice": "You have unsaved changes.\nPulling will overwrite them.",
+    "pushHangRecovery": "Push response was lost; state is uncertain.\nChoose to fetch remote or overwrite with local.",
     "pushFirst": "Push to overwrite remote",
     "pullOverwrite": "Pull to overwrite local",
     "pullFirst": "Pull to fetch remote",

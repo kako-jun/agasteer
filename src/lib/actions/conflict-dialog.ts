@@ -12,8 +12,11 @@ import { _ } from '../i18n'
  * - `stale-push`: push 操作で stale を検知（手動 push / auto-push 共通）
  * - `pull-dirty`: pull 操作時にローカルが dirty（通常時の3択）
  * - `startup-dirty`: 起動時にローカルが dirty（push first を出さない）
+ * - `push-hang`: Push ハング復旧後に状態が不明で 3 択判断が必要（#205）。
+ *   ボタン配置・並びは `stale-push` と同じ（pullFirst primary / pushOverwrite secondary / cancel）。
+ *   本文だけ「Push 応答が消失した」状況を伝えるメッセージに差し替える。
  */
-export type ConflictDialogKind = 'stale-push' | 'pull-dirty' | 'startup-dirty'
+export type ConflictDialogKind = 'stale-push' | 'pull-dirty' | 'startup-dirty' | 'push-hang'
 
 export type ConflictDialogChoice = 'pull' | 'push' | 'cancel' | null
 
@@ -35,7 +38,7 @@ interface BaseParams {
  * 戻り値は `'pull' | 'cancel' | null` に絞られる（型レベルで保証）。
  */
 export type ShowConflictDialogParams =
-  | (BaseParams & { kind: 'stale-push' | 'pull-dirty'; disablePush?: false })
+  | (BaseParams & { kind: 'stale-push' | 'pull-dirty' | 'push-hang'; disablePush?: false })
   | (BaseParams & { kind: 'startup-dirty'; disablePush: true })
 
 interface DiagnosticValues extends Record<string, string | number> {
@@ -98,6 +101,8 @@ function bodyKey(kind: ConflictDialogKind): string {
       return 'modal.unsavedChangesChoice'
     case 'startup-dirty':
       return 'modal.unsavedChangesOnStartup'
+    case 'push-hang':
+      return 'modal.pushHangRecovery'
     default:
       return assertNever(kind)
   }
@@ -115,7 +120,11 @@ function buttonsFor(
   // - pull-dirty / startup-dirty: 「ローカルに未保存変更あり」。pull すると失う。
   //   pullOverwrite が primary（明示的な上書き選択）、pushFirst が secondary
   switch (kind) {
-    case 'stale-push': {
+    case 'stale-push':
+    case 'push-hang': {
+      // push-hang は「Push 応答が消失して状態不明」の状況。
+      // 安全側として「リモートの最新を取り込む（pull）」を primary に置き、
+      // ローカル上書き（push）を secondary とする stale-push と同じ並びにする。
       const pull: ChoiceOption = {
         label: $_('modal.pullFirst'),
         value: 'pull',
@@ -164,7 +173,7 @@ export function showConflictDialog(
   params: BaseParams & { kind: 'startup-dirty'; disablePush: true }
 ): Promise<Exclude<ConflictDialogChoice, 'push'>>
 export function showConflictDialog(
-  params: BaseParams & { kind: 'stale-push' | 'pull-dirty'; disablePush?: false }
+  params: BaseParams & { kind: 'stale-push' | 'pull-dirty' | 'push-hang'; disablePush?: false }
 ): Promise<ConflictDialogChoice>
 export async function showConflictDialog(
   params: ShowConflictDialogParams
