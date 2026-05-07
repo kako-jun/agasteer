@@ -126,16 +126,6 @@
     pointer-events: none;
   }
 
-  /* スマホでは帯幅を細めにして本文幅を圧迫しないようにする */
-  @media (max-width: 480px) {
-    .note-card {
-      padding-left: 1.2rem;
-    }
-    .note-card::before {
-      width: 3px;
-    }
-  }
-
   .note-title {
     display: flex;
     align-items: center;
