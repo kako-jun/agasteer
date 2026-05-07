@@ -998,6 +998,34 @@ export function initApp(deps: InitAppDeps): () => void {
   let lastVisibleTime = Date.now()
   const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
 
+  // #203: 復帰直後は回線復帰の都合で 1 回目の stale check が check_failed になりがち。
+  // そのまま放置すると次の周期チェック（5 分後）まで沈黙するので、短期リトライで救う。
+  // visibilitychange / online 両経路で共通利用する。
+  // shouldContinue は visibility と pull/push/archiveLoading の合成条件で、ユーザーが
+  // 手動 Pull を押した直後やアーカイブロード中にバックグラウンドで stale check が
+  // 裏走りするのを防ぐ。両経路で揃えることで非対称性をなくす。
+  const canContinueResumeRetry = () =>
+    document.visibilityState === 'visible' &&
+    !isPulling.value &&
+    !isPushing.value &&
+    !appState.isArchiveLoading
+  const retryStaleCheckOnResume = async (logPrefix: string) => {
+    const finalOutcome = await runResumeStaleCheckRetry({
+      backoffsMs: RESUME_RETRY_BACKOFFS_MS,
+      shouldContinue: canContinueResumeRetry,
+      runStaleCheck: async (attemptIndex, backoffMs) => {
+        const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+        return applyStaleResult(
+          result,
+          `${logPrefix} retry #${attemptIndex + 1} (after ${backoffMs}ms)`
+        )
+      },
+    })
+    if (finalOutcome === 'check-failed') {
+      console.warn(`${logPrefix}: stale-check retry exhausted; user may need to pull manually`)
+    }
+  }
+
   /**
    * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
    * stale-push と同じ並び（pull primary / push secondary / cancel）。
@@ -1054,30 +1082,6 @@ export function initApp(deps: InitAppDeps): () => void {
           await promptPushHangRecovery(staleResult)
         }
         return outcome
-      }
-
-      // #203: 復帰直後は回線復帰の都合で 1 回目の stale check が check_failed になりがち。
-      // そのまま放置すると次の周期チェック（5 分後）まで沈黙するので、短期リトライで救う。
-      // push-hang フラグはここでは引き継がない（1 回目で消費済み）。
-      // shouldContinue は visibility だけでなく pull/push が走り始めていないかも見る。
-      // ユーザーが手動 Pull を押した直後にバックグラウンドで stale check が裏走りするのを防ぐ。
-      const canContinueResumeRetry = () =>
-        document.visibilityState === 'visible' && !isPulling.value && !isPushing.value
-      const retryStaleCheckOnResume = async (logPrefix: string) => {
-        const finalOutcome = await runResumeStaleCheckRetry({
-          backoffsMs: RESUME_RETRY_BACKOFFS_MS,
-          shouldContinue: canContinueResumeRetry,
-          runStaleCheck: async (attemptIndex, backoffMs) => {
-            const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-            return applyStaleResult(
-              result,
-              `${logPrefix} retry #${attemptIndex + 1} (after ${backoffMs}ms)`
-            )
-          },
-        })
-        if (finalOutcome === 'check-failed') {
-          console.warn(`${logPrefix}: stale-check retry exhausted; user may need to pull manually`)
-        }
       }
 
       try {
@@ -1164,27 +1168,12 @@ export function initApp(deps: InitAppDeps): () => void {
           // visibility 経路と同じく check-failed なら短期リトライをかける（ポリシー統一）。
           // online → 即 visibilitychange のシーケンスでない、純粋な online 復帰ケースの救済。
           if (outcome === 'check-failed') {
-            const finalOutcome = await runResumeStaleCheckRetry({
-              backoffsMs: RESUME_RETRY_BACKOFFS_MS,
-              shouldContinue: () =>
-                document.visibilityState === 'visible' &&
-                !isPulling.value &&
-                !isPushing.value &&
-                !appState.isArchiveLoading,
-              runStaleCheck: async (attemptIndex, backoffMs) => {
-                const r = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-                return applyStaleResult(
-                  r,
-                  `Online resume retry #${attemptIndex + 1} (after ${backoffMs}ms)`
-                )
-              },
-            })
-            if (finalOutcome === 'check-failed') {
-              console.warn(
-                'Online resume: stale-check retry exhausted; user may need to pull manually'
-              )
-            }
+            await retryStaleCheckOnResume('Online resume')
           }
+        } catch (e) {
+          // unhandled rejection を出さないため握る。stale check の一時失敗は実害が薄く、
+          // 周期チェッカー or 次の visibility 復帰で改めて拾われる。
+          console.warn('Online resume stale-check error (ignored, will retry next cycle):', e)
         } finally {
           onlineStaleCheckInFlight = false
         }
