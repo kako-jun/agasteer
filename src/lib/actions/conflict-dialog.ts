@@ -110,38 +110,45 @@ function buttonsFor(
 ): ChoiceOption[] {
   const cancel: ChoiceOption = { label: $_('modal.cancel'), value: 'cancel', variant: 'cancel' }
 
-  // stale-push: 「リモートが新しい」状況。pull で取り込むのが安全な primary。
-  // pull-dirty / startup-dirty: 「ローカルに未保存変更あり」。pull すると失う。
-  //   pullOverwrite が primary（明示的な上書き選択）、pushFirst が secondary。
-  if (kind === 'stale-push') {
-    const pull: ChoiceOption = {
-      label: $_('modal.pullFirst'),
-      value: 'pull',
-      variant: 'primary',
-      icon: PULL_ICON,
+  // kind による pull/push のラベル違い:
+  // - stale-push: 「リモートが新しい」状況。pull で取り込むのが安全な primary
+  // - pull-dirty / startup-dirty: 「ローカルに未保存変更あり」。pull すると失う。
+  //   pullOverwrite が primary（明示的な上書き選択）、pushFirst が secondary
+  switch (kind) {
+    case 'stale-push': {
+      const pull: ChoiceOption = {
+        label: $_('modal.pullFirst'),
+        value: 'pull',
+        variant: 'primary',
+        icon: PULL_ICON,
+      }
+      const push: ChoiceOption = {
+        label: $_('modal.pushOverwrite'),
+        value: 'push',
+        variant: 'secondary',
+        icon: PUSH_ICON,
+      }
+      return disablePush ? [pull, cancel] : [pull, push, cancel]
     }
-    const push: ChoiceOption = {
-      label: $_('modal.pushOverwrite'),
-      value: 'push',
-      variant: 'secondary',
-      icon: PUSH_ICON,
+    case 'pull-dirty':
+    case 'startup-dirty': {
+      const pull: ChoiceOption = {
+        label: $_('modal.pullOverwrite'),
+        value: 'pull',
+        variant: 'primary',
+        icon: PULL_ICON,
+      }
+      const push: ChoiceOption = {
+        label: $_('modal.pushFirst'),
+        value: 'push',
+        variant: 'secondary',
+        icon: PUSH_ICON,
+      }
+      return disablePush ? [pull, cancel] : [pull, push, cancel]
     }
-    return disablePush ? [pull, cancel] : [pull, push, cancel]
+    default:
+      return assertNever(kind)
   }
-
-  const pull: ChoiceOption = {
-    label: $_('modal.pullOverwrite'),
-    value: 'pull',
-    variant: 'primary',
-    icon: PULL_ICON,
-  }
-  const push: ChoiceOption = {
-    label: $_('modal.pushFirst'),
-    value: 'push',
-    variant: 'secondary',
-    icon: PUSH_ICON,
-  }
-  return disablePush ? [pull, cancel] : [pull, push, cancel]
 }
 
 /**
@@ -151,8 +158,14 @@ function buttonsFor(
  * このヘルパー経由になるため、本文・ボタン文言・診断情報の表示揺れがなくなる。
  *
  * @returns ユーザーの選択。`cancel` または `null`（モーダル外クリック等）はキャンセル扱い。
- *   `disablePush: true` のときは戻り値から `'push'` が型レベルで除外される。
+ *   `disablePush: true` のときはオーバーロードにより戻り値から `'push'` が型レベルで除外される。
  */
+export function showConflictDialog(
+  params: BaseParams & { kind: 'startup-dirty'; disablePush: true }
+): Promise<Exclude<ConflictDialogChoice, 'push'>>
+export function showConflictDialog(
+  params: BaseParams & { kind: 'stale-push' | 'pull-dirty'; disablePush?: false }
+): Promise<ConflictDialogChoice>
 export async function showConflictDialog(
   params: ShowConflictDialogParams
 ): Promise<ConflictDialogChoice> {

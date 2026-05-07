@@ -295,6 +295,8 @@ export async function pullFromGitHub(
         // 起動時: push first は選べない（まだPullしていないため disablePush=true）。
         // 共通ヘルパー経由で他経路と本文・診断情報を統一する（#201）。
         // disablePush=true により戻り値から 'push' が型レベルで除外される。
+        // staleResult は precomputedStale 経由で「やや古い」値が来る可能性があるが、
+        // 影響は本文 SHA の表示のみ（判定ロジックには使わない）ため受容範囲。
         const choice = await showConflictDialog({
           kind: 'startup-dirty',
           staleResult,
