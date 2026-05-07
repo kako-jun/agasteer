@@ -51,7 +51,7 @@ Run the following in the developer console and reload:
 
 ```js
 const data = JSON.parse(localStorage.getItem('agasteer'))
-data.state.tourShown = false
-data.state.saveGuideShown = false
+data.globalState.tourShown = false
+data.globalState.saveGuideShown = false
 localStorage.setItem('agasteer', JSON.stringify(data))
 ```

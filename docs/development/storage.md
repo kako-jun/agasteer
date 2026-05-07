@@ -89,9 +89,12 @@ Agasteerのデータ永続化スキーマについて説明します。
 #### JSON parse 失敗時の corrupt 退避
 
 `loadStorageData()` は `localStorage.getItem('agasteer')` の `JSON.parse` が失敗した場合、
-**raw 値を `agasteer-corrupt-<timestamp>` という別キーに退避してから** デフォルト値で起動する。
+**raw 値を `agasteer-corrupt-<timestamp>-<random>` という別キーに退避してから** デフォルト値で起動する。
 従来は `catch {}` で握りつぶしていたため「初回起動と区別がつかない silent fallback」が発生し、
 ヒント再表示や token/repoName 消失のように見える現象の真因が追えなかった。
+
+`<random>` は 4 文字の base36 ランダム suffix。同一ミリ秒に複数回 throw した場合の
+キー衝突で前回 raw を失わないために付与する。
 
 退避後は `console.error` でログを残し、開発者ツールから raw を取り出せる:
 
@@ -122,6 +125,11 @@ Object.keys(localStorage).filter((k) => k.startsWith('agasteer-corrupt-'))
 **「未設定（getItem が null や空文字）」と「復号失敗（暗号文があるが鍵 / WebCrypto エラー）」**
 を区別できるよう、失敗時に `console.warn('Token decrypt failed; treating as unset', { reason })`
 を出す。次に同様の症状が起きたとき切り分けに使える。
+
+**注意（セキュリティ）**: `reason` には WebCrypto/DOMException の `error.message` を入れているが、
+ここに **暗号文・鍵・IV/Salt のバイト列・トークン本体は絶対に含めない**。将来の改修でも
+`reason` フィールドは「失敗の種類」（例: 'OperationError', 'InvalidAccessError'）程度に
+留め、機微情報を載せないこと。
 
 ---
 

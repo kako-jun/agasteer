@@ -497,8 +497,20 @@ export async function pullFromGitHub(
 
       setLastPushedSnapshot(result.notes, result.leaves, archiveNotes.value, archiveLeaves.value)
 
-      saveNotes(result.notes).catch((err) => console.error('Failed to persist notes:', err))
-      saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
+      // #207: Pull 成功パスでも save を await する。await しないと、Pull 直後にタブが
+      // 閉じる / リロードされる経路で次回 createBackup() が空 IndexedDB を読み、
+      // blobSha キャッシュが効かなくなる（pullIncomplete 経路と同じクラスの事故）。
+      // 一方が失敗しても他方は続行できるように Promise.allSettled で握る。
+      const [notesResult, leavesResult] = await Promise.allSettled([
+        saveNotes(result.notes),
+        saveLeaves(sortedLeaves),
+      ])
+      if (notesResult.status === 'rejected') {
+        console.error('Failed to persist notes:', notesResult.reason)
+      }
+      if (leavesResult.status === 'rejected') {
+        console.error('Failed to persist leaves:', leavesResult.reason)
+      }
 
       await tick()
       refreshDirtyState()

@@ -160,7 +160,10 @@ function loadStorageData(): StorageData {
       // ヒント再表示や token/repoName 消失の原因追跡が不可能になる。
       // raw を別キーに退避してから初期化することで、後から開発者ツールで
       // 「本当に消えた」のか「読めなかった」のかを切り分けられるようにする。
-      const backupKey = `${STORAGE_KEY}-corrupt-${Date.now()}`
+      // 同一ミリ秒で複数回 throw した場合のキー衝突を避けるためランダム suffix を付与する。
+      // 衝突して前回 raw を上書きすると診断材料を失うため、衝突確率を実質ゼロにする。
+      const randomSuffix = Math.random().toString(36).slice(2, 6)
+      const backupKey = `${STORAGE_KEY}-corrupt-${Date.now()}-${randomSuffix}`
       try {
         localStorage.setItem(backupKey, stored)
       } catch {
