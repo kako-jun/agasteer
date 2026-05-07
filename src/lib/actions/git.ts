@@ -45,6 +45,8 @@ import {
   saveLeaves,
   setPushInFlightAt,
 } from '../data'
+// fetchRemotePushCount は Push 成功後の lastPulledPushCount 更新（統計表示用）で
+// 直接使うため残す。衝突ダイアログ内での pushCount/SHA 表示は showConflictDialog に集約済み。
 import {
   executePush,
   executePull,
@@ -53,8 +55,6 @@ import {
   canSync,
   fetchRemotePushCount,
 } from '../api'
-// fetchRemotePushCount は Push 成功後の lastPulledPushCount 更新（統計表示用）で
-// 直接使うため残す。衝突ダイアログ内での pushCount/SHA 表示は showConflictDialog に集約済み。
 import { isNoteSaveable, isLeafSaveable } from '../utils'
 import { appState, appActions } from '../app-state.svelte'
 import * as nav from '../navigation'
