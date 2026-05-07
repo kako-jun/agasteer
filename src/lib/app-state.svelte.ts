@@ -1001,6 +1001,25 @@ export function initApp(deps: InitAppDeps): () => void {
    */
   const PUSH_HANG_THRESHOLD_MS = 60 * 1000
 
+  /**
+   * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
+   * stale-push と同じ並び（pull primary / push secondary / cancel）。
+   * cancel/null は何もしない（applyStaleResult で立てた赤バッジに任せる）。
+   */
+  const promptPushHangRecovery = async (staleResult: StaleCheckResult) => {
+    const choice = await showConflictDialog({
+      kind: 'push-hang',
+      staleResult,
+      localPushCount: metadata.value.pushCount,
+      settings: settings.value,
+    })
+    if (choice === 'pull') {
+      await deps.pullFromGitHub(false)
+    } else if (choice === 'push') {
+      await deps.pushToGitHub()
+    }
+  }
+
   const handleVisibilityChange = async () => {
     if (document.visibilityState === 'visible') {
       const now = Date.now()
@@ -1029,6 +1048,23 @@ export function initApp(deps: InitAppDeps): () => void {
         // staleチェック → 共通ロジックで stale/up_to_date を処理（周期チェッカーと挙動を揃える）
         const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
         applyStaleResult(staleResult, 'Long-background resume')
+
+        // #205: Push ハング復旧後にリモートが進んでいたら共通 3 択 (push-hang) で判断を仰ぐ。
+        // up_to_date の場合は applyStaleResult が pushInFlightAt をクリア済み（救済成功）。
+        if (appState.pushHangRecovered) {
+          appState.pushHangRecovered = false
+          if (staleResult.status === 'stale') {
+            await promptPushHangRecovery(staleResult)
+          }
+        }
+      } else if (appState.pushHangRecovered) {
+        // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
+        appState.pushHangRecovered = false
+        const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+        applyStaleResult(staleResult, 'Push hang resume')
+        if (staleResult.status === 'stale') {
+          await promptPushHangRecovery(staleResult)
+        }
       }
       lastVisibleTime = now
 
