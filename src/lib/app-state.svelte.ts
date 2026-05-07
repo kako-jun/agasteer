@@ -97,7 +97,9 @@ import {
   alertAsync,
 } from './ui'
 import { showConflictDialog } from './actions/conflict-dialog'
-import { PUSH_HANG_THRESHOLD_MS } from './sync/constants'
+import { PUSH_HANG_THRESHOLD_MS, RESUME_RETRY_BACKOFFS_MS } from './sync/constants'
+import { runResumeStaleCheckRetry } from './sync/resume-retry'
+import type { ApplyStaleResultOutcome } from './stores/stale-checker.svelte'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
 import { pullArchive, translateGitHubMessage } from './api'
@@ -996,6 +998,34 @@ export function initApp(deps: InitAppDeps): () => void {
   let lastVisibleTime = Date.now()
   const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
 
+  // #203: 復帰直後は回線復帰の都合で 1 回目の stale check が check_failed になりがち。
+  // そのまま放置すると次の周期チェック（5 分後）まで沈黙するので、短期リトライで救う。
+  // visibilitychange / online 両経路で共通利用する。
+  // shouldContinue は visibility と pull/push/archiveLoading の合成条件で、ユーザーが
+  // 手動 Pull を押した直後やアーカイブロード中にバックグラウンドで stale check が
+  // 裏走りするのを防ぐ。両経路で揃えることで非対称性をなくす。
+  const canContinueResumeRetry = () =>
+    document.visibilityState === 'visible' &&
+    !isPulling.value &&
+    !isPushing.value &&
+    !appState.isArchiveLoading
+  const retryStaleCheckOnResume = async (logPrefix: string) => {
+    const finalOutcome = await runResumeStaleCheckRetry({
+      backoffsMs: RESUME_RETRY_BACKOFFS_MS,
+      shouldContinue: canContinueResumeRetry,
+      runStaleCheck: async (attemptIndex, backoffMs) => {
+        const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+        return applyStaleResult(
+          result,
+          `${logPrefix} retry #${attemptIndex + 1} (after ${backoffMs}ms)`
+        )
+      },
+    })
+    if (finalOutcome === 'check-failed') {
+      console.warn(`${logPrefix}: stale-check retry exhausted; user may need to pull manually`)
+    }
+  }
+
   /**
    * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
    * stale-push と同じ並び（pull primary / push secondary / cancel）。
@@ -1043,12 +1073,15 @@ export function initApp(deps: InitAppDeps): () => void {
       // stale check を走らせ、outcome === 'stale-dirty' のときのみ push-hang 判断ダイアログを出す。
       // applyStaleResult の救済ブランチ（'rescued'）が走った場合はユーザー判断不要なので
       // ダイアログを抑制する（救済との二重発火を回避: #204 must）。
-      const runStaleCheckAndMaybePromptHang = async (logContext: string) => {
+      const runStaleCheckAndMaybePromptHang = async (
+        logContext: string
+      ): Promise<ApplyStaleResultOutcome> => {
         const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
         const outcome = applyStaleResult(staleResult, logContext)
         if (consumePushHangFlag && outcome === 'stale-dirty') {
           await promptPushHangRecovery(staleResult)
         }
+        return outcome
       }
 
       try {
@@ -1057,10 +1090,16 @@ export function initApp(deps: InitAppDeps): () => void {
           // モーダルを表示し、閉じたら状態確認を実行
           const t = get(_)
           await alertAsync(t('modal.longBackground'), 'center')
-          await runStaleCheckAndMaybePromptHang('Long-background resume')
+          const outcome = await runStaleCheckAndMaybePromptHang('Long-background resume')
+          if (outcome === 'check-failed') {
+            await retryStaleCheckOnResume('Long-background resume')
+          }
         } else if (consumePushHangFlag) {
           // BACKGROUND_THRESHOLD_MS 未満でも hang は検出済み。軽量な stale check だけ走らせる。
-          await runStaleCheckAndMaybePromptHang('Push hang resume')
+          const outcome = await runStaleCheckAndMaybePromptHang('Push hang resume')
+          if (outcome === 'check-failed') {
+            await retryStaleCheckOnResume('Push hang resume')
+          }
         }
       } finally {
         if (consumePushHangFlag) appState.pushHangRecovered = false
@@ -1096,10 +1135,49 @@ export function initApp(deps: InitAppDeps): () => void {
 
   // オンライン復帰時の自動Pull リトライ
   // 初回Pull失敗（オフライン起動）後、ネットワーク復帰で自動的にPullを再試行する
+  // #203: online イベントは DHCP 再取得・キャリア切替などで短時間に複数回発火することが
+  // あるため、in-flight ガードで stale check の二重発火を防ぐ。
+  let onlineStaleCheckInFlight = false
   const handleOnline = () => {
     if (!appState.isFirstPriorityFetched && !isPulling.value) {
       console.log('Online detected: retrying initial pull')
       deps.pullFromGitHub(true)
+      return
+    }
+    // #203: 通常運用中（初回 Pull 済み）でも、長時間オフライン後に online 復帰した
+    // タイミングで stale check を一発走らせる。これにより、visibilitychange が
+    // 発火していないが回線だけが復帰したケースでも自動同期に再合流できる。
+    // visibility が hidden の場合は走らせない（visibilitychange 側に任せる）。
+    if (
+      appState.isFirstPriorityFetched &&
+      document.visibilityState === 'visible' &&
+      !isPulling.value &&
+      !isPushing.value &&
+      !appState.isArchiveLoading &&
+      githubConfigured.value &&
+      !onlineStaleCheckInFlight
+    ) {
+      onlineStaleCheckInFlight = true
+      console.log(
+        'Online detected (post-startup): running stale check to recover from offline silence'
+      )
+      void (async () => {
+        try {
+          const result = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+          const outcome = applyStaleResult(result, 'Online resume')
+          // visibility 経路と同じく check-failed なら短期リトライをかける（ポリシー統一）。
+          // online → 即 visibilitychange のシーケンスでない、純粋な online 復帰ケースの救済。
+          if (outcome === 'check-failed') {
+            await retryStaleCheckOnResume('Online resume')
+          }
+        } catch (e) {
+          // unhandled rejection を出さないため握る。stale check の一時失敗は実害が薄く、
+          // 周期チェッカー or 次の visibility 復帰で改めて拾われる。
+          console.warn('Online resume stale-check error (ignored, will retry next cycle):', e)
+        } finally {
+          onlineStaleCheckInFlight = false
+        }
+      })()
     }
   }
   window.addEventListener('online', handleOnline)

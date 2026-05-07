@@ -36,3 +36,13 @@ export const PUSH_HANG_THRESHOLD_MS = 60_000
  * 1 時間: ユーザーがスマホをスリープして翌朝開く程度のユースケースをカバー。
  */
 export const PUSH_IN_FLIGHT_EXPIRY_MS = 60 * 60 * 1000
+
+/**
+ * 長時間バックグラウンド復帰直後に stale check が `check_failed` を返した場合の
+ * 短期リトライ間隔（ミリ秒）。配列の各要素が「待ってから次の試行をするまでの遅延」。
+ *
+ * #203: スマホで久しぶりに開いた直後はネットワーク復帰タイミングの都合で
+ * 1 回目の stale check が失敗することがあり、そのまま 5 分沈黙する問題を救う。
+ * 常時ポーリングではなく「復帰直後だけの限定リトライ」にとどめる。
+ */
+export const RESUME_RETRY_BACKOFFS_MS = [2_000, 5_000] as const

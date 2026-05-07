@@ -96,6 +96,11 @@ A thin vertical line (progress bar) is displayed on the left edge of the header.
 
 > **Tip**: Manual Pull/Push resets the countdown to the next check.
 
+> **Tip**: When you reopen the app on a phone after a long pause and the
+> network has not finished reconnecting yet, the app retries automatically
+> within a few seconds and rejoins auto-sync. You do not have to press
+> the Pull button by hand (the same applies after coming back online).
+
 ### Read-Only Mode During Pull
 
 During Pull, a semi-transparent overlay (glass effect) covers the editing area, preventing edits.
