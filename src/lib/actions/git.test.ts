@@ -14,6 +14,7 @@ const stores = vi.hoisted(() => ({
   isDirty: createStore(true),
   isPulling: createStore(false),
   isPushing: createStore(false),
+  isPushingBackground: createStore(false),
   isStale: createStore(false),
   lastPushTime: createStore(0),
   lastKnownCommitSha: createStore<string | null>('local-sha'),
@@ -58,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   flushAllEditors: vi.fn(),
   getPersistedDirtyFlag: vi.fn(() => false),
   setLastPushedSnapshot: vi.fn(),
+  refreshDirtyState: vi.fn(),
   setPushInFlightAt: vi.fn(),
   pushToGitHub: vi.fn(),
   saveNotes: vi.fn(),
@@ -75,7 +77,7 @@ vi.mock('../stores', () => ({
   setLastPushedSnapshot: mocks.setLastPushedSnapshot,
   addLeafToBaseline: vi.fn(),
   addNotesToBaseline: vi.fn(),
-  refreshDirtyState: vi.fn(),
+  refreshDirtyState: mocks.refreshDirtyState,
   flushPendingSaves: mocks.flushPendingSaves,
   leafStatsStore: { addLeaf: vi.fn() },
   pullProgressStore: { start: vi.fn(), increment: vi.fn(), reset: vi.fn() },
@@ -147,6 +149,7 @@ describe('pushToGitHub stale handling', () => {
     vi.clearAllMocks()
     stores.isPulling.value = false
     stores.isPushing.value = false
+    stores.isPushingBackground.value = false
     stores.isStale.value = false
     stores.lastKnownCommitSha.value = 'local-sha'
     stores.lastPushTime.value = 0
@@ -258,11 +261,106 @@ describe('pushToGitHub stale handling', () => {
   })
 })
 
+describe('pushToGitHub background phase (#206)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    stores.notes.value = [{ id: 'note-1', name: 'Note', parentId: null, order: 0 }]
+    stores.leaves.value = [{ id: 'leaf-1', noteId: 'note-1', content: 'orig', order: 0 }]
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+  })
+
+  it('switches isPushing→false and isPushingBackground→true after stale check passes (#206)', async () => {
+    // executePush の中でフラグの状態を観測する
+    let isPushingDuringPush: boolean | undefined
+    let isPushingBackgroundDuringPush: boolean | undefined
+    mocks.executePush.mockImplementation(async () => {
+      isPushingDuringPush = stores.isPushing.value
+      isPushingBackgroundDuringPush = stores.isPushingBackground.value
+      return {
+        success: true,
+        message: 'github.pushSuccess',
+        variant: 'success',
+        commitSha: 'remote-sha',
+      }
+    })
+
+    await pushToGitHub()
+
+    expect(isPushingDuringPush).toBe(false)
+    expect(isPushingBackgroundDuringPush).toBe(true)
+    // 完了後は両方 false に戻る
+    expect(stores.isPushing.value).toBe(false)
+    expect(stores.isPushingBackground.value).toBe(false)
+  })
+
+  it('passes a fixed snapshot to executePush, immune to live-state mutation during background push (#206)', async () => {
+    // executePush に渡された notes/leaves が live state と独立した snapshot であることを検証する
+    let capturedNotes: unknown
+    let capturedLeaves: unknown
+    mocks.executePush.mockImplementation(async (args: { notes: unknown; leaves: unknown }) => {
+      // Push 中に live state を破壊的に変更しても snapshot は不変であるべき
+      stores.notes.value = []
+      stores.leaves.value = [{ id: 'leaf-2', noteId: 'note-1', content: 'mutated', order: 0 }]
+      capturedNotes = args.notes
+      capturedLeaves = args.leaves
+      return {
+        success: true,
+        message: 'github.pushSuccess',
+        variant: 'success',
+        commitSha: 'remote-sha',
+      }
+    })
+
+    await pushToGitHub()
+
+    expect(capturedNotes).toEqual([{ id: 'note-1', name: 'Note', parentId: null, order: 0 }])
+    expect(capturedLeaves).toEqual([{ id: 'leaf-1', noteId: 'note-1', content: 'orig', order: 0 }])
+  })
+
+  it('updates the baseline with the snapshot (not live state) and refreshes dirty state (#206)', async () => {
+    // Push 中に追記された変更は dirty として残るべきなので、setLastPushedSnapshot は固定 snapshot を、
+    // refreshDirtyState は呼ばれて clearAllChanges は呼ばれないことを検証する。
+    mocks.executePush.mockImplementation(async () => {
+      // Push 中に live state を変更（追記）
+      stores.leaves.value = [{ id: 'leaf-1', noteId: 'note-1', content: 'orig + new', order: 0 }]
+      return {
+        success: true,
+        message: 'github.pushSuccess',
+        variant: 'success',
+        commitSha: 'remote-sha',
+      }
+    })
+
+    await pushToGitHub()
+
+    // setLastPushedSnapshot は live state ではなく snapshot で呼ばれる
+    expect(mocks.setLastPushedSnapshot).toHaveBeenCalledTimes(1)
+    const [snapNotes, snapLeaves] = mocks.setLastPushedSnapshot.mock.calls[0]
+    expect(snapLeaves).toEqual([{ id: 'leaf-1', noteId: 'note-1', content: 'orig', order: 0 }])
+    expect(snapNotes).toEqual([{ id: 'note-1', name: 'Note', parentId: null, order: 0 }])
+    // clearAllChanges は使わず refreshDirtyState を使う
+    expect(mocks.clearAllChanges).not.toHaveBeenCalled()
+    expect(mocks.refreshDirtyState).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('pullFromGitHub dirty-check order (#152)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     stores.isPulling.value = false
     stores.isPushing.value = false
+    stores.isPushingBackground.value = false
     stores.isStale.value = false
     stores.isDirty.value = true
     stores.lastKnownCommitSha.value = 'local-sha'
@@ -344,6 +442,7 @@ describe('pullFromGitHub pullIncomplete partial cache (#207)', () => {
     vi.clearAllMocks()
     stores.isPulling.value = false
     stores.isPushing.value = false
+    stores.isPushingBackground.value = false
     stores.isStale.value = false
     stores.isDirty.value = false
     stores.lastKnownCommitSha.value = null
