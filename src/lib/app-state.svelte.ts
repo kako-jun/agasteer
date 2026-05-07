@@ -1131,6 +1131,26 @@ export function initApp(deps: InitAppDeps): () => void {
     if (!appState.isFirstPriorityFetched && !isPulling.value) {
       console.log('Online detected: retrying initial pull')
       deps.pullFromGitHub(true)
+      return
+    }
+    // #203: 通常運用中（初回 Pull 済み）でも、長時間オフライン後に online 復帰した
+    // タイミングで stale check を一発走らせる。これにより、visibilitychange が
+    // 発火していないが回線だけが復帰したケースでも自動同期に再合流できる。
+    // visibility が hidden の場合は走らせない（visibilitychange 側に任せる）。
+    if (
+      appState.isFirstPriorityFetched &&
+      document.visibilityState === 'visible' &&
+      !isPulling.value &&
+      !isPushing.value &&
+      !appState.isArchiveLoading &&
+      githubConfigured.value
+    ) {
+      console.log(
+        'Online detected (post-startup): running stale check to recover from offline silence'
+      )
+      void executeStaleCheck(settings.value, lastKnownCommitSha.value).then((result) => {
+        applyStaleResult(result, 'Online resume')
+      })
     }
   }
   window.addEventListener('online', handleOnline)
