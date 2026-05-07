@@ -124,6 +124,11 @@
       var(--accent) 3px 4px,
       transparent 4px 14px
     );
+    /* カード高さ 150px 固定 + top/bottom:13px → 縦範囲 124px。
+       周期 14px とは割り切れず、デフォルトでは上余白 0 / 下余白 8px の不均衡が出る。
+       gradient を 4px 下にオフセットして上下を対称（4px ずつ）にする。
+       線位置: 4..5 / 7..8 / 18..19 / 21..22 / ... / 116..117 / 119..120 → 下余白 4px。 */
+    background-position: 0 4px;
     opacity: 0.35;
     pointer-events: none;
   }
