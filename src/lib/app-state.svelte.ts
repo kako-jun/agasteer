@@ -84,6 +84,7 @@ import {
   shouldShowPwaInstallBanner,
   setCurrentRepo,
   syncRepoNameCache,
+  getPushInFlightAt,
 } from './data'
 import { shouldUseStartupCache, type PersistedStartupCache } from './startup-cache'
 import {
@@ -212,6 +213,9 @@ let _repoChangePending = $state(false)
 // 他同期（pull/push/archive load）実行中に設定された新リポ名。同期完了後に
 // rehydrateForRepo を走らせてから pull を開始するため、ここで待機させる。
 let _pendingRehydrateRepo = $state<string | null>(null)
+// #204/#205: visibility 復帰時に「Push 中ハング」を検出して isPushing を強制解除した場合に立つフラグ。
+// 直後の stale check で showConflictDialog('push-hang') を表示するために使う（1 度だけ消費）。
+let _pushHangRecovered = $state(false)
 
 export const appState = {
   get breadcrumbs() {
@@ -398,6 +402,12 @@ export const appState = {
   },
   set pendingRehydrateRepo(v: string | null) {
     _pendingRehydrateRepo = v
+  },
+  get pushHangRecovered() {
+    return _pushHangRecovered
+  },
+  set pushHangRecovered(v: boolean) {
+    _pushHangRecovered = v
   },
 }
 
@@ -984,11 +994,33 @@ export function initApp(deps: InitAppDeps): () => void {
   // 長時間バックグラウンドにいた場合は、Service Workerの状態やIndexedDBが不安定になる可能性があるためリロード
   let lastVisibleTime = Date.now()
   const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
+  /**
+   * #204: visibility 復帰時に Push が「ハング中」と判定する閾値。
+   * Phase A の PUSH_TIMEOUT_MS (30 秒) より長くして、通常の Push 完了経路と
+   * 確実に区別できるようにする。
+   */
+  const PUSH_HANG_THRESHOLD_MS = 60 * 1000
 
   const handleVisibilityChange = async () => {
     if (document.visibilityState === 'visible') {
       const now = Date.now()
       const elapsed = now - lastVisibleTime
+
+      // #204: Push 中にスリープ → 復帰、で isPushing が true のまま固まっているケースを救う。
+      // Phase A の Promise.race タイムアウトでもなお isPushing が true のままになるパス
+      // （バックグラウンドで JS タイマー停止 → 復帰時に reject も発火する前 など）の保険。
+      const inFlight = getPushInFlightAt()
+      if (isPushing.value && inFlight && now - inFlight > PUSH_HANG_THRESHOLD_MS) {
+        console.warn(
+          `Push hang detected on visibility resume (inFlight age: ${now - inFlight}ms); clearing isPushing`
+        )
+        isPushing.value = false
+        // pushInFlightAt は意図的に残す: 直後の stale check で
+        //   - Push が成功していた場合 → applyStaleResult が SHA だけ更新して救済
+        //   - Push が成功していなかった場合 → push-hang ダイアログでユーザー判断
+        appState.pushHangRecovered = true
+      }
+
       if (elapsed > BACKGROUND_THRESHOLD_MS) {
         console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
         // モーダルを表示し、閉じたら状態確認を実行
