@@ -11,7 +11,6 @@ import {
   archiveMetadata,
   isPulling,
   isPushing,
-  isPushingBackground,
   isArchiveLoaded,
   isStructureDirty,
   leftWorld,
@@ -49,8 +48,7 @@ async function runPendingRepoSyncAfterArchiveLoad(): Promise<void> {
   await runPendingRepoSyncIfIdle(
     {
       isPulling: isPulling.value,
-      // #206: 背景 Push 中も busy として扱う
-      isPushing: isPushing.value || isPushingBackground.value,
+      isPushing: isPushing.value,
       isArchiveLoading: appState.isArchiveLoading,
     },
     hasValidConfig,
@@ -75,9 +73,7 @@ export async function moveNoteToWorld(
   const $_ = get(_)
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  // #206: 背景 Push 中もアーカイブ ⇄ Home 移動は禁止（実装上 Pull が走ることがあるため）
-  if (isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading)
-    return
+  if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
@@ -364,9 +360,7 @@ export async function moveLeafToWorld(
   const $_ = get(_)
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
-  // #206: 背景 Push 中もアーカイブ ⇄ Home 移動は禁止（実装上 Pull が走ることがあるため）
-  if (isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading)
-    return
+  if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
 
   // アーカイブへの移動時、アーカイブがロードされていない場合は先にPull
   // Pull後のデータを保持（$archiveNotesはリアクティブ更新が遅れる可能性があるため）
