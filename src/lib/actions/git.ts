@@ -511,20 +511,26 @@ export async function pullFromGitHub(
 
         // 途中まで取得したリーフをIndexedDBに保存（次回Pullのblobキャッシュ用）
         // これにより数回のPullで全リーフが揃い、最終的にPullが成功する
+        // #207: await して完了を待ってからこのPullサイクルを閉じる。
+        //   await しないと、次回 Pull の createBackup() が空のIndexedDBを読んでしまい、
+        //   blobSha キャッシュが効かず毎回ゼロから再取得する事故が起きる。
         const partialLeaves = leaves.value
         const partialNotes = notes.value
-        if (partialLeaves.length > 0) {
-          console.log(
-            `Saving ${partialLeaves.length} partial leaves to IndexedDB for next pull cache`
-          )
-          saveLeaves(partialLeaves).catch((err) =>
-            console.error('Failed to save partial leaves for cache:', err)
-          )
-        }
-        if (partialNotes.length > 0) {
-          saveNotes(partialNotes).catch((err) =>
-            console.error('Failed to save partial notes for cache:', err)
-          )
+        if (partialLeaves.length > 0 || partialNotes.length > 0) {
+          if (partialLeaves.length > 0) {
+            console.log(
+              `Saving ${partialLeaves.length} partial leaves to IndexedDB for next pull cache`
+            )
+          }
+          try {
+            await Promise.all([
+              partialLeaves.length > 0 ? saveLeaves(partialLeaves) : Promise.resolve(),
+              partialNotes.length > 0 ? saveNotes(partialNotes) : Promise.resolve(),
+            ])
+          } catch (err) {
+            console.error('Failed to persist partial pull cache:', err)
+            // 救済できなくても続行。次回 Pull で再試行される。
+          }
         }
 
         // メモリ上はクリア（UIはガラス状を維持）
