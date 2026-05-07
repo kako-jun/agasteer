@@ -155,8 +155,18 @@ function loadStorageData(): StorageData {
       }
       updateRepoNameCache(merged.settings.repoName)
       return merged
-    } catch {
-      // パース失敗時はデフォルト値
+    } catch (error) {
+      // #208: silent fallback だと「初回起動」と「JSON 破損」が見分けられず、
+      // ヒント再表示や token/repoName 消失の原因追跡が不可能になる。
+      // raw を別キーに退避してから初期化することで、後から開発者ツールで
+      // 「本当に消えた」のか「読めなかった」のかを切り分けられるようにする。
+      const backupKey = `${STORAGE_KEY}-corrupt-${Date.now()}`
+      try {
+        localStorage.setItem(backupKey, stored)
+      } catch {
+        // 退避すら失敗（quota 等）→ 諦める。少なくとも console.error は残る。
+      }
+      console.error(`localStorage parse failed; raw saved as "${backupKey}"`, error)
     }
   }
 
