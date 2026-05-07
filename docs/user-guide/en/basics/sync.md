@@ -124,16 +124,6 @@ When you change the repository in the settings screen, the following happens aut
 
 ---
 
-## Keep Editing While Push Is in Flight
-
-When you tap Push, editing pauses just for a moment while Agasteer checks for remote changes. As soon as that check passes, **the upload continues in the background and you can resume editing right away**. While a small spinner is shown next to the Push button, you can keep typing, add leaves, or rearrange notes — your work won't be discarded.
-
-- While the spinner is visible, **another Push or Pull cannot start** (it waits for the upload to complete)
-- Anything you write while the spinner is visible is preserved as the "next Push" — it stays dirty and is not absorbed into the just-uploaded snapshot
-- If the remote has newer changes (stale), you still see the conflict dialog before editing resumes, exactly as before
-
----
-
 ## Statistics
 
 Statistics are displayed in the bottom-right of the home screen.

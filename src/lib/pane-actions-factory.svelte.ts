@@ -26,7 +26,6 @@ import {
   rightWorld,
   isPulling,
   isPushing,
-  isPushingBackground,
   dragStore,
   leafStatsStore,
   archiveLeafStatsStore,
@@ -412,9 +411,7 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     // 退避し、pull/push 完了時の runPendingRepoSyncIfIdle 経路で rehydrate
     // してから pending pull を走らせる。
     if (payload.repoName) {
-      // #206: 背景 Push 中も別の repo 切替は queue する
-      const syncBusy =
-        isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading
+      const syncBusy = isPulling.value || isPushing.value || appState.isArchiveLoading
       if (syncBusy) {
         appState.pendingRehydrateRepo = payload.repoName
       } else {
@@ -437,9 +434,8 @@ export async function handleCloseSettings() {
       if (
         shouldQueueRepoSync(
           {
-            // #206: 背景 Push 中は isPushing として扱う（repo-sync-queue は1bitで OK）
             isPulling: isPulling.value,
-            isPushing: isPushing.value || isPushingBackground.value,
+            isPushing: isPushing.value,
             isArchiveLoading: appState.isArchiveLoading,
           },
           hasValidConfig

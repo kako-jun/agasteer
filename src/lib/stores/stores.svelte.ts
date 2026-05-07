@@ -776,21 +776,6 @@ export const isPushing = {
   },
 }
 
-// #206: Push の preflight (stale check / 競合ダイアログ / IME flush) を通過した
-// 後、HTTP 送信が裏で続いている間だけ true になる「背景 Push 中」フラグ。
-// - isPushing は preflight phase の UI ロックに限定する（ガラス効果オーバーレイ）。
-// - isPushingBackground は編集を再開可能にしたまま、Pull や別 Push を排他する目的で使う。
-//   canSync() は両フラグを見て canPull / canPush を返す。
-let _isPushingBackground = $state<boolean>(false)
-export const isPushingBackground = {
-  get value() {
-    return _isPushingBackground
-  },
-  set value(v: boolean) {
-    _isPushingBackground = v
-  },
-}
-
 // フォーカス状態
 let _focusedPane = $state<Pane>('left')
 export const focusedPane = {
