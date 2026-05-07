@@ -374,6 +374,8 @@ export async function pushToGitHub(): Promise<void> {
     }
   } finally {
     isPushingBackground.value = false
+    // runPendingRepoSyncIfIdle は preflight finally でも呼ぶため、pull-first 再帰経路では
+    // 計 3 回発火するが、内部 idle 判定で no-op になるため冪等。
     await runPendingRepoSyncIfIdle()
   }
 }
