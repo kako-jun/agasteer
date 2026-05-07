@@ -49,6 +49,16 @@ Pull中はガラス効果オーバーレイが表示されるが、Offlineリー
 
 ガラス効果の表示と同時に、背面の `<main class="main-pane">` に `inert` 属性が付与され、エディタや Priority リーフのリンクなど背面要素が完全に操作不可になる（視覚的なオーバーレイだけでなく DOM レベルで遮断）。Offline リーフを開いている間はオーバーレイも `inert` も適用されず、通常通り編集できる。
 
+**Push ハング時のガラス効果永続化対策（#204）**: スマホスリープ等で Push 中に
+fetch が pending のまま戻らないと、本来 `finally` で `isPushing.value = false` に
+戻るはずのフラグが立ったままになり、ガラス効果と `inert` が画面復帰後も残る
+不具合があった。これに対して 2 重の対策を入れている:
+
+1. `pushToGitHub` 内で `Promise.race([executePush, timeout(30s)])` により 30 秒で
+   タイムアウト → finally に到達して `isPushing` 解除（[`../sync/push-pull.md`](../sync/push-pull.md)）
+2. `visibilitychange` の visible 復帰時に `isPushing` がまだ残っているハング状態を
+   検出して強制解除（[`../ui/pwa.md`](../ui/pwa.md) の Push ハング検出節）
+
 ## 検索機能
 
 検索機能はオフラインリーフも対象に含む。
