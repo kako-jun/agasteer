@@ -135,9 +135,13 @@ export async function decryptToken(encryptedToken: string): Promise<string> {
 
     return new TextDecoder().decode(decrypted)
   } catch (error) {
-    console.error('Token decryption failed:', error)
+    // #208: 復号失敗と未設定（''）を呼び出し側で区別できないため、
+    // ここで明示的に診断ログを出す。未設定（!encryptedToken）は早期 return しているので、
+    // この経路は必ず「保存はあるが復号失敗」のケースを意味する。
+    const reason = error instanceof Error ? error.message : String(error)
+    console.warn('Token decrypt failed; treating as unset (re-input required)', { reason })
     // 復号失敗 = 別デバイスで暗号化された or データ破損
-    // 空文字を返してユーザーに再入力を促す
+    // 空文字を返してユーザーに再入力を促す（互換性維持）
     return ''
   }
 }

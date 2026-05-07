@@ -497,8 +497,20 @@ export async function pullFromGitHub(
 
       setLastPushedSnapshot(result.notes, result.leaves, archiveNotes.value, archiveLeaves.value)
 
-      saveNotes(result.notes).catch((err) => console.error('Failed to persist notes:', err))
-      saveLeaves(sortedLeaves).catch((err) => console.error('Failed to persist leaves:', err))
+      // #207: Pull 成功パスでも save を await する。await しないと、Pull 直後にタブが
+      // 閉じる / リロードされる経路で次回 createBackup() が空 IndexedDB を読み、
+      // blobSha キャッシュが効かなくなる（pullIncomplete 経路と同じクラスの事故）。
+      // 一方が失敗しても他方は続行できるように Promise.allSettled で握る。
+      const [notesResult, leavesResult] = await Promise.allSettled([
+        saveNotes(result.notes),
+        saveLeaves(sortedLeaves),
+      ])
+      if (notesResult.status === 'rejected') {
+        console.error('Failed to persist notes:', notesResult.reason)
+      }
+      if (leavesResult.status === 'rejected') {
+        console.error('Failed to persist leaves:', leavesResult.reason)
+      }
 
       await tick()
       refreshDirtyState()
@@ -511,20 +523,26 @@ export async function pullFromGitHub(
 
         // 途中まで取得したリーフをIndexedDBに保存（次回Pullのblobキャッシュ用）
         // これにより数回のPullで全リーフが揃い、最終的にPullが成功する
+        // #207: await して完了を待ってからこのPullサイクルを閉じる。
+        //   await しないと、次回 Pull の createBackup() が空のIndexedDBを読んでしまい、
+        //   blobSha キャッシュが効かず毎回ゼロから再取得する事故が起きる。
         const partialLeaves = leaves.value
         const partialNotes = notes.value
-        if (partialLeaves.length > 0) {
-          console.log(
-            `Saving ${partialLeaves.length} partial leaves to IndexedDB for next pull cache`
-          )
-          saveLeaves(partialLeaves).catch((err) =>
-            console.error('Failed to save partial leaves for cache:', err)
-          )
-        }
-        if (partialNotes.length > 0) {
-          saveNotes(partialNotes).catch((err) =>
-            console.error('Failed to save partial notes for cache:', err)
-          )
+        if (partialLeaves.length > 0 || partialNotes.length > 0) {
+          if (partialLeaves.length > 0) {
+            console.log(
+              `Saving ${partialLeaves.length} partial leaves to IndexedDB for next pull cache`
+            )
+          }
+          try {
+            await Promise.all([
+              partialLeaves.length > 0 ? saveLeaves(partialLeaves) : Promise.resolve(),
+              partialNotes.length > 0 ? saveNotes(partialNotes) : Promise.resolve(),
+            ])
+          } catch (err) {
+            console.error('Failed to persist partial pull cache:', err)
+            // 救済できなくても続行。次回 Pull で再試行される。
+          }
         }
 
         // メモリ上はクリア（UIはガラス状を維持）

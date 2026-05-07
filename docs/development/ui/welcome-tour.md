@@ -70,8 +70,22 @@
 開発者コンソールで以下を実行してリロードするとガイドをリセットできます:
 
 ```js
+// 現行（#131 以降）: globalState 構造
 const data = JSON.parse(localStorage.getItem('agasteer'))
-data.state.tourShown = false
-data.state.saveGuideShown = false
+data.globalState.tourShown = false
+data.globalState.saveGuideShown = false
 localStorage.setItem('agasteer', JSON.stringify(data))
 ```
+
+> 旧形式 `data.state.tourShown` は #131 で廃止された。現行の永続化キーは `data.globalState.*`（リポ非依存のフラグ）と `data.byRepo[<repoName>].*`（リポ単位の状態）に分かれている。詳細は [storage.md](../storage.md) を参照。
+
+### localStorage 破損時の診断（#208）
+
+`loadStorageData()` の JSON parse が失敗した場合、raw を `agasteer-corrupt-<timestamp>` キーに退避してからデフォルト値で起動する。`tourShown` などのヒントが想定外に再表示されたら、まず以下を確認する:
+
+```js
+// 破損退避が残っていないか
+Object.keys(localStorage).filter((k) => k.startsWith('agasteer-corrupt-'))
+```
+
+退避が見つかれば、JSON 破損による silent fallback が原因（= 本当に消えたわけではない）。コンソールにも `localStorage parse failed; raw saved as "..."` のログが残る。

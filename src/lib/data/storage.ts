@@ -155,8 +155,21 @@ function loadStorageData(): StorageData {
       }
       updateRepoNameCache(merged.settings.repoName)
       return merged
-    } catch {
-      // パース失敗時はデフォルト値
+    } catch (error) {
+      // #208: silent fallback だと「初回起動」と「JSON 破損」が見分けられず、
+      // ヒント再表示や token/repoName 消失の原因追跡が不可能になる。
+      // raw を別キーに退避してから初期化することで、後から開発者ツールで
+      // 「本当に消えた」のか「読めなかった」のかを切り分けられるようにする。
+      // 同一ミリ秒で複数回 throw した場合のキー衝突を避けるためランダム suffix を付与する。
+      // 衝突して前回 raw を上書きすると診断材料を失うため、衝突確率を実質ゼロにする。
+      const randomSuffix = Math.random().toString(36).slice(2, 6)
+      const backupKey = `${STORAGE_KEY}-corrupt-${Date.now()}-${randomSuffix}`
+      try {
+        localStorage.setItem(backupKey, stored)
+      } catch {
+        // 退避すら失敗（quota 等）→ 諦める。少なくとも console.error は残る。
+      }
+      console.error(`localStorage parse failed; raw saved as "${backupKey}"`, error)
     }
   }
 
@@ -280,22 +293,26 @@ export async function loadSettings(): Promise<Settings> {
  */
 export function saveSettings(settings: Settings): void {
   const data = loadStorageData()
-  // まずトークンを仮の状態で保存（token以外の設定変更を即座に反映）
   const settingsForStorage = { ...settings }
 
   // トークンが平文（暗号化プレフィックスなし）の場合、非同期で暗号化
   if (settingsForStorage.token && !isEncryptedToken(settingsForStorage.token)) {
-    // 暗号化完了までは平文で保存せず、空にしておく
-    // 暗号化が完了したら上書きする
+    // #208: 暗号化中の race 窓で token を空文字に上書きしない。
+    //   従来は「初回入力時は token='' で先に save」していたため、
+    //   暗号化完了前にタブ終了/スリープ/別の saveSettings が走ると
+    //   「repoName はあるが token だけ空」中間状態が永続化していた。
+    //   今は「token フィールドは既存の暗号文を維持したまま、token 以外を即時保存」
+    //   → 暗号化完了後にまとめて token を commit する方式に変える。
     const plainToken = settingsForStorage.token
-    settingsForStorage.token =
-      data.settings?.token && isEncryptedToken(data.settings.token)
-        ? data.settings.token // 既存の暗号化トークンを維持
-        : '' // 初回は空（暗号化完了で上書き）
+    const previousEncryptedToken =
+      data.settings?.token && isEncryptedToken(data.settings.token) ? data.settings.token : ''
+
+    // 既存の暗号文を維持（初回入力時は空のまま）。空文字で上書きしない。
+    settingsForStorage.token = previousEncryptedToken
     data.settings = settingsForStorage
     saveStorageData(data)
 
-    // 非同期で暗号化してから再保存
+    // 非同期で暗号化してから token フィールドだけを commit
     // NOTE: この非同期処理と他のsaveSettings呼び出しの間にレースコンディションの可能性があるが、
     // トークン変更は低頻度のため現状は許容する
     encryptToken(plainToken)
