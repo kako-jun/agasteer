@@ -25,6 +25,7 @@ import {
   updateArchiveLeaves,
   isPulling,
   isPushing,
+  isPushingBackground,
   leftView,
   rightView,
   githubConfigured,
@@ -469,9 +470,16 @@ export const appActions: AppActionsRegistry = new Proxy({} as AppActionsRegistry
 // ========================================
 
 // Pull/Push中はボタンを無効化（リアクティブに追跡）
-let _canPull = $derived(!isPulling.value && !isPushing.value && !_isArchiveLoading)
+// #206: 背景 Push 中も追加の Push / Pull は禁止する（編集だけが再開される）
+let _canPull = $derived(
+  !isPulling.value && !isPushing.value && !isPushingBackground.value && !_isArchiveLoading
+)
 let _canPush = $derived(
-  !isPulling.value && !isPushing.value && !_isArchiveLoading && _isFirstPriorityFetched
+  !isPulling.value &&
+    !isPushing.value &&
+    !isPushingBackground.value &&
+    !_isArchiveLoading &&
+    _isFirstPriorityFetched
 )
 
 // dragStoreへのリアクティブアクセス
@@ -1008,6 +1016,7 @@ export function initApp(deps: InitAppDeps): () => void {
     document.visibilityState === 'visible' &&
     !isPulling.value &&
     !isPushing.value &&
+    !isPushingBackground.value &&
     !appState.isArchiveLoading
   const retryStaleCheckOnResume = async (logPrefix: string) => {
     const finalOutcome = await runResumeStaleCheckRetry({
@@ -1053,12 +1062,16 @@ export function initApp(deps: InitAppDeps): () => void {
       // #204: Push 中にスリープ → 復帰、で isPushing が true のまま固まっているケースを救う。
       // Phase A の Promise.race タイムアウトでもなお isPushing が true のままになるパス
       // （バックグラウンドで JS タイマー停止 → 復帰時に reject も発火する前 など）の保険。
+      // #206: 2 段階 Push の導入後、HTTP 送信フェーズは isPushingBackground で表現される
+      // ため、両フラグのいずれかが立ったまま固まっているケースを救う。
       const inFlight = getPushInFlightAt()
-      if (isPushing.value && inFlight && now - inFlight > PUSH_HANG_THRESHOLD_MS) {
+      const pushPhaseStuck = isPushing.value || isPushingBackground.value
+      if (pushPhaseStuck && inFlight && now - inFlight > PUSH_HANG_THRESHOLD_MS) {
         console.warn(
-          `Push hang detected on visibility resume (inFlight age: ${now - inFlight}ms); clearing isPushing`
+          `Push hang detected on visibility resume (inFlight age: ${now - inFlight}ms); clearing isPushing/isPushingBackground`
         )
         isPushing.value = false
+        isPushingBackground.value = false
         // pushInFlightAt は意図的に残す: 直後の stale check で
         //   - Push が成功していた場合 → applyStaleResult が SHA だけ更新して救済
         //   - Push が成功していなかった場合 → push-hang ダイアログでユーザー判断
@@ -1153,6 +1166,7 @@ export function initApp(deps: InitAppDeps): () => void {
       document.visibilityState === 'visible' &&
       !isPulling.value &&
       !isPushing.value &&
+      !isPushingBackground.value &&
       !appState.isArchiveLoading &&
       githubConfigured.value &&
       !onlineStaleCheckInFlight
@@ -1198,7 +1212,14 @@ export function initApp(deps: InitAppDeps): () => void {
       if (!githubConfigured.value) return
 
       // Push/Pull中またはアーカイブロード中はスキップ
-      if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
+      // #206: 背景 Push 中も別の同期は走らせない
+      if (
+        isPulling.value ||
+        isPushing.value ||
+        isPushingBackground.value ||
+        appState.isArchiveLoading
+      )
+        return
 
       // 初回Pullが完了していなければスキップ
       if (!appState.isFirstPriorityFetched) return
@@ -1275,7 +1296,14 @@ export function initApp(deps: InitAppDeps): () => void {
       if (!githubConfigured.value) return
 
       // Push/Pull中またはアーカイブロード中はスキップ
-      if (isPulling.value || isPushing.value || appState.isArchiveLoading) return
+      // #206: 背景 Push 中も別の同期は走らせない
+      if (
+        isPulling.value ||
+        isPushing.value ||
+        isPushingBackground.value ||
+        appState.isArchiveLoading
+      )
+        return
 
       // 初回Pullが完了していなければスキップ
       if (!appState.isFirstPriorityFetched) return

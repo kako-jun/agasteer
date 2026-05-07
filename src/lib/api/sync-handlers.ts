@@ -62,13 +62,17 @@ function appendErrorCode(translated: string, errorCode?: string, httpStatus?: nu
 
 /**
  * 交通整理: Pull/Pushが実行可能かどうか
+ *
+ * #206: 背景 Push 中（preflight 通過後 / executePush の HTTP 応答待ち）も Pull / 別 Push
+ * は禁止する。背景 Push 中は本文編集だけが再開され、同期系操作はロックを継続する。
  */
 export function canSync(
   isPulling: boolean,
-  isPushing: boolean
+  isPushing: boolean,
+  isPushingBackground: boolean = false
 ): { canPull: boolean; canPush: boolean } {
-  // Pull中またはPush中は両方とも不可
-  if (isPulling || isPushing) {
+  // Pull中・Push中（preflight）・背景 Push 中はいずれも同期不可
+  if (isPulling || isPushing || isPushingBackground) {
     return { canPull: false, canPush: false }
   }
   return { canPull: true, canPush: true }

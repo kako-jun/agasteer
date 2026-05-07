@@ -18,6 +18,7 @@ import {
   settings,
   isPulling,
   isPushing,
+  isPushingBackground,
   isStale,
   isDirty,
   lastStaleCheckTime,
@@ -171,8 +172,8 @@ function canPerformCheck(): boolean {
     return false
   }
 
-  // Pull/Push中
-  if (isPulling.value || isPushing.value) {
+  // Pull/Push中（#206: 背景 Push 中も走らせない）
+  if (isPulling.value || isPushing.value || isPushingBackground.value) {
     return false
   }
 
