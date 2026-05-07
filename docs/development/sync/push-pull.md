@@ -1012,6 +1012,48 @@ export function resetForRepoSwitch(): void {
 
 ---
 
+## #206: 2 段階 Push（preflight + background）
+
+`pushToGitHub()` は 2 つのフェーズに分かれている。**stale check を通過した時点で UI ロックを解除し、HTTP 送信は裏で続ける**。これにより、日常的な中間セーブ Push でも編集が止まらない。
+
+### Phase 1 — preflight（同期的・UI ロック）
+
+`isPushing.value = true` の状態で実行する。PaneView のガラス効果オーバーレイで編集不可。
+
+1. `flushAllEditors()` → `tick()` → `flushPendingSaves()`（IME / 自動保存の確定）
+2. `executeStaleCheck()` でリモート差分を確認
+3. stale なら 3 択ダイアログ（push / pull / cancel）
+4. **送信用 snapshot を `structuredClone` で固定** — `notes` / `leaves` / `metadata` / archive 系すべて
+5. `setPushInFlightAt(Date.now())`
+6. `isPushing.value = false` / `isPushingBackground.value = true` に切替
+
+cancel / pull-first / 例外で抜けた場合は `snapshot === null` のままで終了し、finally で `isPushing.value = false` に戻す。
+
+### Phase 2 — background（編集再開可・送信は裏で継続）
+
+`isPushingBackground.value = true` の間は:
+
+- PaneView のガラス効果オーバーレイは出ない（`isPushing` だけを見ているため） → **編集再開可**
+- `canSync(isPulling, isPushing, isPushingBackground)` で別の Push / Pull は禁止される
+- Push ボタンには小さなスピナーバッジを表示（`PushButton#isPushingBackground`）
+
+送信処理:
+
+1. `Promise.race([executePush(snapshot), 30s timeout])`（#204 の救済機構と同じ）
+2. 成功時: `setLastPushedSnapshot(snapshot.notes, snapshot.leaves, ...)` で **snapshot をベースラインに反映** → `refreshDirtyState()` で **Push 中の追記を dirty として再検出**
+3. `clearAllChanges()` は **使わない** — Push 中の追記が clean に吸収されてしまうため
+4. finally で `isPushingBackground.value = false`、`runPendingRepoSyncIfIdle()` で予約 pull を消化
+
+### snapshot を deep copy する理由
+
+live state を直接渡すと、Push 中にユーザーが編集した内容が executePush 内部で読まれて送信内容に混入する（参照同一性のため）。`structuredClone` で構造的変更（追加・削除・並べ替え・rename）からも保護する。
+
+### 救済機構との整合（#204）
+
+visibility resume 時の hang 検出は `isPushing.value || isPushingBackground.value` の両方を見るように更新済み。`pushInFlightAt` は両フェーズを通じて 1 つの「現在飛んでいる Push」を示す。
+
+---
+
 ## まとめ
 
 - **Push処理**: `pushToGitHub()` - 1つの統合関数
