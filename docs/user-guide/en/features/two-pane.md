@@ -21,6 +21,7 @@ On landscape screens, content is displayed in two side-by-side panes.
 ### When Same Leaf is Open in Both Panes
 
 - **Edits sync instantly** (type in one → reflected in the other). IME composition syncs after conversion is committed.
+- This also applies when **both panes are in edit mode**. You do not need to reopen the leaf or switch to preview to refresh the other pane.
 - **Scroll position also syncs**
 - Left: edit mode, Right: preview → Check your writing as you go
 

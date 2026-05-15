@@ -13,6 +13,12 @@ import type { Pane } from '../navigation'
  */
 const flushers = new Map<Pane, () => void>()
 
+interface LeafEditorSyncHandle {
+  applyExternalContent: (content: string) => void
+}
+
+const leafEditorSyncHandles = new Map<Pane, { leafId: string; handle: LeafEditorSyncHandle }>()
+
 export function registerEditorFlusher(pane: Pane, fn: () => void): void {
   flushers.set(pane, fn)
 }
@@ -40,4 +46,47 @@ export function flushAllEditors(): void {
       console.error('[editor-registry] flusher failed for pane', pane, e)
     }
   }
+}
+
+export function registerLeafEditorSync(
+  leafId: string,
+  pane: Pane,
+  handle: LeafEditorSyncHandle
+): void {
+  leafEditorSyncHandles.set(pane, { leafId, handle })
+}
+
+export function unregisterLeafEditorSync(
+  leafId: string,
+  pane: Pane,
+  expectedHandle?: LeafEditorSyncHandle
+): void {
+  const current = leafEditorSyncHandles.get(pane)
+  if (!current || current.leafId !== leafId) return
+  if (expectedHandle !== undefined && current.handle !== expectedHandle) return
+  leafEditorSyncHandles.delete(pane)
+}
+
+export function syncLeafEditors(leafId: string, content: string, sourcePane?: Pane): void {
+  for (const [pane, registration] of leafEditorSyncHandles) {
+    if (registration.leafId !== leafId) continue
+    if (sourcePane !== undefined && pane === sourcePane) continue
+    try {
+      registration.handle.applyExternalContent(content)
+    } catch (e) {
+      console.error('[editor-registry] leaf sync failed for pane', pane, e)
+    }
+  }
+}
+
+export function getActiveEditorPane(doc: Document = document): Pane | null {
+  const active = doc.activeElement
+  const fromActive = active?.closest?.('.cm-editor')?.getAttribute('data-pane')
+  if (fromActive === 'left' || fromActive === 'right') return fromActive
+
+  const focusedEditor = doc.querySelector<HTMLElement>('.cm-editor.cm-focused[data-pane]')
+  const fromFocused = focusedEditor?.getAttribute('data-pane')
+  if (fromFocused === 'left' || fromFocused === 'right') return fromFocused
+
+  return null
 }

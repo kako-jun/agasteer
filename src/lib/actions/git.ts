@@ -25,6 +25,7 @@ import {
   rightLeaf,
   leftView,
   leftWorld,
+  focusedPane,
   getPersistedDirtyFlag,
   executeStaleCheck,
   setLastPushedSnapshot,
@@ -36,6 +37,7 @@ import {
   pullProgressStore,
   rehydrateForRepo,
   flushAllEditors,
+  getActiveEditorPane,
 } from '../stores'
 import {
   clearAllData,
@@ -147,6 +149,7 @@ export async function handleTestConnection(): Promise<void> {
  */
 export async function pushToGitHub(): Promise<void> {
   const $_ = get(_)
+  const paneToRefocus = getActiveEditorPane() ?? focusedPane.value
 
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
   if (
@@ -252,6 +255,8 @@ export async function pushToGitHub(): Promise<void> {
     // のレース窓を作らない。
     isPushingBackground.value = true
     isPushing.value = false
+    await tick()
+    appActions.getEditorView(paneToRefocus)?.focusEditor?.()
   } finally {
     // preflight phase 終了時、snapshot が設定できなかった経路（cancel / pull-first / 例外）
     // では isPushing が true のまま残るので必ず false に戻す。

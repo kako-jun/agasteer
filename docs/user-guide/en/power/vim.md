@@ -34,6 +34,8 @@ Use CodeMirror's Vim key bindings.
 | `:q`    | Navigate to parent note (close) |
 | `:wq`   | Save and close                  |
 
+After `:w` or `Ctrl+S`, focus stays in the current editor so you can continue typing without clicking the pane again.
+
 ---
 
 ## Two-Pane Behavior

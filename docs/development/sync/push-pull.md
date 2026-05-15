@@ -67,6 +67,23 @@ Android (Gboard 等) の IME 確定前に push が押されると、`MarkdownEdi
 
 **重要**: `flushAllEditors()` と `tick()` は **ロック取得の後** に置く必要がある。canSync 通過からロック取得までの間に await を挟むと、その隙に別の push/pull が canSync を通過する競合窓ができる（過去の `flushPendingSaves` がロック前にあった頃のリグレッションと同類）。
 
+**ステップ 3.5（focus 復帰）の意義（#222）:**
+
+preflight 中は `isPushing=true` により PaneView 側へ `inert` が付き、現在の editor focus が一時的に外れることがある。とくに `Ctrl+S` や Vim `:w` 直後は「Push 自体は成功したのに、クリックし直すまで入力できない」体験になりやすい。
+
+そこで preflight 通過後、`isPushingBackground=true` / `isPushing=false` へ切り替えた直後に `tick()` を 1 回待ち、**DOM 上で実際に active な editor pane を優先して `focusEditor()` を返す**。`focusedPane` はフォールバックとしてのみ使う。これにより、マウスクリックで移った側の editor でも background push 中にそのまま入力を継続できる。
+
+**同一リーフの左右エディタ同期（#223）:**
+
+`src/lib/stores/editor-registry.ts` は IME flush だけでなく、同一リーフを複数ペインで編集中の editor 同期レジストリも持つ。各 `MarkdownEditor` は mount 時に `{ leafId, pane, applyExternalContent }` を登録し、`updateLeafContent()` 成功後に `syncLeafEditors(leafId, content, sourcePane)` を呼ぶことで、**反対側の CodeMirror doc へ直接内容を反映**する。
+
+- store 側の `applyLeafFieldUpdate()` は pane state の plain data をそろえる
+- editor registry 側の `syncLeafEditors()` は **すでに開いている別インスタンスの CodeMirror doc** をそろえる
+
+この二段で、「左右とも edit のとき片方だけ古い doc が残る」経路を塞いでいる。
+
+同期先 editor が IME composition 中の場合は、外部 content を即座に上書きせず `pendingExternalContent` として保留し、**変換確定後に適用**する。これにより、未確定文字列を別ペイン同期が潰す競合を避ける。
+
 ### Push処理フロー
 
 ```mermaid

@@ -17,7 +17,10 @@
     getLastPushedContent,
     dirtyLeafIds,
     registerEditorFlusher,
+    registerLeafEditorSync,
     unregisterEditorFlusher,
+    unregisterLeafEditorSync,
+    focusedPane,
     leftInitialLine,
     rightInitialLine,
   } from '../../lib/stores'
@@ -70,6 +73,8 @@
   let mobilePointerScrollUntil = 0
   let pendingMobileScrollTimers: number[] = []
   let pendingMobileScrollFrames: number[] = []
+  let isApplyingExternalContent = false
+  let pendingExternalContent: string | null = null
 
   // モバイル判定（タッチデバイスかつ画面幅が小さい）
   function isMobileDevice(): boolean {
@@ -489,7 +494,9 @@
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          if (isComposing || update.view.composing) {
+          if (isApplyingExternalContent) {
+            // 別ペインからの同期更新。store へは再通知しない。
+          } else if (isComposing || update.view.composing) {
             pendingCompositionChange = true
           } else {
             onChange(update.state.doc.toString())
@@ -505,6 +512,7 @@
       }),
       EditorView.domEventHandlers({
         pointerdown: (event: PointerEvent) => {
+          focusedPane.value = pane
           if (event.pointerType === 'touch') {
             markMobilePointerScroll()
           }
@@ -513,6 +521,7 @@
           markMobilePointerScroll()
         },
         focus: (_event: FocusEvent, view: any) => {
+          focusedPane.value = pane
           if (isMobilePointerScrollActive()) {
             scheduleMobileCursorScroll(view)
           }
@@ -527,6 +536,18 @@
             queueMicrotask(() => {
               if (editorView !== view) return
               flushPendingCompositionChange(view)
+              if (pendingExternalContent !== null) {
+                const deferredContent = pendingExternalContent
+                pendingExternalContent = null
+                applyExternalContent(deferredContent)
+              }
+            })
+          } else if (pendingExternalContent !== null) {
+            const deferredContent = pendingExternalContent
+            pendingExternalContent = null
+            queueMicrotask(() => {
+              if (!editorView) return
+              applyExternalContent(deferredContent)
             })
           }
         },
@@ -776,6 +797,21 @@
     // 注意: isDirtyはリセットしない（Push成功時のみリセットされる）
   }
 
+  function applyExternalContent(newContent: string) {
+    if (!editorView) return
+    if (editorView.state.doc.toString() === newContent) return
+    if (isComposing || editorView.composing || pendingCompositionChange) {
+      pendingExternalContent = newContent
+      return
+    }
+    isApplyingExternalContent = true
+    try {
+      updateEditorContent(newContent)
+    } finally {
+      isApplyingExternalContent = false
+    }
+  }
+
   // テーマ・Vimモード・罫線モード・カーソルトレイル変更時にエディタを再初期化
   $effect(() => {
     // 各 prop を読み取ることでリアクティブ追跡に登録する
@@ -839,11 +875,15 @@
   // #186: push 直前に全エディタの IME composition を flush するためのレジストリ登録用。
   // unregister 時に「自分が登録した関数」と一致確認するため、関数参照を保持しておく。
   const flushForRegistry = () => flushPendingCompositionChange(editorView)
+  const leafSyncHandle = { applyExternalContent }
 
   onMount(async () => {
     await loadCodeMirror()
     initializeEditor()
     registerEditorFlusher(pane, flushForRegistry)
+    if (leafId) {
+      registerLeafEditorSync(leafId, pane, leafSyncHandle)
+    }
     // 検索結果クリック時など、マウント直後に特定行へジャンプする場合。
     // 使用後はストアをリセットして、後続の再マウント時に誤ジャンプしないようにする。
     if (initialLine > 0) {
@@ -858,6 +898,10 @@
 
   onDestroy(() => {
     unregisterEditorFlusher(pane, flushForRegistry)
+    if (leafId) {
+      unregisterLeafEditorSync(leafId, pane, leafSyncHandle)
+    }
+    pendingExternalContent = null
     flushPendingCompositionChange(editorView)
     isComposing = false
     // dirtyLeafIdsストアの購読解除

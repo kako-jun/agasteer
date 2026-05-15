@@ -29,6 +29,7 @@ const stores = vi.hoisted(() => ({
   rightLeaf: createStore(null),
   leftView: createStore('tree'),
   leftWorld: createStore('home'),
+  focusedPane: createStore('left'),
 }))
 
 const appState = vi.hoisted(() => ({
@@ -48,6 +49,7 @@ const mocks = vi.hoisted(() => ({
   confirmAsync: vi.fn(),
   showPullToast: vi.fn(),
   showPushToast: vi.fn(),
+  focusEditor: vi.fn(),
   executePush: vi.fn(),
   executePull: vi.fn(),
   executeStaleCheck: vi.fn(),
@@ -57,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   clearAllChanges: vi.fn(),
   flushPendingSaves: vi.fn(),
   flushAllEditors: vi.fn(),
+  getActiveEditorPane: vi.fn(() => null),
   getPersistedDirtyFlag: vi.fn(() => false),
   setLastPushedSnapshot: vi.fn(),
   refreshDirtyState: vi.fn(),
@@ -82,6 +85,7 @@ vi.mock('../stores', () => ({
   leafStatsStore: { addLeaf: vi.fn() },
   pullProgressStore: { start: vi.fn(), increment: vi.fn(), reset: vi.fn() },
   flushAllEditors: mocks.flushAllEditors,
+  getActiveEditorPane: mocks.getActiveEditorPane,
 }))
 
 vi.mock('../api', () => ({
@@ -121,6 +125,7 @@ vi.mock('../app-state.svelte', () => ({
     resetLeafStats: vi.fn(),
     rebuildLeafStats: vi.fn(),
     restoreStateFromUrl: vi.fn(),
+    getEditorView: vi.fn(() => ({ focusEditor: mocks.focusEditor })),
   },
 }))
 
@@ -152,10 +157,12 @@ describe('pushToGitHub stale handling', () => {
     stores.isPushingBackground.value = false
     stores.isStale.value = false
     stores.lastKnownCommitSha.value = 'local-sha'
+    stores.focusedPane.value = 'left'
     stores.lastPushTime.value = 0
     appState.isArchiveLoading = false
     appState.isFirstPriorityFetched = true
     appState.pendingRepoSync = false
+    mocks.getActiveEditorPane.mockReturnValue(null)
 
     mocks.flushPendingSaves.mockResolvedValue(undefined)
     mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
@@ -224,6 +231,24 @@ describe('pushToGitHub stale handling', () => {
 
     expect(mocks.flushAllEditors).not.toHaveBeenCalled()
     expect(mocks.flushPendingSaves).not.toHaveBeenCalled()
+  })
+
+  it('restores editor focus to the active editor pane even if focusedPane is stale (#222)', async () => {
+    const { appActions } = await import('../app-state.svelte')
+    stores.focusedPane.value = 'left'
+    mocks.getActiveEditorPane.mockReturnValue('right')
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    await pushToGitHub()
+
+    expect(appActions.getEditorView).toHaveBeenCalledWith('right')
+    expect(mocks.focusEditor).toHaveBeenCalledTimes(1)
   })
 
   it('releases isPushing lock when executePush hangs past PUSH_TIMEOUT_MS (#204)', async () => {

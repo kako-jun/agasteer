@@ -28,6 +28,7 @@ import {
   applyLeafFieldUpdate,
   applyNoteFieldUpdate,
   mutateArchiveLeavesItem,
+  syncLeafEditors,
 } from '../stores'
 import {
   createNote as createNoteLib,
@@ -504,6 +505,7 @@ export async function updateLeafContent(
     const partial = { title: newTitle, content, updatedAt: Date.now() }
     mutateArchiveLeavesItem(leafId, partial)
     applyLeafFieldUpdate(leafId, partial)
+    syncLeafEditors(leafId, content, pane)
     if (titleChanged) appActions.refreshBreadcrumbs()
     return
   }
@@ -524,6 +526,7 @@ export async function updateLeafContent(
       content: result.updatedLeaf.content,
       updatedAt: result.updatedLeaf.updatedAt,
     })
+    syncLeafEditors(leafId, result.updatedLeaf.content, pane)
     if (result.titleChanged) appActions.refreshBreadcrumbs()
   }
 }
