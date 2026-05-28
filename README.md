@@ -36,7 +36,7 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
 </p>
 
-<a href="https://nostalgic.llll-ll.com"><img src="https://api.nostalgic.llll-ll.com/visit?action=get&id=github-9c301a68&format=image" alt="Visitors" align="middle"></a>
+<a href="https://nostalgic.llll-ll.com"><img src="https://api.nostalgic.llll-ll.com/visit?action=get&id=github-9c301a68&format=image&theme=github" alt="Visitors" align="middle"></a>
 <a href="https://nostalgic.llll-ll.com/yokoso"><img src="https://api.nostalgic.llll-ll.com/yokoso?action=get&id=github-9c301a68&format=image" alt="Welcome" align="middle"></a>
 
 ---
