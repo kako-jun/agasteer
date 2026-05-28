@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Editor-CodeMirror-D30707" alt="CodeMirror" align="middle">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License" align="middle">
   <a href="https://nostalgic.llll-ll.com"><img src="https://api.nostalgic.llll-ll.com/visit?action=increment&id=github-9c301a68&format=image&theme=github" alt="Visitors" align="middle"></a>
-  <a href="https://nostalgic.llll-ll.com/yokoso"><img src="https://api.nostalgic.llll-ll.com/yokoso?action=get&id=github-9c301a68&format=image" alt="Welcome" align="middle"></a>
+  <a href="https://nostalgic.llll-ll.com/yokoso"><img src="https://api.nostalgic.llll-ll.com/yokoso?action=get&id=github-f55bde81&format=image" alt="Welcome" align="middle"></a>
 </p>
 
 <p align="center">
