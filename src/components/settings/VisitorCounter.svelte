@@ -41,7 +41,8 @@
 </script>
 
 <div class="visitor-counter" bind:this={containerElement}>
-  <nostalgic-counter id="agasteer-c347357a" type="total"></nostalgic-counter> visits
+  <nostalgic-counter id="agasteer-c347357a" type="total" style="font-family: inherit"
+  ></nostalgic-counter> views
 </div>
 
 <style>
