@@ -49,6 +49,8 @@ const mocks = vi.hoisted(() => ({
   confirmAsync: vi.fn(),
   showPullToast: vi.fn(),
   showPushToast: vi.fn(),
+  showStickyPushToast: vi.fn(),
+  clearPushToast: vi.fn(),
   focusEditor: vi.fn(),
   executePush: vi.fn(),
   executePull: vi.fn(),
@@ -102,6 +104,8 @@ vi.mock('../ui', () => ({
   confirmAsync: mocks.confirmAsync,
   showPullToast: mocks.showPullToast,
   showPushToast: mocks.showPushToast,
+  showStickyPushToast: mocks.showStickyPushToast,
+  clearPushToast: mocks.clearPushToast,
 }))
 
 vi.mock('../data', () => ({
@@ -278,6 +282,8 @@ describe('pushToGitHub stale handling', () => {
       expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
       // タイムアウト時の警告トーストが出ている
       expect(mocks.showPushToast).toHaveBeenCalledWith(expect.any(String), 'error')
+      // #224: timeout 経路は sticky を error トーストで差し替える設計のため clearPushToast は呼ばない
+      expect(mocks.clearPushToast).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
       // ぶらさがった executePush を resolve してメモリリークを避ける
@@ -377,6 +383,63 @@ describe('pushToGitHub background phase (#206)', () => {
     // clearAllChanges は使わず refreshDirtyState を使う
     expect(mocks.clearAllChanges).not.toHaveBeenCalled()
     expect(mocks.refreshDirtyState).toHaveBeenCalledTimes(1)
+  })
+
+  it('バックグラウンドフェーズ突入で sticky トーストを表示する (#224)', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    await pushToGitHub()
+
+    expect(mocks.showStickyPushToast).toHaveBeenCalledWith('toast.pushInProgress')
+  })
+
+  it('push 成功で sticky を成功トーストに差し替える (#224)', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    await pushToGitHub()
+
+    // 送信中は sticky、完了で success variant の通常トースト
+    expect(mocks.showStickyPushToast).toHaveBeenCalledWith('toast.pushInProgress')
+    expect(mocks.showPushToast).toHaveBeenCalledWith('github.pushSuccess', 'success')
+    // 順序: sticky → success
+    const stickyOrder = mocks.showStickyPushToast.mock.invocationCallOrder[0]
+    const successCall = mocks.showPushToast.mock.calls.findIndex(
+      ([, variant]) => variant === 'success'
+    )
+    const successOrder = mocks.showPushToast.mock.invocationCallOrder[successCall]
+    expect(stickyOrder).toBeLessThan(successOrder)
+  })
+
+  it('想定外 push エラーで sticky を消して rethrow する (#224)', async () => {
+    mocks.executePush.mockRejectedValueOnce(new Error('500'))
+
+    await expect(pushToGitHub()).rejects.toThrow()
+
+    expect(mocks.clearPushToast).toHaveBeenCalledTimes(1)
+    expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
+  })
+
+  it('preflight で loading.pushing トーストを出す（①無変更の回帰確認）', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    await pushToGitHub()
+
+    expect(mocks.showPushToast).toHaveBeenCalledWith('loading.pushing')
   })
 })
 

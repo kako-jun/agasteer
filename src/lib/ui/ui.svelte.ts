@@ -96,8 +96,28 @@ export const modalState = {
 export function showPushToast(message: string, variant: 'success' | 'error' | '' = '') {
   pushToastState.value = { message, variant }
   setTimeout(() => {
-    pushToastState.value = { message: '', variant: '' }
+    // 自分が出したトーストがまだ表示中のときだけ消す。
+    // 後から別のトースト（sticky 含む）に差し替わっていたら触らない（後勝ち）。
+    if (pushToastState.value.message === message) {
+      pushToastState.value = { message: '', variant: '' }
+    }
   }, 2000)
+}
+
+/**
+ * Push の sticky トーストを表示する（自動消滅しない）。
+ * isPushingBackground の間だけ出し、完了トースト（showPushToast）や
+ * 他操作のトースト、clearPushToast で差し替わる（後勝ち）。
+ */
+export function showStickyPushToast(message: string) {
+  pushToastState.value = { message, variant: '' }
+}
+
+/**
+ * Pushトーストを即座に消す
+ */
+export function clearPushToast() {
+  pushToastState.value = { message: '', variant: '' }
 }
 
 /**
