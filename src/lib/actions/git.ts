@@ -254,7 +254,8 @@ export async function pushToGitHub(): Promise<void> {
     // することで、両方 false になる瞬間（_canPush $derived が一瞬 true → 別 Push 受付）
     // のレース窓を作らない。
     isPushingBackground.value = true
-    // #224: 送信中はアプリ切替/終了を避けるよう sticky トーストで促す（完了トーストで差し替わる）
+    // #224: 送信中はアプリ切替/終了を避けるよう sticky トーストで促す（完了トーストで差し替わる）。
+    // ロックフラグを触らず await もしないので、上の「両方 false の瞬間を作らない」順序制約には抵触しない。
     showStickyPushToast($_('toast.pushInProgress'))
     isPushing.value = false
     await tick()

@@ -46,7 +46,9 @@ describe('Push トーストのタイマー制御 (#224)', () => {
     expect(pushToastState.value.variant).toBe('')
   })
 
-  it('clearPushToast は pending な showPushToast タイマーをキャンセルする', () => {
+  it('clearPushToast 後は古い showPushToast タイマーが発火しても空のまま', () => {
+    // 後勝ち方式: 古いタイマーは「自分が出したトーストがまだ出ているか」を見て、
+    // 差し替わっていれば何もしない。clear 後に再表示されない。
     showPushToast('A')
     clearPushToast()
 
