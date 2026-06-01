@@ -1,6 +1,6 @@
 import { type Note, type Leaf, type StaleCheckResult, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
-import { showPushToast, showPullToast } from '../ui'
+import { showPushToast, showPullToast, showStickyPushToast, clearPushToast } from '../ui'
 import { showConflictDialog } from './conflict-dialog'
 import {
   settings,
@@ -254,6 +254,8 @@ export async function pushToGitHub(): Promise<void> {
     // することで、両方 false になる瞬間（_canPush $derived が一瞬 true → 別 Push 受付）
     // のレース窓を作らない。
     isPushingBackground.value = true
+    // #224: 送信中はアプリ切替/終了を避けるよう sticky トーストで促す（完了トーストで差し替わる）
+    showStickyPushToast($_('toast.pushInProgress'))
     isPushing.value = false
     await tick()
     appActions.getEditorView(paneToRefocus)?.focusEditor?.()
@@ -322,6 +324,8 @@ export async function pushToGitHub(): Promise<void> {
       // 通常の HTTP 4xx/5xx 等の reject: pushInFlightAt は確実にクリアしてから rethrow。
       // クリアしないと次回 visibility resume で pushHangRecovered=true が誤発火する（#204）。
       setPushInFlightAt(undefined)
+      // #224: throw で抜ける経路では完了トーストが出ないため sticky を明示的に消す
+      clearPushToast()
       throw e
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId)

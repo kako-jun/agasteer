@@ -250,7 +250,8 @@
     "restored": "リストアしました",
     "noteCreated": "ノートを作成しました",
     "leafCreated": "リーフを作成しました",
-    "pushTimeout": "Pushの応答が途切れました。次の同期確認で結果を取得します"
+    "pushTimeout": "Pushの応答が途切れました。次の同期確認で結果を取得します",
+    "pushInProgress": "Push中です。アプリの切り替えや終了はしないでください"
   },
   "ocr": {
     "title": "テキスト読み取り",

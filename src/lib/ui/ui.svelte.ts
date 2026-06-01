@@ -55,6 +55,10 @@ export const pushToastState = {
   },
 }
 
+// Pushトーストの自動消滅タイマー（モジュールスコープで保持し、sticky トーストを
+// 先行 setTimeout が誤って消さないよう、表示前に必ず clear する）
+let _pushToastTimer: ReturnType<typeof setTimeout> | undefined
+
 /**
  * Pullトーストの状態
  */
@@ -94,10 +98,38 @@ export const modalState = {
  * Pushトーストを表示
  */
 export function showPushToast(message: string, variant: 'success' | 'error' | '' = '') {
+  // 先に張られた自動消滅タイマー（sticky 含む）が後から発火して
+  // この表示を消さないよう、表示前にクリアする
+  if (_pushToastTimer !== undefined) clearTimeout(_pushToastTimer)
   pushToastState.value = { message, variant }
-  setTimeout(() => {
+  _pushToastTimer = setTimeout(() => {
     pushToastState.value = { message: '', variant: '' }
+    _pushToastTimer = undefined
   }, 2000)
+}
+
+/**
+ * Push の sticky トーストを表示する。
+ * 自動消滅しない。isPushingBackground の間だけ表示し、完了トースト
+ * （showPushToast）or clearPushToast で差し替える。
+ */
+export function showStickyPushToast(message: string, variant: 'success' | 'error' | '' = '') {
+  if (_pushToastTimer !== undefined) {
+    clearTimeout(_pushToastTimer)
+    _pushToastTimer = undefined
+  }
+  pushToastState.value = { message, variant }
+}
+
+/**
+ * Pushトーストを即座に消す（pending な自動消滅タイマーもクリアする）
+ */
+export function clearPushToast() {
+  if (_pushToastTimer !== undefined) {
+    clearTimeout(_pushToastTimer)
+    _pushToastTimer = undefined
+  }
+  pushToastState.value = { message: '', variant: '' }
 }
 
 /**
