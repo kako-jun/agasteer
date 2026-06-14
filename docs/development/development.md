@@ -27,6 +27,8 @@ npm run check
 npm run lint
 ```
 
+push および pull request では GitHub Actions（`.github/workflows/ci.yml`）が `npm run lint`（format:check + svelte-check）と `npm test` を自動実行する。ローカルの husky pre-commit に加え、リモート側でも品質ゲートがかかる。
+
 ### ビルド
 
 ```bash
