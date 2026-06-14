@@ -27,6 +27,8 @@ npm run check
 npm run lint
 ```
 
+push および pull request では GitHub Actions（`.github/workflows/ci.yml`）が `npm run lint`（format:check + svelte-check）と `npm test` を自動実行する。ローカルの husky pre-commit に加え、リモート側でも品質ゲートがかかる。
+
 ### ビルド
 
 ```bash
@@ -39,7 +41,7 @@ npm run preview
 
 ### デプロイ
 
-`main`ブランチへのプッシュで自動デプロイ（GitHub Actions）。
+`main`ブランチへのプッシュで Cloudflare Pages が自動ビルド・デプロイする（Cloudflare の Git 連携）。GitHub Actions（`.github/workflows/ci.yml`）は lint + test の品質ゲートのみで、デプロイは行わない。
 
 ```bash
 git add .
