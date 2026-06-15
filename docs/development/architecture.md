@@ -170,7 +170,12 @@ agasteer/
 │   │   ├── breadcrumbs.ts               # パンくずリスト生成
 │   │   ├── drag-drop.ts                 # ドラッグ&ドロップヘルパー
 │   │   ├── font.ts                      # カスタムフォント管理
-│   │   ├── github.ts                    # GitHub API統合
+│   │   ├── github.ts                    # GitHub API統合（副作用層: push/pull/http）
+│   │   ├── github/                       # GitHub 純粋層（Phase 1で分離）
+│   │   │   ├── paths.ts                 # パス定数・パス構築（純粋）
+│   │   │   ├── encoding.ts              # Base64/UTF-8変換（純粋）
+│   │   │   ├── sha.ts                   # Git blob SHA計算（純粋）
+│   │   │   └── rate-limit.ts            # レート制限解析（純粋）
 │   │   ├── routing.ts                   # URLルーティング
 │   │   ├── storage.ts                   # IndexedDB/LocalStorage操作
 │   │   ├── actions/                      # App.svelteから抽出したビジネスロジック
@@ -327,7 +332,7 @@ agasteer/
 
 **GitHub同期:**
 
-- `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）
+- `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）。純粋層は `github/` 配下へ分離（Phase 1: paths/encoding/sha/rate-limit）。push/pull/http の副作用層は github.ts に残し、純粋関数を re-export して公開 API を維持
 - `sync.ts`: Push/Pull処理の分離
 
 **データ永続化:**
