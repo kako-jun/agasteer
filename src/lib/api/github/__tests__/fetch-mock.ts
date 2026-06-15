@@ -85,6 +85,11 @@ export interface FetchMock {
   callsMatching: (method: string, matcher: UrlMatcher) => RecordedCall[]
   /** 最初にマッチした記録 */
   firstCall: (method: string, matcher: UrlMatcher) => RecordedCall | undefined
+  /** 未消費のキュー（ステージしたが呼ばれなかった応答）が残っていたら throw する。
+   *  「過剰ステージングが黙って通る」のを防ぐ opt-in ヘルパ（#231 Wave B / #232 nit）。 */
+  assertDrained: () => void
+  /** 未消費キューの件数（assertDrained の非例外版） */
+  pendingCount: () => number
 }
 
 export function createFetchMock(): FetchMock {
@@ -157,6 +162,17 @@ export function createFetchMock(): FetchMock {
     },
     firstCall(method, matcher) {
       return mock.callsMatching(method, matcher)[0]
+    },
+    pendingCount() {
+      return queue.length
+    },
+    assertDrained() {
+      if (queue.length > 0) {
+        const remaining = queue.map((q) => `${q.method} ${String(q.matcher)}`).join(', ')
+        throw new Error(
+          `[fetch-mock] assertDrained: ${queue.length} queued response(s) were never consumed: ${remaining}`
+        )
+      }
     },
   }
   return mock
