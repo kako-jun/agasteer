@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "prepare": "husky",
     "test": "vitest run",
+    "test:e2e": "vitest run -t e2e",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
