@@ -8,100 +8,42 @@ import type {
   Note,
   Settings,
   Metadata,
-  WorldType,
   FetchPushCountResult,
   FetchHeadShaResult,
 } from '../types'
 import { PRIORITY_LEAF_ID } from '../utils'
 
 // ============================================
-// パス定数
+// 純粋層（github/ 配下へ分離・Phase 1）
+// ロジック不変・公開 API 維持のため re-export する
 // ============================================
 
-/** Home用パス（通常のノート・リーフ） */
-export const NOTES_PATH = '.agasteer/notes'
-export const NOTES_METADATA_PATH = '.agasteer/notes/metadata.json'
+import {
+  NOTES_PATH,
+  NOTES_METADATA_PATH,
+  ARCHIVE_PATH,
+  ARCHIVE_METADATA_PATH,
+  getBasePath,
+  getMetadataPath,
+  sanitizePathPart,
+  getFolderPath,
+  getNotePath,
+  buildPath,
+} from './github/paths'
+import { parseRateLimitResponse, type RateLimitInfo } from './github/rate-limit'
+import { calculateGitBlobSha } from './github/sha'
+import { encodeContent, decodeBase64ToString } from './github/encoding'
 
-/** Archive用パス */
-export const ARCHIVE_PATH = '.agasteer/archive'
-export const ARCHIVE_METADATA_PATH = '.agasteer/archive/metadata.json'
-
-/**
- * ワールドに応じたベースパスを取得
- */
-export function getBasePath(world: WorldType): string {
-  return world === 'home' ? NOTES_PATH : ARCHIVE_PATH
+export {
+  NOTES_PATH,
+  NOTES_METADATA_PATH,
+  ARCHIVE_PATH,
+  ARCHIVE_METADATA_PATH,
+  getBasePath,
+  getMetadataPath,
+  parseRateLimitResponse,
 }
-
-/**
- * ワールドに応じたメタデータパスを取得
- */
-export function getMetadataPath(world: WorldType): string {
-  return world === 'home' ? NOTES_METADATA_PATH : ARCHIVE_METADATA_PATH
-}
-
-/**
- * レート制限エラー情報
- */
-export interface RateLimitInfo {
-  isRateLimited: boolean
-  resetTime?: Date
-  remainingSeconds?: number
-}
-
-/**
- * レスポンスからレート制限情報を抽出
- */
-export function parseRateLimitResponse(response: Response): RateLimitInfo {
-  if (response.status !== 403 && response.status !== 429) {
-    return { isRateLimited: false }
-  }
-
-  // X-RateLimit-Remaining が 0 の場合はレートリミット確定
-  const remainingHeader = response.headers.get('X-RateLimit-Remaining')
-  const isRateLimited = remainingHeader === '0' || response.status === 429
-
-  if (!isRateLimited) {
-    // 403だがレートリミットではない（権限エラーなど）
-    return { isRateLimited: false }
-  }
-
-  const resetHeader = response.headers.get('X-RateLimit-Reset')
-  if (resetHeader) {
-    const resetTimestamp = parseInt(resetHeader, 10) * 1000 // 秒→ミリ秒
-    const resetTime = new Date(resetTimestamp)
-    const remainingSeconds = Math.max(0, Math.ceil((resetTimestamp - Date.now()) / 1000))
-    return {
-      isRateLimited: true,
-      resetTime,
-      remainingSeconds,
-    }
-  }
-
-  // ヘッダーがない場合（Secondary rate limitなど）
-  // GitHubのドキュメントによると通常1分程度で解除される
-  return { isRateLimited: true, remainingSeconds: 60 }
-}
-
-/**
- * Git blob形式のSHA-1を計算
- * Git仕様: sha1("blob " + UTF-8バイト数 + "\0" + content)
- */
-async function calculateGitBlobSha(content: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const contentBytes = encoder.encode(content)
-  const header = `blob ${contentBytes.length}\0`
-  const headerBytes = encoder.encode(header)
-
-  // headerとcontentを結合
-  const data = new Uint8Array(headerBytes.length + contentBytes.length)
-  data.set(headerBytes, 0)
-  data.set(contentBytes, headerBytes.length)
-
-  const hashBuffer = await crypto.subtle.digest('SHA-1', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+export type { RateLimitInfo }
 
 export interface SaveResult {
   success: boolean
@@ -244,61 +186,6 @@ async function fetchGitHubContents(
   return fetch(url, {
     headers,
   })
-}
-
-/**
- * UTF-8テキストをBase64エンコード
- */
-function encodeContent(content: string): string {
-  const encoder = new TextEncoder()
-  const bytes = encoder.encode(content)
-  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
-  return btoa(binary)
-}
-
-function decodeBase64ToString(base64: string): string {
-  const clean = base64.replace(/\n/g, '')
-  const binary = atob(clean)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return new TextDecoder().decode(bytes)
-}
-
-/**
- * ノートパスを構築
- */
-function getFolderPath(note: Note, allNotes: Note[]): string {
-  const parentNote = note.parentId ? allNotes.find((f) => f.id === note.parentId) : null
-
-  if (parentNote) {
-    return `${parentNote.name}/${note.name}`
-  }
-  return note.name
-}
-
-/**
- * ノートのフルパスを取得（.agasteer/notes/または.agasteer/archive/配下のディレクトリパス）
- */
-function getNotePath(note: Note, allNotes: Note[], world: WorldType = 'home'): string {
-  const basePath = getBasePath(world)
-  return `${basePath}/${getFolderPath(note, allNotes)}`
-}
-
-function buildPath(leaf: Leaf, notes: Note[], world: WorldType = 'home'): string {
-  const note = notes.find((f) => f.id === leaf.noteId)
-  const basePath = getBasePath(world)
-  // ファイル名に使えない文字をサニタイズ
-  const sanitizedTitle = sanitizePathPart(leaf.title)
-  if (!note) {
-    console.warn('[buildPath] Note not found for leaf:', leaf.title, 'noteId:', leaf.noteId)
-    return `${basePath}/${sanitizedTitle}.md`
-  }
-
-  const folderPath = getFolderPath(note, notes)
-  const path = `${basePath}/${folderPath}/${sanitizedTitle}.md`
-  return path
 }
 
 /**
@@ -1764,18 +1651,6 @@ export async function testGitHubConnection(settings: Settings): Promise<TestResu
     console.error('GitHub test error:', error)
     return { success: false, message: 'github.networkError', errorCode: 'E-3009' }
   }
-}
-const sanitizePathPart = (raw: string): string => {
-  const cleaned = raw.replace(/[\\/:*?"<>|#]/g, '-').replace(/\s+/g, ' ')
-  const limited = cleaned.slice(0, 80)
-  return limited.length === 0 ? 'Untitled' : limited
-}
-
-const collapseToTwoLevels = (parts: string[]): string[] => {
-  if (parts.length <= 2) return parts
-  const first = sanitizePathPart(parts[0])
-  const second = sanitizePathPart(parts.slice(1).join('/'))
-  return [first, second]
 }
 
 /**
