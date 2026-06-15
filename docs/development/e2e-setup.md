@@ -53,13 +53,14 @@ GitHub → Settings → Developer settings → Fine-grained tokens → Generate 
 
 ## 3. env 一覧
 
-| env                         | 必須 | 説明                                                                         |
-| --------------------------- | ---- | ---------------------------------------------------------------------------- |
-| `AGASTEER_E2E_GITHUB_TOKEN` | ○    | 上で発行した fine-grained PAT                                                |
-| `AGASTEER_E2E_OWNER`        | ○    | テスト用リポの owner（例: `kako-jun`）                                       |
-| `AGASTEER_E2E_REPO`         | ○    | テスト用リポ名（例: `agasteer-e2e-fixture`）                                 |
-| `AGASTEER_E2E_BRANCH`       | -    | ブランチ（既定 `main`。sync 層は default branch を自動検出するので通常不要） |
-| `AGASTEER_E2E_ALLOW_WRITES` | ○    | **`1` のときだけ書き込みを許可**（誤爆防止の必須フラグ）                     |
+| env                         | 必須 | 説明                                                     |
+| --------------------------- | ---- | -------------------------------------------------------- |
+| `AGASTEER_E2E_GITHUB_TOKEN` | ○    | 上で発行した fine-grained PAT                            |
+| `AGASTEER_E2E_OWNER`        | ○    | テスト用リポの owner（例: `kako-jun`）                   |
+| `AGASTEER_E2E_REPO`         | ○    | テスト用リポ名（例: `agasteer-e2e-fixture`）             |
+| `AGASTEER_E2E_ALLOW_WRITES` | ○    | **`1` のときだけ書き込みを許可**（誤爆防止の必須フラグ） |
+
+> ブランチは指定不要。sync 層（push/pull）はリポの default branch を自動検出する。
 
 `AGASTEER_E2E_ALLOW_WRITES=1` が無いと、トークン等が揃っていても describe ごと skip され、
 **一切書き込みません**。本物リポへの誤爆を防ぐ二重ガードです。

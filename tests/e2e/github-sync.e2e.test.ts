@@ -14,8 +14,9 @@
  *   AGASTEER_E2E_GITHUB_TOKEN  fine-grained PAT（テスト用リポだけに Contents read/write）
  *   AGASTEER_E2E_OWNER         テスト用リポの owner（例: kako-jun）
  *   AGASTEER_E2E_REPO          テスト用リポ名（例: agasteer-e2e-fixture）
- *   AGASTEER_E2E_BRANCH        ブランチ（既定 main）
  *   AGASTEER_E2E_ALLOW_WRITES  "1" のときだけ書き込みを許可（誤爆防止の必須フラグ）
+ *
+ * 注: ブランチは指定しない。sync 層（push/pull）はリポの default branch を自動検出する。
  *
  * ## 危険性（ランブック docs/development/e2e-setup.md 参照）
  * このアプリの push は notes ツリー全体を**上書き再構築**する。本物の notes リポを
@@ -61,7 +62,6 @@ const env = (k: string): string | undefined => {
 const E2E_TOKEN = env('AGASTEER_E2E_GITHUB_TOKEN')
 const E2E_OWNER = env('AGASTEER_E2E_OWNER')
 const E2E_REPO = env('AGASTEER_E2E_REPO')
-const E2E_BRANCH = env('AGASTEER_E2E_BRANCH') ?? 'main'
 const E2E_ALLOW_WRITES = env('AGASTEER_E2E_ALLOW_WRITES') === '1'
 
 /**
