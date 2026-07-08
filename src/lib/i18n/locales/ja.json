@@ -251,6 +251,7 @@
     "noteCreated": "ノートを作成しました",
     "leafCreated": "リーフを作成しました",
     "pushTimeout": "Pushの応答が途切れました。次の同期確認で結果を取得します",
+    "pushLateSuccess": "遅れていたPushの成功を確認しました。同期状態を回復しました",
     "pushInProgress": "Push中。アプリの切り替えや終了はしないでください"
   },
   "ocr": {

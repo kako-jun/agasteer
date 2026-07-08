@@ -46,6 +46,7 @@ import {
   restoreFromBackup,
   saveNotes,
   saveLeaves,
+  getPushInFlightAt,
   setPushInFlightAt,
 } from '../data'
 // fetchRemotePushCount は Push 成功後の lastPulledPushCount 更新（統計表示用）で
@@ -58,6 +59,7 @@ import {
   canSync,
   fetchRemotePushCount,
 } from '../api'
+import type { PushResult } from '../api'
 import { isNoteSaveable, isLeafSaveable } from '../utils'
 import { appState, appActions } from '../app-state.svelte'
 import * as nav from '../navigation'
@@ -75,6 +77,62 @@ class PushTimeoutError extends Error {
     super('PUSH_TIMEOUT')
     this.name = 'PushTimeoutError'
   }
+}
+
+/**
+ * #235: タイムアウトで UI をあきらめた後の orphan Push を観測する。
+ *
+ * タイムアウト（PUSH_TIMEOUT_MS）後も executePush の fetch チェーンは生きて
+ * おり、遅れて完走すると古い HEAD を parent にしたコミットで ref を force 更新
+ * する（= その間に別 Push が成功していてもリモートを上書きする）。従来はこの
+ * 結果を誰も観測しなかったため、
+ *   - 遅延成功: リモート HEAD が orphan のコミットになったのに
+ *     lastKnownCommitSha は更新されず、pushInFlightAt も後続 Push の応答時に
+ *     消されるため、以降の stale check が毎回 stale になり衝突ダイアログが
+ *     出続けた（#235 の主症状）
+ *   - 遅延失敗: 誰も catch せず unhandledrejection
+ * という2つの穴があった。settle した瞬間に結果を反映して塞ぐ。
+ *
+ * 遅延成功時に SHA を無条件で追従させるのは、settle した瞬間こそ
+ * 「リモート HEAD = この commit」が最も確からしいタイミングだから
+ * （後続 Push が既に成功していても、リモートはこの force push で上書き済み。
+ * ローカルは全リーフを保持しており Push は毎回全ツリーを送るため、次の Push で
+ * リモートの内容も復元される）。
+ *
+ * pushInFlightAt は「自分が設定した値のままの場合だけ」クリアする。後続の
+ * Push が新しい値を設定していた場合、それはその Push の救済マーカーなので
+ * 触らない（このガードがあるため、pushToGitHub 本体側の set / clear は
+ * orphan と競合しない）。
+ */
+function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStamp: number): void {
+  const clearOwnInFlightFlag = () => {
+    if (getPushInFlightAt() === inFlightStamp) {
+      setPushInFlightAt(undefined)
+    }
+  }
+  pushPromise.then(
+    (lateResult) => {
+      if (lateResult.success && lateResult.commitSha) {
+        console.log(
+          `Orphan push settled successfully after timeout; updating lastKnownCommitSha to ${lateResult.commitSha}`
+        )
+        lastKnownCommitSha.value = lateResult.commitSha
+        isStale.value = false
+        // タイムアウト時の「応答が途切れました」トーストを上書きして成功を通知
+        showPushToast(get(_)('toast.pushLateSuccess'), 'success')
+      } else {
+        // 遅延失敗（エラー結果で resolve）: フラグを残すと次の stale check が
+        // 「Push 成功」と誤認して SHA を追従（救済）してしまうためクリアする
+        console.warn('Orphan push settled with failure after timeout:', lateResult.message)
+      }
+      clearOwnInFlightFlag()
+    },
+    (e) => {
+      // 遅延 reject: unhandledrejection の解消も兼ねる
+      console.warn('Orphan push rejected after timeout:', e)
+      clearOwnInFlightFlag()
+    }
+  )
 }
 
 async function runPendingRepoSyncIfIdle(): Promise<void> {
@@ -194,6 +252,8 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     archiveLeaves: Leaf[] | undefined
     archiveMetadata: typeof archiveMetadata.value | undefined
   } | null = null
+  // #235: この Push が setPushInFlightAt に設定した値（Phase 2 とorphan 観測で参照）
+  let pushInFlightStamp = 0
 
   try {
     // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
@@ -276,7 +336,13 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     showPushToast($_('loading.pushing'))
 
     // Push飛行中フラグを設定（スリープによるレスポンス消失検出用）
-    setPushInFlightAt(Date.now())
+    // #235: 値を控えておき、orphan 継続処理（observeOrphanPush）や応答後の
+    // クリアが「自分の設定した値」を対象にしていることを識別できるようにする。
+    // ストレージはリポごと 1 スロットのため、先行 Push が orphan のまま
+    // ここで上書きされ得るが、in-page の orphan は observeOrphanPush が
+    // 直接観測するので救済マーカーの喪失にはならない。
+    pushInFlightStamp = Date.now()
+    setPushInFlightAt(pushInFlightStamp)
 
     // ★ #206: ここで preflight phase を終了し UI ロックを解除する。
     // background phase は finally の外で実行する（編集再開のため）。
@@ -318,42 +384,50 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         reject(new PushTimeoutError())
       }, PUSH_TIMEOUT_MS)
     })
+    // #235: race に負けても（タイムアウトしても）observeOrphanPush で
+    // 結果を観測するため、executePush の Promise を単独で保持する
+    const pushPromise = executePush({
+      // ★ live state ではなく固定済み snapshot を渡す（#206）
+      leaves: snapshot.leaves,
+      notes: snapshot.notes,
+      // settings.value / isFirstPriorityFetched は preflight 通過時点から
+      // 変わらないことが canSync / pendingRehydrateRepo キューで保証されている
+      // ため live 参照で OK。snapshot に含めても等価。
+      settings: settings.value,
+      isOperationsLocked: !appState.isFirstPriorityFetched,
+      localMetadata: snapshot.metadata,
+      // アーカイブがロード済みの場合のみアーカイブデータを渡す
+      archiveLeaves: snapshot.archiveLeaves,
+      archiveNotes: snapshot.archiveNotes,
+      archiveMetadata: snapshot.archiveMetadata,
+      isArchiveLoaded: isArchiveLoaded.value,
+    })
     let result
     try {
-      result = await Promise.race([
-        executePush({
-          // ★ live state ではなく固定済み snapshot を渡す（#206）
-          leaves: snapshot.leaves,
-          notes: snapshot.notes,
-          // settings.value / isFirstPriorityFetched は preflight 通過時点から
-          // 変わらないことが canSync / pendingRehydrateRepo キューで保証されている
-          // ため live 参照で OK。snapshot に含めても等価。
-          settings: settings.value,
-          isOperationsLocked: !appState.isFirstPriorityFetched,
-          localMetadata: snapshot.metadata,
-          // アーカイブがロード済みの場合のみアーカイブデータを渡す
-          archiveLeaves: snapshot.archiveLeaves,
-          archiveNotes: snapshot.archiveNotes,
-          archiveMetadata: snapshot.archiveMetadata,
-          isArchiveLoaded: isArchiveLoaded.value,
-        }),
-        timeoutPromise,
-      ])
+      result = await Promise.race([pushPromise, timeoutPromise])
     } catch (e) {
       if (timeoutFired || e instanceof PushTimeoutError) {
         // #204: タイムアウト時は isPushingBackground を finally で false に戻し
         // 別 Push / Pull のロックを解除する。pushInFlightAt は意図的に残す:
-        // orphan になった executePush が裏で成功した場合、次回の stale check で
-        // applyStaleResult が SHA のみ更新して救済する。
+        // orphan になった executePush が裏で成功した場合、observeOrphanPush が
+        // settle 時に SHA を追従させる。ページリロード等で continuation ごと
+        // 消えた場合の保険として、次回 stale check の tryRescueStalePush
+        // （applyStaleResult / preflight）でも救済される。
         console.warn('Push response timed out after', PUSH_TIMEOUT_MS, 'ms; releasing UI lock')
         showPushToast(
           translateGitHubMessage('toast.pushTimeout', $_, undefined, undefined, 'E-5101'),
           'error'
         )
+        // #235: orphan の遅延結果（成功 → SHA 追従＋トースト / 失敗 → フラグ解除）を観測
+        observeOrphanPush(pushPromise, pushInFlightStamp)
         return
       }
       // 通常の HTTP 4xx/5xx 等の reject: pushInFlightAt は確実にクリアしてから rethrow。
       // クリアしないと次回 visibility resume で pushHangRecovered=true が誤発火する（#204）。
+      // #235: ここに到達するのは race がタイムアウト以外で決着した場合のみで、
+      // Push は同時に 1 本しか走らず orphan 継続処理はフラグを set しない
+      // （guarded clear のみ）ため、この時点のスロットは自分の値か undefined。
+      // 無条件クリアで他者の救済マーカーを壊すことはない。
       setPushInFlightAt(undefined)
       // #224: throw で抜ける経路では完了トーストが出ないため sticky を明示的に消す
       clearPushToast()
@@ -376,6 +450,8 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     showPushToast(translatedMessage, result.variant)
 
     // Push飛行中フラグをクリア（レスポンスを受信できた）
+    // #235: タイムアウト経路は上で return 済みなので、ここに来た時点で
+    // スロットは自分の値か undefined（rethrow 経路のコメント参照）。
     setPushInFlightAt(undefined)
 
     // Push成功時の後処理

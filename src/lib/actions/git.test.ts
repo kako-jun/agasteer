@@ -66,6 +66,8 @@ const mocks = vi.hoisted(() => ({
   setLastPushedSnapshot: vi.fn(),
   refreshDirtyState: vi.fn(),
   setPushInFlightAt: vi.fn(),
+  // #235: 既定「フラグなし」。orphan 継続処理の guarded clear は no-op になる
+  getPushInFlightAt: vi.fn((): number | undefined => undefined),
   // #235: 既定は「救済しない」（従来の stale ダイアログ経路を維持）
   tryRescueStalePush: vi.fn(() => false),
   pushToGitHub: vi.fn(),
@@ -117,6 +119,7 @@ vi.mock('../data', () => ({
   restoreFromBackup: mocks.restoreFromBackup,
   saveNotes: mocks.saveNotes,
   saveLeaves: mocks.saveLeaves,
+  getPushInFlightAt: mocks.getPushInFlightAt,
   setPushInFlightAt: mocks.setPushInFlightAt,
 }))
 
