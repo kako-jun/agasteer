@@ -1,4 +1,5 @@
 import { tick } from 'svelte'
+import { clampMonotonicCountdown } from '../sync/push-stages'
 
 /**
  * トースト通知の状態
@@ -56,6 +57,20 @@ export const pushToastState = {
 }
 
 /**
+ * Push トーストのカウントダウン（残りステージ数、#238）
+ *
+ * sticky Push トースト表示中に FF 風カウントダウンとして 2 行目に表示する。
+ * null = 非表示。setPushToastCountdown は単調減少ガード付きで、リトライ・
+ * 救済経路で内部的にステージが巻き戻っても表示上の数字は絶対に増やさない。
+ */
+let _pushToastCountdown = $state<number | null>(null)
+export const pushToastCountdown = {
+  get value() {
+    return _pushToastCountdown
+  },
+}
+
+/**
  * Pullトーストの状態
  */
 let _pullToastState = $state<ToastState>({
@@ -95,6 +110,8 @@ export const modalState = {
  */
 export function showPushToast(message: string, variant: 'success' | 'error' | '' = '') {
   pushToastState.value = { message, variant }
+  // 完了/エラートーストへの差し替え時点でカウントダウンは役目を終える
+  _pushToastCountdown = null
   setTimeout(() => {
     // 自分が出したトーストがまだ表示中のときだけ消す。
     // 後から別のトースト（sticky 含む）に差し替わっていたら触らない（後勝ち）。
@@ -111,6 +128,19 @@ export function showPushToast(message: string, variant: 'success' | 'error' | ''
  */
 export function showStickyPushToast(message: string) {
   pushToastState.value = { message, variant: '' }
+  // 新しい Push の開始（トースト再表示）なので、カウントダウンをリセットする。
+  // 単調減少ガードのリセットが許されるのはこのタイミングだけ（#238）
+  _pushToastCountdown = null
+}
+
+/**
+ * Push トーストのカウントダウン（残りステージ数）を更新する（#238）。
+ *
+ * 単調減少ガード付き: 表示中の最小値より大きい値は無視する。
+ * リトライ・救済経路で内部的にステージが巻き戻っても数字は増えない。
+ */
+export function setPushToastCountdown(remainingStages: number) {
+  _pushToastCountdown = clampMonotonicCountdown(_pushToastCountdown, remainingStages)
 }
 
 /**
@@ -118,6 +148,7 @@ export function showStickyPushToast(message: string) {
  */
 export function clearPushToast() {
   pushToastState.value = { message: '', variant: '' }
+  _pushToastCountdown = null
 }
 
 /**
