@@ -250,7 +250,7 @@
     "restored": "リストアしました",
     "noteCreated": "ノートを作成しました",
     "leafCreated": "リーフを作成しました",
-    "pushTimeout": "Pushの応答が途切れました。次の同期確認で結果を取得します",
+    "pushTimeout": "Pushの応答が途切れました。裏で結果を見届け、成功していれば自動で回復します",
     "pushLateSuccess": "遅れていたPushの成功を確認しました。同期状態を回復しました",
     "pushInProgress": "Push中。アプリの切り替えや終了はしないでください"
   },

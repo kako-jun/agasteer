@@ -249,7 +249,7 @@
     "restored": "Restored successfully",
     "noteCreated": "Note created",
     "leafCreated": "Leaf created",
-    "pushTimeout": "Push response timed out. The next sync check will recover the state.",
+    "pushTimeout": "Push response timed out. Watching for the result in the background; sync will recover automatically if it succeeded.",
     "pushLateSuccess": "The delayed push turned out to have succeeded. Sync state recovered.",
     "pushInProgress": "Pushing… please don't switch apps or close Agasteer yet."
   },

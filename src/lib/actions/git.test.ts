@@ -563,6 +563,8 @@ describe('pushToGitHub preflight rescue / abortIfStaleCheckFailed (#235)', () =>
 describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // リポ一致ガードのテストで書き換えるため毎回リセット
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
     stores.isPulling.value = false
     stores.isPushing.value = false
     stores.isPushingBackground.value = false
@@ -640,13 +642,18 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
   })
 
-  it('settle 時に飛行中フラグが後続 Push の値なら、フラグには触らないが SHA 追従とトーストは行う', async () => {
-    // 非対称の文書化: guarded clear は「自分が設定した値のときだけ」クリアする
-    // （後続 Push の救済マーカーを壊さない）。一方、SHA 追従とトーストは
-    // 「settle した瞬間のリモート HEAD = このコミット」という外的事実の反映なので
-    // フラグの持ち主に関わらず無条件で行う。
+  it('settle 時に飛行中フラグが後続 Push の値（不一致）なら、盲目追従せず stale check で実リモート HEAD に揃える', async () => {
+    // 後続 Push が挟まった兆候。settle 順 ≠ ref 更新順があり得るため
+    // 戻り値の commitSha には追従せず、実リモート HEAD を確認して揃える。
+    // guarded clear は「自分が設定した値のときだけ」クリアする
+    // （後続 Push の救済マーカーを壊さない）ためフラグにも触らない。
     const { resolvePush, stamp } = await runTimeoutPush()
     mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'actual-remote-sha',
+    })
 
     resolvePush({
       success: true,
@@ -657,8 +664,121 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+    // 盲目追従（late-sha）ではなく実リモート HEAD に揃う
+    expect(stores.lastKnownCommitSha.value).toBe('actual-remote-sha')
+    expect(mocks.executeStaleCheck).toHaveBeenLastCalledWith(stores.settings.value, 'local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+  })
+
+  it('不一致 + stale check が up_to_date: 既に整合しているので何もしない', async () => {
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+  })
+
+  it('不一致 + stale check が check_failed: 何もせず次回の定期チェックに委ねる', async () => {
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'check_failed', reason: 'network' })
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+  })
+
+  it('不一致 + stale check が例外: unhandledrejection にせず何もしない', async () => {
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+    mocks.executeStaleCheck.mockRejectedValue(new Error('network down'))
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+  })
+
+  it('リポ切替後の settle（遅延成功）: 別リポの状態を汚さないよう全書き込みをスキップする', async () => {
+    // M1: lastKnownCommitSha / isStale / pushInFlightAt は「現在リポ」スロット
+    // 対象のため、settle 前にリポが切り替わっていたら一切書き込まない。
+    // 旧リポの pushInFlightAt は残り、戻ったとき tryRescueStalePush が拾う。
+    const { resolvePush, stamp } = await runTimeoutPush()
+    stores.isStale.value = true
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+    stores.settings.value = { ...stores.settings.value, repoName: 'owner/other-repo' }
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(stores.isStale.value).toBe(true)
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+    // stale check 経由の検証も走らせない（preflight の 1 回だけ）
+    expect(mocks.executeStaleCheck).toHaveBeenCalledTimes(1)
+  })
+
+  it('リポ切替後の settle（遅延 reject）: フラグにも触らず握りつぶす', async () => {
+    const { rejectPush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+    stores.settings.value = { ...stores.settings.value, repoName: 'owner/other-repo' }
+
+    rejectPush(new Error('network down'))
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+  })
+
+  it('別 Push 進行中の遅延成功（スロット一致）: SHA は反映するがトーストは出さない', async () => {
+    // N2: 進行中 Push の sticky トースト（toast.pushInProgress）を
+    // 成功トーストで消してしまわないため、通知はログに留める
+    const { resolvePush, stamp } = await runTimeoutPush()
+    stores.isStale.value = true
+    stores.isPushingBackground.value = true
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
     expect(stores.lastKnownCommitSha.value).toBe('late-sha')
-    expect(mocks.showPushToast).toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(stores.isStale.value).toBe(false)
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
   })
 
   it('遅延失敗（success:false で resolve）: SHA は触らず、成功トーストも出さず、フラグだけクリアする', async () => {
