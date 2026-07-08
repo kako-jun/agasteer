@@ -108,24 +108,51 @@ export type ApplyStaleResultOutcome =
   | 'up-to-date'
   | 'check-failed'
 
+/**
+ * stale 検出時の push-in-flight 救済判定（#235）
+ *
+ * pushInFlightAt が期限内に残っている stale は「タイムアウトで応答を見送った
+ * Push が実は成功していて、リモート HEAD は自分が送ったコミット」である
+ * 可能性が高い。この場合は SHA のみリモートに揃えて stale を解消する
+ * （スナップショットとダーティは変更しない = Push 後の追加編集を保護）。
+ * フラグが期限切れならクリアだけして false を返す（通常の stale 処理へ）。
+ *
+ * `applyStaleResult()`（periodic / visibility / online の3経路）に加えて、
+ * Push preflight（actions/git.ts）からも直接呼ぶ。preflight から
+ * `applyStaleResult()` を丸ごと呼んではならない: stale + clean のとき
+ * `shouldAutoPull` が立ち、Push 中に Pull が予約されてしまう。救済判定
+ * だけをこの関数に切り出しているのはそのため。
+ *
+ * @returns true = 救済した（stale は誤検出。SHA 揃え済み・フラグ消費済み）
+ */
+export function tryRescueStalePush(
+  result: Extract<StaleCheckResult, { status: 'stale' }>,
+  logContext: string
+): boolean {
+  const pushInFlight = getPushInFlightAt()
+  if (pushInFlight && Date.now() - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
+    // Pushは成功していたとみなし、SHAのみ更新してstaleを回避
+    // スナップショットとダーティは変更しない（push後の追加編集を保護）
+    console.log(`${logContext}: push-in-flight detected, updating SHA only`)
+    lastKnownCommitSha.value = result.remoteCommitSha
+    setPushInFlightAt(undefined)
+    isStale.value = false
+    return true
+  }
+  // フラグが期限切れの場合はクリア
+  if (pushInFlight) {
+    setPushInFlightAt(undefined)
+  }
+  return false
+}
+
 export function applyStaleResult(
   result: StaleCheckResult,
   logContext: string
 ): ApplyStaleResultOutcome {
   if (result.status === 'stale') {
-    const pushInFlight = getPushInFlightAt()
-    if (pushInFlight && Date.now() - pushInFlight < PUSH_IN_FLIGHT_EXPIRY_MS) {
-      // Pushは成功していたとみなし、SHAのみ更新してstaleを回避
-      // スナップショットとダーティは変更しない（push後の追加編集を保護）
-      console.log(`${logContext}: push-in-flight detected, updating SHA only`)
-      lastKnownCommitSha.value = result.remoteCommitSha
-      setPushInFlightAt(undefined)
-      isStale.value = false
+    if (tryRescueStalePush(result, logContext)) {
       return 'rescued'
-    }
-    // フラグが期限切れの場合はクリア
-    if (pushInFlight) {
-      setPushInFlightAt(undefined)
     }
     if (isDirty.value) {
       isStale.value = true

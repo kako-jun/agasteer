@@ -38,6 +38,7 @@ import {
   rehydrateForRepo,
   flushAllEditors,
   getActiveEditorPane,
+  tryRescueStalePush,
 } from '../stores'
 import {
   clearAllData,
@@ -45,6 +46,7 @@ import {
   restoreFromBackup,
   saveNotes,
   saveLeaves,
+  getPushInFlightAt,
   setPushInFlightAt,
 } from '../data'
 // fetchRemotePushCount は Push 成功後の lastPulledPushCount 更新（統計表示用）で
@@ -57,6 +59,7 @@ import {
   canSync,
   fetchRemotePushCount,
 } from '../api'
+import type { PushResult } from '../api'
 import { isNoteSaveable, isLeafSaveable } from '../utils'
 import { appState, appActions } from '../app-state.svelte'
 import * as nav from '../navigation'
@@ -74,6 +77,130 @@ class PushTimeoutError extends Error {
     super('PUSH_TIMEOUT')
     this.name = 'PushTimeoutError'
   }
+}
+
+/**
+ * #235: タイムアウトで UI をあきらめた後の orphan Push を観測する。
+ *
+ * タイムアウト（PUSH_TIMEOUT_MS）後も executePush の fetch チェーンは生きて
+ * おり、遅れて完走すると古い HEAD を parent にしたコミットで ref を force 更新
+ * する（= その間に別 Push が成功していてもリモートを上書きする）。従来はこの
+ * 結果を誰も観測しなかったため、
+ *   - 遅延成功: リモート HEAD が orphan のコミットになったのに
+ *     lastKnownCommitSha は更新されず、pushInFlightAt も後続 Push の応答時に
+ *     消されるため、以降の stale check が毎回 stale になり衝突ダイアログが
+ *     出続けた（#235 の主症状）
+ *   - 遅延失敗: 誰も catch せず unhandledrejection
+ * という2つの穴があった。settle した瞬間に結果を反映して塞ぐ。
+ *
+ * 遅延成功時の SHA 追従は 2 段階で判定する:
+ * - pushInFlightAt スロットが自分の stamp のまま = 後続 Push は挟まっていない。
+ *   settle した瞬間のリモート HEAD はこのコミット（force 更新済み）なので
+ *   そのまま追従してよい（通常ケース）
+ * - スロットが別値/空 = 後続 Push が挟まった兆候。settle 順 ≠ ref 更新順が
+ *   あり得る（orphan の ref 更新 → 後続 Push B 成功 → orphan のレスポンス到着、
+ *   の順だと盲目追従で lastKnownCommitSha が shaB → shaA に逆流し偽 stale が出る）
+ *   ため盲目追従せず、stale check を 1 回走らせて実リモート HEAD を確認し、
+ *   それが自分の orphan コミットと確認できた場合のみ揃える
+ *
+ * pushInFlightAt は「自分が設定した値のままの場合だけ」クリアする。後続の
+ * Push が新しい値を設定していた場合、それはその Push の救済マーカーなので
+ * 触らない（このガードがあるため、pushToGitHub 本体側の set / clear は
+ * orphan と競合しない）。
+ *
+ * リポ一致ガード: getPushInFlightAt / setPushInFlightAt / lastKnownCommitSha /
+ * isStale はすべて「現在リポ」のスロットを対象とする（storage.ts の
+ * currentRepoKey() は settings.repoName 基準）。タイムアウト後は UI ロックが
+ * 解放されるため、settle 前にユーザーがリポを切り替え得る。そのまま書き込むと
+ * 切替後の**新リポ**の同期状態に旧リポの SHA を混入させてしまうので、settle 時に
+ * リポが変わっていたら warn ログのみで全書き込み（SHA・isStale・トースト・
+ * フラグ）をスキップする。旧リポ側の pushInFlightAt は残るため、旧リポに
+ * 戻ったときの stale check で tryRescueStalePush が救済する（「2段構えの保険」の
+ * 第2段がそのまま効く）。
+ */
+function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStamp: number): void {
+  // リポ一致ガード用: タイムアウト時点のリポ識別子を控える
+  // （storage.ts の currentRepoKey() と同じ settings.repoName 基準）
+  const repoNameAtTimeout = settings.value.repoName
+  const isRepoSwitched = () => settings.value.repoName !== repoNameAtTimeout
+  const warnRepoSwitched = () =>
+    console.warn(
+      `Orphan push settled after repo switch (${repoNameAtTimeout} -> ${settings.value.repoName}); skipping all state updates`
+    )
+  const clearOwnInFlightFlag = () => {
+    if (getPushInFlightAt() === inFlightStamp) {
+      setPushInFlightAt(undefined)
+    }
+  }
+  pushPromise.then(
+    async (lateResult) => {
+      if (isRepoSwitched()) {
+        warnRepoSwitched()
+        return
+      }
+      if (lateResult.success && lateResult.commitSha) {
+        if (getPushInFlightAt() === inFlightStamp) {
+          // スロットが自分の stamp のまま → 後続 Push なし。リモート HEAD は
+          // このコミットで確定しているので追従する
+          console.log(
+            `Orphan push settled successfully after timeout; updating lastKnownCommitSha to ${lateResult.commitSha}`
+          )
+          lastKnownCommitSha.value = lateResult.commitSha
+          isStale.value = false
+          if (isPushing.value || isPushingBackground.value) {
+            // 別 Push が進行中: その sticky トースト（toast.pushInProgress）を
+            // 成功トーストで消してしまわないよう、通知はログに留める（SHA 反映は実施済み）
+            console.log('Orphan push late-success toast suppressed: another push is in progress')
+          } else {
+            // タイムアウト時の「応答が途切れました」トーストを上書きして成功を通知
+            showPushToast(get(_)('toast.pushLateSuccess'), 'success')
+          }
+        } else {
+          // スロットが別値/空 → 後続 Push が挟まった兆候。盲目追従すると
+          // SHA が逆流し得るため、実リモート HEAD を 1 回確認して揃える
+          console.log(
+            'Orphan push settled successfully but another push intervened; verifying remote HEAD instead of blindly following'
+          )
+          try {
+            const check = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+            // await 中にリポが切り替わった可能性を再チェック（M1 と同じ理由）
+            if (isRepoSwitched()) {
+              warnRepoSwitched()
+              return
+            }
+            if (check.status === 'stale' && check.remoteCommitSha === lateResult.commitSha) {
+              // align は「リモート HEAD が自分の送ったコミット」と確認できた場合のみ。
+              // 第三者（別デバイス）のコミットに揃えると真正な divergence を隠し、
+              // 次の Push が無警告上書きになる。一致しない stale は通常の stale
+              // フロー（次回の定期チェック → ダイアログ）に委ねる。
+              // （up_to_date なら既に整合。check_failed は次回の定期チェックに委ねる）
+              console.log(
+                `Orphan push verification: remote HEAD matches orphan commit; aligning lastKnownCommitSha to ${check.remoteCommitSha}`
+              )
+              lastKnownCommitSha.value = check.remoteCommitSha
+            }
+          } catch (checkError) {
+            // 検証失敗は握りつぶし、次回の定期 stale check に委ねる
+            console.warn('Orphan push verification stale check failed:', checkError)
+          }
+        }
+      } else {
+        // 遅延失敗（エラー結果で resolve）: フラグを残すと次の stale check が
+        // 「Push 成功」と誤認して SHA を追従（救済）してしまうためクリアする
+        console.warn('Orphan push settled with failure after timeout:', lateResult.message)
+      }
+      clearOwnInFlightFlag()
+    },
+    (e) => {
+      if (isRepoSwitched()) {
+        warnRepoSwitched()
+        return
+      }
+      // 遅延 reject: unhandledrejection の解消も兼ねる
+      console.warn('Orphan push rejected after timeout:', e)
+      clearOwnInFlightFlag()
+    }
+  )
 }
 
 async function runPendingRepoSyncIfIdle(): Promise<void> {
@@ -133,6 +260,22 @@ export async function handleTestConnection(): Promise<void> {
 }
 
 /**
+ * pushToGitHub のオプション（#235）
+ */
+export interface PushToGitHubOptions {
+  /**
+   * stale check が check_failed（ネットワーク断・認証エラー等で判定不能）の
+   * とき Push を中止する。
+   *
+   * 手動 Push（既定 false）は「ユーザーが押した」意思を尊重してそのまま
+   * 続行するが、auto-push は無人発火なので中止し、オフライン中に 42 秒ごとの
+   * エラートースト連発になるのを防ぐ（自前 stale check を preflight に
+   * 一本化した後も、旧来の「check_failed は静かにスキップ」挙動を維持する）。
+   */
+  abortIfStaleCheckFailed?: boolean
+}
+
+/**
  * GitHubにPush（統合版）
  * すべてのPush処理がこの1つの関数を通る
  *
@@ -147,7 +290,7 @@ export async function handleTestConnection(): Promise<void> {
  *   成功時のベースライン更新は **固定 snapshot** に対して行うため、Push 中の追記は
  *   refreshDirtyState() で再検出され dirty として残る。
  */
-export async function pushToGitHub(): Promise<void> {
+export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void> {
   const $_ = get(_)
   const paneToRefocus = getActiveEditorPane() ?? focusedPane.value
 
@@ -177,6 +320,8 @@ export async function pushToGitHub(): Promise<void> {
     archiveLeaves: Leaf[] | undefined
     archiveMetadata: typeof archiveMetadata.value | undefined
   } | null = null
+  // #235: この Push が setPushInFlightAt に設定した値（Phase 2 とorphan 観測で参照）
+  let pushInFlightStamp = 0
 
   try {
     // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
@@ -193,30 +338,44 @@ export async function pushToGitHub(): Promise<void> {
     // Stale編集かどうかチェック（共通関数で時刻も更新）
     const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
 
-    if (staleResult.status === 'stale') {
-      // リモートに新しい変更あり → 確認ダイアログを表示
-      isStale.value = true
-      console.log(
-        `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
-      )
-      // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
-      const choice = await showConflictDialog({
-        kind: 'stale-push',
-        staleResult,
-        localPushCount: metadata.value.pushCount,
-        settings: settings.value,
-      })
+    // #235: 無人発火（auto-push）経路では、判定不能のまま Push を強行しない
+    if (staleResult.status === 'check_failed' && options?.abortIfStaleCheckFailed) {
+      console.warn('Push aborted: stale check failed', staleResult.reason)
+      return
+    }
 
-      if (choice === 'pull') {
-        // Pull first: isPushingロックを解放してPull→Push
-        isPushing.value = false
-        await pullFromGitHub(false)
-        // Pull後に再度Push（再帰呼び出し）
-        return appActions.pushToGitHub()
-      } else if (choice === 'cancel' || choice === null) {
-        return
+    if (staleResult.status === 'stale') {
+      // #235: まず push-in-flight 救済を試す。タイムアウトで応答を見送った Push
+      // （orphan）が実は成功していた場合、この stale は誤検出（リモート HEAD は
+      // 自分が送ったコミット）なので、ダイアログを出さずに Push を続行する。
+      // 救済時は lastKnownCommitSha がリモートに揃っており、executePush は
+      // 最新 HEAD を parent に読み直すため安全。
+      if (!tryRescueStalePush(staleResult, 'Push preflight')) {
+        // リモートに新しい変更あり → 確認ダイアログを表示
+        isStale.value = true
+        console.log(
+          `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
+        )
+        // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
+        const choice = await showConflictDialog({
+          kind: 'stale-push',
+          staleResult,
+          localPushCount: metadata.value.pushCount,
+          settings: settings.value,
+        })
+
+        if (choice === 'pull') {
+          // Pull first: isPushingロックを解放してPull→Push
+          isPushing.value = false
+          await pullFromGitHub(false)
+          // Pull後に再度Push（再帰呼び出し）
+          // options（abortIfStaleCheckFailed）を引き継がないのは意図的: ダイアログを操作した時点で有人操作なので、再Pushは手動Push相当の既定値で続行する（#235）
+          return appActions.pushToGitHub()
+        } else if (choice === 'cancel' || choice === null) {
+          return
+        }
+        // choice === 'push' → 続行（上書き）
       }
-      // choice === 'push' → 続行（上書き）
     }
     // check_failedやup_to_dateの場合はそのまま続行
 
@@ -246,7 +405,13 @@ export async function pushToGitHub(): Promise<void> {
     showPushToast($_('loading.pushing'))
 
     // Push飛行中フラグを設定（スリープによるレスポンス消失検出用）
-    setPushInFlightAt(Date.now())
+    // #235: 値を控えておき、orphan 継続処理（observeOrphanPush）や応答後の
+    // クリアが「自分の設定した値」を対象にしていることを識別できるようにする。
+    // ストレージはリポごと 1 スロットのため、先行 Push が orphan のまま
+    // ここで上書きされ得るが、in-page の orphan は observeOrphanPush が
+    // 直接観測するので救済マーカーの喪失にはならない。
+    pushInFlightStamp = Date.now()
+    setPushInFlightAt(pushInFlightStamp)
 
     // ★ #206: ここで preflight phase を終了し UI ロックを解除する。
     // background phase は finally の外で実行する（編集再開のため）。
@@ -288,42 +453,50 @@ export async function pushToGitHub(): Promise<void> {
         reject(new PushTimeoutError())
       }, PUSH_TIMEOUT_MS)
     })
+    // #235: race に負けても（タイムアウトしても）observeOrphanPush で
+    // 結果を観測するため、executePush の Promise を単独で保持する
+    const pushPromise = executePush({
+      // ★ live state ではなく固定済み snapshot を渡す（#206）
+      leaves: snapshot.leaves,
+      notes: snapshot.notes,
+      // settings.value / isFirstPriorityFetched は preflight 通過時点から
+      // 変わらないことが canSync / pendingRehydrateRepo キューで保証されている
+      // ため live 参照で OK。snapshot に含めても等価。
+      settings: settings.value,
+      isOperationsLocked: !appState.isFirstPriorityFetched,
+      localMetadata: snapshot.metadata,
+      // アーカイブがロード済みの場合のみアーカイブデータを渡す
+      archiveLeaves: snapshot.archiveLeaves,
+      archiveNotes: snapshot.archiveNotes,
+      archiveMetadata: snapshot.archiveMetadata,
+      isArchiveLoaded: isArchiveLoaded.value,
+    })
     let result
     try {
-      result = await Promise.race([
-        executePush({
-          // ★ live state ではなく固定済み snapshot を渡す（#206）
-          leaves: snapshot.leaves,
-          notes: snapshot.notes,
-          // settings.value / isFirstPriorityFetched は preflight 通過時点から
-          // 変わらないことが canSync / pendingRehydrateRepo キューで保証されている
-          // ため live 参照で OK。snapshot に含めても等価。
-          settings: settings.value,
-          isOperationsLocked: !appState.isFirstPriorityFetched,
-          localMetadata: snapshot.metadata,
-          // アーカイブがロード済みの場合のみアーカイブデータを渡す
-          archiveLeaves: snapshot.archiveLeaves,
-          archiveNotes: snapshot.archiveNotes,
-          archiveMetadata: snapshot.archiveMetadata,
-          isArchiveLoaded: isArchiveLoaded.value,
-        }),
-        timeoutPromise,
-      ])
+      result = await Promise.race([pushPromise, timeoutPromise])
     } catch (e) {
       if (timeoutFired || e instanceof PushTimeoutError) {
         // #204: タイムアウト時は isPushingBackground を finally で false に戻し
         // 別 Push / Pull のロックを解除する。pushInFlightAt は意図的に残す:
-        // orphan になった executePush が裏で成功した場合、次回の stale check で
-        // applyStaleResult が SHA のみ更新して救済する。
+        // orphan になった executePush が裏で成功した場合、observeOrphanPush が
+        // settle 時に SHA を追従させる。ページリロード等で continuation ごと
+        // 消えた場合の保険として、次回 stale check の tryRescueStalePush
+        // （applyStaleResult / preflight）でも救済される。
         console.warn('Push response timed out after', PUSH_TIMEOUT_MS, 'ms; releasing UI lock')
         showPushToast(
           translateGitHubMessage('toast.pushTimeout', $_, undefined, undefined, 'E-5101'),
           'error'
         )
+        // #235: orphan の遅延結果（成功 → SHA 追従＋トースト / 失敗 → フラグ解除）を観測
+        observeOrphanPush(pushPromise, pushInFlightStamp)
         return
       }
       // 通常の HTTP 4xx/5xx 等の reject: pushInFlightAt は確実にクリアしてから rethrow。
       // クリアしないと次回 visibility resume で pushHangRecovered=true が誤発火する（#204）。
+      // #235: ここに到達するのは race がタイムアウト以外で決着した場合のみで、
+      // Push は同時に 1 本しか走らず orphan 継続処理はフラグを set しない
+      // （guarded clear のみ）ため、この時点のスロットは自分の値か undefined。
+      // 無条件クリアで他者の救済マーカーを壊すことはない。
       setPushInFlightAt(undefined)
       // #224: throw で抜ける経路では完了トーストが出ないため sticky を明示的に消す
       clearPushToast()
@@ -346,6 +519,8 @@ export async function pushToGitHub(): Promise<void> {
     showPushToast(translatedMessage, result.variant)
 
     // Push飛行中フラグをクリア（レスポンスを受信できた）
+    // #235: タイムアウト経路は上で return 済みなので、ここに来た時点で
+    // スロットは自分の値か undefined（rethrow 経路のコメント参照）。
     setPushInFlightAt(undefined)
 
     // Push成功時の後処理

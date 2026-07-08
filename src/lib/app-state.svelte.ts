@@ -43,7 +43,6 @@ import {
   clearAllChanges,
   getPersistedDirtyFlag,
   lastKnownCommitSha,
-  isStale,
   initActivityDetection,
   initStoreEffects,
   setupBeforeUnloadSave,
@@ -98,6 +97,7 @@ import {
   alertAsync,
 } from './ui'
 import { showConflictDialog } from './actions/conflict-dialog'
+import type { PushToGitHubOptions } from './actions/git'
 import { PUSH_HANG_THRESHOLD_MS, RESUME_RETRY_BACKOFFS_MS } from './sync/constants'
 import { runResumeStaleCheckRetry } from './sync/resume-retry'
 import type { ApplyStaleResultOutcome } from './stores/stale-checker.svelte'
@@ -684,7 +684,7 @@ export interface InitAppDeps {
     onCancel?: () => void | Promise<void>,
     precomputedStale?: StaleCheckResult
   ) => Promise<void>
-  pushToGitHub: () => Promise<void>
+  pushToGitHub: (options?: PushToGitHubOptions) => Promise<void>
   restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
   handleGlobalKeyDown: (e: KeyboardEvent) => void
 }
@@ -1226,54 +1226,28 @@ export function initApp(deps: InitAppDeps): () => void {
 
       console.log('Auto-push triggered')
       ;(async () => {
-        // Staleチェックを実行（共通関数で時刻も更新）
-        const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
-
-        switch (staleResult.status) {
-          case 'stale':
-            // リモートに新しい変更あり → 確認ダイアログを表示
-            isStale.value = true
-            console.log(
-              `Auto-push stale: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
-            )
-            // ユーザーに確認（手動Pushと同じモーダル / 同じ診断情報）
-            // #200: 共通ヘルパー経由にすることで、auto-push でも SHA / pushCount を表示する。
-            {
-              const choice = await showConflictDialog({
-                kind: 'stale-push',
-                staleResult,
-                localPushCount: metadata.value.pushCount,
-                settings: settings.value,
-              })
-
-              if (choice === 'pull') {
-                // Pull first: Pull→Push
-                resetAutoPushTimer()
-                await deps.pullFromGitHub(false)
-                await deps.pushToGitHub()
-                return
-              } else if (choice === 'cancel' || choice === null) {
-                // キャンセル → タイマーリセットして終了
-                resetAutoPushTimer()
-                return
-              }
-            }
-            // choice === 'push' → 強制Pushを続行（breakしてswitch抜ける）
-            break
-
-          case 'check_failed':
-            // チェック失敗（ネットワークエラー等）→ 静かにスキップ
-            console.warn('Stale check failed, skipping auto-push:', staleResult.reason)
-            // タイマーをリセット（リトライループ防止、次の42秒後に再試行）
-            resetAutoPushTimer()
-            return
-
-          case 'up_to_date':
-            // 最新状態 → 自動Push実行
-            break
+        // #235: stale 判定・push-in-flight 救済・衝突ダイアログは pushToGitHub()
+        // の preflight に一本化する。以前はここでも自前 stale check + ダイアログを
+        // 出しており、「Pushでリモートを上書き」を選んでも preflight が再び同じ
+        // stale を検知して同一ダイアログが 2 連続で出ていた（GitHub Refs API の
+        // 二重呼び出しでもあった）。ダイアログの選択肢（pull first / 上書き /
+        // cancel）と診断情報は preflight 側の showConflictDialog がそのまま担う。
+        //
+        // タイマーは先にリセットする: preflight のダイアログでキャンセルされたり
+        // Push が失敗して dirty のまま残っても、1 秒ごとの再発火にならず次の試行は
+        // 42 秒後になる（旧実装の cancel / check_failed 時と同じ間隔）。
+        // 成功時は isDirty=false になった時点で進捗側の $effect が
+        // タイマーを止めるので影響しない。
+        resetAutoPushTimer()
+        try {
+          // 無人発火なので check_failed（オフライン等）では Push を強行しない
+          // （旧実装の「静かにスキップ」を明示オプションで維持）
+          await deps.pushToGitHub({ abortIfStaleCheckFailed: true })
+        } catch (e) {
+          // pushToGitHub は想定外エラーを rethrow する設計（actions/git.ts）。
+          // auto-push は fire-and-forget のため unhandledrejection にしない。
+          console.error('Auto-push failed:', e)
         }
-
-        await deps.pushToGitHub()
       })()
     })
     return () => {}
