@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ValueStore<T> = { value: T }
 
@@ -264,7 +264,9 @@ describe('pushToGitHub stale handling', () => {
   it('releases isPushing lock when executePush hangs past PUSH_TIMEOUT_MS (#204)', async () => {
     // #204: executePush が永遠に pending のままになるケースを fake timers で再現する。
     // Promise.race 内のタイムアウト Promise が reject → finally で isPushing=false → UI ロック解除。
-    // pushInFlightAt はクリアされず、次回の stale-check で救済される設計のため、
+    // pushInFlightAt はクリアされず、orphan の遅延結果は observeOrphanPush が settle 時に
+    // 観測する設計（#235。リロードで continuation ごと消えた場合の保険として
+    // 次回 stale-check の tryRescueStalePush 救済も残る）のため、
     // setPushInFlightAt(undefined) はタイムアウト経路では呼ばれないことを確認する。
     mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
     let resolveExecute: ((v: unknown) => void) | undefined
@@ -446,6 +448,273 @@ describe('pushToGitHub background phase (#206)', () => {
     await pushToGitHub()
 
     expect(mocks.showPushToast).toHaveBeenCalledWith('loading.pushing')
+  })
+})
+
+describe('pushToGitHub preflight rescue / abortIfStaleCheckFailed (#235)', () => {
+  const staleResult = {
+    status: 'stale',
+    localCommitSha: 'local-sha',
+    remoteCommitSha: 'remote-sha',
+  }
+  const checkFailedResult = {
+    status: 'check_failed',
+    reason: { status: 'network_error' },
+  }
+  const pushSuccessResult = {
+    success: true,
+    message: 'github.pushSuccess',
+    variant: 'success',
+    commitSha: 'remote-sha',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    mocks.getActiveEditorPane.mockReturnValue(null)
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    // clearAllMocks は mockReturnValue を消さないため、#235 の既定値を明示的に再設定する
+    mocks.tryRescueStalePush.mockReturnValue(false)
+    mocks.getPushInFlightAt.mockReturnValue(undefined)
+  })
+
+  it('stale でも tryRescueStalePush が true なら、ダイアログなしで Push を続行する（#235 主シナリオの土台）', async () => {
+    mocks.executeStaleCheck.mockResolvedValue(staleResult)
+    mocks.tryRescueStalePush.mockReturnValue(true)
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub()
+
+    expect(mocks.tryRescueStalePush).toHaveBeenCalledExactlyOnceWith(staleResult, 'Push preflight')
+    expect(mocks.choiceAsync).not.toHaveBeenCalled()
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+  })
+
+  it('stale で救済不成立のとき、救済判定がダイアログ表示より先に走り、cancel の3択フローは従来どおり', async () => {
+    mocks.executeStaleCheck.mockResolvedValue(staleResult)
+    mocks.tryRescueStalePush.mockReturnValue(false)
+    mocks.choiceAsync.mockResolvedValue('cancel')
+
+    await pushToGitHub()
+
+    expect(mocks.tryRescueStalePush).toHaveBeenCalledTimes(1)
+    expect(mocks.choiceAsync).toHaveBeenCalledTimes(1)
+    expect(mocks.tryRescueStalePush.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.choiceAsync.mock.invocationCallOrder[0]
+    )
+    // 従来の cancel 挙動維持（Push しない・赤バッジ維持）
+    expect(mocks.executePush).not.toHaveBeenCalled()
+    expect(stores.isStale.value).toBe(true)
+  })
+
+  it('abortIfStaleCheckFailed: check_failed なら Push を静かに中止する（auto-push の無人スキップ）', async () => {
+    mocks.executeStaleCheck.mockResolvedValue(checkFailedResult)
+
+    await pushToGitHub({ abortIfStaleCheckFailed: true })
+
+    expect(mocks.executePush).not.toHaveBeenCalled()
+    expect(mocks.choiceAsync).not.toHaveBeenCalled()
+    // loading.pushing を含めトーストは一切出さない（静かにスキップ）
+    expect(mocks.showPushToast).not.toHaveBeenCalled()
+    expect(stores.isPushing.value).toBe(false)
+  })
+
+  it('オプションなしの手動 Push は check_failed でもそのまま続行する（従来挙動の回帰確認）', async () => {
+    mocks.executeStaleCheck.mockResolvedValue(checkFailedResult)
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub()
+
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+    expect(mocks.choiceAsync).not.toHaveBeenCalled()
+  })
+
+  it('abortIfStaleCheckFailed 指定でも up_to_date なら通常どおり Push する', async () => {
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub({ abortIfStaleCheckFailed: true })
+
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+    expect(mocks.choiceAsync).not.toHaveBeenCalled()
+  })
+
+  it('abortIfStaleCheckFailed + stale + 救済成立で、ダイアログなしに Push する（#235 主シナリオ）', async () => {
+    mocks.executeStaleCheck.mockResolvedValue(staleResult)
+    mocks.tryRescueStalePush.mockReturnValue(true)
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub({ abortIfStaleCheckFailed: true })
+
+    expect(mocks.choiceAsync).not.toHaveBeenCalled()
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    mocks.getActiveEditorPane.mockReturnValue(null)
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.tryRescueStalePush.mockReturnValue(false)
+    mocks.getPushInFlightAt.mockReturnValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /**
+   * executePush を pending のまま PUSH_TIMEOUT_MS を経過させ、タイムアウト経路で
+   * pushToGitHub を return させる（#204 テストの fake timers パターン踏襲）。
+   * 戻り値の resolvePush / rejectPush で orphan の遅延 settle を再現できる。
+   * stamp は pushToGitHub が setPushInFlightAt に設定した飛行中マーカー。
+   */
+  async function runTimeoutPush(): Promise<{
+    resolvePush: (v: unknown) => void
+    rejectPush: (e: unknown) => void
+    stamp: number
+  }> {
+    let resolvePush: ((v: unknown) => void) | undefined
+    let rejectPush: ((e: unknown) => void) | undefined
+    mocks.executePush.mockImplementation(
+      () =>
+        new Promise((res, rej) => {
+          resolvePush = res
+          rejectPush = rej
+        })
+    )
+
+    vi.useFakeTimers()
+    const pushPromise = pushToGitHub()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await pushPromise
+    // settle 後の then チェーンを実時間で flush するため real timers に戻す
+    vi.useRealTimers()
+
+    const stampCall = mocks.setPushInFlightAt.mock.calls.find(([v]) => typeof v === 'number')
+    expect(stampCall).toBeDefined()
+    return { resolvePush: resolvePush!, rejectPush: rejectPush!, stamp: stampCall![0] as number }
+  }
+
+  /** observeOrphanPush の then チェーンを flush する */
+  const flushThenChain = () => new Promise((r) => setTimeout(r, 0))
+
+  it('遅延成功: SHA を追従・stale 解消・pushLateSuccess トースト・自分の飛行中フラグをクリアする', async () => {
+    const { resolvePush, stamp } = await runTimeoutPush()
+    stores.isStale.value = true
+    // 飛行中フラグは自分の stamp のまま（後続 Push なし）
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('late-sha')
+    expect(stores.isStale.value).toBe(false)
+    expect(mocks.showPushToast).toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
+  })
+
+  it('settle 時に飛行中フラグが後続 Push の値なら、フラグには触らないが SHA 追従とトーストは行う', async () => {
+    // 非対称の文書化: guarded clear は「自分が設定した値のときだけ」クリアする
+    // （後続 Push の救済マーカーを壊さない）。一方、SHA 追従とトーストは
+    // 「settle した瞬間のリモート HEAD = このコミット」という外的事実の反映なので
+    // フラグの持ち主に関わらず無条件で行う。
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+    expect(stores.lastKnownCommitSha.value).toBe('late-sha')
+    expect(mocks.showPushToast).toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+  })
+
+  it('遅延失敗（success:false で resolve）: SHA は触らず、成功トーストも出さず、フラグだけクリアする', async () => {
+    // フラグを残すと次の stale check が「Push 成功」と誤認して SHA を救済してしまう
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+
+    resolvePush({ success: false, message: 'github.error', variant: 'error' })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
+  })
+
+  it('遅延 reject: unhandledrejection にせず、フラグだけクリアする', async () => {
+    const { rejectPush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+
+    // reject が観測されないと vitest が unhandled rejection としてテストを落とすため、
+    // このテストが正常終了すること自体が「握りつぶし済み」の検証になる
+    rejectPush(new Error('network down'))
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
+  })
+
+  it('success:true でも commitSha がなければ失敗側の分岐（SHA 追従もトーストもしない）', async () => {
+    // observeOrphanPush の AND 条件（success && commitSha）の狙い撃ち
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: undefined,
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
+  })
+})
+
+describe('i18n locales (#235)', () => {
+  it('toast.pushLateSuccess が ja / en 両方に定義されている', async () => {
+    const ja = (await import('../i18n/locales/ja.json')).default
+    const en = (await import('../i18n/locales/en.json')).default
+
+    expect(ja.toast.pushLateSuccess).toEqual(expect.any(String))
+    expect(ja.toast.pushLateSuccess).not.toBe('')
+    expect(en.toast.pushLateSuccess).toEqual(expect.any(String))
+    expect(en.toast.pushLateSuccess).not.toBe('')
   })
 })
 
