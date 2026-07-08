@@ -38,6 +38,7 @@ import {
   rehydrateForRepo,
   flushAllEditors,
   getActiveEditorPane,
+  tryRescueStalePush,
 } from '../stores'
 import {
   clearAllData,
@@ -194,29 +195,36 @@ export async function pushToGitHub(): Promise<void> {
     const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
 
     if (staleResult.status === 'stale') {
-      // リモートに新しい変更あり → 確認ダイアログを表示
-      isStale.value = true
-      console.log(
-        `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
-      )
-      // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
-      const choice = await showConflictDialog({
-        kind: 'stale-push',
-        staleResult,
-        localPushCount: metadata.value.pushCount,
-        settings: settings.value,
-      })
+      // #235: まず push-in-flight 救済を試す。タイムアウトで応答を見送った Push
+      // （orphan）が実は成功していた場合、この stale は誤検出（リモート HEAD は
+      // 自分が送ったコミット）なので、ダイアログを出さずに Push を続行する。
+      // 救済時は lastKnownCommitSha がリモートに揃っており、executePush は
+      // 最新 HEAD を parent に読み直すため安全。
+      if (!tryRescueStalePush(staleResult, 'Push preflight')) {
+        // リモートに新しい変更あり → 確認ダイアログを表示
+        isStale.value = true
+        console.log(
+          `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
+        )
+        // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
+        const choice = await showConflictDialog({
+          kind: 'stale-push',
+          staleResult,
+          localPushCount: metadata.value.pushCount,
+          settings: settings.value,
+        })
 
-      if (choice === 'pull') {
-        // Pull first: isPushingロックを解放してPull→Push
-        isPushing.value = false
-        await pullFromGitHub(false)
-        // Pull後に再度Push（再帰呼び出し）
-        return appActions.pushToGitHub()
-      } else if (choice === 'cancel' || choice === null) {
-        return
+        if (choice === 'pull') {
+          // Pull first: isPushingロックを解放してPull→Push
+          isPushing.value = false
+          await pullFromGitHub(false)
+          // Pull後に再度Push（再帰呼び出し）
+          return appActions.pushToGitHub()
+        } else if (choice === 'cancel' || choice === null) {
+          return
+        }
+        // choice === 'push' → 続行（上書き）
       }
-      // choice === 'push' → 続行（上書き）
     }
     // check_failedやup_to_dateの場合はそのまま続行
 

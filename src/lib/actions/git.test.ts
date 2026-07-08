@@ -66,6 +66,8 @@ const mocks = vi.hoisted(() => ({
   setLastPushedSnapshot: vi.fn(),
   refreshDirtyState: vi.fn(),
   setPushInFlightAt: vi.fn(),
+  // #235: 既定は「救済しない」（従来の stale ダイアログ経路を維持）
+  tryRescueStalePush: vi.fn(() => false),
   pushToGitHub: vi.fn(),
   saveNotes: vi.fn(),
   saveLeaves: vi.fn(),
@@ -88,6 +90,7 @@ vi.mock('../stores', () => ({
   pullProgressStore: { start: vi.fn(), increment: vi.fn(), reset: vi.fn() },
   flushAllEditors: mocks.flushAllEditors,
   getActiveEditorPane: mocks.getActiveEditorPane,
+  tryRescueStalePush: mocks.tryRescueStalePush,
 }))
 
 vi.mock('../api', () => ({

@@ -54,6 +54,7 @@ import {
   stopStaleChecker,
   executeStaleCheck,
   applyStaleResult,
+  tryRescueStalePush,
   shouldAutoPull,
   setLastPushedSnapshot,
   isArchiveLoaded,
@@ -1231,6 +1232,12 @@ export function initApp(deps: InitAppDeps): () => void {
 
         switch (staleResult.status) {
           case 'stale':
+            // #235: まず push-in-flight 救済を試す。タイムアウトで応答を見送った
+            // Push が実は成功していた場合、この stale は誤検出なので
+            // ダイアログを出さずに自動 Push を続行する。
+            if (tryRescueStalePush(staleResult, 'Auto-push')) {
+              break
+            }
             // リモートに新しい変更あり → 確認ダイアログを表示
             isStale.value = true
             console.log(
