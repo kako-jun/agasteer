@@ -117,6 +117,8 @@ export function showPushToast(message: string, variant: 'success' | 'error' | ''
     // 後から別のトースト（sticky 含む）に差し替わっていたら触らない（後勝ち）。
     if (pushToastState.value.message === message) {
       pushToastState.value = { message: '', variant: '' }
+      // トーストを空にするならカウントダウンも残さない（不変条件を局所で保証）
+      _pushToastCountdown = null
     }
   }, 2000)
 }

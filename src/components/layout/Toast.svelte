@@ -37,7 +37,7 @@
       >
         {#if pushCountdown !== null}
           <!-- #238: FF 風カウントダウン（残りステージ数）。2行目にセンタリング表示 -->
-          <span>{pushMessage}</span>
+          <span class="message">{pushMessage}</span>
           <span class="countdown" aria-live="polite">{pushCountdown}</span>
         {:else}
           {pushMessage}
@@ -84,6 +84,13 @@
     flex-direction: column;
     gap: 4px;
     line-height: 1.2;
+  }
+
+  /* 2行モードのメッセージ行だけ折返しを許可（狭幅端末で max-width からのはみ出し防止）。
+     1行トースト（countdown なし・pull）は .toast の nowrap のまま */
+  .toast.with-countdown .message {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   /* 残りステージ数。DESIGN.md の上限 20px（h1 = 1.25rem）で大きめに */
