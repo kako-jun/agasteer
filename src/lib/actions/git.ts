@@ -134,6 +134,22 @@ export async function handleTestConnection(): Promise<void> {
 }
 
 /**
+ * pushToGitHub のオプション（#235）
+ */
+export interface PushToGitHubOptions {
+  /**
+   * stale check が check_failed（ネットワーク断・認証エラー等で判定不能）の
+   * とき Push を中止する。
+   *
+   * 手動 Push（既定 false）は「ユーザーが押した」意思を尊重してそのまま
+   * 続行するが、auto-push は無人発火なので中止し、オフライン中に 42 秒ごとの
+   * エラートースト連発になるのを防ぐ（自前 stale check を preflight に
+   * 一本化した後も、旧来の「check_failed は静かにスキップ」挙動を維持する）。
+   */
+  abortIfStaleCheckFailed?: boolean
+}
+
+/**
  * GitHubにPush（統合版）
  * すべてのPush処理がこの1つの関数を通る
  *
@@ -148,7 +164,7 @@ export async function handleTestConnection(): Promise<void> {
  *   成功時のベースライン更新は **固定 snapshot** に対して行うため、Push 中の追記は
  *   refreshDirtyState() で再検出され dirty として残る。
  */
-export async function pushToGitHub(): Promise<void> {
+export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void> {
   const $_ = get(_)
   const paneToRefocus = getActiveEditorPane() ?? focusedPane.value
 
@@ -193,6 +209,12 @@ export async function pushToGitHub(): Promise<void> {
 
     // Stale編集かどうかチェック（共通関数で時刻も更新）
     const staleResult = await executeStaleCheck(settings.value, lastKnownCommitSha.value)
+
+    // #235: 無人発火（auto-push）経路では、判定不能のまま Push を強行しない
+    if (staleResult.status === 'check_failed' && options?.abortIfStaleCheckFailed) {
+      console.warn('Push aborted: stale check failed', staleResult.reason)
+      return
+    }
 
     if (staleResult.status === 'stale') {
       // #235: まず push-in-flight 救済を試す。タイムアウトで応答を見送った Push
