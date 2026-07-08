@@ -83,7 +83,10 @@ export const PUSH_COUNTDOWN_MIN_HOLD_MS = 400
 let countdownQueue: number[] = []
 /** 表示中の数字の最低保持タイマー。非 null の間は次の値を表示しない */
 let countdownHoldTimer: ReturnType<typeof setTimeout> | null = null
-/** キュー消化待ちの成功トースト。drain 完了後に表示する（#238 ペーシング） */
+/**
+ * キュー消化待ちの Push 完了トースト（success のみ・showPushCompletionToast 専用）。
+ * drain 完了時、または割り込んだ汎用トーストの2秒消滅時に必ず表示される
+ */
 let pendingSuccessToast: ToastState | null = null
 
 /** カウントダウンがまだ消化中（数字を保持中、またはキューに次の値がある）か */
@@ -91,13 +94,18 @@ function isCountdownDraining(): boolean {
   return countdownHoldTimer !== null || countdownQueue.length > 0
 }
 
-/** ペーシング状態（キュー・保持タイマー・遅延中の成功トースト）を全破棄する */
-function resetCountdownPacing() {
+/** カウントダウンのキュー・保持タイマーだけを破棄する（遅延中の完了トーストは残す） */
+function discardCountdownQueue() {
   countdownQueue = []
   if (countdownHoldTimer !== null) {
     clearTimeout(countdownHoldTimer)
     countdownHoldTimer = null
   }
+}
+
+/** ペーシング状態（キュー・保持タイマー・遅延中の完了トースト）を全破棄する */
+function resetCountdownPacing() {
+  discardCountdownQueue()
   pendingSuccessToast = null
 }
 
@@ -161,17 +169,33 @@ export const modalState = {
 }
 
 /**
- * Pushトーストを表示
+ * Pushトーストを表示（push スロット共用の汎用入口）
  *
- * #238 ペーシング: カウントダウンの消化中（数字を保持中またはキューあり）に
- * success で呼ばれた場合は、最後の数字が MIN_HOLD 表示されるまで差し替えを
- * 遅延する（最悪ケースでも +1 秒強の安全側遅延）。error は待たせられない
- * のでキュー・タイマーを破棄して即時表示する。
+ * crud / move / share / io / OCR 等、Push 完了以外の通知もここを通るため、
+ * variant を問わず常に即時表示する（ペーシングによる遅延はかけない）。
+ * カウントダウン消化中に割り込んだ場合はキュー・保持タイマーを破棄する
+ * （無関係トーストの下に数字が湧き出すのを防ぐ）が、遅延中の Push 完了
+ * トースト（pending）は破棄せず、このトーストの2秒消滅時に表示される。
  */
 export function showPushToast(message: string, variant: 'success' | 'error' | '' = '') {
+  discardCountdownQueue()
+  displayPushToast(message, variant)
+}
+
+/**
+ * Push 完了トーストを表示する（`actions/git.ts` の Push 完了経路専用、#238）。
+ *
+ * ペーシング対象はこの入口だけ: カウントダウンの消化中（数字を保持中または
+ * キューあり）に success で呼ばれた場合は、最後の数字が MIN_HOLD 表示される
+ * まで差し替えを遅延する（最悪ケース: キュー4件 + 保持中で +2秒弱の安全側
+ * 遅延）。遅延中の完了トーストは drain 完了時、または割り込んだ汎用トースト
+ * の2秒消滅時に必ず表示される。error（タイムアウト・失敗）は待たせられない
+ * のでキュー・タイマー・pending を破棄して即時表示する。
+ */
+export function showPushCompletionToast(message: string, variant: 'success' | 'error' = 'success') {
   if (variant === 'success' && isCountdownDraining()) {
-    // drain 完了時（drainCountdownQueue）に表示される。後から別の呼び出しが
-    // 来たら上書き or 破棄され、常に最新の1件だけが遅延対象（後勝ち）
+    // drain 完了時（drainCountdownQueue）または汎用トーストの2秒消滅時に
+    // 表示される。完了トースト同士は後勝ち（最新の Push の結果が残る）
     pendingSuccessToast = { message, variant }
     return
   }
@@ -185,20 +209,27 @@ function displayPushToast(message: string, variant: 'success' | 'error' | '') {
   // 完了/エラートーストへの差し替え時点でカウントダウンは役目を終える
   _pushToastCountdown = null
   setTimeout(() => {
-    // 自分が出したトーストがまだ表示中のときだけ消す。
+    // 自分が出したトーストがまだ表示中のときだけ触る。
     // 後から別のトースト（sticky 含む）に差し替わっていたら触らない（後勝ち）。
-    if (pushToastState.value.message === message) {
-      pushToastState.value = { message: '', variant: '' }
-      // トーストを空にするならカウントダウンも残さない（不変条件を局所で保証）
-      _pushToastCountdown = null
+    if (pushToastState.value.message !== message) return
+    // 遅延中の Push 完了トーストがあれば、消す代わりにそれを表示する
+    // （pending の完了トーストは必ず最終的に表示されることの保証）
+    const pending = pendingSuccessToast
+    if (pending !== null) {
+      pendingSuccessToast = null
+      displayPushToast(pending.message, pending.variant)
+      return
     }
+    pushToastState.value = { message: '', variant: '' }
+    // トーストを空にするならカウントダウンも残さない（不変条件を局所で保証）
+    _pushToastCountdown = null
   }, 2000)
 }
 
 /**
  * Push の sticky トーストを表示する（自動消滅しない）。
- * isPushingBackground の間だけ出し、完了トースト（showPushToast）や
- * 他操作のトースト、clearPushToast で差し替わる（後勝ち）。
+ * isPushingBackground の間だけ出し、完了トースト（showPushCompletionToast）や
+ * 他操作のトースト（showPushToast）、clearPushToast で差し替わる（後勝ち）。
  */
 export function showStickyPushToast(message: string) {
   pushToastState.value = { message, variant: '' }

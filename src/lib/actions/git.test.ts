@@ -49,6 +49,8 @@ const mocks = vi.hoisted(() => ({
   confirmAsync: vi.fn(),
   showPullToast: vi.fn(),
   showPushToast: vi.fn(),
+  // #238: Push 完了トースト専用入口（通常完了・タイムアウト・orphan 遅延成功）
+  showPushCompletionToast: vi.fn(),
   showStickyPushToast: vi.fn(),
   clearPushToast: vi.fn(),
   // #238: Push 進捗カウントダウン
@@ -114,6 +116,7 @@ vi.mock('../ui', () => ({
   confirmAsync: mocks.confirmAsync,
   showPullToast: mocks.showPullToast,
   showPushToast: mocks.showPushToast,
+  showPushCompletionToast: mocks.showPushCompletionToast,
   showStickyPushToast: mocks.showStickyPushToast,
   clearPushToast: mocks.clearPushToast,
   setPushToastCountdown: mocks.setPushToastCountdown,
@@ -294,8 +297,8 @@ describe('pushToGitHub stale handling', () => {
       // タイムアウト経路では setPushInFlightAt(undefined) は呼ばない（救済機構のためフラグを残す）
       expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(expect.any(Number)) // start 時の 1 回のみ
       expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
-      // タイムアウト時の警告トーストが出ている
-      expect(mocks.showPushToast).toHaveBeenCalledWith(expect.any(String), 'error')
+      // タイムアウト時の警告トーストが出ている（完了トースト入口・error は即時表示）
+      expect(mocks.showPushCompletionToast).toHaveBeenCalledWith(expect.any(String), 'error')
       // #224: timeout 経路は sticky を error トーストで差し替える設計のため clearPushToast は呼ばない
       expect(mocks.clearPushToast).not.toHaveBeenCalled()
     } finally {
@@ -422,15 +425,15 @@ describe('pushToGitHub background phase (#206)', () => {
 
     await pushToGitHub()
 
-    // 送信中は sticky、完了で success variant の通常トースト
+    // 送信中は sticky、完了で success variant の完了トースト
     expect(mocks.showStickyPushToast).toHaveBeenCalledWith('toast.pushInProgress')
-    expect(mocks.showPushToast).toHaveBeenCalledWith('github.pushSuccess', 'success')
+    expect(mocks.showPushCompletionToast).toHaveBeenCalledWith('github.pushSuccess', 'success')
     // 順序: sticky → success
     const stickyOrder = mocks.showStickyPushToast.mock.invocationCallOrder[0]
-    const successCall = mocks.showPushToast.mock.calls.findIndex(
+    const successCall = mocks.showPushCompletionToast.mock.calls.findIndex(
       ([, variant]) => variant === 'success'
     )
-    const successOrder = mocks.showPushToast.mock.invocationCallOrder[successCall]
+    const successOrder = mocks.showPushCompletionToast.mock.invocationCallOrder[successCall]
     expect(stickyOrder).toBeLessThan(successOrder)
   })
 
@@ -531,6 +534,7 @@ describe('pushToGitHub preflight rescue / abortIfStaleCheckFailed (#235)', () =>
     expect(mocks.choiceAsync).not.toHaveBeenCalled()
     // loading.pushing を含めトーストは一切出さない（静かにスキップ）
     expect(mocks.showPushToast).not.toHaveBeenCalled()
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalled()
     expect(stores.isPushing.value).toBe(false)
   })
 
@@ -644,7 +648,7 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
 
     expect(stores.lastKnownCommitSha.value).toBe('late-sha')
     expect(stores.isStale.value).toBe(false)
-    expect(mocks.showPushToast).toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
     expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
   })
 
@@ -675,7 +679,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     // 検証（stale check）を経て、実リモート HEAD = orphan コミットに揃う
     expect(stores.lastKnownCommitSha.value).toBe('late-sha')
     expect(mocks.executeStaleCheck).toHaveBeenLastCalledWith(stores.settings.value, 'local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
   })
 
   it('不一致 + stale だがリモート HEAD が第三者のコミット: align せず通常の stale フローに委ねる', async () => {
@@ -698,7 +705,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
   })
 
@@ -727,7 +737,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
 
     // remoteCommitSha === late-sha（align 条件は満たす）でもリポ再チェックで止まる
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
   })
 
@@ -745,7 +758,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
   })
 
@@ -763,7 +779,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
   })
 
   it('不一致 + stale check が例外: unhandledrejection にせず何もしない', async () => {
@@ -780,7 +799,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
   })
 
   it('リポ切替後の settle（遅延成功）: 別リポの状態を汚さないよう全書き込みをスキップする', async () => {
@@ -802,7 +824,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
     expect(stores.isStale.value).toBe(true)
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
     // stale check 経由の検証も走らせない（preflight の 1 回だけ）
     expect(mocks.executeStaleCheck).toHaveBeenCalledTimes(1)
@@ -838,7 +863,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
 
     expect(stores.lastKnownCommitSha.value).toBe('late-sha')
     expect(stores.isStale.value).toBe(false)
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
   })
 
@@ -851,7 +879,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
   })
 
@@ -882,7 +913,10 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
-    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.showPushCompletionToast).not.toHaveBeenCalledWith(
+      'toast.pushLateSuccess',
+      'success'
+    )
     expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
   })
 })
