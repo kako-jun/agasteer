@@ -100,7 +100,8 @@ class PushTimeoutError extends Error {
  * - スロットが別値/空 = 後続 Push が挟まった兆候。settle 順 ≠ ref 更新順が
  *   あり得る（orphan の ref 更新 → 後続 Push B 成功 → orphan のレスポンス到着、
  *   の順だと盲目追従で lastKnownCommitSha が shaB → shaA に逆流し偽 stale が出る）
- *   ため盲目追従せず、stale check を 1 回走らせて実リモート HEAD に揃える
+ *   ため盲目追従せず、stale check を 1 回走らせて実リモート HEAD を確認し、
+ *   それが自分の orphan コミットと確認できた場合のみ揃える
  *
  * pushInFlightAt は「自分が設定した値のままの場合だけ」クリアする。後続の
  * Push が新しい値を設定していた場合、それはその Push の救済マーカーなので
@@ -167,11 +168,14 @@ function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStamp: numb
               warnRepoSwitched()
               return
             }
-            if (check.status === 'stale') {
-              // 実リモート HEAD に揃える（up_to_date なら既に整合。
-              // check_failed なら何もせず次回の定期チェックに委ねる）
+            if (check.status === 'stale' && check.remoteCommitSha === lateResult.commitSha) {
+              // align は「リモート HEAD が自分の送ったコミット」と確認できた場合のみ。
+              // 第三者（別デバイス）のコミットに揃えると真正な divergence を隠し、
+              // 次の Push が無警告上書きになる。一致しない stale は通常の stale
+              // フロー（次回の定期チェック → ダイアログ）に委ねる。
+              // （up_to_date なら既に整合。check_failed は次回の定期チェックに委ねる）
               console.log(
-                `Orphan push verification: aligning lastKnownCommitSha to actual remote HEAD ${check.remoteCommitSha}`
+                `Orphan push verification: remote HEAD matches orphan commit; aligning lastKnownCommitSha to ${check.remoteCommitSha}`
               )
               lastKnownCommitSha.value = check.remoteCommitSha
             }

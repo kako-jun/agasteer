@@ -644,7 +644,9 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
 
   it('settle 時に飛行中フラグが後続 Push の値（不一致）なら、盲目追従せず stale check で実リモート HEAD に揃える', async () => {
     // 後続 Push が挟まった兆候。settle 順 ≠ ref 更新順があり得るため
-    // 戻り値の commitSha には追従せず、実リモート HEAD を確認して揃える。
+    // 戻り値の commitSha には盲目追従せず、実リモート HEAD を確認する。
+    // align するのは「リモート HEAD = 自分の orphan コミット」と確認できた
+    // 場合のみ（このテストでは remoteCommitSha === late-sha）。
     // guarded clear は「自分が設定した値のときだけ」クリアする
     // （後続 Push の救済マーカーを壊さない）ためフラグにも触らない。
     const { resolvePush, stamp } = await runTimeoutPush()
@@ -652,7 +654,7 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     mocks.executeStaleCheck.mockResolvedValue({
       status: 'stale',
       localCommitSha: 'local-sha',
-      remoteCommitSha: 'actual-remote-sha',
+      remoteCommitSha: 'late-sha',
     })
 
     resolvePush({
@@ -664,10 +666,63 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     await flushThenChain()
 
     expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
-    // 盲目追従（late-sha）ではなく実リモート HEAD に揃う
-    expect(stores.lastKnownCommitSha.value).toBe('actual-remote-sha')
+    // 検証（stale check）を経て、実リモート HEAD = orphan コミットに揃う
+    expect(stores.lastKnownCommitSha.value).toBe('late-sha')
     expect(mocks.executeStaleCheck).toHaveBeenLastCalledWith(stores.settings.value, 'local-sha')
     expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+  })
+
+  it('不一致 + stale だがリモート HEAD が第三者のコミット: align せず通常の stale フローに委ねる', async () => {
+    // 第三者（別デバイス）のコミットに揃えると真正な divergence を隠し、
+    // 次の Push が無警告上書きになるため、何もしない
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'third-party-sha',
+    })
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
+  })
+
+  it('不一致 + 検証の stale check await 中にリポが切り替わった: align せず全書き込みをスキップする', async () => {
+    // M1 のリポ一致ガードは continuation 冒頭だけでなく、検証 await 後にも
+    // 再チェックされる（await 中の切替窓を塞ぐ）
+    const { resolvePush, stamp } = await runTimeoutPush()
+    mocks.getPushInFlightAt.mockReturnValue(stamp + 999)
+    mocks.executeStaleCheck.mockImplementation(async () => {
+      // stale check の応答待ちの間にユーザーがリポを切り替えた状況を再現
+      stores.settings.value = { ...stores.settings.value, repoName: 'owner/other-repo' }
+      return {
+        status: 'stale',
+        localCommitSha: 'local-sha',
+        remoteCommitSha: 'late-sha',
+      }
+    })
+
+    resolvePush({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'late-sha',
+    })
+    await flushThenChain()
+
+    // remoteCommitSha === late-sha（align 条件は満たす）でもリポ再チェックで止まる
+    expect(stores.lastKnownCommitSha.value).toBe('local-sha')
+    expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
+    expect(mocks.setPushInFlightAt).not.toHaveBeenCalledWith(undefined)
   })
 
   it('不一致 + stale check が up_to_date: 既に整合しているので何もしない', async () => {
