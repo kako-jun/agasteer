@@ -33,6 +33,14 @@ import {
 import { parseRateLimitResponse, type RateLimitInfo } from './github/rate-limit'
 import { calculateGitBlobSha } from './github/sha'
 import { encodeContent, decodeBase64ToString } from './github/encoding'
+import {
+  PUSH_STAGE_REFS,
+  PUSH_STAGE_BASE_TREE,
+  PUSH_STAGE_UPLOAD,
+  PUSH_STAGE_COMMIT,
+  PUSH_STAGE_FINALIZE,
+  type PushProgressCallback,
+} from '../sync/push-stages'
 
 export {
   NOTES_PATH,
@@ -293,6 +301,11 @@ export interface PushOptions {
   archiveMetadata?: Metadata
   /** アーカイブがロード済みかどうか */
   isArchiveLoaded?: boolean
+  /**
+   * Push 進捗通知（#238）。残りステージ数（5→1）を各ステージ開始時に通知する。
+   * ステージ対応は src/lib/sync/push-stages.ts を参照。
+   */
+  onProgress?: PushProgressCallback
 }
 
 /**
@@ -325,6 +338,16 @@ export async function pushAllWithTreeAPI(
   const archiveNotes = isOptionsArg ? leavesOrOptions.archiveNotes : undefined
   const archiveMetadata = isOptionsArg ? leavesOrOptions.archiveMetadata : undefined
   const isArchiveLoaded = isOptionsArg ? leavesOrOptions.isArchiveLoaded : false
+  const onProgress = isOptionsArg ? leavesOrOptions.onProgress : undefined
+  // 進捗通知はベストエフォート。コールバック内の例外で Push 本体を
+  // 巻き込まない（catch 節が networkError と誤判定するのを防ぐ）
+  const notifyStage = (remainingStages: number) => {
+    try {
+      onProgress?.(remainingStages)
+    } catch (e) {
+      console.warn('Push progress callback threw:', e)
+    }
+  }
 
   const stableStringify = (value: any): string => {
     if (value === null || typeof value !== 'object') {
@@ -386,6 +409,9 @@ export async function pushAllWithTreeAPI(
   }
 
   try {
+    // ステージ5: repo / ref 取得（空リポジトリ初期化経路もここに含む）
+    notifyStage(PUSH_STAGE_REFS)
+
     // 1. デフォルトブランチを取得
     const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
       headers,
@@ -475,6 +501,10 @@ export async function pushAllWithTreeAPI(
       }
       const refData = await refRes.json()
       currentCommitSha = refData.object.sha
+
+      // ステージ4: base commit / 現行 tree 取得
+      // （空リポジトリ経路は初期化込みで「5」に含めるため、ここでのみ通知）
+      notifyStage(PUSH_STAGE_BASE_TREE)
 
       // 3. 現在のコミットを取得してTreeのSHAを取得
       const commitRes = await fetch(
@@ -880,6 +910,9 @@ export async function pushAllWithTreeAPI(
       content: metadataContent,
     })
 
+    // ステージ3: 新 tree 作成 = 本文アップロード（支配的に重い）
+    notifyStage(PUSH_STAGE_UPLOAD)
+
     // 6. 新しいTreeを作成（base_treeなし、全ファイルを明示的に指定）
     const newTreeRes = await fetch(`https://api.github.com/repos/${settings.repoName}/git/trees`, {
       method: 'POST',
@@ -909,6 +942,9 @@ export async function pushAllWithTreeAPI(
     }
     const newTreeData = await newTreeRes.json()
     const newTreeSha = newTreeData.sha
+
+    // ステージ2: commit 作成
+    notifyStage(PUSH_STAGE_COMMIT)
 
     // 7. 新しいコミットを作成
     // 空リポジトリの場合はparentsを空配列にする（初回コミット）
@@ -953,6 +989,9 @@ export async function pushAllWithTreeAPI(
     }
     const newCommitData = await newCommitRes.json()
     const newCommitSha = newCommitData.sha
+
+    // ステージ1: ref 更新（着地）
+    notifyStage(PUSH_STAGE_FINALIZE)
 
     // 8. ブランチのリファレンスを更新（強制更新）
     // Contents APIで初期化した場合もブランチは既に存在するのでPATCHで更新

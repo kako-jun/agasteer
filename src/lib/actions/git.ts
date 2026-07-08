@@ -1,6 +1,12 @@
 import { type Note, type Leaf, type StaleCheckResult, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
-import { showPushToast, showPullToast, showStickyPushToast, clearPushToast } from '../ui'
+import {
+  showPushToast,
+  showPullToast,
+  showStickyPushToast,
+  clearPushToast,
+  setPushToastCountdown,
+} from '../ui'
 import { showConflictDialog } from './conflict-dialog'
 import {
   settings,
@@ -78,6 +84,17 @@ class PushTimeoutError extends Error {
     this.name = 'PushTimeoutError'
   }
 }
+
+/**
+ * #238: Push 進捗コールバックの世代カウンタ。
+ *
+ * タイムアウトで見送った orphan Push（observeOrphanPush 参照）は裏で
+ * fetch チェーンが生き続けるため、遅延した onProgress が次の Push の
+ * カウントダウン表示を乱し得る（例: 新 Push が「5」の最中に orphan の
+ * 「3」が届いて 5→3 に飛ぶ）。executePush を起動するたびに世代を進め、
+ * 最新世代のコールバックだけをトーストに反映する。
+ */
+let pushProgressGeneration = 0
 
 /**
  * #235: タイムアウトで UI をあきらめた後の orphan Push を観測する。
@@ -453,6 +470,9 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         reject(new PushTimeoutError())
       }, PUSH_TIMEOUT_MS)
     })
+    // #238: この Push の進捗だけをカウントダウンに反映する（世代ガード）。
+    // 表示のリセットは showStickyPushToast（トースト再表示）側で済んでいる
+    const myProgressGeneration = ++pushProgressGeneration
     // #235: race に負けても（タイムアウトしても）observeOrphanPush で
     // 結果を観測するため、executePush の Promise を単独で保持する
     const pushPromise = executePush({
@@ -470,6 +490,14 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
       archiveNotes: snapshot.archiveNotes,
       archiveMetadata: snapshot.archiveMetadata,
       isArchiveLoaded: isArchiveLoaded.value,
+      // #238: 残りステージ数（5→1）を sticky トーストのカウントダウンに配線。
+      // setPushToastCountdown 側に単調減少ガードがあり、加えて世代ガードで
+      // orphan Push の遅延コールバックを弾く
+      onProgress: (remainingStages) => {
+        if (myProgressGeneration === pushProgressGeneration) {
+          setPushToastCountdown(remainingStages)
+        }
+      },
     })
     let result
     try {
@@ -487,6 +515,10 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
           translateGitHubMessage('toast.pushTimeout', $_, undefined, undefined, 'E-5101'),
           'error'
         )
+        // #238: この Push の onProgress を無効化する。orphan の fetch チェーンは
+        // 裏で生き続けるため、放置するとタイムアウトのエラートーストの下に
+        // 遅延カウントダウンが描かれてしまう
+        pushProgressGeneration++
         // #235: orphan の遅延結果（成功 → SHA 追従＋トースト / 失敗 → フラグ解除）を観測
         observeOrphanPush(pushPromise, pushInFlightStamp)
         return

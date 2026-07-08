@@ -4,9 +4,17 @@
     pullVariant?: 'success' | 'error' | ''
     pushMessage?: string
     pushVariant?: 'success' | 'error' | ''
+    /** Push 中の残りステージ数（5→1）。null なら非表示（#238） */
+    pushCountdown?: number | null
   }
 
-  let { pullMessage = '', pullVariant = '', pushMessage = '', pushVariant = '' }: Props = $props()
+  let {
+    pullMessage = '',
+    pullVariant = '',
+    pushMessage = '',
+    pushVariant = '',
+    pushCountdown = null,
+  }: Props = $props()
 </script>
 
 {#if pullMessage || pushMessage}
@@ -25,8 +33,15 @@
         class="toast"
         class:success={pushVariant === 'success'}
         class:error={pushVariant === 'error'}
+        class:with-countdown={pushCountdown !== null}
       >
-        {pushMessage}
+        {#if pushCountdown !== null}
+          <!-- #238: FF 風カウントダウン（残りステージ数）。2行目にセンタリング表示 -->
+          <span class="message">{pushMessage}</span>
+          <span class="countdown" aria-live="polite">{pushCountdown}</span>
+        {:else}
+          {pushMessage}
+        {/if}
       </div>
     {/if}
   </div>
@@ -62,6 +77,45 @@
     align-items: center;
     justify-content: center;
     line-height: 1;
+  }
+
+  /* #238: FF 風カウントダウン付きの2行レイアウト */
+  .toast.with-countdown {
+    flex-direction: column;
+    gap: 4px;
+    line-height: 1.2;
+  }
+
+  /* 2行モードのメッセージ行だけ折返しを許可（狭幅端末で max-width からのはみ出し防止）。
+     1行トースト（countdown なし・pull）は .toast の nowrap のまま */
+  .toast.with-countdown .message {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* 残りステージ数。DESIGN.md の上限 20px（h1 = 1.25rem）で大きめに */
+  .countdown {
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: center;
+    animation: countdown-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* 生存表示: アップロード中（最長ステージ）でも動いていることが伝わる脈動 */
+  @keyframes countdown-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .countdown {
+      animation: none;
+    }
   }
 
   .toast.success {

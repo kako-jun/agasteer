@@ -21,6 +21,7 @@
 
   import {
     pushToastState,
+    pushToastCountdown,
     pullToastState,
     modalState,
     showPullToast,
@@ -305,6 +306,7 @@
       pullVariant={pullToastState.value.variant}
       pushMessage={pushToastState.value.message}
       pushVariant={pushToastState.value.variant}
+      pushCountdown={pushToastCountdown.value}
     />
 
     {#if appState.showInstallBanner}

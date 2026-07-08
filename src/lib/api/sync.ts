@@ -1,6 +1,7 @@
 import type { Note, Leaf, Settings, Metadata, StaleCheckResult } from '../types'
 import { pushAllWithTreeAPI, pullFromGitHub, fetchRemoteHeadSha } from './github'
 import type { PullOptions, RateLimitInfo } from './github'
+import type { PushProgressCallback } from '../sync/push-stages'
 
 export type { PullOptions, PullPriority, LeafSkeleton, RateLimitInfo } from './github'
 export type { StaleCheckResult } from '../types'
@@ -63,6 +64,8 @@ export interface ExecutePushOptions {
   archiveMetadata?: Metadata
   /** アーカイブがロード済みかどうか */
   isArchiveLoaded?: boolean
+  /** Push 進捗通知（#238）。残りステージ数（5→1）を各ステージ開始時に通知 */
+  onProgress?: PushProgressCallback
 }
 
 /**
@@ -87,6 +90,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     archiveNotes,
     archiveMetadata,
     isArchiveLoaded,
+    onProgress,
   } = options
 
   // 操作ロック中はエラー
@@ -119,6 +123,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     archiveNotes,
     archiveMetadata,
     isArchiveLoaded,
+    onProgress,
   })
 
   return {

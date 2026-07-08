@@ -51,6 +51,11 @@ const mocks = vi.hoisted(() => ({
   showPushToast: vi.fn(),
   showStickyPushToast: vi.fn(),
   clearPushToast: vi.fn(),
+  // #238: Push 進捗カウントダウン
+  setPushToastCountdown: vi.fn(),
+  // #238: canSync を差し替え可能に（既定は許可。vi.fn(impl) の既定実装は
+  // clearAllMocks で消えないため、テスト側は mockReturnValueOnce で上書きする）
+  canSync: vi.fn(() => ({ canPull: true, canPush: true })),
   focusEditor: vi.fn(),
   executePush: vi.fn(),
   executePull: vi.fn(),
@@ -100,7 +105,7 @@ vi.mock('../api', () => ({
   executePull: mocks.executePull,
   testGitHubConnection: mocks.testGitHubConnection,
   translateGitHubMessage: mocks.translateGitHubMessage,
-  canSync: () => ({ canPull: true, canPush: true }),
+  canSync: mocks.canSync,
   fetchRemotePushCount: mocks.fetchRemotePushCount,
 }))
 
@@ -111,6 +116,7 @@ vi.mock('../ui', () => ({
   showPushToast: mocks.showPushToast,
   showStickyPushToast: mocks.showStickyPushToast,
   clearPushToast: mocks.clearPushToast,
+  setPushToastCountdown: mocks.setPushToastCountdown,
 }))
 
 vi.mock('../data', () => ({
@@ -878,6 +884,174 @@ describe('observeOrphanPush: タイムアウト後の遅延結果観測 (#235)',
     expect(stores.lastKnownCommitSha.value).toBe('local-sha')
     expect(mocks.showPushToast).not.toHaveBeenCalledWith('toast.pushLateSuccess', 'success')
     expect(mocks.setPushInFlightAt).toHaveBeenCalledWith(undefined)
+  })
+})
+
+describe('Push 進捗カウントダウンの世代ガード (#238)', () => {
+  const pushSuccessResult = {
+    success: true,
+    message: 'github.pushSuccess',
+    variant: 'success',
+    commitSha: 'remote-sha',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    mocks.getActiveEditorPane.mockReturnValue(null)
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.tryRescueStalePush.mockReturnValue(false)
+    mocks.getPushInFlightAt.mockReturnValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /**
+   * executePush を pending のまま PUSH_TIMEOUT_MS を経過させ、タイムアウト経路で
+   * pushToGitHub を return させる（#235 テストの fake timers パターン踏襲）。
+   * 戻り値の onProgress はタイムアウトした Push（orphan）に渡されたコールバック。
+   */
+  async function runTimeoutPush(): Promise<{
+    onProgress: (remainingStages: number) => void
+    resolvePush: (v: unknown) => void
+    stamp: number
+  }> {
+    let resolvePush: ((v: unknown) => void) | undefined
+    mocks.executePush.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolvePush = res
+        })
+    )
+
+    vi.useFakeTimers()
+    const pushPromise = pushToGitHub()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await pushPromise
+    vi.useRealTimers()
+
+    const onProgress = mocks.executePush.mock.calls[0][0].onProgress
+    expect(onProgress).toEqual(expect.any(Function))
+    const stampCall = mocks.setPushInFlightAt.mock.calls.find(([v]) => typeof v === 'number')
+    expect(stampCall).toBeDefined()
+    return { onProgress, resolvePush: resolvePush!, stamp: stampCall![0] as number }
+  }
+
+  /** observeOrphanPush の then チェーンを flush する */
+  const flushThenChain = () => new Promise((r) => setTimeout(r, 0))
+
+  it('正常 Push: executePush に渡った onProgress が setPushToastCountdown に同値で素通しされる', async () => {
+    mocks.executePush.mockImplementation(async (args: { onProgress?: (n: number) => void }) => {
+      args.onProgress?.(5)
+      args.onProgress?.(4)
+      return pushSuccessResult
+    })
+
+    await pushToGitHub()
+
+    expect(mocks.setPushToastCountdown.mock.calls).toEqual([[5], [4]])
+  })
+
+  it('タイムアウト後は同じ Push の onProgress を棄却する（世代 bump）', async () => {
+    const { onProgress, resolvePush } = await runTimeoutPush()
+    mocks.setPushToastCountdown.mockClear()
+
+    // タイムアウトのエラートースト表示後に orphan の遅延進捗が届いても描かない
+    onProgress(3)
+    expect(mocks.setPushToastCountdown).not.toHaveBeenCalled()
+
+    resolvePush({ success: false, message: 'github.cancelled', variant: 'error' })
+    await flushThenChain()
+  })
+
+  it('orphan A の遅延 onProgress は新 Push B の進行を殺さない（低値でも棄却・本機能の核）', async () => {
+    // 最悪シナリオ: orphan A の低値（2）が B の 5 を単調ガードで殺すと、
+    // B のカウントダウンが 2 から始まったように見える。世代ガードで遮断する。
+    const { onProgress: orphanProgress, resolvePush } = await runTimeoutPush()
+
+    // 新 Push B（正常完走）。B 自身の onProgress(5) は反映される
+    mocks.executePush.mockImplementation(async (args: { onProgress?: (n: number) => void }) => {
+      args.onProgress?.(5)
+      return pushSuccessResult
+    })
+    await pushToGitHub()
+    expect(mocks.setPushToastCountdown).toHaveBeenCalledWith(5)
+
+    // orphan A の遅延 onProgress(2) は棄却される
+    mocks.setPushToastCountdown.mockClear()
+    orphanProgress(2)
+    expect(mocks.setPushToastCountdown).not.toHaveBeenCalled()
+
+    resolvePush({ success: false, message: 'github.cancelled', variant: 'error' })
+    await flushThenChain()
+  })
+
+  it('Push 開始時、showStickyPushToast（カウントダウンリセット）が executePush 呼び出しより先に走る', async () => {
+    // リセット（sticky 再表示）→ 世代確定 → 送信の順序が崩れると、
+    // 新 Push の初回進捗がリセットで消される
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub()
+
+    expect(mocks.showStickyPushToast).toHaveBeenCalledTimes(1)
+    expect(mocks.showStickyPushToast.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.executePush.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('orphan の遅延成功が別 Push 進行中に settle しても showPushToast を呼ばない（B のカウントダウンを null 化しない）', async () => {
+    // showPushToast はカウントダウンを null 化するため、B の進行中に呼ばれると
+    // B の表示が消える。既存 #235 テストの「トースト抑止」を countdown 観点で固定する
+    const { resolvePush, stamp } = await runTimeoutPush()
+    stores.isPushingBackground.value = true
+    mocks.getPushInFlightAt.mockReturnValue(stamp)
+    const callsBefore = mocks.showPushToast.mock.calls.length
+
+    resolvePush(pushSuccessResult)
+    await flushThenChain()
+
+    expect(mocks.showPushToast.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('Push 進行中の再入（canSync 拒否）では sticky も executePush も呼ばれずカウントダウンがリセットされない', async () => {
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    await pushToGitHub()
+
+    expect(mocks.showStickyPushToast).not.toHaveBeenCalled()
+    expect(mocks.executePush).not.toHaveBeenCalled()
+    expect(mocks.setPushToastCountdown).not.toHaveBeenCalled()
+  })
+
+  it('世代不一致の棄却は console.warn / console.error を出さない（ログ汚染防止）', async () => {
+    const { onProgress, resolvePush } = await runTimeoutPush()
+    // タイムアウト経路自身の warn を数えないよう、棄却の直前から観測する
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      onProgress(3)
+      expect(warnSpy).not.toHaveBeenCalled()
+      expect(errorSpy).not.toHaveBeenCalled()
+
+      resolvePush({ success: false, message: 'github.cancelled', variant: 'error' })
+      await flushThenChain()
+    } finally {
+      warnSpy.mockRestore()
+      errorSpy.mockRestore()
+    }
   })
 })
 

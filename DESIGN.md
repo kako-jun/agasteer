@@ -225,13 +225,14 @@ All colors are CSS custom properties, dynamically computed via `color-mix()`.
 
 ### Animations
 
-| Animation | Duration  | Usage            |
-| --------- | --------- | ---------------- |
-| leaf-spin | 2.4s      | Loading spinner  |
-| fadeIn    | 0.15-0.3s | Component entry  |
-| shimmer   | 1.5s      | Skeleton loading |
-| slideDown | 0.3s      | Install banner   |
-| heartbeat | 1.5s      | Pulse effect     |
+| Animation       | Duration  | Usage                |
+| --------------- | --------- | -------------------- |
+| leaf-spin       | 2.4s      | Loading spinner      |
+| fadeIn          | 0.15-0.3s | Component entry      |
+| shimmer         | 1.5s      | Skeleton loading     |
+| slideDown       | 0.3s      | Install banner       |
+| heartbeat       | 1.5s      | Pulse effect         |
+| countdown-pulse | 1.5s      | Push countdown pulse |
 
 ## 8. Responsive Behavior
 
