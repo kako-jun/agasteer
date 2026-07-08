@@ -86,16 +86,8 @@
     line-height: 1.2;
   }
 
-  /* 2行モードのメッセージ行だけ折返しを許可（狭幅端末で max-width からのはみ出し防止）。
-     1行トースト（countdown なし・pull）は .toast の nowrap のまま */
-  .toast.with-countdown .message {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  /* 残りステージ数。DESIGN.md の上限 20px（h1 = 1.25rem）で大きめに */
+  /* 残りステージ数。サイズは本文（.toast の 0.9rem）を継承する */
   .countdown {
-    font-size: 1.25rem;
     font-weight: 600;
     text-align: center;
     animation: countdown-pulse 1.5s ease-in-out infinite;

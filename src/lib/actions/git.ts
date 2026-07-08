@@ -2,6 +2,7 @@ import { type Note, type Leaf, type StaleCheckResult, buildBlobShaCache } from '
 import type { PullOptions } from '../api'
 import {
   showPushToast,
+  showPushCompletionToast,
   showPullToast,
   showStickyPushToast,
   clearPushToast,
@@ -170,7 +171,7 @@ function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStamp: numb
             console.log('Orphan push late-success toast suppressed: another push is in progress')
           } else {
             // タイムアウト時の「応答が途切れました」トーストを上書きして成功を通知
-            showPushToast(get(_)('toast.pushLateSuccess'), 'success')
+            showPushCompletionToast(get(_)('toast.pushLateSuccess'), 'success')
           }
         } else {
           // スロットが別値/空 → 後続 Push が挟まった兆候。盲目追従すると
@@ -511,7 +512,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         // 消えた場合の保険として、次回 stale check の tryRescueStalePush
         // （applyStaleResult / preflight）でも救済される。
         console.warn('Push response timed out after', PUSH_TIMEOUT_MS, 'ms; releasing UI lock')
-        showPushToast(
+        showPushCompletionToast(
           translateGitHubMessage('toast.pushTimeout', $_, undefined, undefined, 'E-5101'),
           'error'
         )
@@ -548,7 +549,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
       result.errorCode,
       result.httpStatus
     )
-    showPushToast(translatedMessage, result.variant)
+    showPushCompletionToast(translatedMessage, result.variant)
 
     // Push飛行中フラグをクリア（レスポンスを受信できた）
     // #235: タイムアウト経路は上で return 済みなので、ここに来た時点で
