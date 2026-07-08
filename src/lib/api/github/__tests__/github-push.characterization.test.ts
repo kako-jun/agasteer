@@ -509,3 +509,162 @@ describe('pushAllWithTreeAPI: options overload + archive', () => {
     expect(readme).toMatchObject({ path: 'README.md', sha: 'readme-sha' })
   })
 })
+
+// ============================================
+// onProgress カウントダウン（#238）
+// ============================================
+describe('pushAllWithTreeAPI: onProgress countdown (#238)', () => {
+  /** onProgress に渡された残りステージ数の列を返す */
+  const stagesOf = (spy: ReturnType<typeof vi.fn>) => spy.mock.calls.map((c) => c[0])
+
+  /** options 形式で onProgress spy 付きの push を実行する */
+  const pushWithProgress = (onProgress: ReturnType<typeof vi.fn>) =>
+    pushAllWithTreeAPI({ leaves: [leaf], notes, settings: makeSettings(), onProgress })
+
+  it('通常 Push: onProgress が [5,4,3,2,1] の順で各1回ずつ呼ばれる', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({})
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.success).toBe(true)
+    expect(stagesOf(onProgress)).toEqual([5, 4, 3, 2, 1])
+  })
+
+  it('空リポ（ref 409）: 初期化経路は「5」に含めるため [5,3,2,1]（4 が呼ばれない）', async () => {
+    mock
+      .on('GET', REPO, { json: { default_branch: 'main' } })
+      .on('GET', '/git/ref/heads/main', { status: 409, json: {} })
+      .on('PUT', '/contents/.gitkeep', {
+        json: { commit: { sha: 'init-commit-sha', tree: { sha: 'init-tree-sha' } } },
+      })
+      .on('GET', '/git/trees/init-tree-sha?recursive=1', { json: { truncated: false, tree: [] } })
+    stageWriteSequence({})
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.success).toBe(true)
+    expect(stagesOf(onProgress)).toEqual([5, 3, 2, 1])
+  })
+
+  it('空リポ（ref 404）: 409 と同じく [5,3,2,1]', async () => {
+    mock
+      .on('GET', REPO, { json: { default_branch: 'main' } })
+      .on('GET', '/git/ref/heads/main', { status: 404, json: {} })
+      .on('PUT', '/contents/.gitkeep', {
+        json: { commit: { sha: 'init-commit-sha', tree: { sha: 'init-tree-sha' } } },
+      })
+      .on('GET', '/git/trees/init-tree-sha?recursive=1', { json: { truncated: false, tree: [] } })
+    stageWriteSequence({})
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.success).toBe(true)
+    expect(stagesOf(onProgress)).toEqual([5, 3, 2, 1])
+  })
+
+  it('noChanges 早期 return: [5,4] で打ち切り・success:true', async () => {
+    const leafPath = '.agasteer/notes/MyNote/MyLeaf.md'
+    const leafSha = await calculateGitBlobSha('fresh content')
+    const existingMeta = {
+      version: 1,
+      pushCount: 5,
+      notes: { MyNote: { id: 'note-1', order: 0 } },
+      leaves: { 'MyNote/MyLeaf.md': { id: 'leaf-1', updatedAt: 1000, order: 0 } },
+    }
+    const metaSha = 'meta-blob-sha'
+    stageExistingRepo({
+      treeEntries: [
+        { path: leafPath, sha: leafSha },
+        { path: '.agasteer/notes/metadata.json', sha: metaSha },
+      ],
+    })
+    mock.on('GET', `/git/blobs/${metaSha}`, {
+      json: { content: b64(JSON.stringify(existingMeta)) },
+    })
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.success).toBe(true)
+    expect(res.message).toBe('github.noChanges')
+    expect(stagesOf(onProgress)).toEqual([5, 4])
+  })
+
+  it('repo fetch 500: [5] のみで失敗 return', async () => {
+    mock.on('GET', REPO, { status: 500, json: {} })
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.success).toBe(false)
+    expect(stagesOf(onProgress)).toEqual([5])
+  })
+
+  it('commit fetch 失敗（E-1007）: [5,4] のみ', async () => {
+    mock
+      .on('GET', REPO, { json: { default_branch: 'main' } })
+      .on('GET', '/git/ref/heads/main', { json: { object: { sha: 'h' } } })
+      .on('GET', '/git/commits/h', { status: 500, json: {} })
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.errorCode).toBe('E-1007')
+    expect(stagesOf(onProgress)).toEqual([5, 4])
+  })
+
+  it('new tree POST 失敗（E-1012）: [5,4,3] のみ', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    mock.on('POST', '/git/trees', { status: 500, json: {} })
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.errorCode).toBe('E-1012')
+    expect(stagesOf(onProgress)).toEqual([5, 4, 3])
+  })
+
+  it('fetch reject（ネットワーク例外）: 到達済みステージのみで networkError return（unhandled にならない）', async () => {
+    // repo は応答するが ref がキュー未登録 → fetch mock が throw → E-1017 に化ける
+    mock.on('GET', REPO, { json: { default_branch: 'main' } })
+    const onProgress = vi.fn()
+
+    const res = await pushWithProgress(onProgress)
+
+    expect(res.success).toBe(false)
+    expect(res.errorCode).toBe('E-1017')
+    expect(res.message).toBe('github.networkError')
+    expect(stagesOf(onProgress)).toEqual([5])
+  })
+
+  it('onProgress が毎回 throw しても Push は成功し、5回呼ばれ、warn のみで error は出ない', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({})
+    const onProgress = vi.fn(() => {
+      throw new Error('progress observer broke')
+    })
+
+    const res = await pushWithProgress(onProgress)
+
+    // コールバックの例外は Push 本体を巻き込まない（networkError 誤判定しない）
+    expect(res.success).toBe(true)
+    expect(res.message).toBe('github.pushOk')
+    expect(onProgress).toHaveBeenCalledTimes(5)
+    expect(console.warn).toHaveBeenCalledWith('Push progress callback threw:', expect.any(Error))
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('レガシー位置引数呼び（onProgress なし）: 従来どおり成功し例外なし', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({})
+
+    const res = await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(res.success).toBe(true)
+    expect(res.message).toBe('github.pushOk')
+  })
+})
