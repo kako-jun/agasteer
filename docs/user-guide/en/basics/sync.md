@@ -132,6 +132,8 @@ When you tap Push, editing pauses just for a moment while Agasteer checks for re
 - Anything you write while the spinner is visible is preserved as the "next Push" — it stays dirty and is not absorbed into the just-uploaded snapshot
 - If the remote has newer changes (stale), you still see the conflict dialog before editing resumes, exactly as before
 
+While the upload is in flight, a toast shows "Pushing… please don't switch apps or close Agasteer yet." with a **countdown of remaining stages (5→4→3→2→1)** beneath it. The number is not seconds — it is the number of remaining steps in the Push process, and it only ever counts down. If you want to close the app, wait until this toast switches to the success message.
+
 ---
 
 ## Statistics
