@@ -31,6 +31,7 @@
     createMediaDomHandlers,
     type MediaAttachNotice,
   } from '../../lib/editor/media-attach'
+  import { insertTextAtCursor, type InsertTextOptions } from '../../lib/editor/insert-text'
   import { showPushToast } from '../../lib/ui/ui.svelte'
   import { get } from 'svelte/store'
   import { _ } from '../../lib/i18n'
@@ -164,15 +165,11 @@
     }
   }
 
-  // 外部からカーソル位置にテキストを挿入する関数
-  export function insertAtCursor(text: string) {
+  // 外部からカーソル位置にテキストを挿入する関数。
+  // options.focus: false で挿入後のフォーカス移動を抑制できる（既定は従来どおり移す）
+  export function insertAtCursor(text: string, options: InsertTextOptions = {}) {
     if (!editorView) return
-    const { from } = editorView.state.selection.main
-    editorView.dispatch({
-      changes: { from, insert: text },
-      selection: { anchor: from + text.length },
-    })
-    editorView.focus()
+    insertTextAtCursor(editorView, text, options)
   }
 
   // 外部から選択テキストを取得する関数
@@ -211,7 +208,9 @@
     void attachMediaFiles(files, {
       settings: settings.value,
       optimizeImages: settings.value.mediaOptimizeImages ?? true,
-      insert: (text) => insertAtCursor(text),
+      // 挿入はアップロード完了時（数秒後）に走るため、フォーカスを奪わない
+      // （反対ペイン作業の中断・モバイルのキーボードポップアップを防ぐ、should-3）
+      insert: (text) => insertAtCursor(text, { focus: false }),
       notify: notifyMediaAttach,
     })
   }

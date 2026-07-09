@@ -145,7 +145,11 @@ export interface MediaAttachDeps {
   settings: Settings
   /** 添付画像の自動最適化（設定 mediaOptimizeImages） */
   optimizeImages: boolean
-  /** 確定した Markdown 記法をエディタに挿入する */
+  /**
+   * 確定した Markdown 記法をエディタに挿入する。
+   * 添付からアップロード完了までのタイムラグ後に呼ばれるため、
+   * フォーカスを奪わない実装（insertAtCursor の focus: false）を渡すこと。
+   */
   insert: (text: string) => void
   notify: (notice: MediaAttachNotice) => void
 }
