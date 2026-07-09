@@ -10,10 +10,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const uploadMediaMock = vi.hoisted(() => vi.fn())
+const isMediaConfiguredMock = vi.hoisted(() => vi.fn())
 const optimizeImageFileMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../api/media', () => ({
   uploadMedia: uploadMediaMock,
+  isMediaConfigured: isMediaConfiguredMock,
 }))
 vi.mock('../utils/image-optimize', () => ({
   optimizeImageFile: optimizeImageFileMock,
@@ -45,6 +47,8 @@ beforeEach(() => {
   uploadMediaMock.mockReset()
   optimizeImageFileMock.mockReset()
   optimizeImageFileMock.mockImplementation(async (file: File) => file)
+  isMediaConfiguredMock.mockReset()
+  isMediaConfiguredMock.mockReturnValue(true)
 })
 
 describe('extractDataTransferFiles', () => {
@@ -265,6 +269,22 @@ describe('attachMediaFiles', () => {
     expect(uploadMediaMock).not.toHaveBeenCalled()
     expect(insert).not.toHaveBeenCalled()
     expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('未設定（not_configured）: 複数ファイルでも error 通知は 1 回だけで打ち切る', async () => {
+    isMediaConfiguredMock.mockReturnValue(false)
+    const insert = vi.fn()
+    const notices: any[] = []
+    await attachMediaFiles([makeFile('a.png'), makeFile('b.png'), makeFile('c.png')], {
+      settings,
+      optimizeImages: true,
+      insert,
+      notify: (n) => notices.push(n),
+    })
+    expect(notices).toEqual([{ kind: 'error', errorKind: 'not_configured', name: 'a.png' }])
+    expect(uploadMediaMock).not.toHaveBeenCalled()
+    expect(optimizeImageFileMock).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
   })
 
   it('最適化でリネームされた後にアップロード失敗 → error 通知の name は原本名', async () => {

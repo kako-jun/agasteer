@@ -11,7 +11,7 @@
  */
 
 import type { Settings } from '../types'
-import { uploadMedia, type MediaErrorKind } from '../api/media'
+import { uploadMedia, isMediaConfigured, type MediaErrorKind } from '../api/media'
 import { ALLOWED_MEDIA_EXTENSIONS, IMAGE_MEDIA_EXTENSIONS } from '../api/media/validation'
 import { getMediaExtension } from '../api/media/naming'
 import { optimizeImageFile } from '../utils/image-optimize'
@@ -158,6 +158,13 @@ export interface MediaAttachDeps {
  * 残るため（`![a](...)\n` だけが挿入される）、この方式にしている。
  */
 export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Promise<void> {
+  if (files.length === 0) return
+  // 未設定はファイルごとに同じエラートーストが連発するだけなので、
+  // バッチ全体で 1 回だけ通知して打ち切る（uploadMedia 内の判定は防御として残る）
+  if (!isMediaConfigured(deps.settings)) {
+    deps.notify({ kind: 'error', errorKind: 'not_configured', name: files[0].name })
+    return
+  }
   const markdowns: string[] = []
   for (const original of files) {
     deps.notify({ kind: 'uploading', name: original.name })
