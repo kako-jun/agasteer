@@ -23,8 +23,18 @@
     focusedPane,
     leftInitialLine,
     rightInitialLine,
+    settings,
   } from '../../lib/stores'
   import { clampSelectionRanges } from '../../lib/editor/clamp-selection'
+  import {
+    attachMediaFiles,
+    createMediaDomHandlers,
+    type MediaAttachNotice,
+  } from '../../lib/editor/media-attach'
+  import { insertTextAtCursor, type InsertTextOptions } from '../../lib/editor/insert-text'
+  import { showPushToast } from '../../lib/ui/ui.svelte'
+  import { get } from 'svelte/store'
+  import { _ } from '../../lib/i18n'
 
   interface Props {
     content: string
@@ -155,15 +165,11 @@
     }
   }
 
-  // 外部からカーソル位置にテキストを挿入する関数
-  export function insertAtCursor(text: string) {
+  // 外部からカーソル位置にテキストを挿入する関数。
+  // options.focus: false で挿入後のフォーカス移動を抑制できる（既定は従来どおり移す）
+  export function insertAtCursor(text: string, options: InsertTextOptions = {}) {
     if (!editorView) return
-    const { from } = editorView.state.selection.main
-    editorView.dispatch({
-      changes: { from, insert: text },
-      selection: { anchor: from + text.length },
-    })
-    editorView.focus()
+    insertTextAtCursor(editorView, text, options)
   }
 
   // 外部から選択テキストを取得する関数
@@ -173,6 +179,45 @@
     const selection = state.selection.main
     if (selection.empty) return ''
     return state.doc.sliceString(selection.from, selection.to)
+  }
+
+  // メディア添付フローの進行通知をトーストに変換する（#243）
+  function notifyMediaAttach(notice: MediaAttachNotice) {
+    const translate = get(_)
+    if (notice.kind === 'error') {
+      showPushToast(
+        translate(`media.errors.${notice.errorKind}`, { values: { name: notice.name } }),
+        'error'
+      )
+      return
+    }
+    const variant =
+      notice.kind === 'uploaded' ? 'success' : notice.kind === 'queuedRetry' ? 'error' : ''
+    showPushToast(translate(`media.${notice.kind}`, { values: { name: notice.name } }), variant)
+  }
+
+  // 貼り付け・D&D・フッター添付ボタンの共通入口（#243）。
+  // dropPos があればそこへカーソルを移し、以降はカーソル位置に挿入する
+  // （アップロード完了までの間にカーソルが動いても挿入時点の位置に従う）。
+  function handleMediaFiles(files: File[], dropPos: number | null) {
+    if (!editorView) return
+    if (dropPos !== null) {
+      const pos = Math.min(dropPos, editorView.state.doc.length)
+      editorView.dispatch({ selection: { anchor: pos } })
+    }
+    void attachMediaFiles(files, {
+      settings: settings.value,
+      optimizeImages: settings.value.mediaOptimizeImages ?? true,
+      // 挿入はアップロード完了時（数秒後）に走るため、フォーカスを奪わない
+      // （反対ペイン作業の中断・モバイルのキーボードポップアップを防ぐ、should-3）
+      insert: (text) => insertAtCursor(text, { focus: false }),
+      notify: notifyMediaAttach,
+    })
+  }
+
+  // 外部（フッターの添付ボタン）からファイルを添付する関数（#243）
+  export function attachFiles(files: File[]) {
+    handleMediaFiles(files, null)
   }
 
   function flushPendingCompositionChange(view = editorView) {
@@ -559,6 +604,9 @@
           }
         },
       }),
+      // メディア添付（貼り付け・D&D）。ファイルを含まないイベントは false を
+      // 返し、CodeMirror 既定のテキスト処理に委ねる（#243）
+      EditorView.domEventHandlers(createMediaDomHandlers(handleMediaFiles)),
     ]
 
     // Vimモードが有効な場合は追加

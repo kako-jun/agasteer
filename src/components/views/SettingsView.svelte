@@ -11,6 +11,7 @@
   import LinedModeToggle from '../settings/LinedModeToggle.svelte'
   import VimModeToggle from '../settings/VimModeToggle.svelte'
   import CursorTrailToggle from '../settings/CursorTrailToggle.svelte'
+  import MediaOptimizeToggle from '../settings/MediaOptimizeToggle.svelte'
   import ExportSection from '../settings/ExportSection.svelte'
   import ImportSection from '../settings/ImportSection.svelte'
   import AboutSection from '../settings/AboutSection.svelte'
@@ -70,6 +71,7 @@
           <LinedModeToggle {settings} {onSettingsChange} />
           <CursorTrailToggle {settings} {onSettingsChange} />
           <VimModeToggle {settings} {onSettingsChange} />
+          <MediaOptimizeToggle {settings} {onSettingsChange} />
         </div>
       </div>
       <hr />

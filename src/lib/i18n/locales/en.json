@@ -107,7 +107,8 @@
     "move": "Move",
     "archive": "Archive",
     "restore": "Restore",
-    "ocr": "Text Recognition"
+    "ocr": "Text Recognition",
+    "attach": "Attach files"
   },
   "settings": {
     "title": "Settings",
@@ -182,7 +183,8 @@
       "title": "Editor",
       "linedMode": "Enable lined editor mode",
       "vimMode": "Enable Vim Mode",
-      "cursorTrail": "Enable cursor trail effect"
+      "cursorTrail": "Enable cursor trail effect",
+      "mediaOptimize": "Optimize attached images (WebP, max 2048px)"
     },
     "data": {
       "title": "Data"
@@ -252,6 +254,21 @@
     "pushTimeout": "Push response timed out. Watching for the result in the background; sync will recover automatically if it succeeded.",
     "pushLateSuccess": "The delayed push turned out to have succeeded. Sync state recovered.",
     "pushInProgress": "Pushing… please don't switch apps or close Agasteer yet."
+  },
+  "media": {
+    "uploading": "Uploading {name}...",
+    "uploaded": "Uploaded {name}",
+    "queuedOffline": "Offline: {name} is queued and will upload when back online",
+    "queuedRetry": "Failed to upload {name} (kept in queue, will retry automatically)",
+    "errors": {
+      "not_configured": "Set up GitHub integration to attach files",
+      "format_not_allowed": "This file type cannot be attached: {name}",
+      "size_exceeded": "Files over 100MB cannot be attached: {name}",
+      "storage_failed": "Could not attach {name} (local storage failed)",
+      "repo_unavailable": "Cannot access the media repository",
+      "invalid_url": "Invalid media URL",
+      "fetch_failed": "Failed to fetch media"
+    }
   },
   "ocr": {
     "title": "Text Recognition",

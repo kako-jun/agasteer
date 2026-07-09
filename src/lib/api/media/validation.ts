@@ -8,16 +8,24 @@
 import { getMediaExtension } from './naming'
 
 /**
- * 添付を許可する拡張子（形式ホワイトリスト）
- * jpeg は jpg と同一形式の標準的な別拡張子のため含める。
+ * 添付を許可する画像の拡張子（Markdown 画像記法 `![]()` で挿入する形式）。
+ * jpeg は jpg と同一形式の標準的な別拡張子のため含める。(#243)
  */
-export const ALLOWED_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set([
+export const IMAGE_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set([
   'png',
   'jpg',
   'jpeg',
   'gif',
   'webp',
   'svg',
+])
+
+/**
+ * 添付を許可する拡張子（形式ホワイトリスト）。
+ * 画像集合が常にホワイトリストの部分集合になるよう合成で定義する。
+ */
+export const ALLOWED_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set([
+  ...IMAGE_MEDIA_EXTENSIONS,
   'mp4',
   'webm',
   'mp3',

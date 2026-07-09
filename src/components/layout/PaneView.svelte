@@ -318,6 +318,7 @@
     onArchive={() => actions.archiveLeaf(pane)}
     onRestore={() => actions.restoreLeaf(pane)}
     onOcr={handleOcr}
+    onAttachFiles={(files) => editorViewRef?.attachFiles?.(files)}
   />
 {:else if currentView === 'preview' && currentLeaf}
   <PreviewFooter

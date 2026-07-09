@@ -20,6 +20,13 @@
   - Runs entirely in the browser (Tesseract.js), no data sent to external servers
   - Supports Japanese and English
 
+## File Attachments
+
+- **[File Attachments](./features/attachments.md)** - Attach images, videos, audio, and ZIP files to a leaf
+  - Paste (screenshots), drag & drop, or the attach button in the footer
+  - Images are optimized automatically (max 2048px, WebP; can be turned off in settings)
+  - Stored in a dedicated private repository `{owner}/{repo}-media`, works offline too
+
 ## Data Management
 
 - **[Archive](./features/archive.md)** - Store unused notes/leaves in a separate location

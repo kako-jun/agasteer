@@ -61,7 +61,11 @@ export type MediaFetchResult =
   | { ok: true; data: ArrayBuffer }
   | { ok: false; errorKind: MediaErrorKind; httpStatus?: number }
 
-function isConfigured(settings: Settings): boolean {
+/**
+ * メディア機能が使える設定（token + `owner/repo` 形式の repoName）かを判定する。
+ * UI 側（添付フロー）が事前判定に使えるよう export する（#243 レビュー nit-3）。
+ */
+export function isMediaConfigured(settings: Settings): boolean {
   // `owner/repo` 形式（owner・repo とも非空）だけを設定済みとみなす。
   // 先頭スラッシュ（"/repo"）・末尾スラッシュ（"owner/"）は弾く
   const slashIndex = settings.repoName.indexOf('/')
@@ -92,7 +96,7 @@ export async function ensureMediaRepo(
   settings: Settings,
   mediaRepoFullName?: string
 ): Promise<{ ok: boolean; errorKind?: MediaErrorKind; httpStatus?: number }> {
-  if (!isConfigured(settings)) {
+  if (!isMediaConfigured(settings)) {
     return { ok: false, errorKind: 'not_configured' }
   }
   const mediaRepo = mediaRepoFullName ?? getMediaRepoFullName(settings.repoName)
@@ -147,7 +151,7 @@ export async function ensureMediaRepo(
  * 4. オンラインなら即時アップロードを試行（失敗してもキューに残る）
  */
 export async function uploadMedia(file: File, settings: Settings): Promise<MediaUploadResult> {
-  if (!isConfigured(settings)) {
+  if (!isMediaConfigured(settings)) {
     return { ok: false, errorKind: 'not_configured' }
   }
   const validationError = validateMedia(file.name, file.size)
@@ -253,7 +257,7 @@ let retryInFlight = false
 export async function retryPendingUploads(
   settings: Settings
 ): Promise<{ attempted: number; uploaded: number }> {
-  if (retryInFlight || !isConfigured(settings)) {
+  if (retryInFlight || !isMediaConfigured(settings)) {
     return { attempted: 0, uploaded: 0 }
   }
   retryInFlight = true
@@ -299,7 +303,7 @@ export function initMediaOnlineRetry(getSettings: () => Settings): () => void {
  * branch は指定せず default branch を使う（auto_init 作成直後は main）。
  */
 export async function fetchMedia(url: string, settings: Settings): Promise<MediaFetchResult> {
-  if (!isConfigured(settings)) {
+  if (!isMediaConfigured(settings)) {
     return { ok: false, errorKind: 'not_configured' }
   }
   const parsed = parseRawMediaUrl(url)

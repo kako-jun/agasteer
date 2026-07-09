@@ -107,7 +107,8 @@
     "move": "移動",
     "archive": "アーカイブ",
     "restore": "リストア",
-    "ocr": "テキスト読み取り"
+    "ocr": "テキスト読み取り",
+    "attach": "ファイルを添付"
   },
   "settings": {
     "title": "設定",
@@ -182,7 +183,8 @@
       "title": "エディタ",
       "linedMode": "罫線モードを有効にする",
       "vimMode": "Vimモードを有効にする",
-      "cursorTrail": "カーソルトレイルを有効にする"
+      "cursorTrail": "カーソルトレイルを有効にする",
+      "mediaOptimize": "添付画像を自動最適化する（WebP変換・最大辺2048px）"
     },
     "data": {
       "title": "データ管理"
@@ -253,6 +255,21 @@
     "pushTimeout": "Pushの応答が途切れました。裏で結果を見届け、成功していれば自動で回復します",
     "pushLateSuccess": "遅れていたPushの成功を確認しました。同期状態を回復しました",
     "pushInProgress": "Push中。アプリの切り替えや終了はしないでください"
+  },
+  "media": {
+    "uploading": "{name} をアップロード中...",
+    "uploaded": "{name} をアップロードしました",
+    "queuedOffline": "オフラインのため {name} は保留中です（オンライン復帰時に自動アップロード）",
+    "queuedRetry": "{name} のアップロードに失敗しました（保留され、自動で再試行されます）",
+    "errors": {
+      "not_configured": "GitHub連携が未設定のため添付できません",
+      "format_not_allowed": "この形式のファイルは添付できません: {name}",
+      "size_exceeded": "100MBを超えるファイルは添付できません: {name}",
+      "storage_failed": "ローカル保存に失敗したため添付できません: {name}",
+      "repo_unavailable": "メディアリポジトリにアクセスできません",
+      "invalid_url": "メディアURLが不正です",
+      "fetch_failed": "メディアの取得に失敗しました"
+    }
   },
   "ocr": {
     "title": "テキスト読み取り",

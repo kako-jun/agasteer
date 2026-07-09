@@ -107,6 +107,32 @@ Vimモードでは、以下のカスタムコマンドが使用可能：
 
 Vimコマンドライン（`:` 入力部分）は`.cm-vim-panel`クラスでスタイリングされ、アプリのテーマ変数に連動します。
 
+### メディア添付（#243）
+
+画像・動画・音声・zip をリーフに添付し、専用プライベートリポ `{owner}/{repo}-media` に保存する機能（同期層は #242 の `api/media.ts`）。
+
+#### 入口は3つ
+
+| 入口       | 実装                                                                       | 挿入位置     |
+| ---------- | -------------------------------------------------------------------------- | ------------ |
+| 貼り付け   | `EditorView.domEventHandlers` の paste（`createMediaDomHandlers`）         | カーソル位置 |
+| D&D        | 同 drop。`view.posAtCoords` でドロップ位置を解決                           | ドロップ位置 |
+| 添付ボタン | `EditorFooter` の隠し `input[type=file]`（複数可）→ `attachFiles()` へ委譲 | カーソル位置 |
+
+ファイルを含まない paste/drop は `false` を返し、CodeMirror 既定のテキスト処理に委ねます。
+
+#### 添付フロー（`lib/editor/media-attach.ts`）
+
+1. 画像自動最適化（設定 `mediaOptimizeImages` 既定ON、`lib/utils/image-optimize.ts`）
+   - 最大辺 2048px 縮小 + WebP 再エンコード。対象は png/jpg/jpeg/webp のみ（gif/svg/非画像は無変換）
+   - **uploadMedia に渡す前に適用**するため、ハッシュ・ファイル名・raw URL は最適化後の内容で確定する
+   - デコード/エンコード失敗、および縮小なしで再エンコードだけ太る場合は原本にフォールバック（縮小が発生した場合はバイト数が増えても最適化版を採用。2048px 上限はバイト数でなく表示ポリシー）
+2. `uploadMedia`（#242 同期層）: 検証（形式ホワイトリスト・100MB）→ URL 即時確定 → enqueue → オンラインなら即時アップロード
+3. 記法挿入: 画像は `![name](rawURL)`、動画/音声/zip は `[name](rawURL)`。URL は即時確定するためオフラインでも挿入は完了する。複数ファイルは成功分だけを改行で join してまとめて挿入する（失敗ファイル分の余分な改行が残らない）
+4. トースト通知（既存 `showPushToast` 再利用、i18n キーは `media.*`）: アップロード中 → 完了 / オフライン保留 / 失敗（キューに残り自動再試行）/ 拒否（形式外・100MB超）
+
+`MarkdownEditor.svelte` 側は domEventHandlers 拡張の追加と insert/notify コールバックの薄い配線のみで、ロジックは `media-attach.ts` に置いています（純粋部分は node 環境の vitest でテスト）。
+
 ---
 
 ## パンくずナビゲーション

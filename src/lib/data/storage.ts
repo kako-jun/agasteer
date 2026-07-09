@@ -219,6 +219,7 @@ export const defaultSettings: Settings = {
   vimMode: false, // デフォルトはVimモードオフ
   linedMode: true, // デフォルトは罫線モードオン
   cursorTrailEnabled: true, // デフォルトはカーソルトレイルオン
+  mediaOptimizeImages: true, // デフォルトは添付画像の自動最適化オン (#243)
 }
 
 /**
