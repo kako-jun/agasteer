@@ -23,8 +23,17 @@
     focusedPane,
     leftInitialLine,
     rightInitialLine,
+    settings,
   } from '../../lib/stores'
   import { clampSelectionRanges } from '../../lib/editor/clamp-selection'
+  import {
+    attachMediaFiles,
+    createMediaDomHandlers,
+    type MediaAttachNotice,
+  } from '../../lib/editor/media-attach'
+  import { showPushToast } from '../../lib/ui/ui.svelte'
+  import { get } from 'svelte/store'
+  import { _ } from '../../lib/i18n'
 
   interface Props {
     content: string
@@ -173,6 +182,43 @@
     const selection = state.selection.main
     if (selection.empty) return ''
     return state.doc.sliceString(selection.from, selection.to)
+  }
+
+  // メディア添付フローの進行通知をトーストに変換する（#243）
+  function notifyMediaAttach(notice: MediaAttachNotice) {
+    const translate = get(_)
+    if (notice.kind === 'error') {
+      showPushToast(
+        translate(`media.errors.${notice.errorKind}`, { values: { name: notice.name } }),
+        'error'
+      )
+      return
+    }
+    const variant =
+      notice.kind === 'uploaded' ? 'success' : notice.kind === 'queuedRetry' ? 'error' : ''
+    showPushToast(translate(`media.${notice.kind}`, { values: { name: notice.name } }), variant)
+  }
+
+  // 貼り付け・D&D・フッター添付ボタンの共通入口（#243）。
+  // dropPos があればそこへカーソルを移し、以降はカーソル位置に挿入する
+  // （アップロード完了までの間にカーソルが動いても挿入時点の位置に従う）。
+  function handleMediaFiles(files: File[], dropPos: number | null) {
+    if (!editorView) return
+    if (dropPos !== null) {
+      const pos = Math.min(dropPos, editorView.state.doc.length)
+      editorView.dispatch({ selection: { anchor: pos } })
+    }
+    void attachMediaFiles(files, {
+      settings: settings.value,
+      optimizeImages: settings.value.mediaOptimizeImages ?? true,
+      insert: (text) => insertAtCursor(text),
+      notify: notifyMediaAttach,
+    })
+  }
+
+  // 外部（フッターの添付ボタン）からファイルを添付する関数（#243）
+  export function attachFiles(files: File[]) {
+    handleMediaFiles(files, null)
   }
 
   function flushPendingCompositionChange(view = editorView) {
@@ -559,6 +605,9 @@
           }
         },
       }),
+      // メディア添付（貼り付け・D&D）。ファイルを含まないイベントは false を
+      // 返し、CodeMirror 既定のテキスト処理に委ねる（#243）
+      EditorView.domEventHandlers(createMediaDomHandlers(handleMediaFiles)),
     ]
 
     // Vimモードが有効な場合は追加
