@@ -193,6 +193,16 @@ describe('uploadMedia', () => {
     expect(mediaStore.fns.putPendingMedia).not.toHaveBeenCalled()
   })
 
+  it('owner か repo が空の repoName（"/repo"・"owner/"）は not_configured を返す（#245 nit-2）', async () => {
+    const media = await loadMedia()
+    for (const repoName of ['/repo', 'owner/']) {
+      const res = await media.uploadMedia(makeFile('a.png', 'x'), makeSettings({ repoName }))
+      expect(res).toEqual({ ok: false, errorKind: 'not_configured' })
+    }
+    expect(mock.calls).toHaveLength(0)
+    expect(mediaStore.fns.putPendingMedia).not.toHaveBeenCalled()
+  })
+
   it('ホワイトリスト外の形式（.exe）は format_not_allowed で fetch/IDB に触れない', async () => {
     const media = await loadMedia()
     const res = await media.uploadMedia(makeFile('virus.exe', 'x'), makeSettings())

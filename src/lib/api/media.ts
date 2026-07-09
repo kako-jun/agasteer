@@ -63,7 +63,10 @@ export type MediaFetchResult =
   | { ok: false; errorKind: MediaErrorKind; httpStatus?: number }
 
 function isConfigured(settings: Settings): boolean {
-  return Boolean(settings.token) && settings.repoName.includes('/')
+  // `owner/repo` 形式（owner・repo とも非空）だけを設定済みとみなす。
+  // 先頭スラッシュ（"/repo"）・末尾スラッシュ（"owner/"）は弾く
+  const slashIndex = settings.repoName.indexOf('/')
+  return Boolean(settings.token) && slashIndex > 0 && slashIndex < settings.repoName.length - 1
 }
 
 function authHeaders(settings: Settings): Record<string, string> {

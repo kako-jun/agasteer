@@ -177,7 +177,7 @@ agasteer/
 │   │   │   ├── sha.ts                   # Git blob SHA計算（純粋）
 │   │   │   └── rate-limit.ts            # レート制限解析（純粋）
 │   │   ├── media.ts                     # メディア同期層（副作用層: lazy作成/アップロード/キュー/キャッシュ）#242
-│   │   ├── media/                        # メディア純粋層（github/ の分割パターン踏襲）
+│   │   ├── media/                       # メディア純粋層（github/ の分割パターン踏襲）
 │   │   │   ├── base64.ts                # バイナリ安全な ArrayBuffer↔Base64（純粋）
 │   │   │   ├── naming.ts                # SHA-256・ファイル名・raw URL 生成/パース（純粋）
 │   │   │   ├── validation.ts            # 形式ホワイトリスト・100MB上限（純粋）

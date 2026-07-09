@@ -24,16 +24,3 @@ export function encodeArrayBufferToBase64(buffer: ArrayBuffer): string {
   }
   return btoa(binary)
 }
-
-/**
- * Base64 文字列を ArrayBuffer にデコード（改行は除去）
- */
-export function decodeBase64ToArrayBuffer(base64: string): ArrayBuffer {
-  const clean = base64.replace(/\n/g, '')
-  const binary = atob(clean)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes.buffer
-}
