@@ -111,15 +111,35 @@ export interface ParsedRawMediaUrl {
   path: string
 }
 
+/** owner / repo の安全文字クラス（英数とハイフン、先頭末尾は英数。`..`・`/`・`?` は通らない） */
+const SAFE_NAME_PATTERN = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?'
+
 /**
- * raw URL から owner/repo/branch/path を取り出す。raw URL でなければ null。
+ * メディア raw URL の厳格パターン。
+ * パース結果は認証付き fetch の宛先組み立てに使うため、
+ * buildRawMediaUrl が生成する URL の構造だけを受ける:
+ * - repo は `-media` サフィックス必須（本機能が生成する URL の構造的不変条件。
+ *   任意リポへの認証付き fetch を封じる）
+ * - branch は `main` 固定（生成側が MEDIA_BRANCH 固定のため）
+ * - path はリポルート直下の 1 セグメントのみ（スラッシュ・クエリ・フラグメント不可）
+ */
+const RAW_MEDIA_URL_PATTERN = new RegExp(
+  `^https://raw\\.githubusercontent\\.com/(${SAFE_NAME_PATTERN})/(${SAFE_NAME_PATTERN}${MEDIA_REPO_SUFFIX})/${MEDIA_BRANCH}/([A-Za-z0-9._-]+)$`
+)
+
+/**
+ * raw URL から owner/repo/branch/path を取り出す。
+ * 本機能が生成するメディア raw URL の構造（上記パターン）でなければ null。
  */
 export function parseRawMediaUrl(url: string): ParsedRawMediaUrl | null {
-  const match = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(url)
+  const match = RAW_MEDIA_URL_PATTERN.exec(url)
   if (!match) return null
+  const path = match[3]
+  // 文字クラスだけでは `.`・`..` のようなドットのみのセグメントが通り得るため明示拒否する
+  if (/^\.+$/.test(path)) return null
   return {
     repoFullName: `${match[1]}/${match[2]}`,
-    branch: match[3],
-    path: match[4],
+    branch: MEDIA_BRANCH,
+    path,
   }
 }

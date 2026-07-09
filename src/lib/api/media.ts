@@ -279,8 +279,9 @@ export async function fetchMedia(url: string, settings: Settings): Promise<Media
     return { ok: false, errorKind: 'invalid_url' }
   }
   try {
+    // parseRawMediaUrl が安全文字に絞っているが、防御の二重化としてエンコードも掛ける
     const res = await fetch(
-      `https://api.github.com/repos/${parsed.repoFullName}/contents/${parsed.path}`,
+      `https://api.github.com/repos/${parsed.repoFullName}/contents/${encodeURIComponent(parsed.path)}`,
       {
         headers: {
           ...authHeaders(settings),

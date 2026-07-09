@@ -124,4 +124,48 @@ describe('buildRawMediaUrl / parseRawMediaUrl', () => {
     expect(parseRawMediaUrl('https://example.com/a.png')).toBeNull()
     expect(parseRawMediaUrl('not a url')).toBeNull()
   })
+
+  it('rejects path traversal segments (authenticated fetch must not leave the media repo)', () => {
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/../../../../user/repos')).toBeNull()
+    expect(
+      parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/main/../secret.png')
+    ).toBeNull()
+  })
+
+  it('rejects query-string smuggling in the path', () => {
+    expect(
+      parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/main/x.png?ref=evil')
+    ).toBeNull()
+  })
+
+  it('rejects dots-only path segments while allowing harmless leading dots', () => {
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/main/..')).toBeNull()
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/main/.')).toBeNull()
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/main/..png')).toEqual({
+      repoFullName: 'a/b-media',
+      branch: 'main',
+      path: '..png',
+    })
+  })
+
+  it('rejects repos without the -media suffix (structural invariant of generated URLs)', () => {
+    expect(
+      parseRawMediaUrl('https://raw.githubusercontent.com/kako-jun/notes/main/x.png')
+    ).toBeNull()
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/a/-media/main/x.png')).toBeNull()
+  })
+
+  it('rejects nested paths and non-main branches (generator emits root-level files on main)', () => {
+    expect(
+      parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/main/dir/x.png')
+    ).toBeNull()
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/a/b-media/develop/x.png')).toBeNull()
+  })
+
+  it('rejects unsafe owner names', () => {
+    expect(parseRawMediaUrl('https://raw.githubusercontent.com/../b-media/main/x.png')).toBeNull()
+    expect(
+      parseRawMediaUrl('https://raw.githubusercontent.com/-evil/b-media/main/x.png')
+    ).toBeNull()
+  })
 })
