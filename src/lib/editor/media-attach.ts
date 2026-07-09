@@ -157,12 +157,16 @@ export interface MediaAttachDeps {
  * ファイル群を順に添付する。1 ファイルごとに:
  * 1. 最適化 ON かつ対象画像なら縮小 + WebP 化（ハッシュ・URL は最適化後の内容で確定）
  * 2. uploadMedia（検証 → URL 即時確定 → enqueue → オンラインなら即時アップロード）
- * 3. 成功なら記法を挿入（オフラインでも URL は確定済みなので挿入は完了する）
+ * 3. 成功なら記法を配列に集める（オフラインでも URL は確定済みなので挿入は完了する）
  * 4. 進行・結果を notify（失敗ファイルはスキップして次へ進む）
+ *
+ * 挿入は成功した記法だけを改行で join して最後に 1 回行う。入力配列内の
+ * 位置で改行を決めると、末尾側のファイルが失敗したときにぶら下がり改行が
+ * 残るため（`![a](...)\n` だけが挿入される）、この方式にしている。
  */
 export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Promise<void> {
-  for (let index = 0; index < files.length; index++) {
-    const original = files[index]
+  const markdowns: string[] = []
+  for (const original of files) {
     deps.notify({ kind: 'uploading', name: original.name })
     const file = deps.optimizeImages ? await optimizeImageFile(original) : original
     const result = await uploadMedia(file, deps.settings)
@@ -172,8 +176,7 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
       deps.notify({ kind: 'error', errorKind: result.errorKind, name: original.name })
       continue
     }
-    const markdown = buildMediaMarkdown(file.name, result.url)
-    deps.insert(index < files.length - 1 ? `${markdown}\n` : markdown)
+    markdowns.push(buildMediaMarkdown(file.name, result.url))
     if (result.uploaded) {
       deps.notify({ kind: 'uploaded', name: file.name })
     } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -181,5 +184,8 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
     } else {
       deps.notify({ kind: 'queuedRetry', name: file.name })
     }
+  }
+  if (markdowns.length > 0) {
+    deps.insert(markdowns.join('\n'))
   }
 }

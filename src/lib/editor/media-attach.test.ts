@@ -214,7 +214,7 @@ describe('attachMediaFiles', () => {
     expect(notices).toContainEqual({ kind: 'error', errorKind: 'size_exceeded', name: 'big.zip' })
   })
 
-  it('複数ファイルは最後以外に改行を付けて挿入する', async () => {
+  it('複数ファイルは成功分だけを改行区切りでまとめて 1 回挿入する', async () => {
     uploadMediaMock
       .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
       .mockResolvedValueOnce({ ok: true, url: 'https://example.com/b.png', uploaded: true })
@@ -226,8 +226,38 @@ describe('attachMediaFiles', () => {
       notify: vi.fn(),
     })
     expect(inserted).toEqual([
-      '![a.png](https://example.com/a.png)\n',
-      '![b.png](https://example.com/b.png)',
+      '![a.png](https://example.com/a.png)\n![b.png](https://example.com/b.png)',
+    ])
+  })
+
+  it('末尾ファイルが失敗しても挿入テキストにぶら下がり改行が残らない', async () => {
+    uploadMediaMock
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
+      .mockResolvedValueOnce({ ok: false, errorKind: 'size_exceeded' })
+    const inserted: string[] = []
+    await attachMediaFiles([makeFile('a.png'), makeFile('big.zip')], {
+      settings,
+      optimizeImages: false,
+      insert: (text) => inserted.push(text),
+      notify: vi.fn(),
+    })
+    expect(inserted).toEqual(['![a.png](https://example.com/a.png)'])
+  })
+
+  it('中間ファイルが失敗しても成功分（1・3番目）が 1 つの改行で繋がる', async () => {
+    uploadMediaMock
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
+      .mockResolvedValueOnce({ ok: false, errorKind: 'format_not_allowed' })
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/c.png', uploaded: true })
+    const inserted: string[] = []
+    await attachMediaFiles([makeFile('a.png'), makeFile('b.exe'), makeFile('c.png')], {
+      settings,
+      optimizeImages: false,
+      insert: (text) => inserted.push(text),
+      notify: vi.fn(),
+    })
+    expect(inserted).toEqual([
+      '![a.png](https://example.com/a.png)\n![c.png](https://example.com/c.png)',
     ])
   })
 
