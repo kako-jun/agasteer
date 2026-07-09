@@ -182,7 +182,8 @@
       "title": "Editor",
       "linedMode": "Enable lined editor mode",
       "vimMode": "Enable Vim Mode",
-      "cursorTrail": "Enable cursor trail effect"
+      "cursorTrail": "Enable cursor trail effect",
+      "mediaOptimize": "Optimize attached images (WebP, max 2048px)"
     },
     "data": {
       "title": "Data"

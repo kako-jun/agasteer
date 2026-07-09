@@ -182,7 +182,8 @@
       "title": "エディタ",
       "linedMode": "罫線モードを有効にする",
       "vimMode": "Vimモードを有効にする",
-      "cursorTrail": "カーソルトレイルを有効にする"
+      "cursorTrail": "カーソルトレイルを有効にする",
+      "mediaOptimize": "添付画像を自動最適化する（WebP変換・最大辺2048px）"
     },
     "data": {
       "title": "データ管理"

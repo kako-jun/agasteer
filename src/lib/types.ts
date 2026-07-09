@@ -24,6 +24,8 @@ export interface Settings {
   vimMode?: boolean
   linedMode?: boolean
   cursorTrailEnabled?: boolean
+  /** 添付画像の自動最適化（最大辺2048px縮小+WebP再エンコード）。既定 ON (#243) */
+  mediaOptimizeImages?: boolean
   hasCustomFont?: boolean
   hasCustomBackgroundLeft?: boolean
   hasCustomBackgroundRight?: boolean
