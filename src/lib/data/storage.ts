@@ -194,12 +194,15 @@ function saveStorageData(data: StorageData): void {
 }
 
 // IndexedDB 設定
-const DB_VERSION = 1 // #131 でリセット（既存データは破棄）
+const DB_VERSION = 2 // #242 で mediaPending/mediaCache を追加（v1→v2 は store 追加のみの後方互換移行）
 const LEAVES_STORE = 'leaves'
 const NOTES_STORE = 'notes'
 const OFFLINE_STORE = 'offline'
 const ARCHIVE_LEAVES_STORE = 'archiveLeaves'
 const ARCHIVE_NOTES_STORE = 'archiveNotes'
+// メディア同期層（#242）。アクセサは media-storage.ts に分離し、ここでは store 定義のみ持つ
+export const MEDIA_PENDING_STORE = 'mediaPending'
+export const MEDIA_CACHE_STORE = 'mediaCache'
 const FONTS_STORE = 'fonts'
 const BACKGROUNDS_STORE = 'backgrounds'
 
@@ -566,8 +569,11 @@ function perRepoDbName(repoKey: string): string {
 /**
  * 現在アクティブなリポの DB ハンドルを取得する
  * setCurrentRepo 未呼び出しの場合は settings.repoName から自動で設定する
+ *
+ * export はメディア同期層のアクセサ（media-storage.ts）用（#242）。
+ * それ以外のモジュールは storage.ts / media-storage.ts の公開関数を経由すること。
  */
-async function getCurrentDb(): Promise<IDBDatabase> {
+export async function getCurrentDb(): Promise<IDBDatabase> {
   if (currentDb && currentDbRepoKey) {
     return currentDb
   }
@@ -737,6 +743,13 @@ async function openPerRepoDB(repoKey: string, retryCount = 0): Promise<IDBDataba
         }
         if (!db.objectStoreNames.contains(ARCHIVE_NOTES_STORE)) {
           db.createObjectStore(ARCHIVE_NOTES_STORE, { keyPath: 'id' })
+        }
+        // #242 (v2): メディア同期層。既存 store には触れない後方互換移行
+        if (!db.objectStoreNames.contains(MEDIA_PENDING_STORE)) {
+          db.createObjectStore(MEDIA_PENDING_STORE, { keyPath: 'filename' })
+        }
+        if (!db.objectStoreNames.contains(MEDIA_CACHE_STORE)) {
+          db.createObjectStore(MEDIA_CACHE_STORE, { keyPath: 'url' })
         }
       } catch (upgradeError) {
         console.error('IndexedDB upgrade failed:', upgradeError)
