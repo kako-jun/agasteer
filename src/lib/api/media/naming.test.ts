@@ -65,6 +65,10 @@ describe('sanitizeMediaBaseName', () => {
     expect(sanitizeMediaBaseName('写真.png')).toBe('file')
   })
 
+  it('keeps the ASCII part of a mixed Japanese/ASCII name', () => {
+    expect(sanitizeMediaBaseName('写真abc.png')).toBe('abc')
+  })
+
   it('limits the length to 40 characters', () => {
     const longName = `${'a'.repeat(100)}.png`
     expect(sanitizeMediaBaseName(longName)).toBe('a'.repeat(40))
@@ -81,6 +85,21 @@ describe('buildMediaFileName', () => {
     const date = new Date(2026, 6, 9)
     const hash = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
     expect(buildMediaFileName(date, hash, 'My Photo.PNG')).toBe('20260709-ba7816bf-My-Photo.png')
+  })
+
+  it('does not append a trailing dot when the name has no extension', () => {
+    const date = new Date(2026, 6, 9)
+    const hash = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    expect(buildMediaFileName(date, hash, 'README')).toBe('20260709-ba7816bf-README')
+  })
+
+  it('produces a different filename for the same content on a different day (dedup is per-day)', () => {
+    const hash = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    const day1 = buildMediaFileName(new Date(2026, 6, 9), hash, 'photo.png')
+    const day2 = buildMediaFileName(new Date(2026, 6, 10), hash, 'photo.png')
+    expect(day1).toBe('20260709-ba7816bf-photo.png')
+    expect(day2).toBe('20260710-ba7816bf-photo.png')
+    expect(day1).not.toBe(day2)
   })
 })
 

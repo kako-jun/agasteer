@@ -86,11 +86,14 @@ export function sanitizeMediaBaseName(originalName: string): string {
 /**
  * 確定ファイル名を組み立てる: `{YYYYMMDD}-{hash8}-{sanitized名}.{ext}`
  * 内容 SHA-256 の先頭 8 桁を含むため、同日・同内容なら同名になる（dedup 用）。
+ * 拡張子がない場合は末尾ドットを付けない（アップロード対象は validateMedia が
+ * 拡張子必須で弾くが、純粋層として不正なファイル名を作らない）。
  */
 export function buildMediaFileName(date: Date, sha256HexStr: string, originalName: string): string {
   const ext = getMediaExtension(originalName)
   const base = sanitizeMediaBaseName(originalName)
-  return `${formatDateYYYYMMDD(date)}-${sha256HexStr.slice(0, 8)}-${base}.${ext}`
+  const suffix = ext ? `.${ext}` : ''
+  return `${formatDateYYYYMMDD(date)}-${sha256HexStr.slice(0, 8)}-${base}${suffix}`
 }
 
 /**
