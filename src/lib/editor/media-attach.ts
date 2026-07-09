@@ -12,7 +12,11 @@
 
 import type { Settings } from '../types'
 import { uploadMedia, isMediaConfigured, type MediaErrorKind } from '../api/media'
-import { ALLOWED_MEDIA_EXTENSIONS, IMAGE_MEDIA_EXTENSIONS } from '../api/media/validation'
+import {
+  ALLOWED_MEDIA_EXTENSIONS,
+  IMAGE_MEDIA_EXTENSIONS,
+  validateMedia,
+} from '../api/media/validation'
 import { getMediaExtension } from '../api/media/naming'
 import { optimizeImageFile } from '../utils/image-optimize'
 
@@ -167,6 +171,14 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
   }
   const markdowns: string[] = []
   for (const original of files) {
+    // 形式外・100MB超は「アップロード中」を出す前に弾く（アップロード中→拒否の
+    // 2連トースト防止）。判定は原本に対して行い、uploadMedia 内の検証は
+    // 最適化後の内容への防御として残す
+    const validationError = validateMedia(original.name, original.size)
+    if (validationError) {
+      deps.notify({ kind: 'error', errorKind: validationError, name: original.name })
+      continue
+    }
     deps.notify({ kind: 'uploading', name: original.name })
     const file = deps.optimizeImages ? await optimizeImageFile(original) : original
     const result = await uploadMedia(file, deps.settings)

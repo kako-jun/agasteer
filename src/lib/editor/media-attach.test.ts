@@ -34,6 +34,8 @@ const {
 import type { Settings } from '../types'
 // 型のみの import はモックに影響しない（実行時には消える）
 import type { MediaErrorKind } from '../api/media'
+// validation はモックせず実物を使う（attachMediaFiles の事前検証と同じ判定）
+import { MAX_MEDIA_SIZE_BYTES } from '../api/media/validation'
 import ja from '../i18n/locales/ja.json'
 import en from '../i18n/locales/en.json'
 
@@ -350,9 +352,9 @@ describe('attachMediaFiles', () => {
   })
 
   it('中間ファイルが失敗しても成功分（1・3番目）が 1 つの改行で繋がる', async () => {
+    // b.exe は事前検証（形式外）で弾かれるため uploadMedia には a・c の 2 回だけ届く
     uploadMediaMock
       .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
-      .mockResolvedValueOnce({ ok: false, errorKind: 'format_not_allowed' })
       .mockResolvedValueOnce({ ok: true, url: 'https://example.com/c.png', uploaded: true })
     const inserted: string[] = []
     await attachMediaFiles([makeFile('a.png'), makeFile('b.exe'), makeFile('c.png')], {
@@ -361,9 +363,30 @@ describe('attachMediaFiles', () => {
       insert: (text) => inserted.push(text),
       notify: vi.fn(),
     })
+    expect(uploadMediaMock).toHaveBeenCalledTimes(2)
     expect(inserted).toEqual([
       '![a.png](https://example.com/a.png)\n![c.png](https://example.com/c.png)',
     ])
+  })
+
+  it('形式外・100MB超は「アップロード中」通知を出さず error 通知のみ（事前検証）', async () => {
+    // 100MB超の実バッファは作らず、name/size だけの File 形で事前検証経路を通す
+    const huge = { name: 'huge.zip', size: MAX_MEDIA_SIZE_BYTES + 1 } as File
+    const insert = vi.fn()
+    const notices: any[] = []
+    await attachMediaFiles([makeFile('bad.exe'), huge], {
+      settings,
+      optimizeImages: true,
+      insert,
+      notify: (n) => notices.push(n),
+    })
+    expect(notices).toEqual([
+      { kind: 'error', errorKind: 'format_not_allowed', name: 'bad.exe' },
+      { kind: 'error', errorKind: 'size_exceeded', name: 'huge.zip' },
+    ])
+    expect(uploadMediaMock).not.toHaveBeenCalled()
+    expect(optimizeImageFileMock).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
   })
 
   it('3ファイル（成功/失敗/成功）で通知が uploading→結果 の順に全ファイル分並ぶ', async () => {
