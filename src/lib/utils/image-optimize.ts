@@ -123,6 +123,7 @@ export async function optimizeImageFile(file: File): Promise<File> {
     if (!blob) return file
     const ext = MIME_TO_EXTENSION[blob.type]
     if (!ext) return file
+    // 縮小が発生した場合は WebP が原本よりバイト数で肥大しても最適化版を採用する（2048px 上限はバイト数でなく表示ポリシー）
     if (!scaled && blob.size >= file.size) return file
     return new File([blob], replaceFileExtension(file.name, ext), { type: blob.type })
   } catch (error) {
