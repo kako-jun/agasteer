@@ -30,6 +30,10 @@ const {
 } = await import('./media-attach')
 
 import type { Settings } from '../types'
+// 型のみの import はモックに影響しない（実行時には消える）
+import type { MediaErrorKind } from '../api/media'
+import ja from '../i18n/locales/ja.json'
+import en from '../i18n/locales/en.json'
 
 const settings = { token: 't', repoName: 'owner/repo' } as Settings
 
@@ -70,6 +74,18 @@ describe('extractDataTransferFiles', () => {
     } as unknown as DataTransfer
     expect(extractDataTransferFiles(textOnly)).toEqual([])
   })
+
+  it('items の kind=file でも getAsFile() が null ならスキップする', () => {
+    const a = makeFile('a.png')
+    const data = {
+      files: [],
+      items: [
+        { kind: 'file', getAsFile: () => null },
+        { kind: 'file', getAsFile: () => a },
+      ],
+    } as unknown as DataTransfer
+    expect(extractDataTransferFiles(data)).toEqual([a])
+  })
 })
 
 describe('挿入記法（buildMediaMarkdown）', () => {
@@ -91,6 +107,20 @@ describe('挿入記法（buildMediaMarkdown）', () => {
   it('ラベルの [ ] と改行をサニタイズする', () => {
     expect(sanitizeMediaLabel('a[1]b\nc.png')).toBe('a1b c.png')
     expect(sanitizeMediaLabel('[]')).toBe('file')
+  })
+
+  it('空文字・空白のみのファイル名は fallback ラベル file になる', () => {
+    expect(sanitizeMediaLabel('')).toBe('file')
+    expect(sanitizeMediaLabel('   ')).toBe('file')
+  })
+
+  it('日本語ファイル名はラベルにそのまま残る', () => {
+    expect(sanitizeMediaLabel('スクリーンショット 2026-07-09.png')).toBe(
+      'スクリーンショット 2026-07-09.png'
+    )
+    expect(buildMediaMarkdown('写真.png', 'https://example.com/x.png')).toBe(
+      '![写真.png](https://example.com/x.png)'
+    )
   })
 })
 
@@ -119,6 +149,21 @@ describe('createMediaDomHandlers', () => {
     expect(onFiles).toHaveBeenCalledWith([file], null)
   })
 
+  it('paste: ファイルとテキストが混在する場合はファイルを優先しテキストは破棄する', () => {
+    const onFiles = vi.fn()
+    const handlers = createMediaDomHandlers(onFiles)
+    const file = makeFile('a.png')
+    const event = {
+      clipboardData: {
+        files: [file],
+        items: [{ kind: 'string', getAsFile: () => null }],
+      },
+      preventDefault: vi.fn(),
+    } as unknown as ClipboardEvent
+    expect(handlers.paste(event)).toBe(true)
+    expect(onFiles).toHaveBeenCalledWith([file], null)
+  })
+
   it('paste: テキストのみなら false（CodeMirror 既定処理に委ねる）', () => {
     const onFiles = vi.fn()
     const handlers = createMediaDomHandlers(onFiles)
@@ -143,6 +188,21 @@ describe('createMediaDomHandlers', () => {
     expect(handlers.drop(event, view)).toBe(true)
     expect(view.posAtCoords).toHaveBeenCalledWith({ x: 10, y: 20 })
     expect(onFiles).toHaveBeenCalledWith([file], 42)
+  })
+
+  it('drop: posAtCoords が位置を解決できない場合は onFiles(files, null)', () => {
+    const onFiles = vi.fn()
+    const handlers = createMediaDomHandlers(onFiles)
+    const nullView = { posAtCoords: vi.fn().mockReturnValue(null) }
+    const file = makeFile('a.png')
+    const event = {
+      dataTransfer: { files: [file], items: [] },
+      clientX: 10,
+      clientY: 20,
+      preventDefault: vi.fn(),
+    } as unknown as DragEvent
+    expect(handlers.drop(event, nullView)).toBe(true)
+    expect(onFiles).toHaveBeenCalledWith([file], null)
   })
 
   it('drop: ファイルなしなら false', () => {
@@ -196,6 +256,31 @@ describe('attachMediaFiles', () => {
       notify: vi.fn(),
     })
     expect(optimizeImageFileMock).not.toHaveBeenCalled()
+  })
+
+  it('空配列なら insert / notify / uploadMedia を一切呼ばない', async () => {
+    const insert = vi.fn()
+    const notify = vi.fn()
+    await attachMediaFiles([], { settings, optimizeImages: true, insert, notify })
+    expect(uploadMediaMock).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('最適化でリネームされた後にアップロード失敗 → error 通知の name は原本名', async () => {
+    optimizeImageFileMock.mockResolvedValue(makeFile('shot.webp'))
+    uploadMediaMock.mockResolvedValue({ ok: false, errorKind: 'repo_unavailable' })
+    const notices: any[] = []
+    await attachMediaFiles([makeFile('shot.png')], {
+      settings,
+      optimizeImages: true,
+      insert: vi.fn(),
+      notify: (n) => notices.push(n),
+    })
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'shot.png' },
+      { kind: 'error', errorKind: 'repo_unavailable', name: 'shot.png' },
+    ])
   })
 
   it('検証エラー: 挿入せず error 通知して次のファイルに進む', async () => {
@@ -261,6 +346,51 @@ describe('attachMediaFiles', () => {
     ])
   })
 
+  it('3ファイル（成功/失敗/成功）で通知が uploading→結果 の順に全ファイル分並ぶ', async () => {
+    uploadMediaMock
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
+      .mockResolvedValueOnce({ ok: false, errorKind: 'size_exceeded' })
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/c.png', uploaded: true })
+    const notices: any[] = []
+    await attachMediaFiles([makeFile('a.png'), makeFile('b.zip'), makeFile('c.png')], {
+      settings,
+      optimizeImages: false,
+      insert: vi.fn(),
+      notify: (n) => notices.push(n),
+    })
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'a.png' },
+      { kind: 'uploaded', name: 'a.png' },
+      { kind: 'uploading', name: 'b.zip' },
+      { kind: 'error', errorKind: 'size_exceeded', name: 'b.zip' },
+      { kind: 'uploading', name: 'c.png' },
+      { kind: 'uploaded', name: 'c.png' },
+    ])
+  })
+
+  it('未アップロード（uploaded: false）: navigator 未定義なら queuedRetry 通知（オフライン扱いにしない）', async () => {
+    // Node 21+ はグローバル navigator を持つ（onLine は undefined）ため、
+    // 「navigator 未定義」の分岐は明示的に undefined へスタブして再現する
+    vi.stubGlobal('navigator', undefined)
+    try {
+      uploadMediaMock.mockResolvedValue({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploaded: false,
+      })
+      const notices: any[] = []
+      await attachMediaFiles([makeFile('a.png')], {
+        settings,
+        optimizeImages: false,
+        insert: vi.fn(),
+        notify: (n) => notices.push(n),
+      })
+      expect(notices[1]).toEqual({ kind: 'queuedRetry', name: 'a.png' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('未アップロード（uploaded: false）: オンラインなら queuedRetry 通知', async () => {
     // node 環境には navigator がない（= オフライン分岐に入らない）ためスタブする
     vi.stubGlobal('navigator', { onLine: true })
@@ -303,6 +433,50 @@ describe('attachMediaFiles', () => {
       expect(notices[1]).toEqual({ kind: 'queuedOffline', name: 'a.png' })
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('i18n キー整合（media / footer / settings）', () => {
+  // MediaErrorKind（src/lib/api/media.ts）の全値。型は実行時に消えるため
+  // ここで列挙し、satisfies + Exclude で型との網羅一致を compile 時に縛る
+  const ALL_MEDIA_ERROR_KINDS = [
+    'not_configured',
+    'format_not_allowed',
+    'size_exceeded',
+    'repo_unavailable',
+    'invalid_url',
+    'fetch_failed',
+    'storage_failed',
+  ] as const satisfies readonly MediaErrorKind[]
+  // MediaErrorKind に値が増えると true が代入不能になり型エラーで検出される
+  const _exhaustive: Exclude<MediaErrorKind, (typeof ALL_MEDIA_ERROR_KINDS)[number]> extends never
+    ? true
+    : never = true
+  void _exhaustive
+
+  const requiredKeys = [
+    ...ALL_MEDIA_ERROR_KINDS.map((kind) => `media.errors.${kind}`),
+    'media.uploading',
+    'media.uploaded',
+    'media.queuedOffline',
+    'media.queuedRetry',
+    'footer.attach',
+    'settings.editor.mediaOptimize',
+  ]
+
+  function getByPath(obj: unknown, path: string): unknown {
+    return path
+      .split('.')
+      .reduce<unknown>((cur, key) => (cur as Record<string, unknown> | undefined)?.[key], obj)
+  }
+
+  it.each([
+    ['ja', ja],
+    ['en', en],
+  ])('%s: MediaErrorKind 全値と通知・添付ボタン・設定トグルのキーが存在する', (name, locale) => {
+    for (const key of requiredKeys) {
+      expect(getByPath(locale, key), `${name}.json missing key: ${key}`).toBeTypeOf('string')
     }
   })
 })
