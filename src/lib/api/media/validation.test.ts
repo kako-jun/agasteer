@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { validateMedia, MAX_MEDIA_SIZE_BYTES } from './validation'
+import {
+  validateMedia,
+  MAX_MEDIA_SIZE_BYTES,
+  IMAGE_MEDIA_EXTENSIONS,
+  ALLOWED_MEDIA_EXTENSIONS,
+} from './validation'
 
 describe('validateMedia', () => {
   it('accepts whitelisted formats', () => {
@@ -48,5 +53,14 @@ describe('validateMedia', () => {
   it('checks the format before the size', () => {
     // 両方 NG の場合は形式エラーを優先して返す
     expect(validateMedia('a.exe', MAX_MEDIA_SIZE_BYTES + 1)).toBe('format_not_allowed')
+  })
+})
+
+describe('IMAGE_MEDIA_EXTENSIONS', () => {
+  it('画像拡張子はすべて形式ホワイトリストに含まれる（単一ソースの包含保証）', () => {
+    for (const ext of IMAGE_MEDIA_EXTENSIONS) {
+      expect(ALLOWED_MEDIA_EXTENSIONS.has(ext), `missing in whitelist: ${ext}`).toBe(true)
+    }
+    expect(IMAGE_MEDIA_EXTENSIONS.size).toBeGreaterThan(0)
   })
 })

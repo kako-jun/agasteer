@@ -12,7 +12,7 @@
 
 import type { Settings } from '../types'
 import { uploadMedia, type MediaErrorKind } from '../api/media'
-import { ALLOWED_MEDIA_EXTENSIONS } from '../api/media/validation'
+import { ALLOWED_MEDIA_EXTENSIONS, IMAGE_MEDIA_EXTENSIONS } from '../api/media/validation'
 import { getMediaExtension } from '../api/media/naming'
 import { optimizeImageFile } from '../utils/image-optimize'
 
@@ -49,19 +49,12 @@ export function extractDataTransferFiles(
 // 挿入記法（純粋）
 // ============================================
 
-/** Markdown 画像記法（`![]()`）で挿入する拡張子。それ以外はリンク記法（`[]()`） */
-const IMAGE_MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set([
-  'png',
-  'jpg',
-  'jpeg',
-  'gif',
-  'webp',
-  'svg',
-])
-
-/** ファイル名が画像（`![]()` で挿入する形式）かを判定する */
+/**
+ * ファイル名が画像（`![]()` で挿入する形式）かを判定する。
+ * 画像拡張子の集合は validation.ts のホワイトリスト側を単一ソースにする。
+ */
 export function isImageFileName(fileName: string): boolean {
-  return IMAGE_MARKDOWN_EXTENSIONS.has(getMediaExtension(fileName))
+  return IMAGE_MEDIA_EXTENSIONS.has(getMediaExtension(fileName))
 }
 
 /**
