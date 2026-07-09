@@ -111,8 +111,15 @@ export interface ParsedRawMediaUrl {
   path: string
 }
 
-/** owner / repo の安全文字クラス（英数とハイフン、先頭末尾は英数。`..`・`/`・`?` は通らない） */
-const SAFE_NAME_PATTERN = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?'
+/** owner の安全文字クラス（GitHub ユーザー名/組織名: 英数とハイフン、先頭末尾は英数） */
+const OWNER_NAME_PATTERN = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?'
+
+/**
+ * repo の安全文字クラス。GitHub のリポジトリ名は owner と違い `.`・`_` も合法。
+ * `..` を含む名前もあり得るが、`-media` サフィックス必須のため
+ * セグメント全体が `..` にはならず、パストラバーサルは成立しない。
+ */
+const REPO_NAME_PATTERN = '[A-Za-z0-9._-]+'
 
 /**
  * メディア raw URL の厳格パターン。
@@ -124,7 +131,7 @@ const SAFE_NAME_PATTERN = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?'
  * - path はリポルート直下の 1 セグメントのみ（スラッシュ・クエリ・フラグメント不可）
  */
 const RAW_MEDIA_URL_PATTERN = new RegExp(
-  `^https://raw\\.githubusercontent\\.com/(${SAFE_NAME_PATTERN})/(${SAFE_NAME_PATTERN}${MEDIA_REPO_SUFFIX})/${MEDIA_BRANCH}/([A-Za-z0-9._-]+)$`
+  `^https://raw\\.githubusercontent\\.com/(${OWNER_NAME_PATTERN})/(${REPO_NAME_PATTERN}${MEDIA_REPO_SUFFIX})/${MEDIA_BRANCH}/([A-Za-z0-9._-]+)$`
 )
 
 /**

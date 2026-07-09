@@ -119,6 +119,21 @@ describe('buildRawMediaUrl / parseRawMediaUrl', () => {
     })
   })
 
+  it('round-trips repo names containing _ and . (GitHub-legal, unlike owner names)', () => {
+    // 不変条件: buildRawMediaUrl の出力は必ず parseRawMediaUrl でパースできる
+    for (const repo of ['my_notes', 'my.notes', 'my_notes.v2']) {
+      const url = buildRawMediaUrl(
+        getMediaRepoFullName(`kako-jun/${repo}`),
+        '20260709-ba7816bf-x.png'
+      )
+      expect(parseRawMediaUrl(url)).toEqual({
+        repoFullName: `kako-jun/${repo}-media`,
+        branch: 'main',
+        path: '20260709-ba7816bf-x.png',
+      })
+    }
+  })
+
   it('returns null for non-raw URLs', () => {
     expect(parseRawMediaUrl('https://github.com/kako-jun/notes-media/blob/main/a.png')).toBeNull()
     expect(parseRawMediaUrl('https://example.com/a.png')).toBeNull()
