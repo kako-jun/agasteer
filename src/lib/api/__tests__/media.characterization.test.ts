@@ -379,6 +379,35 @@ describe('uploadMedia', () => {
     expect(console.error).not.toHaveBeenCalled()
   })
 
+  it('putPendingMedia が reject したら ok:false storage_failed を返し throw しない（#245 should-5）', async () => {
+    mediaStore.fns.putPendingMedia.mockRejectedValueOnce(new Error('quota exceeded'))
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
+
+    expect(res).toEqual({ ok: false, errorKind: 'storage_failed' })
+    expect(mock.calls).toHaveLength(0) // アップロード試行に進まない
+    expect(console.error).toHaveBeenCalledWith('Media enqueue failed:', expect.anything())
+  })
+
+  it('file.arrayBuffer() が reject したら ok:false storage_failed を返す（#245 should-5）', async () => {
+    const media = await loadMedia()
+    const broken = {
+      name: 'broken.png',
+      size: 3,
+      type: 'image/png',
+      arrayBuffer: async () => {
+        throw new Error('read error')
+      },
+    } as unknown as File
+
+    const res = await media.uploadMedia(broken, makeSettings())
+
+    expect(res).toEqual({ ok: false, errorKind: 'storage_failed' })
+    expect(mediaStore.fns.putPendingMedia).not.toHaveBeenCalled()
+    expect(mock.calls).toHaveLength(0)
+  })
+
   it('0 byte のファイルは検証を通り enqueue まで進む', async () => {
     vi.stubGlobal('navigator', { onLine: false })
     const media = await loadMedia()

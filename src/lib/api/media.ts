@@ -46,6 +46,7 @@ export type MediaErrorKind =
   | 'repo_unavailable' // メディアリポの確認・lazy 作成に失敗
   | 'invalid_url' // raw URL としてパースできない
   | 'fetch_failed' // 認証付き取得に失敗
+  | 'storage_failed' // ファイル読み取り・pending キュー書き込み（ローカル）に失敗
 
 export type MediaUploadResult =
   | {
@@ -145,26 +146,33 @@ export async function uploadMedia(file: File, settings: Settings): Promise<Media
     return { ok: false, errorKind: validationError }
   }
 
-  const data = await file.arrayBuffer()
-  const hash = await sha256Hex(data)
-  const filename = buildMediaFileName(new Date(), hash, file.name)
-  const url = buildRawMediaUrl(getMediaRepoFullName(settings.repoName), filename)
-
-  const item: MediaPendingItem = {
-    filename,
-    url,
-    data,
-    size: data.byteLength,
-    mimeType: file.type,
-    enqueuedAt: Date.now(),
+  let item: MediaPendingItem
+  try {
+    const data = await file.arrayBuffer()
+    const hash = await sha256Hex(data)
+    const filename = buildMediaFileName(new Date(), hash, file.name)
+    const url = buildRawMediaUrl(getMediaRepoFullName(settings.repoName), filename)
+    item = {
+      filename,
+      url,
+      data,
+      size: data.byteLength,
+      mimeType: file.type,
+      enqueuedAt: Date.now(),
+    }
+    await putPendingMedia(item)
+  } catch (error) {
+    // File 読み取り失敗・IndexedDB 書き込み失敗。pending に実体が残らないため
+    // URL を返さず失敗にする（結果オブジェクト契約: この層は throw しない）
+    console.error('Media enqueue failed:', error)
+    return { ok: false, errorKind: 'storage_failed' }
   }
-  await putPendingMedia(item)
 
   let uploaded = false
   if (typeof navigator === 'undefined' || navigator.onLine) {
     uploaded = await uploadPendingItem(item, settings)
   }
-  return { ok: true, url, uploaded }
+  return { ok: true, url: item.url, uploaded }
 }
 
 /**
