@@ -551,6 +551,24 @@ describe('retryPendingUploads', () => {
     expect(mediaStore.fns.getAllPendingMedia).toHaveBeenCalledTimes(2)
   })
 
+  it('リポ切替後の pending は settings ではなく item.url のリポへアップロードされる（#245 should-2）', async () => {
+    // item.url は owner/repo-media を指す。settings は owner/other に切替済み
+    seedPending('old.png', 100)
+    mock
+      .on('GET', /\/repos\/owner\/other-media$/, { json: { id: 1 } }) // ensure は settings 由来
+      .on('GET', `${CONTENTS}old.png`, { status: 404, json: {} })
+      .on('PUT', `${CONTENTS}old.png`, { status: 201, json: {} })
+    const media = await loadMedia()
+
+    const res = await media.retryPendingUploads(makeSettings({ repoName: 'owner/other' }))
+
+    expect(res).toEqual({ attempted: 1, uploaded: 1 })
+    // 新リポ（owner/other-media）への contents アクセスは一切ない
+    expect(mock.callsMatching('GET', '/repos/owner/other-media/contents/')).toHaveLength(0)
+    expect(mock.callsMatching('PUT', '/repos/owner/other-media/contents/')).toHaveLength(0)
+    mock.assertDrained()
+  })
+
   it('未設定なら {0,0} を返し IndexedDB に触れない', async () => {
     const media = await loadMedia()
     const res = await media.retryPendingUploads(makeSettings({ token: '' }))
@@ -572,7 +590,8 @@ describe('retryPendingUploads', () => {
 })
 
 describe('initMediaOnlineRetry', () => {
-  it('online イベントで発火時点の最新 settings を読んでリトライし、解除後は発火しない', async () => {
+  /** window.addEventListener/removeEventListener をスタブし、online 発火関数を返す */
+  function stubWindowOnline(): () => void {
     const listeners = new Map<string, Set<() => void>>()
     const windowStub = {
       addEventListener: (type: string, fn: () => void) => {
@@ -584,19 +603,27 @@ describe('initMediaOnlineRetry', () => {
       },
     }
     vi.stubGlobal('window', windowStub)
-    const dispatchOnline = () => {
+    return () => {
       for (const fn of listeners.get('online') ?? []) fn()
     }
+  }
+
+  it('online イベントで発火時点の最新 settings を読んでリトライし、解除後は発火しない', async () => {
+    const dispatchOnline = stubWindowOnline()
     const media = await loadMedia()
 
     const settingsRef = { current: makeSettings({ token: '' }) } // 最初は未設定
     const getSettings = vi.fn(() => settingsRef.current)
     const dispose = media.initMediaOnlineRetry(getSettings)
+    await flushAsync()
+    // 登録時の初回キック（未設定なので IDB には触れない）
+    expect(getSettings).toHaveBeenCalledTimes(1)
+    expect(mediaStore.fns.getAllPendingMedia).not.toHaveBeenCalled()
 
     // 発火1回目: 未設定なのでリトライは IDB に触れない
     dispatchOnline()
     await flushAsync()
-    expect(getSettings).toHaveBeenCalledTimes(1)
+    expect(getSettings).toHaveBeenCalledTimes(2)
     expect(mediaStore.fns.getAllPendingMedia).not.toHaveBeenCalled()
 
     // settings を差し替えてから発火 → 最新の設定でリトライが走る
@@ -609,8 +636,26 @@ describe('initMediaOnlineRetry', () => {
     dispose()
     dispatchOnline()
     await flushAsync()
-    expect(getSettings).toHaveBeenCalledTimes(2)
+    expect(getSettings).toHaveBeenCalledTimes(3)
     expect(mediaStore.fns.getAllPendingMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('登録時に一度リトライが走り、前セッションの積み残しが回収される（#245 should-3）', async () => {
+    stubWindowOnline()
+    seedPending('leftover.png', 100)
+    mock
+      .on('GET', REPO_GET, { json: { id: 1 } })
+      .on('GET', `${CONTENTS}leftover.png`, { status: 200, json: {} })
+    const media = await loadMedia()
+
+    const dispose = media.initMediaOnlineRetry(() => makeSettings())
+    await flushAsync()
+
+    // online イベントなしでアップロード試行され、キューが空になる
+    expect(mediaStore.fns.getAllPendingMedia).toHaveBeenCalledTimes(1)
+    expect(mediaStore.pending.size).toBe(0)
+    mock.assertDrained()
+    dispose()
   })
 })
 

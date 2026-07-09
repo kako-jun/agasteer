@@ -172,12 +172,19 @@ export async function uploadMedia(file: File, settings: Settings): Promise<Media
  * 失敗（オフライン・API エラー）は false を返し、キューに残す（online 復帰でリトライ）。
  */
 async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Promise<boolean> {
+  // アップロード先は実行時の settings.repoName ではなく item.url から導出する。
+  // リポ切替とリトライが重なっても、埋め込んだ URL とアップロード先が構造的に一致する
+  const parsed = parseRawMediaUrl(item.url)
+  if (!parsed) {
+    // buildRawMediaUrl 由来の URL は必ずパースできる。到達したら pending の破損
+    console.warn('Media pending item has an unparseable URL (skipped):', item.url)
+    return false
+  }
   const ensured = await ensureMediaRepo(settings)
   if (!ensured.ok) {
     return false
   }
-  const mediaRepo = getMediaRepoFullName(settings.repoName)
-  const contentsUrl = `https://api.github.com/repos/${mediaRepo}/contents/${item.filename}`
+  const contentsUrl = `https://api.github.com/repos/${parsed.repoFullName}/contents/${encodeURIComponent(parsed.path)}`
   try {
     // 内容アドレス dedup: ファイル名に内容ハッシュを含むため、同名が既にあれば同内容。
     // アップロード自体をスキップしてキューだけ掃除する。
@@ -252,12 +259,15 @@ export async function retryPendingUploads(
 /**
  * online 復帰時に pending キューを自動リトライするリスナーを登録する。
  * initApp から 1 回だけ呼ぶ。戻り値は解除関数。
+ * 登録時にも一度リトライを蹴る（前セッション積み残しの回収。
+ * in-flight ガード・内容アドレス dedup 済みのため冪等）。
  */
 export function initMediaOnlineRetry(getSettings: () => Settings): () => void {
   const handler = () => {
     void retryPendingUploads(getSettings())
   }
   window.addEventListener('online', handler)
+  handler()
   return () => window.removeEventListener('online', handler)
 }
 
