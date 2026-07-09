@@ -12,6 +12,8 @@
   import ArchiveIcon from '../../icons/ArchiveIcon.svelte'
   import RestoreIcon from '../../icons/RestoreIcon.svelte'
   import CameraIcon from '../../icons/CameraIcon.svelte'
+  import ImageIcon from '../../icons/ImageIcon.svelte'
+  import { MEDIA_FILE_ACCEPT } from '../../../lib/editor/media-attach'
 
   interface Props {
     onDelete: () => void
@@ -30,6 +32,7 @@
     onArchive?: (() => void) | null
     onRestore?: (() => void) | null
     onOcr?: (() => void) | null
+    onAttachFiles?: ((files: File[]) => void) | null
   }
 
   let {
@@ -49,9 +52,27 @@
     onArchive = null,
     onRestore = null,
     onOcr = null,
+    onAttachFiles = null,
   }: Props = $props()
 
   let downloadTitle = $state($_('footer.download'))
+
+  // 添付ボタン用の隠しファイル入力（#243）
+  let attachInput: HTMLInputElement | null = $state(null)
+
+  function handleAttachClick() {
+    attachInput?.click()
+  }
+
+  function handleAttachChange(event: Event) {
+    const input = event.target as HTMLInputElement
+    const files = Array.from(input.files ?? [])
+    // 同じファイルを続けて選び直せるようにリセットする
+    input.value = ''
+    if (files.length > 0 && onAttachFiles) {
+      onAttachFiles(files)
+    }
+  }
 
   // マウスエンター時に選択状態をチェックしてtitleを更新
   function updateDownloadTitle() {
@@ -119,6 +140,24 @@
     </IconButton>
   {/snippet}
   {#snippet center()}
+    {#if onAttachFiles}
+      <IconButton
+        onClick={handleAttachClick}
+        title={$_('footer.attach')}
+        ariaLabel={$_('footer.attach')}
+        {disabled}
+      >
+        <ImageIcon />
+      </IconButton>
+      <input
+        bind:this={attachInput}
+        type="file"
+        multiple
+        accept={MEDIA_FILE_ACCEPT}
+        onchange={handleAttachChange}
+        hidden
+      />
+    {/if}
     {#if onOcr}
       <IconButton onClick={onOcr} title={$_('footer.ocr')} ariaLabel={$_('footer.ocr')} {disabled}>
         <CameraIcon />

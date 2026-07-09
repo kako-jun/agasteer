@@ -84,6 +84,13 @@
     }
   }
 
+  // 外部（フッターの添付ボタン）からメディアファイルを添付する関数（#243）
+  export function attachFiles(files: File[]) {
+    if (markdownEditor && markdownEditor.attachFiles) {
+      markdownEditor.attachFiles(files)
+    }
+  }
+
   // 外部から選択テキストを取得する関数
   export function getSelectedText(): string {
     if (markdownEditor && markdownEditor.getSelectedText) {

@@ -9,6 +9,7 @@ function createEditor(leafId: string): EditorPaneRef {
     focusEditor() {},
     scrollToLine() {},
     insertAtCursor() {},
+    attachFiles() {},
     getSelectedText() {
       return ''
     },

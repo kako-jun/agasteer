@@ -107,7 +107,8 @@
     "move": "Move",
     "archive": "Archive",
     "restore": "Restore",
-    "ocr": "Text Recognition"
+    "ocr": "Text Recognition",
+    "attach": "Attach files"
   },
   "settings": {
     "title": "Settings",
