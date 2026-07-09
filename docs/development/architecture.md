@@ -176,6 +176,12 @@ agasteer/
 │   │   │   ├── encoding.ts              # Base64/UTF-8変換（純粋）
 │   │   │   ├── sha.ts                   # Git blob SHA計算（純粋）
 │   │   │   └── rate-limit.ts            # レート制限解析（純粋）
+│   │   ├── media.ts                     # メディア同期層（副作用層: lazy作成/アップロード/キュー/キャッシュ）#242
+│   │   ├── media/                       # メディア純粋層（github/ の分割パターン踏襲）
+│   │   │   ├── base64.ts                # バイナリ安全な ArrayBuffer↔Base64（純粋）
+│   │   │   ├── naming.ts                # SHA-256・ファイル名・raw URL 生成/パース（純粋）
+│   │   │   ├── validation.ts            # 形式ホワイトリスト・100MB上限（純粋）
+│   │   │   └── lru.ts                   # キャッシュ上限・LRU追い出し選定（純粋）
 │   │   ├── routing.ts                   # URLルーティング
 │   │   ├── storage.ts                   # IndexedDB/LocalStorage操作
 │   │   ├── actions/                      # App.svelteから抽出したビジネスロジック
@@ -334,10 +340,12 @@ agasteer/
 
 - `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）。純粋層は `github/` 配下へ分離（Phase 1: paths/encoding/sha/rate-limit）。push/pull/http の副作用層は github.ts に残し、純粋関数を re-export して公開 API を維持
 - `sync.ts`: Push/Pull処理の分離
+- `media.ts`: メディア同期層（#242）。別リポ `{owner}/{repo}-media` の lazy 作成・アップロード（pending キュー + online リトライ）・認証付き取得・LRU キャッシュ。Push/Pull フロー・WorldType とは独立。純粋層は `media/` 配下（base64/naming/validation/lru）
 
 **データ永続化:**
 
 - `storage.ts`: IndexedDB/LocalStorageへの読み書き（汎用ヘルパー関数）
+- `media-storage.ts`: per-repo DB の `mediaPending`/`mediaCache` store アクセサ（#242。ArrayBuffer を含むため toPlain を通さない）
 
 **UI/UX:**
 
