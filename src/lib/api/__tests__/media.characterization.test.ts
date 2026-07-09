@@ -590,11 +590,11 @@ describe('retryPendingUploads', () => {
     expect(mediaStore.fns.getAllPendingMedia).toHaveBeenCalledTimes(2)
   })
 
-  it('リポ切替後の pending は settings ではなく item.url のリポへアップロードされる（#245 should-2）', async () => {
+  it('リポ切替後の pending は ensure 含め settings ではなく item.url のリポへ向く（#245 should-2）', async () => {
     // item.url は owner/repo-media を指す。settings は owner/other に切替済み
     seedPending('old.png', 100)
     mock
-      .on('GET', /\/repos\/owner\/other-media$/, { json: { id: 1 } }) // ensure は settings 由来
+      .on('GET', REPO_GET, { json: { id: 1 } }) // 存在確認も item.url 由来の owner/repo-media へ
       .on('GET', `${CONTENTS}old.png`, { status: 404, json: {} })
       .on('PUT', `${CONTENTS}old.png`, { status: 201, json: {} })
     const media = await loadMedia()
@@ -602,9 +602,8 @@ describe('retryPendingUploads', () => {
     const res = await media.retryPendingUploads(makeSettings({ repoName: 'owner/other' }))
 
     expect(res).toEqual({ attempted: 1, uploaded: 1 })
-    // 新リポ（owner/other-media）への contents アクセスは一切ない
-    expect(mock.callsMatching('GET', '/repos/owner/other-media/contents/')).toHaveLength(0)
-    expect(mock.callsMatching('PUT', '/repos/owner/other-media/contents/')).toHaveLength(0)
+    // 新リポ（owner/other-media）へのアクセスは存在確認・contents とも一切ない
+    expect(mock.calls.filter((c) => c.url.includes('other-media'))).toHaveLength(0)
     mock.assertDrained()
   })
 

@@ -26,17 +26,6 @@ export function getMediaRepoFullName(notesRepoName: string): string {
 }
 
 /**
- * notes リポのフルネームからメディアリポの短縮名（owner なし）を作る
- * `POST /user/repos` の `name` パラメータ用。
- * 例: "kako-jun/notes" -> "notes-media"
- */
-export function getMediaRepoShortName(notesRepoName: string): string {
-  const slashIndex = notesRepoName.indexOf('/')
-  const repo = slashIndex >= 0 ? notesRepoName.slice(slashIndex + 1) : notesRepoName
-  return `${repo}${MEDIA_REPO_SUFFIX}`
-}
-
-/**
  * ArrayBuffer の SHA-256 を hex 文字列で返す（内容アドレス用）
  */
 export async function sha256Hex(data: ArrayBuffer): Promise<string> {

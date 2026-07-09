@@ -15,7 +15,6 @@ import type { Settings } from '../types'
 import { encodeArrayBufferToBase64 } from './media/base64'
 import {
   getMediaRepoFullName,
-  getMediaRepoShortName,
   sha256Hex,
   buildMediaFileName,
   buildRawMediaUrl,
@@ -83,14 +82,20 @@ const ensuredMediaRepos = new Set<string>()
 /**
  * メディアリポ `{owner}/{repo}-media` の存在を確認し、404 なら lazy 作成する。
  * private + auto_init（default branch と初期コミットを持たせ、Contents API を即使えるようにする）。
+ *
+ * mediaRepoFullName 省略時は settings.repoName から導出する。
+ * uploadPendingItem は item.url 由来のフルネームを渡す
+ * （リポ切替と重なっても URL・存在確認・アップロード先が構造的に一致する）。
+ * メモ化 Set のキーも渡されたフルネーム基準。
  */
 export async function ensureMediaRepo(
-  settings: Settings
+  settings: Settings,
+  mediaRepoFullName?: string
 ): Promise<{ ok: boolean; errorKind?: MediaErrorKind; httpStatus?: number }> {
   if (!isConfigured(settings)) {
     return { ok: false, errorKind: 'not_configured' }
   }
-  const mediaRepo = getMediaRepoFullName(settings.repoName)
+  const mediaRepo = mediaRepoFullName ?? getMediaRepoFullName(settings.repoName)
   if (ensuredMediaRepos.has(mediaRepo)) {
     return { ok: true }
   }
@@ -110,7 +115,8 @@ export async function ensureMediaRepo(
       method: 'POST',
       headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: getMediaRepoShortName(settings.repoName),
+        // POST /user/repos の name は owner なしの短縮名
+        name: mediaRepo.slice(mediaRepo.indexOf('/') + 1),
         private: true,
         auto_init: true,
         description: 'Agasteer media attachments',
@@ -191,7 +197,8 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
     console.warn('Media pending item has an unparseable URL (skipped):', item.url)
     return false
   }
-  const ensured = await ensureMediaRepo(settings)
+  // 存在確認・lazy 作成も item.url 由来のリポに対して行う
+  const ensured = await ensureMediaRepo(settings, parsed.repoFullName)
   if (!ensured.ok) {
     return false
   }

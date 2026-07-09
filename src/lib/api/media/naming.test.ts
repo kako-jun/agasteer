@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getMediaRepoFullName,
-  getMediaRepoShortName,
   sha256Hex,
   formatDateYYYYMMDD,
   getMediaExtension,
@@ -12,10 +11,9 @@ import {
   parseRawMediaUrl,
 } from './naming'
 
-describe('getMediaRepoFullName / getMediaRepoShortName', () => {
+describe('getMediaRepoFullName', () => {
   it('appends -media to the notes repo name', () => {
     expect(getMediaRepoFullName('kako-jun/notes')).toBe('kako-jun/notes-media')
-    expect(getMediaRepoShortName('kako-jun/notes')).toBe('notes-media')
   })
 })
 
