@@ -104,6 +104,7 @@ import type { ApplyStaleResultOutcome } from './stores/stale-checker.svelte'
 import { initI18n, _ } from './i18n'
 import { waitForSwCheck } from '../main'
 import { pullArchive, translateGitHubMessage } from './api'
+import { initMediaOnlineRetry } from './api/media'
 import { setArchiveBaseline } from './stores'
 
 // ========================================
@@ -1196,6 +1197,9 @@ export function initApp(deps: InitAppDeps): () => void {
   }
   window.addEventListener('online', handleOnline)
 
+  // #242: メディア pending キューの online リトライ（Push/Pull とは独立したサブシステム）
+  const cleanupMediaOnlineRetry = initMediaOnlineRetry(() => settings.value)
+
   // 自動Push機能（$effect.rootで購読）
   const cleanupAutoPush = $effect.root(() => {
     $effect(() => {
@@ -1299,6 +1303,7 @@ export function initApp(deps: InitAppDeps): () => void {
     window.removeEventListener('appinstalled', handleAppInstalled)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     window.removeEventListener('online', handleOnline)
+    cleanupMediaOnlineRetry()
     cleanupAutoPush()
     cleanupAutoPull()
     cleanupStoreEffects()

@@ -27,3 +27,5 @@ export {
 } from './github'
 export * from './sync'
 export * from './sync-handlers'
+// メディア同期層（#242）。Push/Pull フローとは独立
+export * from './media'
