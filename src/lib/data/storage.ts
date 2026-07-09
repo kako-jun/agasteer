@@ -762,6 +762,17 @@ async function openPerRepoDB(repoKey: string, retryCount = 0): Promise<IDBDataba
     request.onsuccess = () => {
       settle(() => {
         const db = request.result
+        // 別接続（新バージョンのタブ）が上位バージョンで open した時に、
+        // この接続が握り続けて相手を onblocked にしないよう自ら閉じる。
+        // 明示的な close() は onclose を発火しないため、参照も自分でクリアする
+        db.onversionchange = () => {
+          console.warn('IndexedDB version change requested by another connection; closing')
+          db.close()
+          if (db === currentDb) {
+            currentDb = null
+            currentDbPromise = null
+          }
+        }
         db.onclose = () => {
           console.warn('IndexedDB connection closed unexpectedly')
           // 当該 DB が現在の current DB なら参照をクリア

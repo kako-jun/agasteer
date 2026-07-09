@@ -117,6 +117,29 @@ describe('per-repo DB の v1→v2 移行', () => {
     expect(notes).toEqual([{ id: 'note-1', name: 'existing note', order: 0 }])
   })
 
+  it('接続保持中に上位バージョンの open が来ても blocked にならない（onversionchange で自ら閉じる）', async () => {
+    const { storage } = await loadModules()
+    await storage.setCurrentRepo(REPO_KEY)
+    await storage.getCurrentDb() // v2 接続を握った状態にする
+
+    let blocked = false
+    const db3 = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 3)
+      request.onblocked = () => {
+        blocked = true
+      }
+      request.onupgradeneeded = () => {
+        // スキーマ変更なし（バージョンだけ上げる）
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+    expect(blocked).toBe(false)
+    expect(db3.version).toBe(3)
+    db3.close()
+  })
+
   it('新規 DB でも全 7 store が揃う', async () => {
     const { storage } = await loadModules()
     await storage.setCurrentRepo(REPO_KEY)
