@@ -94,6 +94,44 @@ describe('listMediaAssets', () => {
     const result = await listMediaAssets(makeSettings())
     expect(result).toEqual({ ok: false, errorKind: 'fetch_failed', httpStatus: 500 })
   })
+
+  it('401 / 403（認証エラー）も fetch_failed＋httpStatus（res.status をそのまま載せる）', async () => {
+    mock.on('GET', '/repo-media/contents/', { status: 401, json: {} })
+    mock.on('GET', '/repo-media/contents/', { status: 403, json: {} })
+    const { listMediaAssets } = await loadLibrary()
+    expect(await listMediaAssets(makeSettings())).toEqual({
+      ok: false,
+      errorKind: 'fetch_failed',
+      httpStatus: 401,
+    })
+    expect(await listMediaAssets(makeSettings())).toEqual({
+      ok: false,
+      errorKind: 'fetch_failed',
+      httpStatus: 403,
+    })
+  })
+
+  it('fetch が throw（ネットワーク断）→ fetch_failed（httpStatus なし）＋ console.error', async () => {
+    // 例外系は fetch-mock のキューでなく、reject する fetch を直接差し込んで再現する
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+      const { listMediaAssets } = await loadLibrary()
+      const result = await listMediaAssets(makeSettings())
+      // toEqual の完全一致で httpStatus が付いていないことも同時に固定する
+      expect(result).toEqual({ ok: false, errorKind: 'fetch_failed' })
+      expect(errorSpy).toHaveBeenCalled()
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  it('200 だが配列でない JSON（想定外応答）は ok・空配列にする（Array.isArray ガード）', async () => {
+    mock.on('GET', '/repo-media/contents/', { status: 200, json: { message: 'not an array' } })
+    const { listMediaAssets } = await loadLibrary()
+    const result = await listMediaAssets(makeSettings())
+    expect(result).toEqual({ ok: true, assets: [] })
+  })
 })
 
 describe('deleteMediaAsset', () => {
@@ -123,5 +161,58 @@ describe('deleteMediaAsset', () => {
     const result = await deleteMediaAsset(makeSettings(), '20260101-aa-x.png', 'sha-xyz')
     expect(result).toEqual({ ok: false, errorKind: 'fetch_failed', httpStatus: 409 })
     expect(mediaStore.fns.deleteCachedMedia).not.toHaveBeenCalled()
+  })
+
+  it('未設定なら not_configured（fetch しない）', async () => {
+    const { deleteMediaAsset } = await loadLibrary()
+    const result = await deleteMediaAsset(
+      makeSettings({ token: '' }),
+      '20260101-aa-x.png',
+      'sha-xyz'
+    )
+    expect(result).toEqual({ ok: false, errorKind: 'not_configured' })
+    expect(mock.calls.length).toBe(0)
+  })
+
+  it('DELETE が throw → fetch_failed ＋ console.error（evict しない）', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom')))
+      const { deleteMediaAsset } = await loadLibrary()
+      const result = await deleteMediaAsset(makeSettings(), '20260101-aa-x.png', 'sha-xyz')
+      expect(result).toEqual({ ok: false, errorKind: 'fetch_failed' })
+      expect(errorSpy).toHaveBeenCalled()
+      expect(mediaStore.fns.deleteCachedMedia).not.toHaveBeenCalled()
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  it('削除成功後に evict（cache/pending）が reject しても ok:true（allSettled で握り潰す）', async () => {
+    // リモート削除は既に成立しているため、ローカル evict の失敗で結果を失敗にしない
+    mediaStore.fns.deleteCachedMedia.mockRejectedValueOnce(new Error('idb read fail'))
+    mediaStore.fns.deletePendingMedia.mockRejectedValueOnce(new Error('idb read fail'))
+    mock.on('DELETE', '/repo-media/contents/20260101-aa-x.png', { status: 200, json: {} })
+    const { deleteMediaAsset } = await loadLibrary()
+    const result = await deleteMediaAsset(makeSettings(), '20260101-aa-x.png', 'sha-xyz')
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('特殊文字を含む path は encodeURIComponent で送り、body に message/committer/sha を積む', async () => {
+    const path = 'a b+c.png'
+    mock.on('DELETE', '/repo-media/contents/', { status: 200, json: {} })
+    const { deleteMediaAsset } = await loadLibrary()
+    const result = await deleteMediaAsset(makeSettings(), path, 'sha-777')
+    expect(result).toEqual({ ok: true })
+    const call = mock.firstCall('DELETE', '/repo-media/contents/')
+    // 生パス（空白・+）は URL に出さず、必ず percent-encode したものを宛先にする
+    expect(call?.url).toContain(`/contents/${encodeURIComponent(path)}`)
+    expect(call?.url).toContain('/contents/a%20b%2Bc.png')
+    expect(call?.url).not.toContain('a b+c.png')
+    expect(call?.body).toMatchObject({
+      message: `Agasteer media delete: ${path}`,
+      sha: 'sha-777',
+      committer: { name: 'agasteer', email: 'agasteer@users.noreply.github.com' },
+    })
   })
 })

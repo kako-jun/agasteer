@@ -12,6 +12,10 @@ import {
   formatMediaSize,
   type GitHubContentsItem,
 } from './library'
+// 型のみの import は実行時に消えるが、コンパイル時（svelte-check）に型設計を縛る
+import type { WorldType, View } from '../../types'
+import ja from '../../i18n/locales/ja.json'
+import en from '../../i18n/locales/en.json'
 
 const REPO = 'owner/repo-media'
 
@@ -63,6 +67,12 @@ describe('contentsItemToMediaAsset', () => {
       expect(contentsItemToMediaAsset(item({ name, path: name }), REPO)).not.toBeNull()
     }
   })
+
+  it('大文字拡張子（.PNG / .MP4 / .ZIP）も通す（getMediaExtension が小文字化する）', () => {
+    for (const name of ['X.PNG', 'V.MP4', 'A.ZIP']) {
+      expect(contentsItemToMediaAsset(item({ name, path: name }), REPO)).not.toBeNull()
+    }
+  })
 })
 
 describe('mapContentsToMediaAssets', () => {
@@ -102,5 +112,72 @@ describe('formatMediaSize', () => {
   it('不正値は空文字', () => {
     expect(formatMediaSize(-1)).toBe('')
     expect(formatMediaSize(NaN)).toBe('')
+  })
+
+  it('単位の境界・丸め切替点', () => {
+    expect(formatMediaSize(1023)).toBe('1023 B') // B の上端
+    expect(formatMediaSize(1024)).toBe('1.0 KB') // KB の下端（小数第1位）
+    expect(formatMediaSize(10240)).toBe('10 KB') // 10KB＝小数→整数の切替点
+    expect(formatMediaSize(1048575)).toBe('1024 KB') // MB 直前は KB 表示のまま
+    expect(formatMediaSize(1048576)).toBe('1.0 MB') // MB の下端
+  })
+})
+
+describe('i18n キー整合（メディアライブラリ画面・#250）', () => {
+  // 画面が参照する文言キー。ja/en 両方に string で存在することを縛る
+  // （media-attach.test.ts の requiredKeys 方式に倣う）
+  const requiredKeys = [
+    'breadcrumbs.worldMedia',
+    'media.library.title',
+    'media.library.back',
+    'media.library.loading',
+    'media.library.empty',
+    'media.library.loadFailed',
+    'media.library.retry',
+    'media.library.delete',
+    'media.library.deleteConfirm',
+    'media.library.deleted',
+    'media.library.deleteFailed',
+  ]
+
+  function getByPath(obj: unknown, path: string): unknown {
+    return path
+      .split('.')
+      .reduce<unknown>((cur, key) => (cur as Record<string, unknown> | undefined)?.[key], obj)
+  }
+
+  it.each([
+    ['ja', ja],
+    ['en', en],
+  ])('%s: 画面文言キーが全て string で存在する', (name, locale) => {
+    for (const key of requiredKeys) {
+      expect(getByPath(locale, key), `${name}.json missing key: ${key}`).toBeTypeOf('string')
+    }
+  })
+})
+
+describe('型設計の回帰ガード（WorldType 3値化防止・#250）', () => {
+  // 'media' は「World（Home/Archive）ではなく独立の View」という設計を型で固定する。
+  // これらは svelte-check（npm run check）が検証する compile 時アサーション。
+  // 実行時の expect は「テストが空でない」ことの担保にすぎない。
+
+  // WorldType が 'home' | 'archive' の2値のまま（3値化したら下の網羅列挙が壊れる）
+  const ALL_WORLD_TYPES = ['home', 'archive'] as const satisfies readonly WorldType[]
+  // WorldType に値が増えると never へ落ちて型エラーになり、回帰を検出する
+  const _worldExhaustive: Exclude<WorldType, (typeof ALL_WORLD_TYPES)[number]> extends never
+    ? true
+    : never = true
+
+  // 'media' は WorldType の外（Exclude で 'media' が残る＝WorldType に含まれない）。
+  // WorldType に 'media' を足すと never になり代入不能で壊れる
+  const mediaIsNotWorld: Exclude<'media', WorldType> = 'media'
+  // 'media' は View に含まれる（View から外すと never で代入不能）
+  const mediaIsView: View = 'media'
+
+  it("'media' は View だが WorldType ではない（型レベルで固定）", () => {
+    void _worldExhaustive
+    expect(ALL_WORLD_TYPES).toEqual(['home', 'archive'])
+    expect(mediaIsNotWorld).toBe('media')
+    expect(mediaIsView).toBe('media')
   })
 })
