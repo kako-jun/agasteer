@@ -15,11 +15,12 @@ import type { Settings } from '../types'
 import {
   isMediaConfigured,
   fetchWithTimeout,
+  authHeaders,
   MEDIA_API_TIMEOUT_MS,
   type MediaErrorKind,
 } from './media'
 import { getMediaRepoFullName, buildRawMediaUrl } from './media/naming'
-import { mapTreeToMediaAssets, type MediaAsset, type GitTreeItem } from './media/library'
+import { mapTreeToMediaAssets, type MediaAsset } from './media/library'
 import { deleteCachedMedia, deletePendingMedia } from '../data/media-storage'
 
 // 取り込んだ MediaAsset をこの層の公開型としても再輸出する（UI は media-library から引く）
@@ -41,24 +42,23 @@ export type MediaDeleteResult =
   | { ok: true }
   | { ok: false; errorKind: MediaErrorKind; httpStatus?: number }
 
-function authHeaders(settings: Settings): Record<string, string> {
-  return { Authorization: `Bearer ${settings.token}` }
-}
-
 /**
  * メディアリポ直下のアセット一覧を取得する。
  *
- * #258: 取得は Git Trees API（`GET /git/trees/HEAD?recursive=1`）。
+ * #258: 取得は Git Trees API（`GET /git/trees/HEAD`、非 recursive）。
  * Contents API のディレクトリ一覧は 1000 件で黙って切れる（silent cap）が、
- * Trees API は全件返り、上限（100,000 件 / 7MB）超過は truncated フラグで検知できる。
- * ref に HEAD を使うのは default branch 追従のため（Contents API の既定と同じ挙動。
- * push/pull が使う実証済み経路でもある）。
+ * Trees API は全件返り、上限超過は truncated フラグで検知できる。
+ * - ref に HEAD を使うのは default branch 追従のため（Contents API の既定と同じ挙動）
+ * - メディアはルート直下フラット配置の契約なので recursive は不要。非 recursive は
+ *   ルートツリーだけを返すため、（ユーザーが手動でフォルダを作った異常系でも）
+ *   ネストした大量エントリで応答が肥大したり truncated が誤発火したりしない
  *
  * - 未設定（token / `owner/repo` 形式でない）は not_configured。
- * - 404（メディアリポ未作成）・409（空リポ = コミット 0 件で HEAD なし）は
- *   「まだ添付が 0 件」なので成功扱いで空配列を返す。
- * - それ以外の HTTP エラー・ネットワークエラー・タイムアウト（#262）は
- *   fetch_failed（UI は再試行導線を出す）。
+ * - 409（空リポ = コミット 0 件で HEAD なし）は「まだ添付が 0 件」なので成功・空配列。
+ * - 404 は「リポ未作成」と「ref/tree 解決失敗」を区別できない。黙って空を返すと
+ *   実在する全アセットが見えない silent failure に化けるため、リポ自体の存在を
+ *   確認して未作成のときだけ空として扱う（それ以外は fetch_failed → 再試行導線）。
+ * - それ以外の HTTP エラー・ネットワークエラー・タイムアウト（#262）も fetch_failed。
  */
 export async function listMediaAssets(settings: Settings): Promise<MediaListResult> {
   if (!isMediaConfigured(settings)) {
@@ -67,28 +67,45 @@ export async function listMediaAssets(settings: Settings): Promise<MediaListResu
   const mediaRepo = getMediaRepoFullName(settings.repoName)
   try {
     const res = await fetchWithTimeout(
-      `https://api.github.com/repos/${mediaRepo}/git/trees/HEAD?recursive=1`,
+      `https://api.github.com/repos/${mediaRepo}/git/trees/HEAD`,
       {
         headers: authHeaders(settings),
         cache: 'no-store',
       },
       MEDIA_API_TIMEOUT_MS
     )
-    if (res.status === 404 || res.status === 409) {
+    if (res.status === 409) {
       return { ok: true, assets: [], truncated: false }
+    }
+    if (res.status === 404) {
+      const repoRes = await fetchWithTimeout(
+        `https://api.github.com/repos/${mediaRepo}`,
+        {
+          headers: authHeaders(settings),
+          cache: 'no-store',
+        },
+        MEDIA_API_TIMEOUT_MS
+      )
+      if (repoRes.status === 404) {
+        // リポ未作成 = まだ何も添付していない
+        return { ok: true, assets: [], truncated: false }
+      }
+      // リポは在るのに tree が引けない（ref 解決失敗・レプリケーション遅延等）は
+      // 空一覧に見せかけず、エラー + 再試行に落とす
+      return { ok: false, errorKind: 'fetch_failed', httpStatus: res.status }
     }
     if (!res.ok) {
       return { ok: false, errorKind: 'fetch_failed', httpStatus: res.status }
     }
     const json = await res.json()
-    const tree: unknown = json?.tree
+    const tree = json?.tree
     // tree は配列で返る。非配列応答（想定外）は空扱いにして UI を壊さない
     if (!Array.isArray(tree)) {
       return { ok: true, assets: [], truncated: false }
     }
     return {
       ok: true,
-      assets: mapTreeToMediaAssets(tree as GitTreeItem[], mediaRepo),
+      assets: mapTreeToMediaAssets(tree, mediaRepo),
       truncated: json.truncated === true,
     }
   } catch (error) {

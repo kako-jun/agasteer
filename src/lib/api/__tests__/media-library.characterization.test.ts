@@ -38,6 +38,8 @@ async function loadLibrary(): Promise<LibraryModule> {
 
 // Trees API 一覧の URL マッチャ（一覧のみ。削除は従来どおり Contents API）
 const TREES = '/repo-media/git/trees/HEAD'
+// 404 曖昧性解消用のリポ存在確認 GET（trees と部分一致しないよう末尾一致）
+const REPO_GET = /\/repos\/owner\/repo-media$/
 
 let mock: FetchMock
 
@@ -63,11 +65,22 @@ describe('listMediaAssets', () => {
     expect(mock.calls.length).toBe(0)
   })
 
-  it('404（メディアリポ未作成）は成功扱いで空配列', async () => {
+  it('404 + リポも 404（メディアリポ未作成）は成功扱いで空配列', async () => {
     mock.on('GET', TREES, { status: 404, json: { message: 'Not Found' } })
+    mock.on('GET', REPO_GET, { status: 404, json: { message: 'Not Found' } })
     const { listMediaAssets } = await loadLibrary()
     const result = await listMediaAssets(makeSettings())
     expect(result).toEqual({ ok: true, assets: [], truncated: false })
+    mock.assertDrained()
+  })
+
+  it('404 だがリポは実在（ref/tree 解決失敗）は空に見せかけず fetch_failed（再試行導線）', async () => {
+    mock.on('GET', TREES, { status: 404, json: { message: 'Not Found' } })
+    mock.on('GET', REPO_GET, { status: 200, json: { id: 1 } })
+    const { listMediaAssets } = await loadLibrary()
+    const result = await listMediaAssets(makeSettings())
+    expect(result).toEqual({ ok: false, errorKind: 'fetch_failed', httpStatus: 404 })
+    mock.assertDrained()
   })
 
   it('409（空リポ = コミット0件で HEAD なし）も成功扱いで空配列', async () => {
@@ -77,7 +90,7 @@ describe('listMediaAssets', () => {
     expect(result).toEqual({ ok: true, assets: [], truncated: false })
   })
 
-  it('一覧成功で Trees API の tree 配列を MediaAsset に変換する（HEAD?recursive=1 宛て）', async () => {
+  it('一覧成功で Trees API の tree 配列を MediaAsset に変換する（git/trees/HEAD 宛て・非 recursive）', async () => {
     mock.on('GET', TREES, {
       status: 200,
       json: {
@@ -102,9 +115,9 @@ describe('listMediaAssets', () => {
         'https://raw.githubusercontent.com/owner/repo-media/main/20260101-aa-x.png'
       )
     }
-    // 宛先が Trees API（default branch 追従の HEAD・recursive=1）であることを固定
+    // 宛先が Trees API（default branch 追従の HEAD・非 recursive = ルートツリーのみ）であることを固定
     const call = mock.firstCall('GET', TREES)
-    expect(call!.url).toContain('/repos/owner/repo-media/git/trees/HEAD?recursive=1')
+    expect(call!.url.endsWith('/repos/owner/repo-media/git/trees/HEAD')).toBe(true)
   })
 
   it('truncated: true は結果に透過される（silent cap 禁止の配線・#258）', async () => {

@@ -105,9 +105,11 @@
       <!-- Trees API の上限で一覧が切り詰められた（#258。silent cap にしない） -->
       <div class="media-truncated" role="status">{$_('media.library.truncated')}</div>
     {/if}
-    {#if controller.assets.length === 0}
+    <!-- truncated 時は「まだ添付がありません」を出さない（切り詰めで 0 件に見えている
+         可能性があり、「一部のみ表示」と並ぶと矛盾した表示になるため） -->
+    {#if controller.assets.length === 0 && !controller.truncated}
       <div class="media-status media-empty">{$_('media.library.empty')}</div>
-    {:else}
+    {:else if controller.assets.length > 0}
       <div class="media-grid">
         {#each controller.assets as asset (asset.path)}
           <div class="media-card">

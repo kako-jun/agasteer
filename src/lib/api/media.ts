@@ -77,7 +77,8 @@ export function isMediaConfigured(settings: Settings): boolean {
   return Boolean(settings.token) && slashIndex > 0 && slashIndex < settings.repoName.length - 1
 }
 
-function authHeaders(settings: Settings): Record<string, string> {
+/** GitHub API の認証ヘッダ。media-library.ts（一覧・削除）と共用する */
+export function authHeaders(settings: Settings): Record<string, string> {
   return { Authorization: `Bearer ${settings.token}` }
 }
 
