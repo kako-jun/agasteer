@@ -198,7 +198,7 @@
 
   // 貼り付け・D&D・フッター添付ボタンの共通入口（#243）。
   // dropPos があればそこへカーソルを移し、以降はカーソル位置に挿入する
-  // （アップロード完了までの間にカーソルが動いても挿入時点の位置に従う）。
+  // （挿入までの間にカーソルが動いても挿入時点の位置に従う）。
   function handleMediaFiles(files: File[], dropPos: number | null) {
     if (!editorView) return
     if (dropPos !== null) {
@@ -208,7 +208,7 @@
     void attachMediaFiles(files, {
       settings: settings.value,
       optimizeImages: settings.value.mediaOptimizeImages ?? true,
-      // 挿入はアップロード完了時（数秒後）に走るため、フォーカスを奪わない
+      // 挿入は enqueue 直後（最適化の待ちで僅かに遅延しうる）に走るため、フォーカスを奪わない
       // （反対ペイン作業の中断・モバイルのキーボードポップアップを防ぐ、should-3）
       insert: (text) => insertAtCursor(text, { focus: false }),
       notify: notifyMediaAttach,

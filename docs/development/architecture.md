@@ -342,11 +342,11 @@ agasteer/
 
 - `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）。純粋層は `github/` 配下へ分離（Phase 1: paths/encoding/sha/rate-limit）。push/pull/http の副作用層は github.ts に残し、純粋関数を re-export して公開 API を維持
 - `sync.ts`: Push/Pull処理の分離
-- `media.ts`: メディア同期層（#242）。別リポ `{owner}/{repo}-media` の lazy 作成・アップロード（pending キュー + online リトライ）・認証付き取得・LRU キャッシュ。Push/Pull フロー・WorldType とは独立。純粋層は `media/` 配下（base64/naming/validation/lru）
+- `media.ts`: メディア同期層（#242）。別リポ `{owner}/{repo}-media` の lazy 作成・アップロード（pending キュー + online リトライ）・認証付き取得・LRU キャッシュ。`uploadMedia` は enqueue で即返し、実アップロードは背景の**グローバル直列チェーン**で流す（#247。同一リポへの並行 PUT が 409 になるのを直列化で回避。戻り値 `uploadDone: Promise<boolean>`）。Push/Pull フロー・WorldType とは独立。純粋層は `media/` 配下（base64/naming/validation/lru）
 
 **メディア添付 UI（#243）:**
 
-- `editor/media-attach.ts`: エディタ添付の共通ロジック。ファイル取り出し（paste/drop/ファイル選択）・挿入記法の組み立て（画像=`![]()`/他=`[]()`）・CodeMirror `domEventHandlers` の生成・添付編成（最適化 → uploadMedia → 挿入 → トースト通知）。Svelte 側（MarkdownEditor/EditorFooter）は insert/notify コールバックの薄い配線のみ
+- `editor/media-attach.ts`: エディタ添付の共通ロジック。ファイル取り出し（paste/drop/ファイル選択）・挿入記法の組み立て（画像=`![]()`/他=`[]()`）・CodeMirror `domEventHandlers` の生成・添付編成（最適化 → uploadMedia[enqueue で即返る] → **背景アップロードを待つ前に挿入** → 終端トーストは `uploadDone` 解決後、#247）。挿入が背景待ちの前に走るため、直後の editorView 破棄でも挿入が消えない。Svelte 側（MarkdownEditor/EditorFooter）は insert/notify コールバックの薄い配線のみ
 - `utils/image-optimize.ts`: 添付画像の自動最適化（最大辺2048px縮小 + WebP再エンコード。設定 `mediaOptimizeImages` 既定ON）。gif/svg/非画像は無変換。uploadMedia に渡す前に適用するため、ハッシュ・raw URL は最適化後の内容で確定する。寸法計算・対象判定は純粋関数として分離
 - `preview/media-resolve.ts`: プレビューでの添付メディア表示解決（#244）。sanitize 済み DOM から `parseRawMediaUrl` 受理の URL だけを検出し、`resolveMedia`（pending → cache → 認証 fetch）の実体を Blob URL 化して `<img>`/`<video>`/`<audio>`/`<a download>` に差し替え。URL→Blob URL の Map で重複排除し、破棄時に revoke。純粋関数（種別判定・MIME・ファイル名）と副作用（解決・DOM 差し替え）を分離
 

@@ -147,8 +147,8 @@ export interface MediaAttachDeps {
   optimizeImages: boolean
   /**
    * 確定した Markdown 記法をエディタに挿入する。
-   * 添付からアップロード完了までのタイムラグ後に呼ばれるため、
-   * フォーカスを奪わない実装（insertAtCursor の focus: false）を渡すこと。
+   * enqueue 直後（実アップロードの背景待ちの前）に呼ばれる。画像最適化の待ちで
+   * 僅かに遅延しうるため、フォーカスを奪わない実装（insertAtCursor の focus: false）を渡すこと。
    */
   insert: (text: string) => void
   notify: (notice: MediaAttachNotice) => void
@@ -157,13 +157,15 @@ export interface MediaAttachDeps {
 /**
  * ファイル群を順に添付する。1 ファイルごとに:
  * 1. 最適化 ON かつ対象画像なら縮小 + WebP 化（ハッシュ・URL は最適化後の内容で確定）
- * 2. uploadMedia（検証 → URL 即時確定 → enqueue → オンラインなら即時アップロード）
- * 3. 成功なら記法を配列に集める（オフラインでも URL は確定済みなので挿入は完了する）
+ * 2. uploadMedia（検証 → URL 即時確定 → enqueue で即返る＝ネットワーク待ちなし）
+ * 3. 成功なら記法を配列に集め、実アップロードの終端トーストを uploadDone に予約する
  * 4. 進行・結果を notify（失敗ファイルはスキップして次へ進む）
  *
- * 挿入は成功した記法だけを改行で join して最後に 1 回行う。入力配列内の
- * 位置で改行を決めると、末尾側のファイルが失敗したときにぶら下がり改行が
- * 残るため（`![a](...)\n` だけが挿入される）、この方式にしている。
+ * 挿入は成功した記法だけを改行で join し、背景アップロードを待つ前に 1 回行う。
+ * これにより editorView が破棄される窓が、アップロード完了までの数分ではなく
+ * ローカル処理（最適化 + enqueue）の数 ms に縮み、挿入が黙って消えることを防ぐ。
+ * 入力配列内の位置で改行を決めると末尾ファイル失敗時にぶら下がり改行が残るため、
+ * 成功分だけを最後に join する方式にしている。
  */
 export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Promise<void> {
   if (files.length === 0) return
@@ -174,6 +176,8 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
     return
   }
   const markdowns: string[] = []
+  // 背景アップロードの終端トースト。挿入はこの待ちの前に済ませる
+  const backgroundUploads: Promise<void>[] = []
   for (const original of files) {
     // 形式外・100MB超は「アップロード中」を出す前に弾く（アップロード中→拒否の
     // 2連トースト防止）。判定は原本に対して行い、uploadMedia 内の検証は
@@ -183,6 +187,10 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
       deps.notify({ kind: 'error', errorKind: validationError, name: original.name })
       continue
     }
+    // 事前検証を通った直後（最適化 await の前）に「アップロード中」を出す。
+    // 大きい画像の最適化は数百 ms かかりうるため、その間の無反応を避ける。
+    // 事前検証済み＝最適化は縮小のみで uploadMedia の形式/サイズ再検証を新たに失敗させないため
+    // 「アップロード中→拒否」の 2 連トーストは通常起きない
     deps.notify({ kind: 'uploading', name: original.name })
     const file = deps.optimizeImages ? await optimizeImageFile(original) : original
     const result = await uploadMedia(file, deps.settings)
@@ -193,15 +201,26 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
       continue
     }
     markdowns.push(buildMediaMarkdown(file.name, result.url))
-    if (result.uploaded) {
-      deps.notify({ kind: 'uploaded', name: file.name })
-    } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      deps.notify({ kind: 'queuedOffline', name: file.name })
-    } else {
-      deps.notify({ kind: 'queuedRetry', name: file.name })
-    }
+    // enqueue 成功＝実アップロード開始。完了/保留のトーストは背景 uploadDone 解決後に出す
+    backgroundUploads.push(
+      result.uploadDone
+        .then((uploaded) => {
+          if (uploaded) deps.notify({ kind: 'uploaded', name: file.name })
+          else if (typeof navigator !== 'undefined' && !navigator.onLine)
+            deps.notify({ kind: 'queuedOffline', name: file.name })
+          else deps.notify({ kind: 'queuedRetry', name: file.name })
+        })
+        // 防御: uploadDone は現状 never-reject だが、その不変条件に依存しない。
+        // reject してもキューには残る（online 復帰で回収される）ため queuedRetry 扱いにし、
+        // 終端トーストの欠落と unhandledRejection を防ぐ
+        .catch(() => deps.notify({ kind: 'queuedRetry', name: file.name }))
+    )
   }
+  // 挿入はローカル処理（最適化 + enqueue）完了時点＝ネットワーク待ちの前に行う
   if (markdowns.length > 0) {
     deps.insert(markdowns.join('\n'))
   }
+  // 背景アップロードの終端トーストが出揃うまで解決を保つ（テスト決定性・浮きプロミス防止）。
+  // UI は本関数を fire-and-forget で呼ぶため UX には影響しない
+  await Promise.allSettled(backgroundUploads)
 }

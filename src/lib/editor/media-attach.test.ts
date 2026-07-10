@@ -45,6 +45,22 @@ function makeFile(name: string, content = 'data'): File {
   return new File([content], name, { type: 'application/octet-stream' })
 }
 
+/** 解決/棄却を外部から制御できる Promise（背景 uploadDone のタイミング観測用） */
+function defer<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+/** マイクロタスク＋直近のマクロタスクを流しきる（insert が背景待ちの前に走ることの観測用） */
+function flushTasks(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 beforeEach(() => {
   uploadMediaMock.mockReset()
   optimizeImageFileMock.mockReset()
@@ -230,7 +246,7 @@ describe('attachMediaFiles', () => {
     uploadMediaMock.mockResolvedValue({
       ok: true,
       url: 'https://example.com/x.webp',
-      uploaded: true,
+      uploadDone: Promise.resolve(true),
     })
     const insert = vi.fn()
     const notices: unknown[] = []
@@ -243,6 +259,7 @@ describe('attachMediaFiles', () => {
     expect(optimizeImageFileMock).toHaveBeenCalledOnce()
     expect(uploadMediaMock).toHaveBeenCalledWith(optimized, settings)
     expect(insert).toHaveBeenCalledWith('![shot.webp](https://example.com/x.webp)')
+    // uploading は enqueue 直後（同期）、uploaded は背景 uploadDone 解決後
     expect(notices).toEqual([
       { kind: 'uploading', name: 'shot.png' },
       { kind: 'uploaded', name: 'shot.webp' },
@@ -253,7 +270,7 @@ describe('attachMediaFiles', () => {
     uploadMediaMock.mockResolvedValue({
       ok: true,
       url: 'https://example.com/x.png',
-      uploaded: true,
+      uploadDone: Promise.resolve(true),
     })
     await attachMediaFiles([makeFile('shot.png')], {
       settings,
@@ -289,9 +306,11 @@ describe('attachMediaFiles', () => {
     expect(insert).not.toHaveBeenCalled()
   })
 
-  it('最適化でリネームされた後にアップロード失敗 → error 通知の name は原本名', async () => {
+  it('uploadMedia が失敗しても error 通知の name は最適化後名でなく原本名', async () => {
     optimizeImageFileMock.mockResolvedValue(makeFile('shot.webp'))
-    uploadMediaMock.mockResolvedValue({ ok: false, errorKind: 'repo_unavailable' })
+    // 分離後 uploadMedia が同期で返す実在の失敗は storage_failed（File 読み取り・IDB 書き込み）。
+    // リポ確認は背景 uploadPendingItem に移ったため uploadMedia は repo_unavailable を返さない
+    uploadMediaMock.mockResolvedValue({ ok: false, errorKind: 'storage_failed' })
     const notices: any[] = []
     await attachMediaFiles([makeFile('shot.png')], {
       settings,
@@ -299,16 +318,21 @@ describe('attachMediaFiles', () => {
       insert: vi.fn(),
       notify: (n) => notices.push(n),
     })
+    // uploading は事前検証通過時点で原本名で出る。error も最適化後リネーム（shot.webp）でなく原本名
     expect(notices).toEqual([
       { kind: 'uploading', name: 'shot.png' },
-      { kind: 'error', errorKind: 'repo_unavailable', name: 'shot.png' },
+      { kind: 'error', errorKind: 'storage_failed', name: 'shot.png' },
     ])
   })
 
   it('検証エラー: 挿入せず error 通知して次のファイルに進む', async () => {
     uploadMediaMock
       .mockResolvedValueOnce({ ok: false, errorKind: 'size_exceeded' })
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/b.zip', uploaded: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/b.zip',
+        uploadDone: Promise.resolve(true),
+      })
     const insert = vi.fn()
     const notices: any[] = []
     await attachMediaFiles([makeFile('big.zip'), makeFile('b.zip')], {
@@ -323,8 +347,16 @@ describe('attachMediaFiles', () => {
 
   it('複数ファイルは成功分だけを改行区切りでまとめて 1 回挿入する', async () => {
     uploadMediaMock
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/b.png', uploaded: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: Promise.resolve(true),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/b.png',
+        uploadDone: Promise.resolve(true),
+      })
     const inserted: string[] = []
     await attachMediaFiles([makeFile('a.png'), makeFile('b.png')], {
       settings,
@@ -339,7 +371,11 @@ describe('attachMediaFiles', () => {
 
   it('末尾ファイルが失敗しても挿入テキストにぶら下がり改行が残らない', async () => {
     uploadMediaMock
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: Promise.resolve(true),
+      })
       .mockResolvedValueOnce({ ok: false, errorKind: 'size_exceeded' })
     const inserted: string[] = []
     await attachMediaFiles([makeFile('a.png'), makeFile('big.zip')], {
@@ -354,8 +390,16 @@ describe('attachMediaFiles', () => {
   it('中間ファイルが失敗しても成功分（1・3番目）が 1 つの改行で繋がる', async () => {
     // b.exe は事前検証（形式外）で弾かれるため uploadMedia には a・c の 2 回だけ届く
     uploadMediaMock
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/c.png', uploaded: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: Promise.resolve(true),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/c.png',
+        uploadDone: Promise.resolve(true),
+      })
     const inserted: string[] = []
     await attachMediaFiles([makeFile('a.png'), makeFile('b.exe'), makeFile('c.png')], {
       settings,
@@ -389,11 +433,20 @@ describe('attachMediaFiles', () => {
     expect(insert).not.toHaveBeenCalled()
   })
 
-  it('3ファイル（成功/失敗/成功）で通知が uploading→結果 の順に全ファイル分並ぶ', async () => {
+  it('3ファイル（成功/uploadMedia失敗/成功）: 事前検証通過は全て uploading を出し、各終端は自分の uploading の後に出る', async () => {
     uploadMediaMock
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploaded: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: Promise.resolve(true),
+      })
+      // b.zip は事前検証は通る（小サイズ）が uploadMedia 段で失敗する
       .mockResolvedValueOnce({ ok: false, errorKind: 'size_exceeded' })
-      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/c.png', uploaded: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/c.png',
+        uploadDone: Promise.resolve(true),
+      })
     const notices: any[] = []
     await attachMediaFiles([makeFile('a.png'), makeFile('b.zip'), makeFile('c.png')], {
       settings,
@@ -401,17 +454,28 @@ describe('attachMediaFiles', () => {
       insert: vi.fn(),
       notify: (n) => notices.push(n),
     })
-    expect(notices).toEqual([
-      { kind: 'uploading', name: 'a.png' },
-      { kind: 'uploaded', name: 'a.png' },
-      { kind: 'uploading', name: 'b.zip' },
-      { kind: 'error', errorKind: 'size_exceeded', name: 'b.zip' },
-      { kind: 'uploading', name: 'c.png' },
-      { kind: 'uploaded', name: 'c.png' },
+    // 事前検証を通った 3 ファイルはすべて uploading を出す（最適化中の無反応を避けるため事前に出す）
+    expect(notices.filter((n) => n.kind === 'uploading').map((n) => n.name)).toEqual([
+      'a.png',
+      'b.zip',
+      'c.png',
     ])
+    // uploadMedia 失敗の b.zip は error（uploaded は出ない）、成功の a/c は背景 uploadDone で uploaded
+    expect(notices.filter((n) => n.kind === 'uploaded').map((n) => n.name)).toEqual([
+      'a.png',
+      'c.png',
+    ])
+    expect(notices).toContainEqual({ kind: 'error', errorKind: 'size_exceeded', name: 'b.zip' })
+    // 各ファイルの終端（uploaded / error）は必ず自分の uploading の後に出る
+    const at = (kind: string, name: string) =>
+      notices.findIndex((n) => n.kind === kind && n.name === name)
+    for (const name of ['a.png', 'c.png']) {
+      expect(at('uploaded', name)).toBeGreaterThan(at('uploading', name))
+    }
+    expect(at('error', 'b.zip')).toBeGreaterThan(at('uploading', 'b.zip'))
   })
 
-  it('未アップロード（uploaded: false）: navigator 未定義なら queuedRetry 通知（オフライン扱いにしない）', async () => {
+  it('未アップロード（uploadDone: false）: navigator 未定義なら queuedRetry 通知（オフライン扱いにしない）', async () => {
     // Node 21+ はグローバル navigator を持つ（onLine は undefined）ため、
     // 「navigator 未定義」の分岐は明示的に undefined へスタブして再現する
     vi.stubGlobal('navigator', undefined)
@@ -419,7 +483,7 @@ describe('attachMediaFiles', () => {
       uploadMediaMock.mockResolvedValue({
         ok: true,
         url: 'https://example.com/a.png',
-        uploaded: false,
+        uploadDone: Promise.resolve(false),
       })
       const notices: any[] = []
       await attachMediaFiles([makeFile('a.png')], {
@@ -434,14 +498,14 @@ describe('attachMediaFiles', () => {
     }
   })
 
-  it('未アップロード（uploaded: false）: オンラインなら queuedRetry 通知', async () => {
+  it('未アップロード（uploadDone: false）: オンラインなら queuedRetry 通知', async () => {
     // node 環境には navigator がない（= オフライン分岐に入らない）ためスタブする
     vi.stubGlobal('navigator', { onLine: true })
     try {
       uploadMediaMock.mockResolvedValue({
         ok: true,
         url: 'https://example.com/a.png',
-        uploaded: false,
+        uploadDone: Promise.resolve(false),
       })
       const notices: any[] = []
       await attachMediaFiles([makeFile('a.png')], {
@@ -456,13 +520,13 @@ describe('attachMediaFiles', () => {
     }
   })
 
-  it('未アップロード（uploaded: false）: オフラインなら queuedOffline 通知（挿入は完了する）', async () => {
+  it('未アップロード（uploadDone: false）: オフラインなら queuedOffline 通知（挿入は完了する）', async () => {
     vi.stubGlobal('navigator', { onLine: false })
     try {
       uploadMediaMock.mockResolvedValue({
         ok: true,
         url: 'https://example.com/a.png',
-        uploaded: false,
+        uploadDone: Promise.resolve(false),
       })
       const insert = vi.fn()
       const notices: any[] = []
@@ -476,6 +540,147 @@ describe('attachMediaFiles', () => {
       expect(notices[1]).toEqual({ kind: 'queuedOffline', name: 'a.png' })
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('uploadDone が reject しても破綻しない: throw せず insert し queuedRetry 通知（unhandledRejection・console 汚染なし）', async () => {
+    // uploadPendingItem は現状 never-reject だが、その不変条件に依存しない防御（.catch）を守る。
+    // reject はキューに残る＝online 復帰で回収されるため queuedRetry が正しい意味
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const d = defer<boolean>()
+      uploadMediaMock.mockResolvedValue({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: d.promise,
+      })
+      const insert = vi.fn()
+      const notices: any[] = []
+      const done = attachMediaFiles([makeFile('a.png')], {
+        settings,
+        optimizeImages: false,
+        insert,
+        notify: (n) => notices.push(n),
+      })
+      // 挿入は背景 uploadDone 待ちの前に済んでいる
+      await flushTasks()
+      expect(insert).toHaveBeenCalledWith('![a.png](https://example.com/a.png)')
+
+      // .then().catch() は既に wired 済みの状態で reject する
+      d.reject(new Error('background upload crashed'))
+      await expect(done).resolves.toBeUndefined() // throw しない
+      await flushTasks()
+
+      expect(notices).toEqual([
+        { kind: 'uploading', name: 'a.png' },
+        { kind: 'queuedRetry', name: 'a.png' },
+      ])
+      expect(unhandled).toHaveLength(0)
+      expect(errorSpy).not.toHaveBeenCalled()
+      expect(warnSpy).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+      errorSpy.mockRestore()
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('insert は uploadDone 解決の前に走る（挿入がネットワーク待ちの前である直接証明）', async () => {
+    const d = defer<boolean>()
+    uploadMediaMock.mockResolvedValue({
+      ok: true,
+      url: 'https://example.com/a.png',
+      uploadDone: d.promise,
+    })
+    const insert = vi.fn()
+    const notices: any[] = []
+    const done = attachMediaFiles([makeFile('a.png')], {
+      settings,
+      optimizeImages: false,
+      insert,
+      notify: (n) => notices.push(n),
+    })
+    await flushTasks()
+
+    // 挿入は済み・終端トーストはまだ（uploading のみ）＝挿入は uploadDone 待ちの前
+    expect(insert).toHaveBeenCalledWith('![a.png](https://example.com/a.png)')
+    expect(notices).toEqual([{ kind: 'uploading', name: 'a.png' }])
+
+    // uploadDone 解決で初めて終端トーストが出る
+    d.resolve(true)
+    await done
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'a.png' },
+      { kind: 'uploaded', name: 'a.png' },
+    ])
+  })
+
+  it('複数ファイルの終端トーストは uploadDone の解決順に出る（d2 を先に解決 → uploaded b が先）', async () => {
+    const d1 = defer<boolean>()
+    const d2 = defer<boolean>()
+    uploadMediaMock
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploadDone: d1.promise })
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/b.png', uploadDone: d2.promise })
+    const insert = vi.fn()
+    const notices: any[] = []
+    const done = attachMediaFiles([makeFile('a.png'), makeFile('b.png')], {
+      settings,
+      optimizeImages: false,
+      insert,
+      notify: (n) => notices.push(n),
+    })
+    await flushTasks()
+
+    // 挿入は 1 回（成功分を改行 join）・終端トーストはまだ出ていない
+    expect(insert).toHaveBeenCalledTimes(1)
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'a.png' },
+      { kind: 'uploading', name: 'b.png' },
+    ])
+
+    // b を先に解決 → uploaded b が uploaded a より先に出る（解決順に従う）
+    d2.resolve(true)
+    await flushTasks()
+    d1.resolve(true)
+    await done
+
+    const uploaded = notices.filter((n) => n.kind === 'uploaded').map((n) => n.name)
+    expect(uploaded).toEqual(['b.png', 'a.png'])
+  })
+
+  it('順序不変条件: 各ファイルの uploaded は必ず対応する uploading の後に出る', async () => {
+    uploadMediaMock
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: Promise.resolve(true),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/b.png',
+        uploadDone: Promise.resolve(true),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/c.png',
+        uploadDone: Promise.resolve(true),
+      })
+    const notices: any[] = []
+    await attachMediaFiles([makeFile('a.png'), makeFile('b.png'), makeFile('c.png')], {
+      settings,
+      optimizeImages: false,
+      insert: vi.fn(),
+      notify: (n) => notices.push(n),
+    })
+    for (const name of ['a.png', 'b.png', 'c.png']) {
+      const uploadingAt = notices.findIndex((n) => n.kind === 'uploading' && n.name === name)
+      const uploadedAt = notices.findIndex((n) => n.kind === 'uploaded' && n.name === name)
+      expect(uploadingAt).toBeGreaterThanOrEqual(0)
+      expect(uploadedAt).toBeGreaterThan(uploadingAt)
     }
   })
 })
