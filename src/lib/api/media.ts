@@ -81,6 +81,63 @@ function authHeaders(settings: Settings): Record<string, string> {
 }
 
 // ============================================
+// fetch タイムアウト（#252: 背景アップロードチェーンの head-of-line blocking 防止）
+// ============================================
+
+/**
+ * メタデータ系リクエスト（リポ存在確認 GET・リポ作成 POST・存在チェック GET）の
+ * タイムアウト。ボディが小さく数秒で返るのが正常なので、短めの固定値でよい。
+ */
+export const MEDIA_API_TIMEOUT_MS = 30_000
+
+/** アップロード PUT タイムアウトの下限（小さいファイルでもこれ未満では切らない） */
+export const MEDIA_PUT_TIMEOUT_BASE_MS = 60_000
+
+/**
+ * アップロード PUT タイムアウトの算出に使う「許容最低スループット」。
+ *
+ * 固定値タイムアウト（例 5 分）だと、低速回線 × 100MB 上限ファイルの正当な
+ * アップロードを途中で誤中断し、リトライ→再中断のループでモバイル通信量だけを
+ * 浪費しかねない（#252 の閾値トレードオフ）。サイズ比例にすることで
+ * 「この速度すら出ていなければストール」という基準になり、生きている正当な
+ * アップロードを途中で切らない。50KiB/s: 3G 実効上り相当の保守的な値。
+ */
+export const MEDIA_PUT_MIN_BYTES_PER_SEC = 50 * 1024
+
+/**
+ * アップロード PUT のタイムアウトをペイロード長（base64 後のリクエストボディ長）
+ * から算出する。下限 60 秒 + 50KiB/s 換算の転送時間。
+ * 例: 最適化済み画像 2MB → 約 100 秒、上限の 100MB（base64 後 ≈133MB）→ 約 46 分。
+ * 巨大ファイルのストールはその間チェーンを塞ぐが、有限で必ず解ける。
+ */
+export function calcMediaPutTimeoutMs(payloadBytes: number): number {
+  return MEDIA_PUT_TIMEOUT_BASE_MS + Math.ceil((payloadBytes / MEDIA_PUT_MIN_BYTES_PER_SEC) * 1000)
+}
+
+/**
+ * AbortController によるタイムアウト付き fetch。
+ *
+ * #247 のグローバル直列化（uploadChain）は、チェーン内のどれか 1 つの fetch が
+ * 永久 pending になると以後の背景アップロードが全て止まる（head-of-line blocking）。
+ * チェーン経路の全 fetch に上限を入れ、ストールを reject → 既存の catch →
+ * 「false（pending 残置）」に落とすことでチェーンを必ず前進させる。
+ * pending に残ったアイテムは online 復帰・次回起動の initMediaOnlineRetry が回収する。
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController()
+  const timerId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timerId)
+  }
+}
+
+// ============================================
 // メディアリポの lazy 作成
 // ============================================
 
@@ -108,10 +165,14 @@ export async function ensureMediaRepo(
     return { ok: true }
   }
   try {
-    const repoRes = await fetch(`https://api.github.com/repos/${mediaRepo}`, {
-      headers: authHeaders(settings),
-      cache: 'no-store',
-    })
+    const repoRes = await fetchWithTimeout(
+      `https://api.github.com/repos/${mediaRepo}`,
+      {
+        headers: authHeaders(settings),
+        cache: 'no-store',
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
     if (repoRes.ok) {
       ensuredMediaRepos.add(mediaRepo)
       return { ok: true }
@@ -119,17 +180,21 @@ export async function ensureMediaRepo(
     if (repoRes.status !== 404) {
       return { ok: false, errorKind: 'repo_unavailable', httpStatus: repoRes.status }
     }
-    const createRes = await fetch('https://api.github.com/user/repos', {
-      method: 'POST',
-      headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        // POST /user/repos の name は owner なしの短縮名
-        name: mediaRepo.slice(mediaRepo.indexOf('/') + 1),
-        private: true,
-        auto_init: true,
-        description: 'Agasteer media attachments',
-      }),
-    })
+    const createRes = await fetchWithTimeout(
+      'https://api.github.com/user/repos',
+      {
+        method: 'POST',
+        headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // POST /user/repos の name は owner なしの短縮名
+          name: mediaRepo.slice(mediaRepo.indexOf('/') + 1),
+          private: true,
+          auto_init: true,
+          description: 'Agasteer media attachments',
+        }),
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
     // 422 = name already exists（並行タブとの作成 race）→ 存在するので成功扱い
     if (createRes.ok || createRes.status === 422) {
       ensuredMediaRepos.add(mediaRepo)
@@ -149,6 +214,8 @@ export async function ensureMediaRepo(
 // 実アップロードは URL 確定後に背景で直列実行する。
 // Contents API は default branch へ直接コミットするため、同一リポへの
 // 並行 PUT は 409 になりうる。グローバルに直列化して衝突を避ける。
+// チェーン経路の全 fetch にはタイムアウト（#252）が入っており、
+// 1 件のストールで以後の背景アップロードが止まり続けることはない。
 let uploadChain: Promise<unknown> = Promise.resolve()
 
 /**
@@ -227,25 +294,36 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
   try {
     // 内容アドレス dedup: ファイル名に内容ハッシュを含むため、同名が既にあれば同内容。
     // アップロード自体をスキップしてキューだけ掃除する。
-    const existsRes = await fetch(`${contentsUrl}?t=${Date.now()}`, {
-      headers: authHeaders(settings),
-    })
+    const existsRes = await fetchWithTimeout(
+      `${contentsUrl}?t=${Date.now()}`,
+      {
+        headers: authHeaders(settings),
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
     if (!existsRes.ok && existsRes.status !== 404) {
       return false
     }
     if (existsRes.status === 404) {
-      const putRes = await fetch(contentsUrl, {
-        method: 'PUT',
-        headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `Agasteer media upload: ${item.filename}`,
-          content: encodeArrayBufferToBase64(item.data),
-          committer: {
-            name: 'agasteer',
-            email: 'agasteer@users.noreply.github.com',
-          },
-        }),
+      const body = JSON.stringify({
+        message: `Agasteer media upload: ${item.filename}`,
+        content: encodeArrayBufferToBase64(item.data),
+        committer: {
+          name: 'agasteer',
+          email: 'agasteer@users.noreply.github.com',
+        },
       })
+      // PUT はボディが大きい（base64 で元サイズの約 4/3）ため、
+      // サイズ比例のタイムアウトで正当な低速アップロードを誤中断しない
+      const putRes = await fetchWithTimeout(
+        contentsUrl,
+        {
+          method: 'PUT',
+          headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
+          body,
+        },
+        calcMediaPutTimeoutMs(body.length)
+      )
       // 422 = 同名パスが並行作成された race。同名=同内容なので成功扱い
       if (!putRes.ok && putRes.status !== 422) {
         return false

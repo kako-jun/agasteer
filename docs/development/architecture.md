@@ -342,7 +342,7 @@ agasteer/
 
 - `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）。純粋層は `github/` 配下へ分離（Phase 1: paths/encoding/sha/rate-limit）。push/pull/http の副作用層は github.ts に残し、純粋関数を re-export して公開 API を維持
 - `sync.ts`: Push/Pull処理の分離
-- `media.ts`: メディア同期層（#242）。別リポ `{owner}/{repo}-media` の lazy 作成・アップロード（pending キュー + online リトライ）・認証付き取得・LRU キャッシュ。`uploadMedia` は enqueue で即返し、実アップロードは背景の**グローバル直列チェーン**で流す（#247。同一リポへの並行 PUT が 409 になるのを直列化で回避。戻り値 `uploadDone: Promise<boolean>`）。Push/Pull フロー・WorldType とは独立。純粋層は `media/` 配下（base64/naming/validation/lru）
+- `media.ts`: メディア同期層（#242）。別リポ `{owner}/{repo}-media` の lazy 作成・アップロード（pending キュー + online リトライ）・認証付き取得・LRU キャッシュ。`uploadMedia` は enqueue で即返し、実アップロードは背景の**グローバル直列チェーン**で流す（#247。同一リポへの並行 PUT が 409 になるのを直列化で回避。戻り値 `uploadDone: Promise<boolean>`。チェーン経路の fetch はタイムアウト付きで head-of-line blocking を防ぐ #252）。Push/Pull フロー・WorldType とは独立。純粋層は `media/` 配下（base64/naming/validation/lru）
 
 **メディア添付 UI（#243）:**
 
