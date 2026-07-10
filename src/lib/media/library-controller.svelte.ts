@@ -109,14 +109,26 @@ export function createMediaLibraryController(
     if (kindOf(asset) !== 'image') return
     if (thumbUrls[asset.rawUrl] || resolving.has(asset.rawUrl)) return
     resolving.add(asset.rawUrl)
-    const result = await deps.resolveMedia(asset.rawUrl, deps.getSettings())
-    resolving.delete(asset.rawUrl)
+    let result: MediaFetchResult
+    try {
+      result = await deps.resolveMedia(asset.rawUrl, deps.getSettings())
+    } catch (error) {
+      // resolveMedia は結果オブジェクト契約（throw しない）だが、万一 reject しても
+      // resolving に残してリークさせず・unhandledRejection にせず、サムネイル無し扱いにする
+      // （#244 createPreviewMediaResolver の .catch と同型）。
+      console.warn('Media thumbnail resolve failed:', error)
+      return
+    } finally {
+      // 成功・失敗いずれでも in-flight から外す（再試行できるようにする）
+      resolving.delete(asset.rawUrl)
+    }
     if (disposed || !result.ok) return
     const blobUrl = URL.createObjectURL(
       new Blob([result.data], { type: previewMediaMimeType(asset.name) })
     )
-    // createObjectURL 直前まで await がないため通常は通らない防御分岐（元コードと 1:1）
-    if (disposed) {
+    // 解決中に破棄された／該当アセットが削除で assets から消えた場合は、生成した Blob を
+    // 孤児化させず即 revoke する（#244 の dispose ガードと同型。thumbUrls にも載せない）。
+    if (disposed || !assets.some((a) => a.rawUrl === asset.rawUrl)) {
       URL.revokeObjectURL(blobUrl)
       return
     }
@@ -168,8 +180,9 @@ export function createMediaLibraryController(
       return errorKind
     },
     get errorMessageKey() {
+      // 未設定はライブラリ画面文脈の専用文言（media.errors.* は添付フロー寄りの文言のため）
       return errorKind === 'not_configured'
-        ? 'media.errors.not_configured'
+        ? 'media.library.notConfigured'
         : 'media.library.loadFailed'
     },
     get deletingPath() {

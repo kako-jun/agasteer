@@ -280,6 +280,7 @@
       "back": "Back to home",
       "loading": "Loading...",
       "empty": "No attachments yet",
+      "notConfigured": "GitHub integration isn't set up. Open Settings to configure your token and repository.",
       "loadFailed": "Failed to load the media list",
       "retry": "Retry",
       "delete": "Delete",

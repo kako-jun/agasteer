@@ -142,11 +142,11 @@ describe('load: 状態遷移', () => {
 })
 
 describe('errorMessageKey の派生', () => {
-  it('T13a: not_configured は専用文言キー', async () => {
+  it('T13a: not_configured はライブラリ画面専用の文言キー', async () => {
     listMediaAssetsMock.mockResolvedValue({ ok: false, errorKind: 'not_configured' })
     const c = makeController()
     await c.load()
-    expect(c.errorMessageKey).toBe('media.errors.not_configured')
+    expect(c.errorMessageKey).toBe('media.library.notConfigured')
   })
 
   it('T13b: not_configured 以外は loadFailed キー', async () => {
@@ -264,9 +264,11 @@ describe('resolveThumb: 対象判定と重複防止', () => {
 
   it('T20: 同一 rawUrl 連打で resolveMedia は 1 回・Blob URL を共有する', async () => {
     const img = makeAsset(PNG)
+    listMediaAssetsMock.mockResolvedValue({ ok: true, assets: [img] })
     const d = deferred<ReturnType<typeof okFetch>>()
     resolveMediaMock.mockReturnValue(d.promise)
     const c = makeController()
+    await c.load() // assets に載せる（解決完了時の孤児ガードを通すため）
 
     const p1 = c.resolveThumb(img)
     const p2 = c.resolveThumb(img) // resolving 中 → 即 return
@@ -281,6 +283,52 @@ describe('resolveThumb: 対象判定と重複防止', () => {
     await c.resolveThumb(img) // 既に thumbUrls にある → 再解決しない
     expect(resolveMediaMock).toHaveBeenCalledTimes(1)
     expect(c.thumbUrls[img.rawUrl]).toBe(shared)
+  })
+})
+
+describe('resolveThumb: 失敗・削除孤児の防御', () => {
+  it('T25: resolveMedia が reject → 握って resolving を解放・thumb 未設定（unhandledRejection なし）', async () => {
+    const img = makeAsset(PNG)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    listMediaAssetsMock.mockResolvedValue({ ok: true, assets: [img] })
+    resolveMediaMock.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(okFetch())
+    const c = makeController()
+    await c.load()
+
+    // 1 回目: reject を握る（resolveThumb 自体は throw しない＝await が正常完了する）
+    await c.resolveThumb(img)
+    expect(createObjectURLMock).not.toHaveBeenCalled()
+    expect(c.thumbUrls[img.rawUrl]).toBeUndefined()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    // 2 回目: resolving が解放済みなので再解決でき、今度は Blob を載せる
+    await c.resolveThumb(img)
+    expect(resolveMediaMock).toHaveBeenCalledTimes(2)
+    expect(c.thumbUrls[img.rawUrl]).toBe('blob:agasteer/1')
+  })
+
+  it('T26: 解決中に該当 asset を削除 → 解決完了で生成 Blob を即 revoke・thumbUrls 未登録', async () => {
+    const img = makeAsset(PNG)
+    listMediaAssetsMock.mockResolvedValue({ ok: true, assets: [img] })
+    confirmMock.mockResolvedValue(true)
+    deleteMediaAssetMock.mockResolvedValue({ ok: true })
+    const d = deferred<ReturnType<typeof okFetch>>()
+    resolveMediaMock.mockReturnValue(d.promise)
+    const c = makeController()
+    await c.load()
+
+    const p = c.resolveThumb(img) // サムネ解決を in-flight にする
+    await c.handleDelete(img) // 解決中にそのアセットを削除（assets から除去）
+    expect(c.assets.length).toBe(0)
+
+    d.resolve(okFetch()) // 削除後に解決が完了する
+    await p
+    await flush()
+
+    // 生成した Blob は孤児化させず即 revoke され、thumbUrls には載らない
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:agasteer/1')
+    expect(c.thumbUrls[img.rawUrl]).toBeUndefined()
   })
 })
 

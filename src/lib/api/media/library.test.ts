@@ -132,6 +132,7 @@ describe('i18n キー整合（メディアライブラリ画面・#250）', () =
     'media.library.back',
     'media.library.loading',
     'media.library.empty',
+    'media.library.notConfigured',
     'media.library.loadFailed',
     'media.library.retry',
     'media.library.delete',
