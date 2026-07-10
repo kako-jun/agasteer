@@ -67,6 +67,8 @@ import {
   fetchRemotePushCount,
 } from '../api'
 import type { PushResult } from '../api'
+// #254: 添付フローの挿入フェーズ待ち（詳細は insert-phase.ts のモジュールコメント）
+import { waitForPendingMediaInserts } from '../api/media/insert-phase'
 import { isNoteSaveable, isLeafSaveable } from '../utils'
 import { appState, appActions } from '../app-state.svelte'
 import * as nav from '../navigation'
@@ -342,6 +344,15 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
   let pushInFlightStamp = 0
 
   try {
+    // #254: メディア添付の挿入フェーズ（最適化＋enqueue の後に走る記法挿入）が
+    // 進行中なら、それが store に着地するまで待つ。待たないと、添付直後の Push が
+    // 挿入前の内容をスナップショットに固定して「変更なし」で no-op になり、
+    // アップロード済みメディアへの参照テキストだけがリポに保存されない窓ができる
+    //（次回 Pull で参照が消えるとメディアが孤児化する）。モバイルの画像最適化は
+    // 数百 ms〜数秒かかるため実機で顕在化していた。上限つき（ストール時は従来挙動）。
+    // flushAllEditors より前に置く: 挿入が IME composition 中に着地した場合も、
+    // 後段の flush が store へ確実に反映する。
+    await waitForPendingMediaInserts()
     // #186: IME composition 確定前に push が押されると、MarkdownEditor 側の
     // pendingCompositionChange が立ったまま onChange が呼ばれず、leaves.value
     // が IME 確定前の古い content のまま push されてしまう（Android で特に
@@ -634,6 +645,10 @@ export async function pullFromGitHub(
   // pull開始と同時に「pull予約あり」バッジを落とす（進捗%に交代）
   appState.repoChangePending = false
   try {
+    // #254: Push 側と同じ理由の待ち。挿入フェーズ着地前に Pull が走ると、
+    // isDirty が挿入前の状態で評価されて dirty 警告を素通りし、Pull の
+    // クリア＆再取得で挿入テキストが消える（メディア参照の喪失＝孤児化）。
+    await waitForPendingMediaInserts()
     // Staleチェックを先に行う。
     // リモートに変更がない（= 実際のPullが走らない）場合にまで
     // 「未保存の変更があります。Pullすると上書きされます」系の警告を出すと、

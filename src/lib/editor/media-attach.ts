@@ -18,6 +18,7 @@ import {
   validateMedia,
 } from '../api/media/validation'
 import { getMediaExtension } from '../api/media/naming'
+import { beginMediaInsertPhase } from '../api/media/insert-phase'
 import { optimizeImageFile } from '../utils/image-optimize'
 
 // ============================================
@@ -178,6 +179,28 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
   const markdowns: string[] = []
   // 背景アップロードの終端トースト。挿入はこの待ちの前に済ませる
   const backgroundUploads: Promise<void>[] = []
+  // #254: 挿入フェーズ（最適化〜挿入のローカル区間）を in-flight 登録する。
+  // Push / Pull の preflight は waitForPendingMediaInserts でこの区間の完了を
+  // 待ち、挿入前の内容がスナップショットに固定される（＝挿入テキストだけ
+  // リポに保存されない）レースを防ぐ。背景アップロード待ちは含めない。
+  const endInsertPhase = beginMediaInsertPhase()
+  try {
+    await runAttachLoop(files, deps, markdowns, backgroundUploads)
+  } finally {
+    endInsertPhase()
+  }
+  // 背景アップロードの終端トーストが出揃うまで解決を保つ（テスト決定性・浮きプロミス防止）。
+  // UI は本関数を fire-and-forget で呼ぶため UX には影響しない
+  await Promise.allSettled(backgroundUploads)
+}
+
+/** attachMediaFiles の挿入フェーズ本体（最適化 → enqueue → 挿入）。#254 の追跡区間 */
+async function runAttachLoop(
+  files: File[],
+  deps: MediaAttachDeps,
+  markdowns: string[],
+  backgroundUploads: Promise<void>[]
+): Promise<void> {
   for (const original of files) {
     // 形式外・100MB超は「アップロード中」を出す前に弾く（アップロード中→拒否の
     // 2連トースト防止）。判定は原本に対して行い、uploadMedia 内の検証は
@@ -220,7 +243,4 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
   if (markdowns.length > 0) {
     deps.insert(markdowns.join('\n'))
   }
-  // 背景アップロードの終端トーストが出揃うまで解決を保つ（テスト決定性・浮きプロミス防止）。
-  // UI は本関数を fire-and-forget で呼ぶため UX には影響しない
-  await Promise.allSettled(backgroundUploads)
 }
