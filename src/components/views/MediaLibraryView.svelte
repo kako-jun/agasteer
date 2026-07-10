@@ -205,7 +205,7 @@
     font-weight: 600;
     font-size: 0.9rem;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: opacity 0.2s;
   }
 
   .retry-button:hover {
