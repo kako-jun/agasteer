@@ -45,6 +45,9 @@ export async function listMediaAssets(settings: Settings): Promise<MediaListResu
   }
   const mediaRepo = getMediaRepoFullName(settings.repoName)
   try {
+    // 注意: Contents API のディレクトリ一覧は最大 1000 件・ページネーションなしで、
+    // 超過分は黙って欠落する。約 1000 件を超えると一覧に出ないアセットが生じ得る。
+    // Git Trees API（recursive）への切り替えは #258 で対応予定。
     const res = await fetch(`https://api.github.com/repos/${mediaRepo}/contents/`, {
       headers: authHeaders(settings),
       cache: 'no-store',
