@@ -281,11 +281,15 @@
       "loading": "Loading...",
       "empty": "No attachments yet",
       "truncated": "Too many assets to list them all — showing a partial list",
+      "orphan": "Unreferenced",
+      "orphanHint": "Not referenced by any note (including the archive). Deleting it will not break anything",
+      "orphanUnavailable": "Unreferenced detection is on hold (open the Archive screen once, and media not referenced by any note will be labeled \"Unreferenced\")",
       "notConfigured": "GitHub integration isn't set up. Open Settings to configure your token and repository.",
       "loadFailed": "Failed to load the media list",
       "retry": "Retry",
       "delete": "Delete",
       "deleteConfirm": "Delete \"{name}\"?\nIf this media is referenced by a note, that note will display broken.",
+      "deleteConfirmOrphan": "Delete \"{name}\"?\nThis media is not referenced by any note (unreferenced). Deleting it will not break anything.",
       "deleted": "Deleted \"{name}\"",
       "deleteFailed": "Failed to delete"
     }

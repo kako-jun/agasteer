@@ -110,6 +110,7 @@ From the "**›**" dropdown at the left of the breadcrumbs (the Home/Archive swi
 - Each file shows its name and size
 - If you have not attached anything yet, it shows "No attachments yet"
 - There is no practical limit on the number of attachments (only in extreme cases will you see a "showing a partial list" notice)
+- Files not referenced by any note are labeled "**Unreferenced**" (a sign they are safe to delete). While the archive has not been loaded yet, the check is on hold and a notice explains this
 
 ### Deleting
 
