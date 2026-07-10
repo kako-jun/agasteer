@@ -88,6 +88,13 @@ function makeAbortableFetch(route: (url: string, method: string) => Response | '
 const ok = (json: unknown = {}) => new Response(JSON.stringify(json), { status: 200 })
 const notFound = () => new Response('{}', { status: 404 })
 
+/** uploadMedia の結果を enqueue 成功側に型ナローイングする（4テストで共通） */
+function assertEnqueued(
+  result: Awaited<ReturnType<MediaModule['uploadMedia']>>
+): asserts result is Extract<Awaited<ReturnType<MediaModule['uploadMedia']>>, { ok: true }> {
+  if (!('uploadDone' in result)) throw new Error('enqueue に失敗した')
+}
+
 /** fake timers 環境でマイクロタスクを流しきる */
 async function flushMicrotasks(): Promise<void> {
   await vi.advanceTimersByTimeAsync(0)
@@ -120,13 +127,8 @@ describe('calcMediaPutTimeoutMs', () => {
 
   it('ペイロードに比例して 50KiB/s 換算の転送時間が加算される', async () => {
     const media = await loadMedia()
-    const payload = 10 * 1024 * 1024 // 10MB
-    const expected =
-      media.MEDIA_PUT_TIMEOUT_BASE_MS +
-      Math.ceil((payload / media.MEDIA_PUT_MIN_BYTES_PER_SEC) * 1000)
-    expect(media.calcMediaPutTimeoutMs(payload)).toBe(expected)
-    // 10MB / 50KiB/s = 204.8 秒 → 下限 60 秒 + 204,800ms
-    expect(expected).toBe(60_000 + 204_800)
+    // 10MB / 50KiB/s = 204.8 秒 → 下限 60 秒 + 204,800ms（実装の写経でなく具体値で固定する）
+    expect(media.calcMediaPutTimeoutMs(10 * 1024 * 1024)).toBe(60_000 + 204_800)
   })
 })
 
@@ -141,7 +143,7 @@ describe('uploadPendingItem のタイムアウト（uploadMedia 経由）', () =
     vi.stubGlobal('fetch', fetchStub.fn)
 
     const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
-    if (!('uploadDone' in result)) throw new Error('enqueue に失敗した')
+    assertEnqueued(result)
 
     // PUT のタイムアウト（base + サイズ比例）まで進めると abort → false 解決
     await vi.advanceTimersByTimeAsync(media.calcMediaPutTimeoutMs(1024))
@@ -167,7 +169,8 @@ describe('uploadPendingItem のタイムアウト（uploadMedia 経由）', () =
 
     const first = await media.uploadMedia(makeFile('a.png', 'data-a'), makeSettings())
     const second = await media.uploadMedia(makeFile('b.png', 'data-b'), makeSettings())
-    if (!('uploadDone' in first) || !('uploadDone' in second)) throw new Error('enqueue 失敗')
+    assertEnqueued(first)
+    assertEnqueued(second)
 
     // タイムアウト前: 2件目はチェーンで待機中（contents GET は 1 件目の分だけ）
     await flushMicrotasks()
@@ -192,7 +195,7 @@ describe('uploadPendingItem のタイムアウト（uploadMedia 経由）', () =
     vi.stubGlobal('fetch', fetchStub.fn)
 
     const result = await media.uploadMedia(makeFile('x.png', 'data'), makeSettings())
-    if (!('uploadDone' in result)) throw new Error('enqueue に失敗した')
+    assertEnqueued(result)
 
     await vi.advanceTimersByTimeAsync(media.MEDIA_API_TIMEOUT_MS)
     await expect(result.uploadDone).resolves.toBe(false)
@@ -209,7 +212,7 @@ describe('uploadPendingItem のタイムアウト（uploadMedia 経由）', () =
     vi.stubGlobal('fetch', fetchStub.fn)
 
     const result = await media.uploadMedia(makeFile('x.png', 'data'), makeSettings())
-    if (!('uploadDone' in result)) throw new Error('enqueue に失敗した')
+    assertEnqueued(result)
     await flushMicrotasks()
     await expect(result.uploadDone).resolves.toBe(true)
     // clearTimeout 済み＝fake timers に未消化タイマーが残っていない

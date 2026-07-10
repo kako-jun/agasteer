@@ -298,6 +298,21 @@ describe('uploadMedia', () => {
     mock.assertDrained()
   })
 
+  it('存在チェック GET は object メディアタイプを送る（1MB超の既存ファイルでも 403 でなく 200 になり dedup が成立する #252）', async () => {
+    mock.on('GET', REPO_GET, { json: { id: 1 } }).on('GET', CONTENTS, { status: 200, json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('big.png', 'big'), makeSettings())
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    await res.uploadDone
+
+    // 既定の JSON 表現は 1MB 超の既存ファイルに 403（too_large）を返し、
+    // dedup 不能 → 永遠に pending 残留になる。object なら 1〜100MB でも 200
+    const existsGet = mock.firstCall('GET', CONTENTS)
+    expect(existsGet!.headers.Accept).toBe('application/vnd.github.object+json')
+  })
+
   it('PUT 422（並行作成 race）は成功扱いで dequeue+cache する', async () => {
     mock
       .on('GET', REPO_GET, { json: { id: 1 } })

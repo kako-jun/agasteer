@@ -22,6 +22,7 @@ import {
 } from './media/naming'
 import { validateMedia } from './media/validation'
 import { shouldCacheMediaSize, selectCacheEvictions } from './media/lru'
+import { MEDIA_API_TIMEOUT_MS, calcMediaPutTimeoutMs } from './media/timeouts'
 import {
   putPendingMedia,
   getPendingMedia,
@@ -84,35 +85,13 @@ function authHeaders(settings: Settings): Record<string, string> {
 // fetch タイムアウト（#252: 背景アップロードチェーンの head-of-line blocking 防止）
 // ============================================
 
-/**
- * メタデータ系リクエスト（リポ存在確認 GET・リポ作成 POST・存在チェック GET）の
- * タイムアウト。ボディが小さく数秒で返るのが正常なので、短めの固定値でよい。
- */
-export const MEDIA_API_TIMEOUT_MS = 30_000
-
-/** アップロード PUT タイムアウトの下限（小さいファイルでもこれ未満では切らない） */
-export const MEDIA_PUT_TIMEOUT_BASE_MS = 60_000
-
-/**
- * アップロード PUT タイムアウトの算出に使う「許容最低スループット」。
- *
- * 固定値タイムアウト（例 5 分）だと、低速回線 × 100MB 上限ファイルの正当な
- * アップロードを途中で誤中断し、リトライ→再中断のループでモバイル通信量だけを
- * 浪費しかねない（#252 の閾値トレードオフ）。サイズ比例にすることで
- * 「この速度すら出ていなければストール」という基準になり、生きている正当な
- * アップロードを途中で切らない。50KiB/s: 3G 実効上り相当の保守的な値。
- */
-export const MEDIA_PUT_MIN_BYTES_PER_SEC = 50 * 1024
-
-/**
- * アップロード PUT のタイムアウトをペイロード長（base64 後のリクエストボディ長）
- * から算出する。下限 60 秒 + 50KiB/s 換算の転送時間。
- * 例: 最適化済み画像 2MB → 約 100 秒、上限の 100MB（base64 後 ≈133MB）→ 約 46 分。
- * 巨大ファイルのストールはその間チェーンを塞ぐが、有限で必ず解ける。
- */
-export function calcMediaPutTimeoutMs(payloadBytes: number): number {
-  return MEDIA_PUT_TIMEOUT_BASE_MS + Math.ceil((payloadBytes / MEDIA_PUT_MIN_BYTES_PER_SEC) * 1000)
-}
+// 閾値と算出は純粋層 media/timeouts.ts に分離。テスト・チューニングの単一参照点として再公開する
+export {
+  MEDIA_API_TIMEOUT_MS,
+  MEDIA_PUT_TIMEOUT_BASE_MS,
+  MEDIA_PUT_MIN_BYTES_PER_SEC,
+  calcMediaPutTimeoutMs,
+} from './media/timeouts'
 
 /**
  * AbortController によるタイムアウト付き fetch。
@@ -122,6 +101,10 @@ export function calcMediaPutTimeoutMs(payloadBytes: number): number {
  * チェーン経路の全 fetch に上限を入れ、ストールを reject → 既存の catch →
  * 「false（pending 残置）」に落とすことでチェーンを必ず前進させる。
  * pending に残ったアイテムは online 復帰・次回起動の initMediaOnlineRetry が回収する。
+ *
+ * AbortSignal.timeout() の一行で書けるが意図的に使わない: Node の実装は
+ * vitest の fake timers（vi.useFakeTimers）に乗らず、タイムアウト挙動を
+ * 決定的にテストできなくなるため（media-timeout.test.ts が時計を進めて検証する）。
  */
 async function fetchWithTimeout(
   url: string,
@@ -294,10 +277,14 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
   try {
     // 内容アドレス dedup: ファイル名に内容ハッシュを含むため、同名が既にあれば同内容。
     // アップロード自体をスキップしてキューだけ掃除する。
+    // Accept は object メディアタイプを明示する: 既定の JSON 表現は 1MB 超の
+    // 既存ファイルに 403（too_large）を返すため、1MB 超のアイテムが永遠に
+    // dedup できず pending に残り続ける（object は 1〜100MB でも 200 + content 空で返る）。
+    // タイムアウトで中断した PUT がサーバ側では完了していた場合の回収経路でもある（#252）
     const existsRes = await fetchWithTimeout(
       `${contentsUrl}?t=${Date.now()}`,
       {
-        headers: authHeaders(settings),
+        headers: { ...authHeaders(settings), Accept: 'application/vnd.github.object+json' },
       },
       MEDIA_API_TIMEOUT_MS
     )
@@ -314,7 +301,13 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
         },
       })
       // PUT はボディが大きい（base64 で元サイズの約 4/3）ため、
-      // サイズ比例のタイムアウトで正当な低速アップロードを誤中断しない
+      // サイズ比例のタイムアウトで正当な低速アップロードを誤中断しない。
+      // 注: abort はクライアント側の待機を切るだけで、サーバ側では PUT の
+      // コミットが完了していることがあり得る。その場合チェーンは前進済みなので
+      // 次アイテムの PUT が同一リポで並行し 409 になり得るが、409 は
+      // false（pending 残置）→ リトライで回収され、アイテム自身も次回の
+      // 存在チェック 200 で dedup される。#247 の直列化不変条件は
+      // 「恒久ブロックしない」ためにこの限定的な劣化を受容する（#252）
       const putRes = await fetchWithTimeout(
         contentsUrl,
         {
