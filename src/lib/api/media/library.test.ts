@@ -1,16 +1,16 @@
 /**
- * メディアライブラリ純粋層のテスト（#250）
+ * メディアライブラリ純粋層のテスト（#250・#258 で Trees API へ切替）
  *
- * 対象: contentsItemToMediaAsset / mapContentsToMediaAssets / formatMediaSize
+ * 対象: treeItemToMediaAsset / mapTreeToMediaAssets / formatMediaSize
  * fetch・IO には触れない純粋関数なので node 環境で完結する。
  */
 
 import { describe, expect, it } from 'vitest'
 import {
-  contentsItemToMediaAsset,
-  mapContentsToMediaAssets,
+  treeItemToMediaAsset,
+  mapTreeToMediaAssets,
   formatMediaSize,
-  type GitHubContentsItem,
+  type GitTreeItem,
 } from './library'
 // 型のみの import は実行時に消えるが、コンパイル時（svelte-check）に型設計を縛る
 import type { WorldType, View } from '../../types'
@@ -19,77 +19,78 @@ import en from '../../i18n/locales/en.json'
 
 const REPO = 'owner/repo-media'
 
-function item(overrides: Partial<GitHubContentsItem> = {}): GitHubContentsItem {
+function item(overrides: Partial<GitTreeItem> = {}): GitTreeItem {
   return {
-    name: '20260101-abcd1234-photo.png',
     path: '20260101-abcd1234-photo.png',
     size: 1234,
     sha: 'sha-1',
-    type: 'file',
-    download_url: 'https://example.com/dl.png',
+    type: 'blob',
     ...overrides,
   }
 }
 
-describe('contentsItemToMediaAsset', () => {
-  it('対応形式のファイルを MediaAsset に変換し raw URL を再構成する', () => {
-    const asset = contentsItemToMediaAsset(item(), REPO)
+describe('treeItemToMediaAsset', () => {
+  it('対応形式の blob を MediaAsset に変換し raw URL を再構成する', () => {
+    const asset = treeItemToMediaAsset(item(), REPO)
     expect(asset).toEqual({
       name: '20260101-abcd1234-photo.png',
       path: '20260101-abcd1234-photo.png',
       size: 1234,
       sha: 'sha-1',
-      downloadUrl: 'https://example.com/dl.png',
       rawUrl: 'https://raw.githubusercontent.com/owner/repo-media/main/20260101-abcd1234-photo.png',
     })
   })
 
-  it('download_url が null/未定義なら downloadUrl は undefined', () => {
-    expect(
-      contentsItemToMediaAsset(item({ download_url: null }), REPO)?.downloadUrl
-    ).toBeUndefined()
+  it('blob 以外（tree=ディレクトリ・commit=submodule）は除外する（null）', () => {
+    expect(treeItemToMediaAsset(item({ type: 'tree' }), REPO)).toBeNull()
+    expect(treeItemToMediaAsset(item({ type: 'commit' }), REPO)).toBeNull()
   })
 
-  it('ディレクトリ項目は除外する（null）', () => {
-    expect(contentsItemToMediaAsset(item({ type: 'dir' }), REPO)).toBeNull()
+  it('ネストしたパス（recursive で返る sub/dir 配下）は除外する（raw URL の1セグメント不変条件）', () => {
+    expect(treeItemToMediaAsset(item({ path: 'sub/photo.png' }), REPO)).toBeNull()
+  })
+
+  it('size が無い blob は 0 とする（Trees API は稀に size を省く想定外応答への防御）', () => {
+    expect(treeItemToMediaAsset(item({ size: undefined }), REPO)?.size).toBe(0)
   })
 
   it('.gitkeep（拡張子なし）は除外する（null）', () => {
-    expect(contentsItemToMediaAsset(item({ name: '.gitkeep', path: '.gitkeep' }), REPO)).toBeNull()
+    expect(treeItemToMediaAsset(item({ path: '.gitkeep' }), REPO)).toBeNull()
   })
 
   it('対応形式外（例: txt）は除外する（null）', () => {
-    expect(contentsItemToMediaAsset(item({ name: 'note.txt', path: 'note.txt' }), REPO)).toBeNull()
+    expect(treeItemToMediaAsset(item({ path: 'note.txt' }), REPO)).toBeNull()
   })
 
   it('動画・音声・zip は対応形式として通す', () => {
-    for (const name of ['a.mp4', 'b.mp3', 'c.zip']) {
-      expect(contentsItemToMediaAsset(item({ name, path: name }), REPO)).not.toBeNull()
+    for (const path of ['a.mp4', 'b.mp3', 'c.zip']) {
+      expect(treeItemToMediaAsset(item({ path }), REPO)).not.toBeNull()
     }
   })
 
   it('大文字拡張子（.PNG / .MP4 / .ZIP）も通す（getMediaExtension が小文字化する）', () => {
-    for (const name of ['X.PNG', 'V.MP4', 'A.ZIP']) {
-      expect(contentsItemToMediaAsset(item({ name, path: name }), REPO)).not.toBeNull()
+    for (const path of ['X.PNG', 'V.MP4', 'A.ZIP']) {
+      expect(treeItemToMediaAsset(item({ path }), REPO)).not.toBeNull()
     }
   })
 })
 
-describe('mapContentsToMediaAssets', () => {
-  it('非対応/ディレクトリを除外し、名前の降順（新しい順）で並べる', () => {
-    const items: GitHubContentsItem[] = [
-      item({ name: '20260101-a-x.png', path: '20260101-a-x.png' }),
-      item({ name: '.gitkeep', path: '.gitkeep' }),
-      item({ name: 'sub', path: 'sub', type: 'dir' }),
-      item({ name: '20260305-b-y.png', path: '20260305-b-y.png' }),
-      item({ name: 'readme.md', path: 'readme.md' }),
+describe('mapTreeToMediaAssets', () => {
+  it('非対応/非blob/ネストを除外し、名前の降順（新しい順）で並べる', () => {
+    const items: GitTreeItem[] = [
+      item({ path: '20260101-a-x.png' }),
+      item({ path: '.gitkeep' }),
+      item({ path: 'sub', type: 'tree' }),
+      item({ path: 'sub/20260401-c-z.png' }),
+      item({ path: '20260305-b-y.png' }),
+      item({ path: 'readme.md' }),
     ]
-    const assets = mapContentsToMediaAssets(items, REPO)
+    const assets = mapTreeToMediaAssets(items, REPO)
     expect(assets.map((a) => a.name)).toEqual(['20260305-b-y.png', '20260101-a-x.png'])
   })
 
   it('空配列は空配列を返す', () => {
-    expect(mapContentsToMediaAssets([], REPO)).toEqual([])
+    expect(mapTreeToMediaAssets([], REPO)).toEqual([])
   })
 })
 
@@ -132,6 +133,7 @@ describe('i18n キー整合（メディアライブラリ画面・#250）', () =
     'media.library.back',
     'media.library.loading',
     'media.library.empty',
+    'media.library.truncated',
     'media.library.notConfigured',
     'media.library.loadFailed',
     'media.library.retry',

@@ -1,9 +1,12 @@
 /**
  * メディアライブラリ（一覧・削除）の純粋層（#250）
  *
- * GitHub Contents API のディレクトリ一覧アイテムを表示用の MediaAsset に変換し、
- * 表示対象（対応形式のファイルのみ）にフィルタする純粋関数群。
+ * GitHub Git Trees API のツリーエントリを表示用の MediaAsset に変換し、
+ * 表示対象（ルート直下・対応形式のファイルのみ）にフィルタする純粋関数群。
  * fetch・settings・IO には触れない（naming/validation の純粋層と同じ扱い）。
+ *
+ * #258: 一覧の取得元を Contents API（ディレクトリあたり 1000 件で silent cap）
+ * から Git Trees API（全件返る・上限は truncated フラグで検知可能）に切り替えた。
  *
  * 副作用を伴う一覧取得・削除（HTTP・IndexedDB evict）は sibling の
  * `api/media-library.ts`（副作用層）に置く。
@@ -18,67 +21,65 @@ import { ALLOWED_MEDIA_EXTENSIONS } from './validation'
  * データ構造なのでこの層に置く（types.ts のドメインモデル Note/Leaf とは別カテゴリ）。
  */
 export interface MediaAsset {
-  /** ファイル名（メディアはリポルート直下なので path の末尾と一致） */
+  /** ファイル名（メディアはリポルート直下なので path と一致） */
   name: string
   /** リポルートからのパス（Contents API DELETE の宛先。ルート直下なので name と同じ） */
   path: string
   /** バイト数 */
   size: number
-  /** blob SHA（Contents API DELETE に必須） */
+  /** blob SHA（Contents API DELETE に必須。Trees API のエントリからも取れる） */
   sha: string
-  /** GitHub の download_url（private リポでは未認証で開けないため表示解決には使わない） */
-  downloadUrl?: string
   /** 認証付き取得・種別判定に使う raw URL（buildRawMediaUrl で再構成） */
   rawUrl: string
 }
 
 /**
- * GitHub Contents API のディレクトリ一覧アイテム（本機能が使う部分集合）。
- * ディレクトリ一覧は配列で返り、各要素が file/dir 等の type を持つ。
+ * GitHub Git Trees API のツリーエントリ（本機能が使う部分集合）。
+ * `GET /git/trees/{ref}?recursive=1` の `tree` 配列要素。blob は size を持つ。
  */
-export interface GitHubContentsItem {
-  name: string
+export interface GitTreeItem {
   path: string
-  size: number
-  sha: string
   type: string
-  download_url?: string | null
+  sha: string
+  size?: number
 }
 
 /**
- * 一覧アイテム 1 件を MediaAsset に変換する。表示対象でなければ null。
+ * ツリーエントリ 1 件を MediaAsset に変換する。表示対象でなければ null。
  *
  * 除外する対象:
- * - ディレクトリ等（type !== 'file'）
- * - 対応形式ホワイトリスト外（`.gitkeep` は拡張子が無く弾かれる。過去仕様の
- *   手書きファイルや想定外拡張子も同様に一覧から除く）
+ * - blob 以外（type !== 'blob'。tree=ディレクトリ・commit=submodule 等）
+ * - ルート直下でないパス（recursive=1 はネストした blob も返すが、メディアは
+ *   フラット配置が前提で、raw URL の「1 セグメント」構造的不変条件（#242）を
+ *   満たさないパスは扱わない）
+ * - 対応形式ホワイトリスト外（`.gitkeep` は拡張子が無く弾かれる。想定外拡張子も同様）
  */
-export function contentsItemToMediaAsset(
-  item: GitHubContentsItem,
+export function treeItemToMediaAsset(
+  item: GitTreeItem,
   mediaRepoFullName: string
 ): MediaAsset | null {
-  if (item.type !== 'file') return null
-  if (!ALLOWED_MEDIA_EXTENSIONS.has(getMediaExtension(item.name))) return null
+  if (item.type !== 'blob') return null
+  if (item.path.includes('/')) return null
+  if (!ALLOWED_MEDIA_EXTENSIONS.has(getMediaExtension(item.path))) return null
   return {
-    name: item.name,
+    name: item.path,
     path: item.path,
-    size: item.size,
+    size: item.size ?? 0,
     sha: item.sha,
-    downloadUrl: item.download_url ?? undefined,
-    rawUrl: buildRawMediaUrl(mediaRepoFullName, item.name),
+    rawUrl: buildRawMediaUrl(mediaRepoFullName, item.path),
   }
 }
 
 /**
- * 一覧アイテム配列を MediaAsset 配列に変換する（ディレクトリ・非対応形式は除外）。
+ * ツリーエントリ配列を MediaAsset 配列に変換する（非 blob・ネスト・非対応形式は除外）。
  * ファイル名先頭が YYYYMMDD のため、名前の降順 ≒ 添付日時の新しい順で並べる。
  */
-export function mapContentsToMediaAssets(
-  items: GitHubContentsItem[],
+export function mapTreeToMediaAssets(
+  items: GitTreeItem[],
   mediaRepoFullName: string
 ): MediaAsset[] {
   return items
-    .map((item) => contentsItemToMediaAsset(item, mediaRepoFullName))
+    .map((item) => treeItemToMediaAsset(item, mediaRepoFullName))
     .filter((asset): asset is MediaAsset => asset !== null)
     .sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0))
 }

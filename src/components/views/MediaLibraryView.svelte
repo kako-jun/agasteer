@@ -100,41 +100,47 @@
         >{$_('media.library.retry')}</button
       >
     </div>
-  {:else if controller.assets.length === 0}
-    <div class="media-status media-empty">{$_('media.library.empty')}</div>
   {:else}
-    <div class="media-grid">
-      {#each controller.assets as asset (asset.path)}
-        <div class="media-card">
-          <div class="media-thumb">
-            {#if controller.kindOf(asset) === 'image' && controller.thumbUrls[asset.rawUrl]}
-              <img src={controller.thumbUrls[asset.rawUrl]} alt={asset.name} />
-            {:else if controller.kindOf(asset) === 'image'}
-              <div class="media-thumb-placeholder" use:thumbObserve={asset}>
-                <span class="media-ext">{controller.extLabel(asset)}</span>
-              </div>
-            {:else}
-              <div class="media-thumb-placeholder">
-                <span class="media-ext">{controller.extLabel(asset)}</span>
-              </div>
-            {/if}
+    {#if controller.truncated}
+      <!-- Trees API の上限で一覧が切り詰められた（#258。silent cap にしない） -->
+      <div class="media-truncated" role="status">{$_('media.library.truncated')}</div>
+    {/if}
+    {#if controller.assets.length === 0}
+      <div class="media-status media-empty">{$_('media.library.empty')}</div>
+    {:else}
+      <div class="media-grid">
+        {#each controller.assets as asset (asset.path)}
+          <div class="media-card">
+            <div class="media-thumb">
+              {#if controller.kindOf(asset) === 'image' && controller.thumbUrls[asset.rawUrl]}
+                <img src={controller.thumbUrls[asset.rawUrl]} alt={asset.name} />
+              {:else if controller.kindOf(asset) === 'image'}
+                <div class="media-thumb-placeholder" use:thumbObserve={asset}>
+                  <span class="media-ext">{controller.extLabel(asset)}</span>
+                </div>
+              {:else}
+                <div class="media-thumb-placeholder">
+                  <span class="media-ext">{controller.extLabel(asset)}</span>
+                </div>
+              {/if}
+            </div>
+            <div class="media-info">
+              <span class="media-name" title={asset.name}>{asset.name}</span>
+              <span class="media-size">{formatMediaSize(asset.size)}</span>
+            </div>
+            <button
+              class="media-delete"
+              onclick={() => controller.handleDelete(asset)}
+              disabled={controller.deletingPath === asset.path}
+              title={$_('media.library.delete')}
+              aria-label={$_('media.library.delete')}
+            >
+              <DeleteIcon />
+            </button>
           </div>
-          <div class="media-info">
-            <span class="media-name" title={asset.name}>{asset.name}</span>
-            <span class="media-size">{formatMediaSize(asset.size)}</span>
-          </div>
-          <button
-            class="media-delete"
-            onclick={() => controller.handleDelete(asset)}
-            disabled={controller.deletingPath === asset.path}
-            title={$_('media.library.delete')}
-            aria-label={$_('media.library.delete')}
-          >
-            <DeleteIcon />
-          </button>
-        </div>
-      {/each}
-    </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </section>
 
@@ -210,6 +216,16 @@
 
   .retry-button:hover {
     opacity: 0.9;
+  }
+
+  .media-truncated {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
   }
 
   .media-grid {

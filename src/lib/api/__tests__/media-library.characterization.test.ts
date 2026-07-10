@@ -1,13 +1,13 @@
 /**
- * Characterization テスト（#250）— メディアライブラリ同期層（media-library.ts）
+ * Characterization テスト（#250・#258 で一覧を Trees API に切替）— メディアライブラリ同期層
  *
  * 対象: listMediaAssets / deleteMediaAsset の配線
- *   - 404（メディアリポ未作成）→ 成功・空配列
- *   - 一覧成功 → Contents API 配列を MediaAsset に変換
+ *   - 404（リポ未作成）/ 409（空リポ）→ 成功・空配列
+ *   - 一覧成功 → Trees API の tree 配列を MediaAsset に変換・truncated を透過
  *   - 削除成功 → DELETE 送信（sha 同梱）＋ ローカル cache/pending の evict
  *   - 未設定 → not_configured
  *
- * 本番コードは変更しない。fetch は github/__tests__ の fetch-mock、
+ * fetch は github/__tests__ の fetch-mock、
  * IndexedDB アクセサ（media-storage）は in-memory Map でモックする。
  */
 
@@ -36,6 +36,9 @@ async function loadLibrary(): Promise<LibraryModule> {
   return await import('../media-library')
 }
 
+// Trees API 一覧の URL マッチャ（一覧のみ。削除は従来どおり Contents API）
+const TREES = '/repo-media/git/trees/HEAD'
+
 let mock: FetchMock
 
 beforeEach(() => {
@@ -61,43 +64,76 @@ describe('listMediaAssets', () => {
   })
 
   it('404（メディアリポ未作成）は成功扱いで空配列', async () => {
-    mock.on('GET', '/repo-media/contents/', { status: 404, json: { message: 'Not Found' } })
+    mock.on('GET', TREES, { status: 404, json: { message: 'Not Found' } })
     const { listMediaAssets } = await loadLibrary()
     const result = await listMediaAssets(makeSettings())
-    expect(result).toEqual({ ok: true, assets: [] })
+    expect(result).toEqual({ ok: true, assets: [], truncated: false })
   })
 
-  it('一覧成功で Contents API 配列を MediaAsset に変換する', async () => {
-    mock.on('GET', '/repo-media/contents/', {
+  it('409（空リポ = コミット0件で HEAD なし）も成功扱いで空配列', async () => {
+    mock.on('GET', TREES, { status: 409, json: { message: 'Git Repository is empty.' } })
+    const { listMediaAssets } = await loadLibrary()
+    const result = await listMediaAssets(makeSettings())
+    expect(result).toEqual({ ok: true, assets: [], truncated: false })
+  })
+
+  it('一覧成功で Trees API の tree 配列を MediaAsset に変換する（HEAD?recursive=1 宛て）', async () => {
+    mock.on('GET', TREES, {
       status: 200,
-      json: [
-        { name: '20260101-aa-x.png', path: '20260101-aa-x.png', size: 10, sha: 's1', type: 'file' },
-        { name: '.gitkeep', path: '.gitkeep', size: 0, sha: 's2', type: 'file' },
-        { name: 'sub', path: 'sub', size: 0, sha: 's3', type: 'dir' },
-      ],
+      json: {
+        sha: 'tree-sha',
+        truncated: false,
+        tree: [
+          { path: '20260101-aa-x.png', size: 10, sha: 's1', type: 'blob' },
+          { path: '.gitkeep', size: 0, sha: 's2', type: 'blob' },
+          { path: 'sub', sha: 's3', type: 'tree' },
+          { path: 'sub/nested.png', size: 5, sha: 's4', type: 'blob' },
+        ],
+      },
     })
     const { listMediaAssets } = await loadLibrary()
     const result = await listMediaAssets(makeSettings())
     expect(result.ok).toBe(true)
     if (result.ok) {
+      expect(result.truncated).toBe(false)
       expect(result.assets).toHaveLength(1)
       expect(result.assets[0].name).toBe('20260101-aa-x.png')
       expect(result.assets[0].rawUrl).toBe(
         'https://raw.githubusercontent.com/owner/repo-media/main/20260101-aa-x.png'
       )
     }
+    // 宛先が Trees API（default branch 追従の HEAD・recursive=1）であることを固定
+    const call = mock.firstCall('GET', TREES)
+    expect(call!.url).toContain('/repos/owner/repo-media/git/trees/HEAD?recursive=1')
   })
 
-  it('404 以外の HTTP エラーは fetch_failed（httpStatus 付き）', async () => {
-    mock.on('GET', '/repo-media/contents/', { status: 500, json: {} })
+  it('truncated: true は結果に透過される（silent cap 禁止の配線・#258）', async () => {
+    mock.on('GET', TREES, {
+      status: 200,
+      json: {
+        truncated: true,
+        tree: [{ path: '20260101-aa-x.png', size: 10, sha: 's1', type: 'blob' }],
+      },
+    })
+    const { listMediaAssets } = await loadLibrary()
+    const result = await listMediaAssets(makeSettings())
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.truncated).toBe(true)
+      expect(result.assets).toHaveLength(1)
+    }
+  })
+
+  it('404/409 以外の HTTP エラーは fetch_failed（httpStatus 付き）', async () => {
+    mock.on('GET', TREES, { status: 500, json: {} })
     const { listMediaAssets } = await loadLibrary()
     const result = await listMediaAssets(makeSettings())
     expect(result).toEqual({ ok: false, errorKind: 'fetch_failed', httpStatus: 500 })
   })
 
   it('401 / 403（認証エラー）も fetch_failed＋httpStatus（res.status をそのまま載せる）', async () => {
-    mock.on('GET', '/repo-media/contents/', { status: 401, json: {} })
-    mock.on('GET', '/repo-media/contents/', { status: 403, json: {} })
+    mock.on('GET', TREES, { status: 401, json: {} })
+    mock.on('GET', TREES, { status: 403, json: {} })
     const { listMediaAssets } = await loadLibrary()
     expect(await listMediaAssets(makeSettings())).toEqual({
       ok: false,
@@ -126,11 +162,11 @@ describe('listMediaAssets', () => {
     }
   })
 
-  it('200 だが配列でない JSON（想定外応答）は ok・空配列にする（Array.isArray ガード）', async () => {
-    mock.on('GET', '/repo-media/contents/', { status: 200, json: { message: 'not an array' } })
+  it('200 だが tree が配列でない JSON（想定外応答）は ok・空配列にする（Array.isArray ガード）', async () => {
+    mock.on('GET', TREES, { status: 200, json: { message: 'no tree field' } })
     const { listMediaAssets } = await loadLibrary()
     const result = await listMediaAssets(makeSettings())
-    expect(result).toEqual({ ok: true, assets: [] })
+    expect(result).toEqual({ ok: true, assets: [], truncated: false })
   })
 })
 

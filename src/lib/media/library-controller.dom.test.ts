@@ -124,6 +124,26 @@ describe('load: 状態遷移', () => {
     expect(c.assets.map((a) => a.path)).toEqual([PNG, PNG2])
   })
 
+  it('truncated: 一覧が切り詰められたフラグを透過し、非 truncated の再読込で消える（#258）', async () => {
+    listMediaAssetsMock.mockResolvedValueOnce({
+      ok: true,
+      assets: [makeAsset(PNG)],
+      truncated: true,
+    })
+    const c = makeController()
+    await c.load()
+    expect(c.truncated).toBe(true)
+
+    // 再読込で truncated が解消したら通知も消える（古いフラグが残らない）
+    listMediaAssetsMock.mockResolvedValueOnce({
+      ok: true,
+      assets: [makeAsset(PNG)],
+      truncated: false,
+    })
+    await c.load()
+    expect(c.truncated).toBe(false)
+  })
+
   it('T12b: loading → 空（0 件でも loaded・View 側で empty 表示）', async () => {
     listMediaAssetsMock.mockResolvedValue({ ok: true, assets: [] })
     const c = makeController()

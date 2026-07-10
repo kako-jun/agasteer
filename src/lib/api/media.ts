@@ -105,8 +105,14 @@ export {
  * AbortSignal.timeout() の一行で書けるが意図的に使わない: Node の実装は
  * vitest の fake timers（vi.useFakeTimers）に乗らず、タイムアウト挙動を
  * 決定的にテストできなくなるため（media-timeout.test.ts が時計を進めて検証する）。
+ *
+ * タイマーは応答**ヘッダ**到着で解除する（本文ストリーミングは対象外）。
+ * ストールの典型（接続不能・応答が永遠に来ない）を有限化するのが目的で、
+ * 進行中の大きい本文転送を途中で切らない。
+ *
+ * media-library.ts（一覧・削除）も共用する（#262）ため export する。
  */
-async function fetchWithTimeout(
+export async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number
@@ -400,14 +406,17 @@ export async function fetchMedia(url: string, settings: Settings): Promise<Media
   }
   try {
     // parseRawMediaUrl が安全文字に絞っているが、防御の二重化としてエンコードも掛ける
-    const res = await fetch(
+    // #262: ヘッダ到着までを 30 秒で有限化（失敗時はプレビューの「再試行」UI が受ける）。
+    // タイマーはヘッダ到着で解除されるため、100MB 級の本文ダウンロードは切られない
+    const res = await fetchWithTimeout(
       `https://api.github.com/repos/${parsed.repoFullName}/contents/${encodeURIComponent(parsed.path)}`,
       {
         headers: {
           ...authHeaders(settings),
           Accept: 'application/vnd.github.raw',
         },
-      }
+      },
+      MEDIA_API_TIMEOUT_MS
     )
     if (!res.ok) {
       return { ok: false, errorKind: 'fetch_failed', httpStatus: res.status }
