@@ -167,6 +167,13 @@ vi.mock('svelte', () => ({
 }))
 
 const { pushToGitHub, pullFromGitHub } = await import('./git')
+// #254: insert-phase はモックせず実物を使う（push/pull preflight が待つことの結合検証）
+const { beginMediaInsertPhase } = await import('../api/media/insert-phase')
+
+/** マイクロタスク＋直近のマクロタスクを流しきる（preflight が進まないことの観測用） */
+function flushTasks(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
 
 describe('pushToGitHub stale handling', () => {
   beforeEach(() => {
@@ -457,6 +464,98 @@ describe('pushToGitHub background phase (#206)', () => {
     await pushToGitHub()
 
     expect(mocks.showPushToast).toHaveBeenCalledWith('loading.pushing')
+  })
+})
+
+describe('メディア挿入フェーズの待ち合わせ (#254)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    stores.notes.value = [{ id: 'note-1', name: 'Note', parentId: null, order: 0 }]
+    stores.leaves.value = [{ id: 'leaf-1', noteId: 'note-1', content: 'orig', order: 0 }]
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    appState.isPullCompleted = true
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+  })
+
+  it('Push preflight は挿入フェーズ着地を待ち、着地後の内容をスナップショットする（添付直後 Push の no-op 防止）', async () => {
+    const end = beginMediaInsertPhase()
+    try {
+      const pushDone = pushToGitHub()
+      await flushTasks()
+      // 挿入フェーズが開いている間は preflight が進まない（ロックだけ取得済み）
+      expect(stores.isPushing.value).toBe(true)
+      expect(mocks.flushAllEditors).not.toHaveBeenCalled()
+      expect(mocks.executePush).not.toHaveBeenCalled()
+
+      // 挿入着地（attachMediaFiles の deps.insert → store 反映）を模擬してからフェーズ終了
+      stores.leaves.value = [
+        {
+          id: 'leaf-1',
+          noteId: 'note-1',
+          content: 'orig\n![a](https://example.com/a.png)',
+          order: 0,
+        },
+      ]
+      end()
+      await pushDone
+    } finally {
+      end()
+    }
+
+    // 挿入後の内容が送信スナップショットに入っている＝「変更なし」no-op にならない
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+    const args = mocks.executePush.mock.calls[0][0]
+    expect(args.leaves).toEqual([
+      {
+        id: 'leaf-1',
+        noteId: 'note-1',
+        content: 'orig\n![a](https://example.com/a.png)',
+        order: 0,
+      },
+    ])
+  })
+
+  it('Pull preflight も挿入フェーズ着地を待つ（挿入前の clean 誤認による上書き防止）', async () => {
+    const end = beginMediaInsertPhase()
+    try {
+      const pullDone = pullFromGitHub(false)
+      await flushTasks()
+      // 挿入フェーズが開いている間は flush にも stale check にも進まない
+      expect(stores.isPulling.value).toBe(true)
+      expect(mocks.flushAllEditors).not.toHaveBeenCalled()
+      expect(mocks.executeStaleCheck).not.toHaveBeenCalled()
+
+      end()
+      await pullDone
+    } finally {
+      end()
+    }
+    // 挿入着地後に composition flush（IME 中の着地を store へ反映）→ stale check の順で進む。
+    // up_to_date + isPullCompleted なので実 Pull なしで終了
+    expect(mocks.flushAllEditors).toHaveBeenCalledTimes(1)
+    expect(mocks.executeStaleCheck).toHaveBeenCalledTimes(1)
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('挿入フェーズが開いていなければ Push は従来どおり即進む（回帰確認）', async () => {
+    await pushToGitHub()
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -32,6 +32,8 @@ const {
 } = await import('./media-attach')
 
 import type { Settings } from '../types'
+// insert-phase はモックしない（attachMediaFiles が実物の in-flight 登録を行うことを検証する）
+import { waitForPendingMediaInserts } from '../api/media/insert-phase'
 // 型のみの import はモックに影響しない（実行時には消える）
 import type { MediaErrorKind } from '../api/media'
 // validation はモックせず実物を使う（attachMediaFiles の事前検証と同じ判定）
@@ -650,6 +652,57 @@ describe('attachMediaFiles', () => {
 
     const uploaded = notices.filter((n) => n.kind === 'uploaded').map((n) => n.name)
     expect(uploaded).toEqual(['b.png', 'a.png'])
+  })
+
+  it('挿入フェーズ追跡（#254）: 挿入が終わるまで waitForPendingMediaInserts は解決せず、背景アップロードは待たない', async () => {
+    // 最適化を deferred にして「挿入前のローカル処理中」を再現する
+    const optimize = defer<File>()
+    optimizeImageFileMock.mockReturnValue(optimize.promise)
+    const uploadDone = defer<boolean>()
+    uploadMediaMock.mockResolvedValue({
+      ok: true,
+      url: 'https://example.com/x.webp',
+      uploadDone: uploadDone.promise,
+    })
+    const insert = vi.fn()
+    const done = attachMediaFiles([makeFile('shot.png')], {
+      settings,
+      optimizeImages: true,
+      insert,
+      notify: vi.fn(),
+    })
+
+    let waitSettled = false
+    waitForPendingMediaInserts().then(() => {
+      waitSettled = true
+    })
+    await flushTasks()
+    // 最適化中（＝挿入前）は Push preflight の待ちが解けない
+    expect(insert).not.toHaveBeenCalled()
+    expect(waitSettled).toBe(false)
+
+    // 最適化完了 → enqueue → 挿入でフェーズ終了。背景 uploadDone は未解決のまま
+    optimize.resolve(makeFile('shot.webp'))
+    await flushTasks()
+    expect(insert).toHaveBeenCalledWith('![shot.webp](https://example.com/x.webp)')
+    expect(waitSettled).toBe(true)
+
+    uploadDone.resolve(true)
+    await done
+  })
+
+  it('挿入フェーズ追跡（#254）: uploadMedia が throw してもフェーズが開きっぱなしにならない', async () => {
+    uploadMediaMock.mockRejectedValue(new Error('boom'))
+    await expect(
+      attachMediaFiles([makeFile('a.png')], {
+        settings,
+        optimizeImages: false,
+        insert: vi.fn(),
+        notify: vi.fn(),
+      })
+    ).rejects.toThrow('boom')
+    // finally でフェーズが閉じている＝以後の Push preflight は即進む
+    await expect(waitForPendingMediaInserts()).resolves.toBeUndefined()
   })
 
   it('順序不変条件: 各ファイルの uploaded は必ず対応する uploading の後に出る', async () => {

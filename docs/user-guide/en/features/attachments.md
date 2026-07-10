@@ -74,6 +74,7 @@ Attaching while offline still completes the syntax insertion on the spot.
 - The file content is stored in a local pending queue
 - It uploads automatically when you come back online
 - Failed uploads also stay in the queue and retry automatically
+- Pushing while an attachment is still being processed (image optimization / saving) waits for the insertion to land first, so the inserted reference is never left out of the push
 
 ---
 
