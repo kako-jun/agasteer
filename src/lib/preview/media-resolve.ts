@@ -92,11 +92,6 @@ export interface PreviewMediaResolver {
 }
 
 /**
- * プレビュー 1 インスタンス分のメディア解決器を作る。
- * 同一 URL の複数出現・再レンダリングでは Blob URL を共有し、
- * resolveMedia と Blob 生成を URL につき 1 回に抑える。
- */
-/**
  * svg のみ、Blob 化する前に中身を DOMPurify で sanitize する（それ以外は素通し）。
  *
  * blob: URL は生成元（アプリ）オリジンを継承するため、`<img src=blob:>` 表示自体は
@@ -114,6 +109,11 @@ async function toSanitizedBlobPart(url: string, data: ArrayBuffer): Promise<Blob
   })
 }
 
+/**
+ * プレビュー 1 インスタンス分のメディア解決器を作る。
+ * 同一 URL の複数出現・再レンダリングでは Blob URL を共有し、
+ * resolveMedia と Blob 生成を URL につき 1 回に抑える。
+ */
 export function createPreviewMediaResolver(): PreviewMediaResolver {
   /** raw URL → Blob URL（レンダリングを跨いで共有） */
   const blobUrls = new Map<string, string>()
