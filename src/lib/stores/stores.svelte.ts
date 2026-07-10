@@ -31,6 +31,8 @@ import {
   flushPendingSaves,
 } from './auto-save.svelte'
 import { leafStatsStore } from './leaf-stats.svelte'
+// #254: リポ切替前にメディア添付の挿入着地を待つ（詳細は insert-phase.ts）
+import { waitForPendingMediaInserts } from '../api/media/insert-phase'
 
 // ============================================
 // 基本ストア（Home用）
@@ -947,6 +949,12 @@ export function resetForRepoSwitch(): void {
  * 既存の Pull ロジックが commitSha=null を見て初回 Pull を実行する。
  */
 export async function rehydrateForRepo(repoKey: string): Promise<void> {
+  // #254: 添付フローの挿入フェーズが進行中なら着地を待つ。待たずにクリアすると、
+  // アップロード済みメディアへの参照テキストが旧リポの store/DB に載る前に消え、
+  // メディアが孤児化する（push/pull preflight と同じレースのリポ切替版）。
+  // 着地後は下の flushPendingSaves が旧リポ DB へ永続化する。
+  await waitForPendingMediaInserts()
+
   // rehydrate 実行中は、ストアへの一時的な代入（null リセット等）が
   // localStorage の新リポ slot に書き戻されないようガードする。
   setRehydrating(true)

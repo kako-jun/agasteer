@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { beginMediaInsertPhase, waitForPendingMediaInserts } from './insert-phase'
+import { MEDIA_INSERT_WAIT_TIMEOUT_MS, MEDIA_INSERT_PHASE_STALE_MS } from '../../sync/constants'
 
 /** マイクロタスク＋直近のマクロタスクを流しきる（未解決の観測用） */
 function flushTasks(): Promise<void> {
@@ -110,5 +111,51 @@ describe('waitForPendingMediaInserts', () => {
     end()
     await wait
     expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('恒久ストール隔離: STALE 閾値を超えたフェーズはタイムアウト時に追跡から外れ、以後の待ちは即解決する', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const end = beginMediaInsertPhase()
+    try {
+      // フェーズ開始から STALE 閾値を超えるまで時計を進める（settle しないフェーズを再現）
+      await vi.advanceTimersByTimeAsync(MEDIA_INSERT_PHASE_STALE_MS)
+
+      // 1 回目の待ち: タイムアウトまで待たされるが、ストール隔離が発動する
+      const first = observeSettled(waitForPendingMediaInserts())
+      await vi.advanceTimersByTimeAsync(MEDIA_INSERT_WAIT_TIMEOUT_MS)
+      expect(first.settled).toBe(true)
+
+      // 2 回目以降の待ちは隔離済みなので即解決（毎回 10 秒待たされ続けない）
+      const second = observeSettled(waitForPendingMediaInserts())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(second.settled).toBe(true)
+    } finally {
+      end()
+    }
+  })
+
+  it('正当に遅いだけのフェーズ（STALE 閾値未満）はタイムアウトしても追跡に残り、保護が継続する', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const end = beginMediaInsertPhase()
+    try {
+      // 1 回目の待ちがタイムアウト（フェーズ経過は 10 秒 < STALE 60 秒 → 隔離されない）
+      const first = observeSettled(waitForPendingMediaInserts())
+      await vi.advanceTimersByTimeAsync(MEDIA_INSERT_WAIT_TIMEOUT_MS)
+      expect(first.settled).toBe(true)
+
+      // 2 回目の待ちはまだフェーズを待つ（即解決しない）＝遅いバッチへの保護が続く
+      const second = observeSettled(waitForPendingMediaInserts())
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(second.settled).toBe(false)
+
+      // フェーズが終われば解決する
+      end()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(second.settled).toBe(true)
+    } finally {
+      end()
+    }
   })
 })

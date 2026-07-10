@@ -536,8 +536,9 @@ describe('メディア挿入フェーズの待ち合わせ (#254)', () => {
     try {
       const pullDone = pullFromGitHub(false)
       await flushTasks()
-      // 挿入フェーズが開いている間は stale check にも進まない
+      // 挿入フェーズが開いている間は flush にも stale check にも進まない
       expect(stores.isPulling.value).toBe(true)
+      expect(mocks.flushAllEditors).not.toHaveBeenCalled()
       expect(mocks.executeStaleCheck).not.toHaveBeenCalled()
 
       end()
@@ -545,7 +546,9 @@ describe('メディア挿入フェーズの待ち合わせ (#254)', () => {
     } finally {
       end()
     }
-    // up_to_date + isPullCompleted なので実 Pull なしで終了（待ち合わせのみの検証）
+    // 挿入着地後に composition flush（IME 中の着地を store へ反映）→ stale check の順で進む。
+    // up_to_date + isPullCompleted なので実 Pull なしで終了
+    expect(mocks.flushAllEditors).toHaveBeenCalledTimes(1)
     expect(mocks.executeStaleCheck).toHaveBeenCalledTimes(1)
     expect(stores.isPulling.value).toBe(false)
   })

@@ -649,6 +649,12 @@ export async function pullFromGitHub(
     // isDirty が挿入前の状態で評価されて dirty 警告を素通りし、Pull の
     // クリア＆再取得で挿入テキストが消える（メディア参照の喪失＝孤児化）。
     await waitForPendingMediaInserts()
+    // #254: 挿入が IME composition 中に着地した場合、エディタの updateListener は
+    // onChange を保留する（#186 と同じ機構）ため、store（leaves.value / isDirty）は
+    // 挿入前のまま。Push 側と同様に flush + tick してから下の isDirty 判定に進まないと、
+    // dirty 警告を素通りして Pull の上書きで挿入テキストが消える。
+    flushAllEditors()
+    await tick()
     // Staleチェックを先に行う。
     // リモートに変更がない（= 実際のPullが走らない）場合にまで
     // 「未保存の変更があります。Pullすると上書きされます」系の警告を出すと、
