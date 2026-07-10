@@ -77,6 +77,24 @@ Attaching while offline still completes the syntax insertion on the spot.
 
 ---
 
+## Display in Preview
+
+Open the preview (👁️) and attachments are displayed according to their type.
+
+| Type      | Display                       |
+| --------- | ----------------------------- |
+| Image     | Shown inline                  |
+| Video     | Player with playback controls |
+| Audio     | Player with playback controls |
+| ZIP, etc. | Link you can tap to download  |
+
+- Already-fetched files appear instantly; the first time shows a brief "Loading..." state
+- Files still on your device (right after attaching, or while offline) are displayed as-is
+- If a file cannot be fetched (offline and not yet cached, or deleted), the file name and a "**Retry**" button are shown
+
+---
+
 ## Note
 
-- The media repository is private, so opening the inserted URL directly in a browser will not display it (GitHub authentication is required)
+- The media repository is private, so opening the inserted URL directly in a browser will not display it (GitHub authentication is required). The preview fetches it with authentication and displays it as described above
+- "Download/Share as image" includes attached images, but video and audio are not captured

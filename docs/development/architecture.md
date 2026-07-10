@@ -195,6 +195,8 @@ agasteer/
 │   │   ├── pane-navigation.svelte.ts    # ペインナビゲーション（ビュー遷移・パンくず・URL同期）
 │   │   ├── keyboard-nav.svelte.ts       # キーボードナビゲーション（グローバルキーハンドラ）
 │   │   ├── pane-actions-factory.svelte.ts # PaneActions生成ファクトリ（Context API用）
+│   │   ├── preview/                     # プレビュー機能のロジック
+│   │   │   └── media-resolve.ts         # 添付メディアの表示解決（Blob URL差し替え）#244
 │   │   ├── stores/                      # 状態管理モジュール
 │   │   │   ├── stores.svelte.ts         # Svelte 5 rune ベース状態管理
 │   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
@@ -346,6 +348,7 @@ agasteer/
 
 - `editor/media-attach.ts`: エディタ添付の共通ロジック。ファイル取り出し（paste/drop/ファイル選択）・挿入記法の組み立て（画像=`![]()`/他=`[]()`）・CodeMirror `domEventHandlers` の生成・添付編成（最適化 → uploadMedia → 挿入 → トースト通知）。Svelte 側（MarkdownEditor/EditorFooter）は insert/notify コールバックの薄い配線のみ
 - `utils/image-optimize.ts`: 添付画像の自動最適化（最大辺2048px縮小 + WebP再エンコード。設定 `mediaOptimizeImages` 既定ON）。gif/svg/非画像は無変換。uploadMedia に渡す前に適用するため、ハッシュ・raw URL は最適化後の内容で確定する。寸法計算・対象判定は純粋関数として分離
+- `preview/media-resolve.ts`: プレビューでの添付メディア表示解決（#244）。sanitize 済み DOM から `parseRawMediaUrl` 受理の URL だけを検出し、`resolveMedia`（pending → cache → 認証 fetch）の実体を Blob URL 化して `<img>`/`<video>`/`<audio>`/`<a download>` に差し替え。URL→Blob URL の Map で重複排除し、破棄時に revoke。純粋関数（種別判定・MIME・ファイル名）と副作用（解決・DOM 差し替え）を分離
 
 **データ永続化:**
 

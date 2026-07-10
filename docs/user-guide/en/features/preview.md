@@ -17,6 +17,7 @@ Render and display leaf Markdown as HTML.
 - External links open in new tabs
 - Code block syntax highlighting supported
 - XSS protection (DOMPurify)
+- Attachments are displayed (images inline, video/audio in a player, ZIP as a download link — see [File Attachments](./attachments.md))
 
 ---
 
