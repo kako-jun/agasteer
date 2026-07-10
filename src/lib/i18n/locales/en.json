@@ -45,7 +45,8 @@
     "editLeafName": "Edit leaf name",
     "showSiblings": "Show siblings",
     "worldHome": "Home",
-    "worldArchive": "Archive"
+    "worldArchive": "Archive",
+    "worldMedia": "Media"
   },
   "share": {
     "title": "Share",
@@ -273,6 +274,19 @@
       "loading": "Loading...",
       "unavailable": "Failed to load",
       "retry": "Retry"
+    },
+    "library": {
+      "title": "Media",
+      "back": "Back to home",
+      "loading": "Loading...",
+      "empty": "No attachments yet",
+      "notConfigured": "GitHub integration isn't set up. Open Settings to configure your token and repository.",
+      "loadFailed": "Failed to load the media list",
+      "retry": "Retry",
+      "delete": "Delete",
+      "deleteConfirm": "Delete \"{name}\"?\nIf this media is referenced by a note, that note will display broken.",
+      "deleted": "Deleted \"{name}\"",
+      "deleteFailed": "Failed to delete"
     }
   },
   "ocr": {

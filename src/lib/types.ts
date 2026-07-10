@@ -9,7 +9,10 @@ export type ThemeType = 'yomi' | 'campus' | 'greenboard' | 'whiteboard' | 'dotsD
 
 export type Locale = 'ja' | 'en'
 
-export type View = 'home' | 'settings' | 'edit' | 'note' | 'preview'
+// 'media' はメディアライブラリ画面（#250）。ワールド（Home/Archive）とは独立した
+// フルスクリーン View であり、note/leaf/metadata/dirty/push のどの契約も持たない。
+// WorldType を 3 値化しないための設計上の境界（media は world ではなく view）。
+export type View = 'home' | 'settings' | 'edit' | 'note' | 'preview' | 'media'
 
 /** ワールド（Home/Archive）の識別子 */
 export type WorldType = 'home' | 'archive'

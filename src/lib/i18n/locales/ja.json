@@ -45,7 +45,8 @@
     "editLeafName": "リーフ名を編集",
     "showSiblings": "同階層の一覧を表示",
     "worldHome": "ホーム",
-    "worldArchive": "アーカイブ"
+    "worldArchive": "アーカイブ",
+    "worldMedia": "メディア"
   },
   "share": {
     "title": "シェア",
@@ -274,6 +275,19 @@
       "loading": "読み込み中...",
       "unavailable": "取得できませんでした",
       "retry": "再試行"
+    },
+    "library": {
+      "title": "メディア",
+      "back": "ホームへ戻る",
+      "loading": "読み込み中...",
+      "empty": "まだ添付がありません",
+      "notConfigured": "GitHub連携が未設定です。設定画面でトークンとリポジトリを設定してください",
+      "loadFailed": "メディア一覧の取得に失敗しました",
+      "retry": "再試行",
+      "delete": "削除",
+      "deleteConfirm": "「{name}」を削除しますか？\nこのメディアがノートから参照されている場合、そのノートの表示が壊れます。",
+      "deleted": "「{name}」を削除しました",
+      "deleteFailed": "削除に失敗しました"
     }
   },
   "ocr": {

@@ -94,6 +94,30 @@ Open the preview (👁️) and attachments are displayed according to their type
 
 ---
 
+## Listing and Deleting Media
+
+You can review and delete attached media from a dedicated screen.
+
+### Opening it
+
+From the "**›**" dropdown at the left of the breadcrumbs (the Home/Archive switcher), choose "**Media**". To go back, tap the home icon in the breadcrumbs, or choose "Home" from the same dropdown.
+
+### The list
+
+- Attached files are shown in a grid with thumbnails (newest first)
+- Images show a thumbnail; video, audio, ZIP, etc. show an extension label
+- Each file shows its name and size
+- If you have not attached anything yet, it shows "No attachments yet"
+- If you have more than about 1,000 attachments, some may not appear in the list (to be addressed in a future update)
+
+### Deleting
+
+Delete a file with its delete button (🗑️). A confirmation dialog asks whether to delete.
+
+> **⚠️ Note**: If the media you delete is referenced by any note, that note will display broken (the image won't show, or the link will break). Before deleting, check that the file isn't used in your notes. This first version does not automatically detect whether a file is still referenced.
+
+---
+
 ## Note
 
 - The media repository is private, so opening the inserted URL directly in a browser will not display it (GitHub authentication is required). The preview fetches it with authentication and displays it as described above

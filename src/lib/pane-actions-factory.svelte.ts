@@ -60,6 +60,7 @@ import {
   switchPane,
   togglePreview,
   openPriorityView,
+  navigateToMediaLibrary,
   openOfflineView,
   updateOfflineBadge,
   updateOfflineContent,
@@ -605,6 +606,7 @@ export function setupAppActionsAndContext(pushDisabledReasonGetter: () => string
     switchPane,
     togglePreview,
     openPriorityView,
+    navigateToMediaLibrary,
 
     // CRUD操作
     createNote,

@@ -23,6 +23,7 @@ export interface PaneActions {
   switchPane: (pane: Pane) => void
   togglePreview: (pane: Pane) => void
   openPriorityView: (pane: Pane) => void
+  navigateToMediaLibrary: (pane: Pane) => void
 
   // CRUD操作
   createNote: (parentId: string | undefined, pane: Pane, name?: string) => void
