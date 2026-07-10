@@ -17,8 +17,7 @@
   import { listMediaAssets, deleteMediaAsset, type MediaAsset } from '../../lib/api/media-library'
   import { resolveMedia } from '../../lib/api/media'
   import { formatMediaSize } from '../../lib/api/media/library'
-  import { getMediaExtension } from '../../lib/api/media/naming'
-  import { classifyPreviewMediaKind, previewMediaMimeType } from '../../lib/preview/media-resolve'
+  import { createMediaLibraryController } from '../../lib/media/library-controller.svelte'
   import { confirmAsync, showPushToast } from '../../lib/ui'
   import LeafSpinner from '../icons/LeafSpinner.svelte'
   import ArrowLeftIcon from '../icons/ArrowLeftIcon.svelte'
@@ -32,66 +31,20 @@
 
   let { settings, onClose }: Props = $props()
 
-  type LoadState = 'loading' | 'loaded' | 'error'
-  let loadState = $state<LoadState>('loading')
-  let assets = $state<MediaAsset[]>([])
-  let errorKind = $state<string | null>(null)
-  /** 削除中のアセット path（ボタン二度押し防止） */
-  let deletingPath = $state<string | null>(null)
-  /** rawUrl → サムネイルの Blob URL（解決済みのみ） */
-  let thumbUrls = $state<Record<string, string>>({})
+  // 状態と IO はコントローラへ。ここは配線（observer の DOM 接続・描画）だけを持つ
+  const controller = createMediaLibraryController({
+    listMediaAssets,
+    deleteMediaAsset,
+    resolveMedia,
+    confirm: (message) => confirmAsync(message),
+    toast: (message, variant) => showPushToast(message, variant),
+    getSettings: () => settings,
+    translate: (key, values) => $_(key, values ? { values } : undefined),
+  })
 
-  // 解決の重複防止・遅延解決の観測。$state 外（描画に不要）
-  const resolving = new Set<string>()
+  // 遅延解決の観測（DOM 配線）。$state 外（描画に不要）
   const elToAsset = new Map<Element, MediaAsset>()
   let observer: IntersectionObserver | null = null
-  let disposed = false
-
-  let errorMessage = $derived(
-    errorKind === 'not_configured'
-      ? $_('media.errors.not_configured')
-      : $_('media.library.loadFailed')
-  )
-
-  function kindOf(asset: MediaAsset): 'image' | 'video' | 'audio' | 'download' {
-    return classifyPreviewMediaKind(asset.rawUrl) ?? 'download'
-  }
-
-  function extLabel(asset: MediaAsset): string {
-    return getMediaExtension(asset.name).toUpperCase() || 'FILE'
-  }
-
-  async function load() {
-    loadState = 'loading'
-    errorKind = null
-    const result = await listMediaAssets(settings)
-    if (disposed) return
-    // strict でない tsconfig では !result.ok の真偽値 narrowing が効かないため in 演算子で判別
-    if ('errorKind' in result) {
-      errorKind = result.errorKind
-      loadState = 'error'
-      return
-    }
-    assets = result.assets
-    loadState = 'loaded'
-  }
-
-  /** 表示領域に入った画像アセットを 1 回だけ解決して Blob URL を作る */
-  async function resolveThumb(asset: MediaAsset) {
-    if (thumbUrls[asset.rawUrl] || resolving.has(asset.rawUrl)) return
-    resolving.add(asset.rawUrl)
-    const result = await resolveMedia(asset.rawUrl, settings)
-    resolving.delete(asset.rawUrl)
-    if (disposed || !result.ok) return
-    const blobUrl = URL.createObjectURL(
-      new Blob([result.data], { type: previewMediaMimeType(asset.name) })
-    )
-    if (disposed) {
-      URL.revokeObjectURL(blobUrl)
-      return
-    }
-    thumbUrls = { ...thumbUrls, [asset.rawUrl]: blobUrl }
-  }
 
   /** 画像サムネイルのプレースホルダに付ける action。可視化されたら解決を蹴る */
   function thumbObserve(node: HTMLElement, asset: MediaAsset) {
@@ -105,52 +58,25 @@
     }
   }
 
-  async function handleDelete(asset: MediaAsset) {
-    const confirmed = await confirmAsync(
-      $_('media.library.deleteConfirm', { values: { name: asset.name } })
-    )
-    if (!confirmed || disposed) return
-    deletingPath = asset.path
-    const result = await deleteMediaAsset(settings, asset.path, asset.sha)
-    if (disposed) return
-    deletingPath = null
-    if (result.ok) {
-      const blobUrl = thumbUrls[asset.rawUrl]
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl)
-        const { [asset.rawUrl]: _omit, ...rest } = thumbUrls
-        thumbUrls = rest
-      }
-      assets = assets.filter((a) => a.path !== asset.path)
-      showPushToast($_('media.library.deleted', { values: { name: asset.name } }), 'success')
-    } else {
-      showPushToast($_('media.library.deleteFailed'), 'error')
-    }
-  }
-
   onMount(() => {
     observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue
           const asset = elToAsset.get(entry.target)
-          if (asset) void resolveThumb(asset)
+          if (asset) void controller.resolveThumb(asset)
           observer?.unobserve(entry.target)
         }
       },
       { rootMargin: '150px' }
     )
-    void load()
+    void controller.load()
   })
 
   onDestroy(() => {
-    disposed = true
     observer?.disconnect()
     observer = null
-    for (const blobUrl of Object.values(thumbUrls)) {
-      URL.revokeObjectURL(blobUrl)
-    }
-    thumbUrls = {}
+    controller.dispose()
   })
 </script>
 
@@ -162,32 +88,34 @@
     <h2>{$_('media.library.title')}</h2>
   </div>
 
-  {#if loadState === 'loading'}
+  {#if controller.loadState === 'loading'}
     <div class="media-status">
       <LeafSpinner size={32} />
       <span>{$_('media.library.loading')}</span>
     </div>
-  {:else if loadState === 'error'}
+  {:else if controller.loadState === 'error'}
     <div class="media-status">
-      <p>{errorMessage}</p>
-      <button class="retry-button" onclick={load}>{$_('media.library.retry')}</button>
+      <p>{$_(controller.errorMessageKey)}</p>
+      <button class="retry-button" onclick={() => controller.retry()}
+        >{$_('media.library.retry')}</button
+      >
     </div>
-  {:else if assets.length === 0}
+  {:else if controller.assets.length === 0}
     <div class="media-status media-empty">{$_('media.library.empty')}</div>
   {:else}
     <div class="media-grid">
-      {#each assets as asset (asset.path)}
+      {#each controller.assets as asset (asset.path)}
         <div class="media-card">
           <div class="media-thumb">
-            {#if kindOf(asset) === 'image' && thumbUrls[asset.rawUrl]}
-              <img src={thumbUrls[asset.rawUrl]} alt={asset.name} />
-            {:else if kindOf(asset) === 'image'}
+            {#if controller.kindOf(asset) === 'image' && controller.thumbUrls[asset.rawUrl]}
+              <img src={controller.thumbUrls[asset.rawUrl]} alt={asset.name} />
+            {:else if controller.kindOf(asset) === 'image'}
               <div class="media-thumb-placeholder" use:thumbObserve={asset}>
-                <span class="media-ext">{extLabel(asset)}</span>
+                <span class="media-ext">{controller.extLabel(asset)}</span>
               </div>
             {:else}
               <div class="media-thumb-placeholder">
-                <span class="media-ext">{extLabel(asset)}</span>
+                <span class="media-ext">{controller.extLabel(asset)}</span>
               </div>
             {/if}
           </div>
@@ -197,8 +125,8 @@
           </div>
           <button
             class="media-delete"
-            onclick={() => handleDelete(asset)}
-            disabled={deletingPath === asset.path}
+            onclick={() => controller.handleDelete(asset)}
+            disabled={controller.deletingPath === asset.path}
             title={$_('media.library.delete')}
             aria-label={$_('media.library.delete')}
           >
