@@ -148,15 +148,15 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
+    // URL は enqueue 完了時点で即確定して返る（実アップロード完了は待たない）
     // sha256('hello') = 2cf24dba... → hash8 = 2cf24dba
-    expect(res).toEqual({
-      ok: true,
-      uploaded: true,
-      url: expect.stringMatching(
-        /^https:\/\/raw\.githubusercontent\.com\/owner\/repo-media\/main\/\d{8}-2cf24dba-hello\.png$/
-      ),
-    })
+    expect(res.ok).toBe(true)
     if (!res.ok) throw new Error('unreachable')
+    expect(res.url).toMatch(
+      /^https:\/\/raw\.githubusercontent\.com\/owner\/repo-media\/main\/\d{8}-2cf24dba-hello\.png$/
+    )
+    // 背景アップロードの完了を待つ
+    expect(await res.uploadDone).toBe(true)
 
     // PUT body: base64 content + committer
     const put = mock.firstCall('PUT', CONTENTS)
@@ -232,11 +232,11 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res).toEqual({
-      ok: true,
-      uploaded: false,
-      url: expect.stringMatching(/\/owner\/repo-media\/main\/\d{8}-2cf24dba-hello\.png$/),
-    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(res.url).toMatch(/\/owner\/repo-media\/main\/\d{8}-2cf24dba-hello\.png$/)
+    // オフラインは即時試行せずキュー保留＝uploadDone は false に即解決
+    expect(await res.uploadDone).toBe(false)
     expect(mock.calls).toHaveLength(0)
     expect(mediaStore.pending.size).toBe(1)
     expect(console.error).not.toHaveBeenCalled()
@@ -248,7 +248,9 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res.ok && res.uploaded).toBe(true)
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
     expect(mock.callsMatching('PUT', CONTENTS)).toHaveLength(0)
     expect(mediaStore.pending.size).toBe(0)
     expect(mediaStore.cache.size).toBe(1)
@@ -264,13 +266,15 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res.ok && res.uploaded).toBe(true)
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
     expect(mediaStore.pending.size).toBe(0)
     expect(mediaStore.cache.size).toBe(1)
     mock.assertDrained()
   })
 
-  it('PUT 500 は uploaded:false で pending に残り cache には載らない', async () => {
+  it('PUT 500 は uploadDone:false で pending に残り cache には載らない', async () => {
     mock
       .on('GET', REPO_GET, { json: { id: 1 } })
       .on('GET', CONTENTS, { status: 404, json: {} })
@@ -279,18 +283,23 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res).toEqual({ ok: true, uploaded: false, url: expect.any(String) })
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(res.url).toEqual(expect.any(String))
+    expect(await res.uploadDone).toBe(false)
     expect(mediaStore.pending.size).toBe(1)
     expect(mediaStore.cache.size).toBe(0)
   })
 
-  it('存在チェックが 403 なら uploaded:false で pending に残る', async () => {
+  it('存在チェックが 403 なら uploadDone:false で pending に残る', async () => {
     mock.on('GET', REPO_GET, { json: { id: 1 } }).on('GET', CONTENTS, { status: 403, json: {} })
     const media = await loadMedia()
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res).toEqual({ ok: true, uploaded: false, url: expect.any(String) })
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(false)
     expect(mock.callsMatching('PUT', CONTENTS)).toHaveLength(0)
     expect(mediaStore.pending.size).toBe(1)
   })
@@ -301,20 +310,24 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res).toEqual({ ok: true, uploaded: false, url: expect.any(String) })
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(false)
     expect(mock.callsMatching('GET', CONTENTS)).toHaveLength(0)
     expect(mock.callsMatching('PUT', CONTENTS)).toHaveLength(0)
     expect(mediaStore.pending.size).toBe(1)
   })
 
-  it('通信自体が throw しても uploaded:false + console.warn で pending に残る（error は出さない）', async () => {
+  it('通信自体が throw しても uploadDone:false + console.warn で pending に残る（error は出さない）', async () => {
     // リポ確認だけ成功させ、存在チェックの fetch を throw させる（キュー空 = throw）
     mock.on('GET', REPO_GET, { json: { id: 1 } })
     const media = await loadMedia()
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res).toEqual({ ok: true, uploaded: false, url: expect.any(String) })
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(false)
     expect(mediaStore.pending.size).toBe(1)
     expect(console.warn).toHaveBeenCalledWith(
       'Media upload failed (kept in pending queue):',
@@ -337,7 +350,9 @@ describe('uploadMedia', () => {
     expect(first.ok && second.ok).toBe(true)
     if (!first.ok || !second.ok) throw new Error('unreachable')
     expect(second.url).toBe(first.url)
-    expect(second.uploaded).toBe(true)
+    // 背景アップロードはグローバル直列チェーンで流れるため、1件目→2件目の順で解決する
+    expect(await first.uploadDone).toBe(true)
+    expect(await second.uploadDone).toBe(true)
     expect(mock.callsMatching('PUT', CONTENTS)).toHaveLength(1)
     // pending put は同一 filename の上書き（2回 put されても常に1件）
     const putFilenames = mediaStore.fns.putPendingMedia.mock.calls.map((c) => c[0].filename)
@@ -356,12 +371,14 @@ describe('uploadMedia', () => {
       makeSettings()
     )
 
-    expect(res.ok && res.uploaded).toBe(true)
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
     expect(mediaStore.fns.putCachedMedia).toHaveBeenCalledTimes(1)
     expect(mediaStore.cache.size).toBe(1)
   })
 
-  it('20MB+1 のアップロード成功は uploaded:true だが cache には載らない', async () => {
+  it('20MB+1 のアップロード成功は uploadDone:true だが cache には載らない', async () => {
     mock.on('GET', REPO_GET, { json: { id: 1 } }).on('GET', CONTENTS, { status: 200, json: {} })
     const media = await loadMedia()
 
@@ -370,7 +387,9 @@ describe('uploadMedia', () => {
       makeSettings()
     )
 
-    expect(res.ok && res.uploaded).toBe(true)
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
     expect(mediaStore.fns.putCachedMedia).not.toHaveBeenCalled()
     expect(mediaStore.cache.size).toBe(0)
   })
@@ -424,7 +443,10 @@ describe('uploadMedia', () => {
 
     const res = await media.uploadMedia(makeFile('empty.png', ''), makeSettings())
 
-    expect(res).toEqual({ ok: true, uploaded: false, url: expect.any(String) })
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(res.url).toEqual(expect.any(String))
+    expect(await res.uploadDone).toBe(false)
     expect(mediaStore.fns.putPendingMedia).toHaveBeenCalledWith(
       expect.objectContaining({ size: 0 })
     )
@@ -913,7 +935,9 @@ describe('cacheMedia（LRU 配線）', () => {
 
     const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
 
-    expect(res.ok && res.uploaded).toBe(true)
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
     expect(mediaStore.fns.deletePendingMedia).toHaveBeenCalledTimes(1)
     expect(console.warn).toHaveBeenCalledWith(
       'Media cache write failed (ignored):',

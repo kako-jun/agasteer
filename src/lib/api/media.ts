@@ -5,7 +5,7 @@
  * ワールド（WorldType）とは独立したサブシステムであり、Push/Pull フローには関与しない。
  * 純粋層（命名・検証・base64・LRU）は media/ 配下に分離している（github/ の分割パターン踏襲）。
  *
- * - アップロードは「enqueue → オンラインなら即時試行 → 失敗/オフラインは online 復帰でリトライ」
+ * - アップロードは「enqueue → URL 即返し → 背景で直列アップロード → 失敗/オフラインは online 復帰でリトライ」
  * - raw URL は内容 SHA-256 から即時確定するため、呼び出し元はアップロード完了を待たずに URL を得る
  * - 取得は raw URL をパースし Contents API（Accept: application/vnd.github.raw）を認証付きで叩く。
  *   raw.githubusercontent.com への直接 fetch は private リポでは CORS/認証とも通らない（#190 実測）
@@ -52,8 +52,12 @@ export type MediaUploadResult =
       ok: true
       /** 確定 raw URL（アップロード完了を待たずに埋め込みに使える） */
       url: string
-      /** 即時アップロードまで完了したか（false ならキュー待ち＝online 復帰でリトライ） */
-      uploaded: boolean
+      /**
+       * 実アップロードの背景タスク。解決値: true=即時アップロード完了 /
+       * false=キュー保留（オフライン or 失敗、online 復帰でリトライ）。
+       * 呼び出し側は url を即挿入し、このプロミスの解決で完了/保留トーストを出す。
+       */
+      uploadDone: Promise<boolean>
     }
   | { ok: false; errorKind: MediaErrorKind; httpStatus?: number }
 
@@ -139,16 +143,23 @@ export async function ensureMediaRepo(
 }
 
 // ============================================
-// アップロード（enqueue → 即時試行）
+// アップロード（enqueue → URL 即返し → 背景アップロード）
 // ============================================
 
+// 実アップロードは URL 確定後に背景で直列実行する。
+// Contents API は default branch へ直接コミットするため、同一リポへの
+// 並行 PUT は 409 になりうる。グローバルに直列化して衝突を避ける。
+let uploadChain: Promise<unknown> = Promise.resolve()
+
 /**
- * メディアファイルをアップロードする。
+ * メディアファイルをアップロードする。URL 確定＝完了を待たず即返す。
  *
  * 1. 形式・サイズ検証（この層で強制）
  * 2. 内容 SHA-256 からファイル名・raw URL を確定
- * 3. pending キューに enqueue（オフラインでも URL は返せる）
- * 4. オンラインなら即時アップロードを試行（失敗してもキューに残る）
+ * 3. pending キューに enqueue（この時点で URL は IndexedDB に永続化される。
+ *    アプリを閉じても次回 initMediaOnlineRetry が拾うため、挿入した URL は孤児化しない）
+ * 4. enqueue 完了で即返す。実アップロードは待たず背景で直列実行し uploadDone として返す
+ *    （オフラインは即 false 解決＝キュー保留。online 復帰でリトライ）
  */
 export async function uploadMedia(file: File, settings: Settings): Promise<MediaUploadResult> {
   if (!isMediaConfigured(settings)) {
@@ -181,11 +192,17 @@ export async function uploadMedia(file: File, settings: Settings): Promise<Media
     return { ok: false, errorKind: 'storage_failed' }
   }
 
-  let uploaded = false
-  if (typeof navigator === 'undefined' || navigator.onLine) {
-    uploaded = await uploadPendingItem(item, settings)
+  // オフラインは即時試行せずキュー保留（online 復帰でリトライ）。チェーンも塞がない
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { ok: true, url: item.url, uploadDone: Promise.resolve(false) }
   }
-  return { ok: true, url: item.url, uploaded }
+  const uploadDone = uploadChain.then(() => uploadPendingItem(item, settings))
+  // チェーン末尾は成否を飲み込み次のアップロードを止めない
+  uploadChain = uploadDone.then(
+    () => undefined,
+    () => undefined
+  )
+  return { ok: true, url: item.url, uploadDone }
 }
 
 /**
