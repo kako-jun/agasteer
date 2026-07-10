@@ -306,9 +306,11 @@ describe('attachMediaFiles', () => {
     expect(insert).not.toHaveBeenCalled()
   })
 
-  it('最適化でリネームされた後にアップロード失敗 → error 通知の name は原本名', async () => {
+  it('uploadMedia が失敗しても error 通知の name は最適化後名でなく原本名', async () => {
     optimizeImageFileMock.mockResolvedValue(makeFile('shot.webp'))
-    uploadMediaMock.mockResolvedValue({ ok: false, errorKind: 'repo_unavailable' })
+    // 分離後 uploadMedia が同期で返す実在の失敗は storage_failed（File 読み取り・IDB 書き込み）。
+    // リポ確認は背景 uploadPendingItem に移ったため uploadMedia は repo_unavailable を返さない
+    uploadMediaMock.mockResolvedValue({ ok: false, errorKind: 'storage_failed' })
     const notices: any[] = []
     await attachMediaFiles([makeFile('shot.png')], {
       settings,
@@ -316,8 +318,11 @@ describe('attachMediaFiles', () => {
       insert: vi.fn(),
       notify: (n) => notices.push(n),
     })
-    // 分離後は enqueue 前（uploadMedia が同期で返す）失敗なので uploading は出さない
-    expect(notices).toEqual([{ kind: 'error', errorKind: 'repo_unavailable', name: 'shot.png' }])
+    // uploading は事前検証通過時点で原本名で出る。error も最適化後リネーム（shot.webp）でなく原本名
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'shot.png' },
+      { kind: 'error', errorKind: 'storage_failed', name: 'shot.png' },
+    ])
   })
 
   it('検証エラー: 挿入せず error 通知して次のファイルに進む', async () => {
@@ -428,13 +433,14 @@ describe('attachMediaFiles', () => {
     expect(insert).not.toHaveBeenCalled()
   })
 
-  it('3ファイル（成功/失敗/成功）: 失敗ファイルは uploading を出さず、完了通知は背景で出る', async () => {
+  it('3ファイル（成功/uploadMedia失敗/成功）: 事前検証通過は全て uploading を出し、各終端は自分の uploading の後に出る', async () => {
     uploadMediaMock
       .mockResolvedValueOnce({
         ok: true,
         url: 'https://example.com/a.png',
         uploadDone: Promise.resolve(true),
       })
+      // b.zip は事前検証は通る（小サイズ）が uploadMedia 段で失敗する
       .mockResolvedValueOnce({ ok: false, errorKind: 'size_exceeded' })
       .mockResolvedValueOnce({
         ok: true,
@@ -448,15 +454,25 @@ describe('attachMediaFiles', () => {
       insert: vi.fn(),
       notify: (n) => notices.push(n),
     })
-    // enqueue 成功ファイルのみ uploading を出す（b.zip は uploadMedia 段で失敗＝uploading なし）。
-    // 完了トーストは即解決の uploadDone により、次ファイルの処理前に背景で発火する
-    expect(notices).toEqual([
-      { kind: 'uploading', name: 'a.png' },
-      { kind: 'uploaded', name: 'a.png' },
-      { kind: 'error', errorKind: 'size_exceeded', name: 'b.zip' },
-      { kind: 'uploading', name: 'c.png' },
-      { kind: 'uploaded', name: 'c.png' },
+    // 事前検証を通った 3 ファイルはすべて uploading を出す（最適化中の無反応を避けるため事前に出す）
+    expect(notices.filter((n) => n.kind === 'uploading').map((n) => n.name)).toEqual([
+      'a.png',
+      'b.zip',
+      'c.png',
     ])
+    // uploadMedia 失敗の b.zip は error（uploaded は出ない）、成功の a/c は背景 uploadDone で uploaded
+    expect(notices.filter((n) => n.kind === 'uploaded').map((n) => n.name)).toEqual([
+      'a.png',
+      'c.png',
+    ])
+    expect(notices).toContainEqual({ kind: 'error', errorKind: 'size_exceeded', name: 'b.zip' })
+    // 各ファイルの終端（uploaded / error）は必ず自分の uploading の後に出る
+    const at = (kind: string, name: string) =>
+      notices.findIndex((n) => n.kind === kind && n.name === name)
+    for (const name of ['a.png', 'c.png']) {
+      expect(at('uploaded', name)).toBeGreaterThan(at('uploading', name))
+    }
+    expect(at('error', 'b.zip')).toBeGreaterThan(at('uploading', 'b.zip'))
   })
 
   it('未アップロード（uploadDone: false）: navigator 未定義なら queuedRetry 通知（オフライン扱いにしない）', async () => {

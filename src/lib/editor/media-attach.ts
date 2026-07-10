@@ -187,6 +187,11 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
       deps.notify({ kind: 'error', errorKind: validationError, name: original.name })
       continue
     }
+    // 事前検証を通った直後（最適化 await の前）に「アップロード中」を出す。
+    // 大きい画像の最適化は数百 ms かかりうるため、その間の無反応を避ける。
+    // 事前検証済み＝最適化は縮小のみで uploadMedia の形式/サイズ再検証を新たに失敗させないため
+    // 「アップロード中→拒否」の 2 連トーストは通常起きない
+    deps.notify({ kind: 'uploading', name: original.name })
     const file = deps.optimizeImages ? await optimizeImageFile(original) : original
     const result = await uploadMedia(file, deps.settings)
     // strict モードでない tsconfig では !result.ok の真偽値 narrowing が
@@ -197,7 +202,6 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
     }
     markdowns.push(buildMediaMarkdown(file.name, result.url))
     // enqueue 成功＝実アップロード開始。完了/保留のトーストは背景 uploadDone 解決後に出す
-    deps.notify({ kind: 'uploading', name: original.name })
     backgroundUploads.push(
       result.uploadDone
         .then((uploaded) => {
