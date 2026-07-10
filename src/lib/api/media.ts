@@ -22,6 +22,7 @@ import {
 } from './media/naming'
 import { validateMedia } from './media/validation'
 import { shouldCacheMediaSize, selectCacheEvictions } from './media/lru'
+import { MEDIA_API_TIMEOUT_MS, calcMediaPutTimeoutMs } from './media/timeouts'
 import {
   putPendingMedia,
   getPendingMedia,
@@ -81,6 +82,45 @@ function authHeaders(settings: Settings): Record<string, string> {
 }
 
 // ============================================
+// fetch タイムアウト（#252: 背景アップロードチェーンの head-of-line blocking 防止）
+// ============================================
+
+// 閾値と算出は純粋層 media/timeouts.ts に分離。テスト・チューニングの単一参照点として再公開する
+export {
+  MEDIA_API_TIMEOUT_MS,
+  MEDIA_PUT_TIMEOUT_BASE_MS,
+  MEDIA_PUT_MIN_BYTES_PER_SEC,
+  calcMediaPutTimeoutMs,
+} from './media/timeouts'
+
+/**
+ * AbortController によるタイムアウト付き fetch。
+ *
+ * #247 のグローバル直列化（uploadChain）は、チェーン内のどれか 1 つの fetch が
+ * 永久 pending になると以後の背景アップロードが全て止まる（head-of-line blocking）。
+ * チェーン経路の全 fetch に上限を入れ、ストールを reject → 既存の catch →
+ * 「false（pending 残置）」に落とすことでチェーンを必ず前進させる。
+ * pending に残ったアイテムは online 復帰・次回起動の initMediaOnlineRetry が回収する。
+ *
+ * AbortSignal.timeout() の一行で書けるが意図的に使わない: Node の実装は
+ * vitest の fake timers（vi.useFakeTimers）に乗らず、タイムアウト挙動を
+ * 決定的にテストできなくなるため（media-timeout.test.ts が時計を進めて検証する）。
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController()
+  const timerId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timerId)
+  }
+}
+
+// ============================================
 // メディアリポの lazy 作成
 // ============================================
 
@@ -108,10 +148,14 @@ export async function ensureMediaRepo(
     return { ok: true }
   }
   try {
-    const repoRes = await fetch(`https://api.github.com/repos/${mediaRepo}`, {
-      headers: authHeaders(settings),
-      cache: 'no-store',
-    })
+    const repoRes = await fetchWithTimeout(
+      `https://api.github.com/repos/${mediaRepo}`,
+      {
+        headers: authHeaders(settings),
+        cache: 'no-store',
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
     if (repoRes.ok) {
       ensuredMediaRepos.add(mediaRepo)
       return { ok: true }
@@ -119,17 +163,21 @@ export async function ensureMediaRepo(
     if (repoRes.status !== 404) {
       return { ok: false, errorKind: 'repo_unavailable', httpStatus: repoRes.status }
     }
-    const createRes = await fetch('https://api.github.com/user/repos', {
-      method: 'POST',
-      headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        // POST /user/repos の name は owner なしの短縮名
-        name: mediaRepo.slice(mediaRepo.indexOf('/') + 1),
-        private: true,
-        auto_init: true,
-        description: 'Agasteer media attachments',
-      }),
-    })
+    const createRes = await fetchWithTimeout(
+      'https://api.github.com/user/repos',
+      {
+        method: 'POST',
+        headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // POST /user/repos の name は owner なしの短縮名
+          name: mediaRepo.slice(mediaRepo.indexOf('/') + 1),
+          private: true,
+          auto_init: true,
+          description: 'Agasteer media attachments',
+        }),
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
     // 422 = name already exists（並行タブとの作成 race）→ 存在するので成功扱い
     if (createRes.ok || createRes.status === 422) {
       ensuredMediaRepos.add(mediaRepo)
@@ -149,6 +197,8 @@ export async function ensureMediaRepo(
 // 実アップロードは URL 確定後に背景で直列実行する。
 // Contents API は default branch へ直接コミットするため、同一リポへの
 // 並行 PUT は 409 になりうる。グローバルに直列化して衝突を避ける。
+// チェーン経路の全 fetch にはタイムアウト（#252）が入っており、
+// 1 件のストールで以後の背景アップロードが止まり続けることはない。
 let uploadChain: Promise<unknown> = Promise.resolve()
 
 /**
@@ -227,25 +277,46 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
   try {
     // 内容アドレス dedup: ファイル名に内容ハッシュを含むため、同名が既にあれば同内容。
     // アップロード自体をスキップしてキューだけ掃除する。
-    const existsRes = await fetch(`${contentsUrl}?t=${Date.now()}`, {
-      headers: authHeaders(settings),
-    })
+    // Accept は object メディアタイプを明示する: 既定の JSON 表現は 1MB 超の
+    // 既存ファイルに 403（too_large）を返すため、1MB 超のアイテムが永遠に
+    // dedup できず pending に残り続ける（object は 1〜100MB でも 200 + content 空で返る）。
+    // タイムアウトで中断した PUT がサーバ側では完了していた場合の回収経路でもある（#252）
+    const existsRes = await fetchWithTimeout(
+      `${contentsUrl}?t=${Date.now()}`,
+      {
+        headers: { ...authHeaders(settings), Accept: 'application/vnd.github.object+json' },
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
     if (!existsRes.ok && existsRes.status !== 404) {
       return false
     }
     if (existsRes.status === 404) {
-      const putRes = await fetch(contentsUrl, {
-        method: 'PUT',
-        headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `Agasteer media upload: ${item.filename}`,
-          content: encodeArrayBufferToBase64(item.data),
-          committer: {
-            name: 'agasteer',
-            email: 'agasteer@users.noreply.github.com',
-          },
-        }),
+      const body = JSON.stringify({
+        message: `Agasteer media upload: ${item.filename}`,
+        content: encodeArrayBufferToBase64(item.data),
+        committer: {
+          name: 'agasteer',
+          email: 'agasteer@users.noreply.github.com',
+        },
       })
+      // PUT はボディが大きい（base64 で元サイズの約 4/3）ため、
+      // サイズ比例のタイムアウトで正当な低速アップロードを誤中断しない。
+      // 注: abort はクライアント側の待機を切るだけで、サーバ側では PUT の
+      // コミットが完了していることがあり得る。その場合チェーンは前進済みなので
+      // 次アイテムの PUT が同一リポで並行し 409 になり得るが、409 は
+      // false（pending 残置）→ リトライで回収され、アイテム自身も次回の
+      // 存在チェック 200 で dedup される。#247 の直列化不変条件は
+      // 「恒久ブロックしない」ためにこの限定的な劣化を受容する（#252）
+      const putRes = await fetchWithTimeout(
+        contentsUrl,
+        {
+          method: 'PUT',
+          headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
+          body,
+        },
+        calcMediaPutTimeoutMs(body.length)
+      )
       // 422 = 同名パスが並行作成された race。同名=同内容なので成功扱い
       if (!putRes.ok && putRes.status !== 422) {
         return false
