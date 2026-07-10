@@ -104,6 +104,47 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve))
 }
 
+/**
+ * 背景アップロードの直列性を観測するための手動解決 fetch。
+ * リポ存在確認 GET（`/contents/` を含まない URL）は即 ok（観測対象外・以後メモ化される）。
+ * contents（存在チェック GET / PUT）は解決を保留し、呼び出し順とタイミングを外部から制御する。
+ */
+function makeSerialFetch() {
+  const calls: { url: string; method: string }[] = []
+  const pending = new Map<string, (res: Response) => void>()
+  const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : String(input)
+    const method = (init?.method ?? 'GET').toUpperCase()
+    calls.push({ url, method })
+    if (!url.includes('/contents/')) {
+      return Promise.resolve(new Response(JSON.stringify({ id: 1 }), { status: 200 }))
+    }
+    return new Promise<Response>((resolve) => {
+      pending.set(url, resolve)
+    })
+  })
+  return {
+    fn,
+    /** これまでに fetch された contents のパス（クエリ・ドメインを除いたファイル名） */
+    contentsPaths(): string[] {
+      return calls
+        .filter((c) => c.url.includes('/contents/'))
+        .map((c) => c.url.split('?')[0].split('/').pop() as string)
+    },
+    /** path を含む保留中の contents fetch を status で解決する */
+    resolveContents(path: string, status: number): void {
+      for (const [url, resolve] of pending) {
+        if (url.includes(path)) {
+          pending.delete(url)
+          resolve(new Response('{}', { status }))
+          return
+        }
+      }
+      throw new Error(`makeSerialFetch: no pending contents fetch for ${path}`)
+    },
+  }
+}
+
 // メディアリポ存在確認 GET（contents GET と部分一致で衝突しないよう末尾一致で書く）
 const REPO_GET = /\/repos\/owner\/repo-media$/
 // Contents API（存在チェック GET / アップロード PUT 共通）
@@ -943,6 +984,132 @@ describe('cacheMedia（LRU 配線）', () => {
       'Media cache write failed (ignored):',
       expect.anything()
     )
+    expect(console.error).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================
+// 背景アップロードの直列性・状態遷移結合（#247）
+// ============================================
+describe('背景アップロードの直列性・結合（#247）', () => {
+  it('T1 直列性: 2件同時 enqueue で contents fetch が f1→f2 に直列化される（f1 完了まで f2 は fetch されない）', async () => {
+    const serial = makeSerialFetch()
+    vi.stubGlobal('fetch', serial.fn)
+    const media = await loadMedia()
+
+    // 異なる内容 → 別 filename・別 contents URL。await で enqueue+チェーン連結を f1→f2 順に確定
+    const r1 = await media.uploadMedia(makeFile('f1.png', 'one'), makeSettings())
+    const r2 = await media.uploadMedia(makeFile('f2.png', 'two'), makeSettings())
+    if (!r1.ok || !r2.ok) throw new Error('unreachable')
+    const f1Path = r1.url.split('/').pop() as string
+    const f2Path = r2.url.split('/').pop() as string
+    await flushAsync()
+
+    // f1 の存在チェックだけが飛び、f2 の contents fetch はまだ呼ばれない
+    expect(serial.contentsPaths()).toEqual([f1Path])
+
+    // f1 を解決すると初めて f2 の contents fetch が発火する
+    serial.resolveContents(f1Path, 200)
+    expect(await r1.uploadDone).toBe(true)
+    await flushAsync()
+    expect(serial.contentsPaths()).toEqual([f1Path, f2Path])
+
+    // 後始末: f2 も解決して uploadDone を回収する（浮きプロミス防止）
+    serial.resolveContents(f2Path, 200)
+    expect(await r2.uploadDone).toBe(true)
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('T2 直列性: チェーン内の失敗（f1 PUT500）が後続 f2 を止めない（末尾 then の飲み込み）', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1 } })
+      .on('GET', CONTENTS, { status: 404, json: {} }) // f1 存在チェック
+      .on('PUT', CONTENTS, { status: 500, json: {} }) // f1 PUT 失敗
+      .on('GET', CONTENTS, { status: 200, json: {} }) // f2 存在チェック（dedup 成功）
+    const media = await loadMedia()
+
+    const r1 = await media.uploadMedia(makeFile('f1.png', 'one'), makeSettings())
+    const r2 = await media.uploadMedia(makeFile('f2.png', 'two'), makeSettings())
+    if (!r1.ok || !r2.ok) throw new Error('unreachable')
+
+    // f1 は失敗（false・pending 残）、f2 は成功（true・dequeue+cache）。失敗が後続を止めない
+    expect(await r1.uploadDone).toBe(false)
+    expect(await r2.uploadDone).toBe(true)
+    const f1Path = r1.url.split('/').pop() as string
+    expect([...mediaStore.pending.keys()]).toEqual([f1Path])
+    expect(mediaStore.cache.has(r2.url)).toBe(true)
+    expect(mediaStore.cache.has(r1.url)).toBe(false)
+    mock.assertDrained()
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('T3 表A8: 背景 PUT 409（並行コミット衝突）は false でキュー保留・cache 非載せ（直列化の存在理由）', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1 } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, { status: 409, json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('c.png', 'conflict'), makeSettings())
+    if (!res.ok) throw new Error('unreachable')
+
+    expect(await res.uploadDone).toBe(false)
+    expect(mediaStore.pending.size).toBe(1)
+    expect(mediaStore.cache.size).toBe(0)
+    mock.assertDrained()
+  })
+
+  it('T4 offline: offline enqueue はチェーンを塞がない（in-flight の f1 完了を待たず f2 が即 false 解決）', async () => {
+    const serial = makeSerialFetch()
+    vi.stubGlobal('fetch', serial.fn)
+    const media = await loadMedia()
+
+    // f1 は online で in-flight（存在チェックを保留）
+    const r1 = await media.uploadMedia(makeFile('f1.png', 'one'), makeSettings())
+    if (!r1.ok) throw new Error('unreachable')
+    const f1Path = r1.url.split('/').pop() as string
+    await flushAsync()
+    expect(serial.contentsPaths()).toEqual([f1Path]) // f1 は fetch 中
+
+    // f2 は offline → 即 false 解決・fetch せず・チェーンにも乗らない
+    vi.stubGlobal('navigator', { onLine: false })
+    const r2 = await media.uploadMedia(makeFile('f2.png', 'two'), makeSettings())
+    if (!r2.ok) throw new Error('unreachable')
+    const f2Path = r2.url.split('/').pop() as string
+    expect(await r2.uploadDone).toBe(false) // f1 未解決のまま解決する（塞がれない）
+    expect(serial.contentsPaths()).toEqual([f1Path]) // f2 の contents fetch は無い
+
+    // 後から f1 を解決しても f2 に影響なし。offline の f2 は pending に残る
+    serial.resolveContents(f1Path, 200)
+    expect(await r1.uploadDone).toBe(true)
+    await flushAsync()
+    expect(mediaStore.pending.has(f2Path)).toBe(true)
+    expect(mediaStore.pending.has(f1Path)).toBe(false)
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('T5 結合: 背景 PUT500 で pending 残（URL 一致）→ retryPendingUploads で同一 item を回収し孤児化しない', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1 } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, { status: 500, json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('r.png', 'retry'), makeSettings())
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(false)
+    expect(mediaStore.pending.size).toBe(1)
+    // pending item の URL は enqueue 時に挿入した URL と一致（挿入済み URL が孤児化しない前提）
+    const item = [...mediaStore.pending.values()][0]
+    expect(item.url).toBe(res.url)
+
+    // online 復帰相当の retry で同一 item を回収（repo GET はメモ化済みなので飛ばない）
+    mock.on('GET', CONTENTS, { status: 200, json: {} })
+    const retryRes = await media.retryPendingUploads(makeSettings())
+
+    expect(retryRes).toEqual({ attempted: 1, uploaded: 1 })
+    expect(mediaStore.pending.size).toBe(0)
+    mock.assertDrained()
     expect(console.error).not.toHaveBeenCalled()
   })
 })
