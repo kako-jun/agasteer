@@ -572,6 +572,101 @@ describe('attachMediaFiles', () => {
       warnSpy.mockRestore()
     }
   })
+
+  it('insert は uploadDone 解決の前に走る（挿入がネットワーク待ちの前である直接証明）', async () => {
+    const d = defer<boolean>()
+    uploadMediaMock.mockResolvedValue({
+      ok: true,
+      url: 'https://example.com/a.png',
+      uploadDone: d.promise,
+    })
+    const insert = vi.fn()
+    const notices: any[] = []
+    const done = attachMediaFiles([makeFile('a.png')], {
+      settings,
+      optimizeImages: false,
+      insert,
+      notify: (n) => notices.push(n),
+    })
+    await flushTasks()
+
+    // 挿入は済み・終端トーストはまだ（uploading のみ）＝挿入は uploadDone 待ちの前
+    expect(insert).toHaveBeenCalledWith('![a.png](https://example.com/a.png)')
+    expect(notices).toEqual([{ kind: 'uploading', name: 'a.png' }])
+
+    // uploadDone 解決で初めて終端トーストが出る
+    d.resolve(true)
+    await done
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'a.png' },
+      { kind: 'uploaded', name: 'a.png' },
+    ])
+  })
+
+  it('複数ファイルの終端トーストは uploadDone の解決順に出る（d2 を先に解決 → uploaded b が先）', async () => {
+    const d1 = defer<boolean>()
+    const d2 = defer<boolean>()
+    uploadMediaMock
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/a.png', uploadDone: d1.promise })
+      .mockResolvedValueOnce({ ok: true, url: 'https://example.com/b.png', uploadDone: d2.promise })
+    const insert = vi.fn()
+    const notices: any[] = []
+    const done = attachMediaFiles([makeFile('a.png'), makeFile('b.png')], {
+      settings,
+      optimizeImages: false,
+      insert,
+      notify: (n) => notices.push(n),
+    })
+    await flushTasks()
+
+    // 挿入は 1 回（成功分を改行 join）・終端トーストはまだ出ていない
+    expect(insert).toHaveBeenCalledTimes(1)
+    expect(notices).toEqual([
+      { kind: 'uploading', name: 'a.png' },
+      { kind: 'uploading', name: 'b.png' },
+    ])
+
+    // b を先に解決 → uploaded b が uploaded a より先に出る（解決順に従う）
+    d2.resolve(true)
+    await flushTasks()
+    d1.resolve(true)
+    await done
+
+    const uploaded = notices.filter((n) => n.kind === 'uploaded').map((n) => n.name)
+    expect(uploaded).toEqual(['b.png', 'a.png'])
+  })
+
+  it('順序不変条件: 各ファイルの uploaded は必ず対応する uploading の後に出る', async () => {
+    uploadMediaMock
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: Promise.resolve(true),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/b.png',
+        uploadDone: Promise.resolve(true),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/c.png',
+        uploadDone: Promise.resolve(true),
+      })
+    const notices: any[] = []
+    await attachMediaFiles([makeFile('a.png'), makeFile('b.png'), makeFile('c.png')], {
+      settings,
+      optimizeImages: false,
+      insert: vi.fn(),
+      notify: (n) => notices.push(n),
+    })
+    for (const name of ['a.png', 'b.png', 'c.png']) {
+      const uploadingAt = notices.findIndex((n) => n.kind === 'uploading' && n.name === name)
+      const uploadedAt = notices.findIndex((n) => n.kind === 'uploaded' && n.name === name)
+      expect(uploadingAt).toBeGreaterThanOrEqual(0)
+      expect(uploadedAt).toBeGreaterThan(uploadingAt)
+    }
+  })
 })
 
 describe('i18n キー整合（media / footer / settings）', () => {
