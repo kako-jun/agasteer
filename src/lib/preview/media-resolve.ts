@@ -96,6 +96,24 @@ export interface PreviewMediaResolver {
  * 同一 URL の複数出現・再レンダリングでは Blob URL を共有し、
  * resolveMedia と Blob 生成を URL につき 1 回に抑える。
  */
+/**
+ * svg のみ、Blob 化する前に中身を DOMPurify で sanitize する（それ以外は素通し）。
+ *
+ * blob: URL は生成元（アプリ）オリジンを継承するため、`<img src=blob:>` 表示自体は
+ * script 不実行で安全でも、画像を「新しいタブで開く」と image/svg+xml の SVG が
+ * ドキュメントとして script 実行され、アプリオリジンの localStorage（GitHub PAT）に
+ * 届いてしまう。MIME 偽装では `<img>` が SVG を描画しなくなるため、中身から
+ * script・イベントハンドラを除去する方式を採る（正当な SVG 図形は表示され続ける）。
+ */
+async function toSanitizedBlobPart(url: string, data: ArrayBuffer): Promise<BlobPart> {
+  if (getMediaExtension(url) !== 'svg') return data
+  // PreviewView と同じ流儀の動的 import（markdown-tools チャンク）
+  const DOMPurify = (await import('dompurify')).default
+  return DOMPurify.sanitize(new TextDecoder().decode(data), {
+    USE_PROFILES: { svg: true, svgFilters: true },
+  })
+}
+
 export function createPreviewMediaResolver(): PreviewMediaResolver {
   /** raw URL → Blob URL（レンダリングを跨いで共有） */
   const blobUrls = new Map<string, string>()
@@ -110,10 +128,12 @@ export function createPreviewMediaResolver(): PreviewMediaResolver {
     let pending = inFlight.get(url)
     if (!pending) {
       pending = resolveMedia(url, settings)
-        .then((result) => {
+        .then(async (result) => {
           if (!result.ok) return null
           const blobUrl = URL.createObjectURL(
-            new Blob([result.data], { type: previewMediaMimeType(url) })
+            new Blob([await toSanitizedBlobPart(url, result.data)], {
+              type: previewMediaMimeType(url),
+            })
           )
           if (disposed) {
             URL.revokeObjectURL(blobUrl)

