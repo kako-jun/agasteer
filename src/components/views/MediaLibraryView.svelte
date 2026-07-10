@@ -254,15 +254,16 @@
     font-size: 0.8125rem;
   }
 
+  /* DESIGN.md の Badges 仕様（surface-2 / accent / 2px 8px / 999px / 12px）に従う */
   .media-orphan {
     display: inline-block;
     margin-left: 4px;
-    padding: 0 4px;
-    border: 1px solid var(--border-strong);
-    border-radius: 4px;
-    color: var(--text-muted);
-    font-size: 0.6875rem;
-    line-height: 1.5;
+    padding: 2px 8px;
+    background: var(--surface-2);
+    border-radius: 999px;
+    color: var(--accent);
+    font-size: 0.75rem;
+    line-height: 1.4;
     vertical-align: text-bottom;
   }
 

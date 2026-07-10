@@ -109,22 +109,43 @@ describe('collectMediaReferenceUrls（#250 孤児検出）', () => {
     expect(refs).toEqual(new Set([URL_A]))
   })
 
-  it('-media リポ以外の raw URL・構造不正は参照として数えない（parseRawMediaUrl 検証）', () => {
+  it('-media リポ以外の raw URL・main 以外・他ホストは参照として数えない', () => {
     const refs = collectMediaReferenceUrls([
       // 通常リポ（-media でない）
       '![x](https://raw.githubusercontent.com/owner/repo/main/a.png)',
       // main 以外のブランチ
       '![x](https://raw.githubusercontent.com/owner/repo-media/dev/a.png)',
-      // ネストしたパス（1 セグメント不変条件）
-      '![x](https://raw.githubusercontent.com/owner/repo-media/main/sub/a.png)',
       // raw 以外のホスト
       '![x](https://example.com/a.png)',
     ])
     expect(refs.size).toBe(0)
   })
 
+  it('ネストしたパスは先頭セグメントだけが参照として拾われる（安全側: 孤児バッジを出さない方向の誤差）', () => {
+    // 手書きのネスト URL（アプリは生成しない）はファイル名文字クラスが '/' で切れるため、
+    // 先頭セグメント（ここでは 'sub'）への参照として集合に入る。実在アセット名と
+    // 衝突した場合も「未参照バッジが出ない」方向にしか作用せず、削除誘発の危険はない
+    const refs = collectMediaReferenceUrls([
+      '![x](https://raw.githubusercontent.com/owner/repo-media/main/sub/a.png)',
+    ])
+    expect(refs).toEqual(new Set(['https://raw.githubusercontent.com/owner/repo-media/main/sub']))
+  })
+
   it('記法の閉じ括弧・引用符・空白で URL が正しく切れる', () => {
     const refs = collectMediaReferenceUrls([`<img src="${URL_A}"> and (${URL_B}) trailing`])
+    expect(refs).toEqual(new Set([URL_A, URL_B]))
+  })
+
+  it('散文中の素の URL: 直後に日本語句読点・全角文字が続いても参照として数える', () => {
+    const refs = collectMediaReferenceUrls([
+      `画像はこちら ${URL_A}。続きの文`,
+      `これも見て ${URL_B}、ね`,
+    ])
+    expect(refs).toEqual(new Set([URL_A, URL_B]))
+  })
+
+  it('散文中の素の URL: 文末の ASCII ピリオドは巻き込まれても末尾トリムで参照になる', () => {
+    const refs = collectMediaReferenceUrls([`See ${URL_A}.`, `Or ${URL_B}...`])
     expect(refs).toEqual(new Set([URL_A, URL_B]))
   })
 
@@ -177,6 +198,7 @@ describe('i18n キー整合（メディアライブラリ画面・#250）', () =
     'media.library.orphan',
     'media.library.orphanHint',
     'media.library.orphanUnavailable',
+    'media.library.deleteConfirmOrphan',
     'media.library.notConfigured',
     'media.library.loadFailed',
     'media.library.retry',

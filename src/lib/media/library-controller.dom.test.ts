@@ -179,6 +179,33 @@ describe('load: 状態遷移', () => {
     expect(c.isOrphan(a)).toBe(false)
   })
 
+  it('孤児判定（#250）: 未参照アセットの削除確認は矛盾しない専用文言（deleteConfirmOrphan）になる', async () => {
+    const referenced = makeAsset(PNG)
+    const orphan = makeAsset(PNG2)
+    listMediaAssetsMock.mockResolvedValue({
+      ok: true,
+      assets: [referenced, orphan],
+      truncated: false,
+    })
+    confirmMock.mockResolvedValue(false) // 確認で止める（文言だけ検証）
+    const c = makeController({
+      getReferenceContents: () => ({
+        contents: [`![x](${referenced.rawUrl})`],
+        complete: true,
+      }),
+    })
+    await c.load()
+
+    await c.handleDelete(orphan)
+    expect(confirmMock).toHaveBeenLastCalledWith(
+      `media.library.deleteConfirmOrphan ${JSON.stringify({ name: orphan.name })}`
+    )
+    await c.handleDelete(referenced)
+    expect(confirmMock).toHaveBeenLastCalledWith(
+      `media.library.deleteConfirm ${JSON.stringify({ name: referenced.name })}`
+    )
+  })
+
   it('T12b: loading → 空（0 件でも loaded・View 側で empty 表示）', async () => {
     listMediaAssetsMock.mockResolvedValue({ ok: true, assets: [] })
     const c = makeController()

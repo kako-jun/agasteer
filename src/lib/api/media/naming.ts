@@ -119,8 +119,27 @@ const REPO_NAME_PATTERN = '[A-Za-z0-9._-]+'
  * - branch は `main` 固定（生成側が MEDIA_BRANCH 固定のため）
  * - path はリポルート直下の 1 セグメントのみ（スラッシュ・クエリ・フラグメント不可）
  */
+/** ファイル名（リポルート直下 1 セグメント）の安全文字クラス。parse / scan で共有 */
+const MEDIA_FILE_NAME_PATTERN = '[A-Za-z0-9._-]+'
+
 const RAW_MEDIA_URL_PATTERN = new RegExp(
-  `^https://raw\\.githubusercontent\\.com/(${OWNER_NAME_PATTERN})/(${REPO_NAME_PATTERN}${MEDIA_REPO_SUFFIX})/${MEDIA_BRANCH}/([A-Za-z0-9._-]+)$`
+  `^https://raw\\.githubusercontent\\.com/(${OWNER_NAME_PATTERN})/(${REPO_NAME_PATTERN}${MEDIA_REPO_SUFFIX})/${MEDIA_BRANCH}/(${MEDIA_FILE_NAME_PATTERN})$`
+)
+
+/**
+ * 本文スキャン用の非アンカー・global 版（#250 孤児検出）。
+ * parse と同じサブパターンから組み立て、文字集合の乖離を構造的に防ぐ。
+ *
+ * 末尾がファイル名の安全文字クラスで自然に途切れるため、散文中に素の URL を
+ * 書いて直後に日本語・記号（`。` `、` 全角文字・括弧・引用符など）が続いても
+ * URL 部分だけが正しく切り出される。ASCII の `.` `-` `_` はクラス内のため
+ * 文末ピリオド等が巻き込まれ得るが、確定ファイル名は必ず拡張子の英数字で
+ * 終わる（sanitizeMediaBaseName + ext）ので、呼び出し側で末尾の `[._-]` を
+ * 落としてから parse すれば誤って参照を取りこぼさない。
+ */
+export const RAW_MEDIA_URL_SCAN_PATTERN = new RegExp(
+  `https://raw\\.githubusercontent\\.com/${OWNER_NAME_PATTERN}/${REPO_NAME_PATTERN}${MEDIA_REPO_SUFFIX}/${MEDIA_BRANCH}/${MEDIA_FILE_NAME_PATTERN}`,
+  'g'
 )
 
 /**

@@ -86,8 +86,20 @@ export function createMediaLibraryController(
   let loadState = $state<MediaLibraryLoadState>('loading')
   let assets = $state<MediaAsset[]>([])
   let truncated = $state<boolean>(false)
-  /** 孤児判定の状態（#250）。null = 判定保留（Archive 未ロード） */
-  let referencedUrls = $state<Set<string> | null>(null)
+  /**
+   * 孤児判定の参照集合（#250）。null = 判定保留（Archive 未ロード）。
+   *
+   * load 時のスナップショットでなく $derived にする: メディア画面を開いたまま
+   * 反対ペインで編集され参照が増減しても、バッジが陳腐化して「未参照（削除
+   * しても壊れない）」の誤表示が削除を誘発しないため（レビュー指摘）。
+   * deps.getReferenceContents が reactive store（leaves 等）を読む getter で
+   * ある限り、その変更で自動再計算される（テストの素の closure では静的なまま）。
+   * derived は読み取り時に遅延評価されるため、画面が出ていない間のコストはない。
+   */
+  const referencedUrls = $derived.by<Set<string> | null>(() => {
+    const { contents, complete } = deps.getReferenceContents()
+    return complete ? collectMediaReferenceUrls(contents) : null
+  })
   let errorKind = $state<string | null>(null)
   /** 削除中のアセット path（ボタン二度押し防止） */
   let deletingPath = $state<string | null>(null)
@@ -120,11 +132,6 @@ export function createMediaLibraryController(
     }
     assets = result.assets
     truncated = result.truncated
-    // 孤児判定（#250）: 一覧確定と同じタイミングで参照集合を再計算する。
-    // 本文が揃っていない（Archive 未ロード）ときは null = 判定保留。
-    // 誤った「未参照」バッジが削除を誘発するのを防ぐため、部分判定はしない
-    const { contents, complete } = deps.getReferenceContents()
-    referencedUrls = complete ? collectMediaReferenceUrls(contents) : null
     loadState = 'loaded'
   }
 
@@ -167,8 +174,13 @@ export function createMediaLibraryController(
   async function handleDelete(asset: MediaAsset): Promise<void> {
     // 連打ガード（元は delete ボタンの disabled={deletingPath === asset.path} が担っていた）
     if (asset.path === deletingPath) return
+    // 未参照バッジ（「削除しても壊れない」）と汎用警告（「参照中なら壊れる」）が
+    // 同じアセットで矛盾しないよう、未参照確定時は専用の確認文言を出す（#250）
     const confirmed = await deps.confirm(
-      deps.translate('media.library.deleteConfirm', { name: asset.name })
+      deps.translate(
+        isOrphan(asset) ? 'media.library.deleteConfirmOrphan' : 'media.library.deleteConfirm',
+        { name: asset.name }
+      )
     )
     if (!confirmed || disposed) return
     deletingPath = asset.path
