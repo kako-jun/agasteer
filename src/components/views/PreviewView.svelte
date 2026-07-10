@@ -1,7 +1,11 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, untrack } from 'svelte'
+  import { get } from 'svelte/store'
+  import { _ } from 'svelte-i18n'
   import type { Leaf } from '../../lib/types'
   import { openExternalUrl } from '../../lib/utils'
+  import { settings } from '../../lib/stores'
+  import { createPreviewMediaResolver } from '../../lib/preview/media-resolve'
   import LeafSpinner from '../icons/LeafSpinner.svelte'
 
   interface Props {
@@ -14,12 +18,15 @@
   let { leaf, onScroll = null, onPriorityLinkClick = null }: Props = $props()
 
   let previewSection: HTMLElement
+  let previewContent = $state<HTMLElement | null>(null)
   let isScrollingSynced = false // スクロール同期中フラグ（無限ループ防止）
   let isLoading = $state(true) // marked/DOMPurifyローディング中フラグ
   let marked: any
   let DOMPurify: any
 
   // マークダウンをHTMLに変換してサニタイズ
+  // ALLOWED_URI_REGEXP に blob: は追加しない（本文由来の任意 blob: URL まで通るため）。
+  // メディアの Blob URL 差し替えは sanitize 後の DOM に対して行う（media-resolve.ts 参照）
   let htmlContent = $derived(
     isLoading
       ? ''
@@ -27,6 +34,16 @@
           ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|#):/i,
         })
   )
+
+  // 添付メディアの表示解決（#244）: レンダリング後の DOM からメディア raw URL を検出し、
+  // pending → cache → 認証 fetch で得た実体を Blob URL に差し替える
+  const mediaResolver = createPreviewMediaResolver()
+  $effect(() => {
+    const container = previewContent
+    void htmlContent // {@html} 再レンダリングのたびに再解決する
+    if (!container) return
+    untrack(() => mediaResolver.apply(container, settings.value, get(_)))
+  })
 
   // marked/DOMPurifyを動的ロード
   async function loadMarkdownTools() {
@@ -102,6 +119,8 @@
       document.body.appendChild(wrapper)
 
       // html2canvasでキャプチャ（余白を含める）
+      // 添付メディア（#244）: 解決済み <img> の blob: URL は同一オリジン扱いで描画される。
+      // <video>/<audio> は html2canvas がフレームを描画しないため共有画像には映らない（既知の制約）
       const canvas = await html2canvas(wrapper, {
         backgroundColor: '#ffffff', // 白背景を強制
         scale: 1, // 等倍で出力
@@ -231,6 +250,8 @@
     if (previewSection) {
       previewSection.removeEventListener('click', handleClick)
     }
+    // プレビュー破棄時に Blob URL を全て解放する（リーク防止）
+    mediaResolver.revokeAll()
   })
 </script>
 
@@ -240,7 +261,7 @@
       <LeafSpinner size={28} />
     </div>
   {:else}
-    <div class="preview-content">
+    <div class="preview-content" bind:this={previewContent}>
       {@html htmlContent}
     </div>
   {/if}
@@ -430,5 +451,40 @@
     color: inherit;
     font-weight: inherit;
     cursor: inherit;
+  }
+
+  /* 添付メディアの表示解決（#244） */
+  .preview-content :global(video),
+  .preview-content :global(audio) {
+    max-width: 100%;
+  }
+
+  /* 解決中・取得失敗のプレースホルダ（media-resolve.ts が生成） */
+  .preview-content :global(.media-placeholder) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-1);
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .preview-content :global(.media-placeholder-name) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 上の button リセットより後に書いてリトライ導線を有効化する */
+  .preview-content :global(.media-placeholder-retry) {
+    flex-shrink: 0;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: inherit;
   }
 </style>

@@ -269,6 +269,11 @@
       "repo_unavailable": "メディアリポジトリにアクセスできません",
       "invalid_url": "メディアURLが不正です",
       "fetch_failed": "メディアの取得に失敗しました"
+    },
+    "preview": {
+      "loading": "読み込み中...",
+      "unavailable": "取得できませんでした",
+      "retry": "再試行"
     }
   },
   "ocr": {

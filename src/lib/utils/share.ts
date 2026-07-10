@@ -50,6 +50,11 @@ function getSelectedText(pane: Pane, handlers: ShareHandlers): string {
 
 /**
  * Markdownテキストを画像Blobに変換
+ *
+ * 添付メディア（#244）はこの経路では解決しない: raw URL のままレンダリングされ、
+ * private メディアリポの画像は読み込めず html2canvas は該当要素を描画しない
+ * （プレビュー画像化はプレビュー DOM 側で解決済みのため対象外。ここは編集モードの
+ * 選択範囲共有専用で、安全側=未解決のままとする）
  */
 async function convertMarkdownToImageBlob(markdown: string): Promise<Blob | null> {
   try {

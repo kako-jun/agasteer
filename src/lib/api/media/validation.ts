@@ -20,18 +20,20 @@ export const IMAGE_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set([
   'svg',
 ])
 
+/** 添付を許可する動画の拡張子（プレビューで `<video>` に振り分ける形式）。(#244) */
+export const VIDEO_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set(['mp4', 'webm'])
+
+/** 添付を許可する音声の拡張子（プレビューで `<audio>` に振り分ける形式）。(#244) */
+export const AUDIO_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set(['mp3', 'm4a', 'ogg', 'wav'])
+
 /**
  * 添付を許可する拡張子（形式ホワイトリスト）。
- * 画像集合が常にホワイトリストの部分集合になるよう合成で定義する。
+ * 画像・動画・音声の各集合が常にホワイトリストの部分集合になるよう合成で定義する。
  */
 export const ALLOWED_MEDIA_EXTENSIONS: ReadonlySet<string> = new Set([
   ...IMAGE_MEDIA_EXTENSIONS,
-  'mp4',
-  'webm',
-  'mp3',
-  'm4a',
-  'ogg',
-  'wav',
+  ...VIDEO_MEDIA_EXTENSIONS,
+  ...AUDIO_MEDIA_EXTENSIONS,
   'zip',
 ])
 
