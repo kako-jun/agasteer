@@ -19,6 +19,7 @@
   import { formatMediaSize } from '../../lib/api/media/library'
   import { createMediaLibraryController } from '../../lib/media/library-controller.svelte'
   import { confirmAsync, showPushToast } from '../../lib/ui'
+  import { leaves, archiveLeaves, isArchiveLoaded, offlineLeafStore } from '../../lib/stores'
   import LeafSpinner from '../icons/LeafSpinner.svelte'
   import ArrowLeftIcon from '../icons/ArrowLeftIcon.svelte'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
@@ -40,6 +41,18 @@
     toast: (message, variant) => showPushToast(message, variant),
     getSettings: () => settings,
     translate: (key, values) => $_(key, values ? { values } : undefined),
+    // 孤児判定（#250）用の全リーフ本文。Archive 未ロード時は complete: false で
+    // 判定保留になる（誤った「未参照」バッジで削除を誘発しない）。
+    // メディアは note/leaf 契約を持たない View だが、本文の読み取り専用参照は
+    // 検索（SearchBar）と同じ扱いで許容する
+    getReferenceContents: () => ({
+      contents: [
+        ...leaves.value.map((l) => l.content),
+        ...archiveLeaves.value.map((l) => l.content),
+        offlineLeafStore.value.content,
+      ],
+      complete: isArchiveLoaded.value,
+    }),
   })
 
   // 遅延解決の観測（DOM 配線）。$state 外（描画に不要）
@@ -103,7 +116,11 @@
   {:else}
     {#if controller.truncated}
       <!-- Trees API の上限で一覧が切り詰められた（#258。silent cap にしない） -->
-      <div class="media-truncated" role="status">{$_('media.library.truncated')}</div>
+      <div class="media-notice" role="status">{$_('media.library.truncated')}</div>
+    {/if}
+    {#if !controller.orphanCheckAvailable && controller.assets.length > 0}
+      <!-- Archive 未ロード時は孤児（未参照）判定を保留する（#250） -->
+      <div class="media-notice" role="status">{$_('media.library.orphanUnavailable')}</div>
     {/if}
     <!-- truncated 時は「まだ添付がありません」を出さない（切り詰めで 0 件に見えている
          可能性があり、「一部のみ表示」と並ぶと矛盾した表示になるため） -->
@@ -128,7 +145,14 @@
             </div>
             <div class="media-info">
               <span class="media-name" title={asset.name}>{asset.name}</span>
-              <span class="media-size">{formatMediaSize(asset.size)}</span>
+              <span class="media-size">
+                {formatMediaSize(asset.size)}
+                {#if controller.isOrphan(asset)}
+                  <span class="media-orphan" title={$_('media.library.orphanHint')}
+                    >{$_('media.library.orphan')}</span
+                  >
+                {/if}
+              </span>
             </div>
             <button
               class="media-delete"
@@ -220,7 +244,7 @@
     opacity: 0.9;
   }
 
-  .media-truncated {
+  .media-notice {
     padding: 0.5rem 0.75rem;
     margin-bottom: 0.75rem;
     background: var(--surface-1);
@@ -228,6 +252,18 @@
     border-radius: 6px;
     color: var(--text-muted);
     font-size: 0.8125rem;
+  }
+
+  .media-orphan {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    line-height: 1.5;
+    vertical-align: text-bottom;
   }
 
   .media-grid {

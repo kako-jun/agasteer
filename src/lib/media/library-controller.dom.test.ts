@@ -90,6 +90,9 @@ function makeController(overrides: Partial<MediaLibraryControllerDeps> = {}) {
     getSettings: () => settings,
     // 文言化はキー（＋values）をそのまま返すだけの素通しにして、呼び出し内容を assert する
     translate: (key, values) => (values ? `${key} ${JSON.stringify(values)}` : key),
+    // 既定: 本文なし・complete（孤児判定は有効で、全アセットが未参照になる）。
+    // 判定そのものを検証するテストは overrides で差し替える
+    getReferenceContents: () => ({ contents: [], complete: true }),
     ...overrides,
   }
   return createMediaLibraryController(deps)
@@ -142,6 +145,38 @@ describe('load: 状態遷移', () => {
     })
     await c.load()
     expect(c.truncated).toBe(false)
+  })
+
+  it('孤児判定（#250）: 参照集合に無いアセットだけ isOrphan=true になる', async () => {
+    const referenced = makeAsset(PNG)
+    const orphan = makeAsset(PNG2)
+    listMediaAssetsMock.mockResolvedValue({
+      ok: true,
+      assets: [referenced, orphan],
+      truncated: false,
+    })
+    const c = makeController({
+      getReferenceContents: () => ({
+        contents: [`before ![x](${referenced.rawUrl}) after`],
+        complete: true,
+      }),
+    })
+    await c.load()
+    expect(c.orphanCheckAvailable).toBe(true)
+    expect(c.isOrphan(referenced)).toBe(false)
+    expect(c.isOrphan(orphan)).toBe(true)
+  })
+
+  it('孤児判定（#250）: Archive 未ロード（complete=false）なら判定保留＝全アセット isOrphan=false', async () => {
+    const a = makeAsset(PNG)
+    listMediaAssetsMock.mockResolvedValue({ ok: true, assets: [a], truncated: false })
+    const c = makeController({
+      getReferenceContents: () => ({ contents: [], complete: false }),
+    })
+    await c.load()
+    expect(c.orphanCheckAvailable).toBe(false)
+    // 本文ゼロ＝本来なら未参照だが、保留中は誤バッジを出さない
+    expect(c.isOrphan(a)).toBe(false)
   })
 
   it('T12b: loading → 空（0 件でも loaded・View 側で empty 表示）', async () => {

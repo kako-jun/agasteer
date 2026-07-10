@@ -23,6 +23,7 @@ import {
   previewMediaMimeType,
   type PreviewMediaKind,
 } from '../preview/media-resolve'
+import { collectMediaReferenceUrls } from '../api/media/library'
 import { getMediaExtension } from '../api/media/naming'
 
 export type MediaLibraryLoadState = 'loading' | 'loaded' | 'error'
@@ -45,6 +46,12 @@ export interface MediaLibraryControllerDeps {
   getSettings: () => Settings
   /** i18n キー → 文言。one-shot なメッセージ（confirm/toast）に使う */
   translate: (key: string, values?: Record<string, string | number>) => string
+  /**
+   * 孤児判定（#250）に使う全リーフ本文を返す。
+   * `complete: false`（= Archive 未ロードで本文が揃っていない）のときは
+   * 判定を保留する（誤った「未参照」表示が削除を誘発しないため）。
+   */
+  getReferenceContents: () => { contents: string[]; complete: boolean }
 }
 
 export interface MediaLibraryController {
@@ -52,6 +59,11 @@ export interface MediaLibraryController {
   readonly assets: MediaAsset[]
   /** Trees API 応答が上限で切り詰められた（一覧は一部のみ）。UI で明示する（#258） */
   readonly truncated: boolean
+  /**
+   * 孤児（未参照）判定が有効か（#250）。Archive 未ロード時は false になり、
+   * View は判定保留の案内を出す（バッジは一切出さない）
+   */
+  readonly orphanCheckAvailable: boolean
   readonly errorKind: string | null
   /** error 表示に使う i18n キー（文言化＝locale 反応は View 側の $_ に委ねる） */
   readonly errorMessageKey: string
@@ -59,6 +71,8 @@ export interface MediaLibraryController {
   readonly thumbUrls: Record<string, string>
   kindOf(asset: MediaAsset): PreviewMediaKind
   extLabel(asset: MediaAsset): string
+  /** どのリーフ本文からも参照されていない（孤児）か。判定無効時は常に false（#250） */
+  isOrphan(asset: MediaAsset): boolean
   load(): Promise<void>
   retry(): Promise<void>
   resolveThumb(asset: MediaAsset): Promise<void>
@@ -72,6 +86,8 @@ export function createMediaLibraryController(
   let loadState = $state<MediaLibraryLoadState>('loading')
   let assets = $state<MediaAsset[]>([])
   let truncated = $state<boolean>(false)
+  /** 孤児判定の状態（#250）。null = 判定保留（Archive 未ロード） */
+  let referencedUrls = $state<Set<string> | null>(null)
   let errorKind = $state<string | null>(null)
   /** 削除中のアセット path（ボタン二度押し防止） */
   let deletingPath = $state<string | null>(null)
@@ -104,7 +120,16 @@ export function createMediaLibraryController(
     }
     assets = result.assets
     truncated = result.truncated
+    // 孤児判定（#250）: 一覧確定と同じタイミングで参照集合を再計算する。
+    // 本文が揃っていない（Archive 未ロード）ときは null = 判定保留。
+    // 誤った「未参照」バッジが削除を誘発するのを防ぐため、部分判定はしない
+    const { contents, complete } = deps.getReferenceContents()
+    referencedUrls = complete ? collectMediaReferenceUrls(contents) : null
     loadState = 'loaded'
+  }
+
+  function isOrphan(asset: MediaAsset): boolean {
+    return referencedUrls !== null && !referencedUrls.has(asset.rawUrl)
   }
 
   /** 表示領域に入った画像アセットを 1 回だけ解決して Blob URL を作る */
@@ -183,6 +208,9 @@ export function createMediaLibraryController(
     get truncated() {
       return truncated
     },
+    get orphanCheckAvailable() {
+      return referencedUrls !== null
+    },
     get errorKind() {
       return errorKind
     },
@@ -200,6 +228,7 @@ export function createMediaLibraryController(
     },
     kindOf,
     extLabel,
+    isOrphan,
     load,
     retry: load,
     resolveThumb,

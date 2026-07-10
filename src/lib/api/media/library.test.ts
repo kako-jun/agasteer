@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import {
   treeItemToMediaAsset,
   mapTreeToMediaAssets,
+  collectMediaReferenceUrls,
   formatMediaSize,
   type GitTreeItem,
 } from './library'
@@ -94,6 +95,45 @@ describe('mapTreeToMediaAssets', () => {
   })
 })
 
+describe('collectMediaReferenceUrls（#250 孤児検出）', () => {
+  const URL_A = 'https://raw.githubusercontent.com/owner/repo-media/main/20260101-aa-x.png'
+  const URL_B = 'https://raw.githubusercontent.com/owner/repo-media/main/20260102-bb-y.mp4'
+
+  it('画像記法・リンク記法の両方から raw メディア URL を集める', () => {
+    const refs = collectMediaReferenceUrls([`text ![x](${URL_A}) more`, `[clip](${URL_B})`])
+    expect(refs).toEqual(new Set([URL_A, URL_B]))
+  })
+
+  it('同一 URL の重複参照は 1 つに畳まれ、複数リーフ横断で集まる', () => {
+    const refs = collectMediaReferenceUrls([`![a](${URL_A}) ![b](${URL_A})`, `also ${URL_A}`])
+    expect(refs).toEqual(new Set([URL_A]))
+  })
+
+  it('-media リポ以外の raw URL・構造不正は参照として数えない（parseRawMediaUrl 検証）', () => {
+    const refs = collectMediaReferenceUrls([
+      // 通常リポ（-media でない）
+      '![x](https://raw.githubusercontent.com/owner/repo/main/a.png)',
+      // main 以外のブランチ
+      '![x](https://raw.githubusercontent.com/owner/repo-media/dev/a.png)',
+      // ネストしたパス（1 セグメント不変条件）
+      '![x](https://raw.githubusercontent.com/owner/repo-media/main/sub/a.png)',
+      // raw 以外のホスト
+      '![x](https://example.com/a.png)',
+    ])
+    expect(refs.size).toBe(0)
+  })
+
+  it('記法の閉じ括弧・引用符・空白で URL が正しく切れる', () => {
+    const refs = collectMediaReferenceUrls([`<img src="${URL_A}"> and (${URL_B}) trailing`])
+    expect(refs).toEqual(new Set([URL_A, URL_B]))
+  })
+
+  it('空配列・参照なし本文は空集合', () => {
+    expect(collectMediaReferenceUrls([]).size).toBe(0)
+    expect(collectMediaReferenceUrls(['plain text only']).size).toBe(0)
+  })
+})
+
 describe('formatMediaSize', () => {
   it('1024 未満はバイト表示', () => {
     expect(formatMediaSize(0)).toBe('0 B')
@@ -134,6 +174,9 @@ describe('i18n キー整合（メディアライブラリ画面・#250）', () =
     'media.library.loading',
     'media.library.empty',
     'media.library.truncated',
+    'media.library.orphan',
+    'media.library.orphanHint',
+    'media.library.orphanUnavailable',
     'media.library.notConfigured',
     'media.library.loadFailed',
     'media.library.retry',

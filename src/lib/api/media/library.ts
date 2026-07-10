@@ -12,7 +12,7 @@
  * `api/media-library.ts`（副作用層）に置く。
  */
 
-import { getMediaExtension, buildRawMediaUrl } from './naming'
+import { getMediaExtension, buildRawMediaUrl, parseRawMediaUrl } from './naming'
 import { ALLOWED_MEDIA_EXTENSIONS } from './validation'
 
 /**
@@ -82,6 +82,33 @@ export function mapTreeToMediaAssets(
     .map((item) => treeItemToMediaAsset(item, mediaRepoFullName))
     .filter((asset): asset is MediaAsset => asset !== null)
     .sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0))
+}
+
+/**
+ * raw メディア URL 候補の抽出パターン。
+ * `![name](URL)` / `[name](URL)` の閉じ括弧・空白・引用符・山括弧で切れる連続文字列を拾い、
+ * 構造検証（-media リポ・main 固定・1 セグメント）は parseRawMediaUrl に委ねる。
+ */
+const RAW_MEDIA_URL_PATTERN = /https:\/\/raw\.githubusercontent\.com\/[^\s)"'<>\]]+/g
+
+/**
+ * リーフ本文（Markdown）群から、参照されている raw メディア URL の集合を作る（#250 孤児検出）。
+ *
+ * parseRawMediaUrl で構造検証した URL のみを集合に入れる（`-media` リポ以外の
+ * raw URL や不正パスは参照として数えない）。集合に **無い** アセット＝未参照（孤児）候補。
+ * 判定の正しさは渡す contents の網羅性に依存する: Home + Archive の全リーフ本文を
+ * 渡すこと（Archive 未ロード時は判定自体を保留するのが呼び出し側の契約）。
+ */
+export function collectMediaReferenceUrls(contents: readonly string[]): Set<string> {
+  const refs = new Set<string>()
+  for (const content of contents) {
+    for (const candidate of content.match(RAW_MEDIA_URL_PATTERN) ?? []) {
+      if (parseRawMediaUrl(candidate)) {
+        refs.add(candidate)
+      }
+    }
+  }
+  return refs
 }
 
 /**
