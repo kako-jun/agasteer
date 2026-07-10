@@ -122,6 +122,13 @@ export function createPreviewMediaResolver(): PreviewMediaResolver {
           blobUrls.set(url, blobUrl)
           return blobUrl
         })
+        // resolveMedia は結果オブジェクト契約（throw しない）だが、万一 reject しても
+        // 解決中プレースホルダが永久固定 + unhandledRejection にならないよう
+        // ok:false と同じ失敗（null → リトライ可能プレースホルダ）に落とす
+        .catch((error) => {
+          console.error('Preview media resolve failed:', error)
+          return null
+        })
         .finally(() => inFlight.delete(url))
       inFlight.set(url, pending)
     }
