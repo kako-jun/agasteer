@@ -39,7 +39,7 @@ Select files (multiple allowed) from the "**🖼️ Attach files**" button in th
 | Images                   | `![name](rawURL)` |
 | Video / audio / ZIP etc. | `[name](rawURL)`  |
 
-The URL is finalized the moment you attach, so you can keep editing without waiting for the upload to finish.
+The URL is finalized the moment you attach, and the syntax is inserted right then too—without waiting for the upload to finish. So even if you switch to another leaf or toggle the preview (👁️) immediately after attaching, the inserted syntax is never lost. The upload keeps going in the background, and if it fails it stays in the queue and retries automatically.
 
 ---
 
