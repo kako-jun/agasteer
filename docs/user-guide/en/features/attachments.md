@@ -109,7 +109,7 @@ From the "**›**" dropdown at the left of the breadcrumbs (the Home/Archive swi
 - Images show a thumbnail; video, audio, ZIP, etc. show an extension label
 - Each file shows its name and size
 - If you have not attached anything yet, it shows "No attachments yet"
-- If you have more than about 1,000 attachments, some may not appear in the list (to be addressed in a future update)
+- There is no practical limit on the number of attachments (only in extreme cases will you see a "showing a partial list" notice)
 
 ### Deleting
 

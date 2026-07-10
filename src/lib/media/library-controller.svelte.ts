@@ -50,6 +50,8 @@ export interface MediaLibraryControllerDeps {
 export interface MediaLibraryController {
   readonly loadState: MediaLibraryLoadState
   readonly assets: MediaAsset[]
+  /** Trees API 応答が上限で切り詰められた（一覧は一部のみ）。UI で明示する（#258） */
+  readonly truncated: boolean
   readonly errorKind: string | null
   /** error 表示に使う i18n キー（文言化＝locale 反応は View 側の $_ に委ねる） */
   readonly errorMessageKey: string
@@ -69,6 +71,7 @@ export function createMediaLibraryController(
 ): MediaLibraryController {
   let loadState = $state<MediaLibraryLoadState>('loading')
   let assets = $state<MediaAsset[]>([])
+  let truncated = $state<boolean>(false)
   let errorKind = $state<string | null>(null)
   /** 削除中のアセット path（ボタン二度押し防止） */
   let deletingPath = $state<string | null>(null)
@@ -100,6 +103,7 @@ export function createMediaLibraryController(
       return
     }
     assets = result.assets
+    truncated = result.truncated
     loadState = 'loaded'
   }
 
@@ -175,6 +179,9 @@ export function createMediaLibraryController(
     },
     get assets() {
       return assets
+    },
+    get truncated() {
+      return truncated
     },
     get errorKind() {
       return errorKind

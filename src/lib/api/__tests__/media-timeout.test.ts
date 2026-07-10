@@ -266,6 +266,45 @@ describe('ensureMediaRepo のタイムアウト', () => {
   })
 })
 
+describe('非チェーン系 fetch のタイムアウト（#262: 一覧・削除・プレビュー取得）', () => {
+  it('listMediaAssets のストールは MEDIA_API_TIMEOUT_MS で fetch_failed に落ちる', async () => {
+    const media = await loadMedia()
+    const library = await import('../media-library')
+    const fetchStub = makeAbortableFetch(() => 'hang')
+    vi.stubGlobal('fetch', fetchStub.fn)
+
+    const resultPromise = library.listMediaAssets(makeSettings())
+    await vi.advanceTimersByTimeAsync(media.MEDIA_API_TIMEOUT_MS)
+    await expect(resultPromise).resolves.toEqual({ ok: false, errorKind: 'fetch_failed' })
+  })
+
+  it('deleteMediaAsset のストールは MEDIA_API_TIMEOUT_MS で fetch_failed に落ち evict しない', async () => {
+    const media = await loadMedia()
+    const library = await import('../media-library')
+    const fetchStub = makeAbortableFetch(() => 'hang')
+    vi.stubGlobal('fetch', fetchStub.fn)
+
+    const resultPromise = library.deleteMediaAsset(makeSettings(), 'a.png', 'sha-1')
+    await vi.advanceTimersByTimeAsync(media.MEDIA_API_TIMEOUT_MS)
+    await expect(resultPromise).resolves.toEqual({ ok: false, errorKind: 'fetch_failed' })
+    expect(mediaStore.fns.deleteCachedMedia).not.toHaveBeenCalled()
+    expect(mediaStore.fns.deletePendingMedia).not.toHaveBeenCalled()
+  })
+
+  it('fetchMedia のストールは MEDIA_API_TIMEOUT_MS で fetch_failed に落ちる（プレビューの再試行 UI が受ける）', async () => {
+    const media = await loadMedia()
+    const fetchStub = makeAbortableFetch(() => 'hang')
+    vi.stubGlobal('fetch', fetchStub.fn)
+
+    const resultPromise = media.fetchMedia(
+      'https://raw.githubusercontent.com/owner/repo-media/main/a.png',
+      makeSettings()
+    )
+    await vi.advanceTimersByTimeAsync(media.MEDIA_API_TIMEOUT_MS)
+    await expect(resultPromise).resolves.toEqual({ ok: false, errorKind: 'fetch_failed' })
+  })
+})
+
 describe('retryPendingUploads のタイムアウト（自己回復経路）', () => {
   it('1件目がストールしても中断せず、タイムアウト後に 2 件目を試行する', async () => {
     const media = await loadMedia()
