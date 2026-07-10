@@ -7,6 +7,7 @@
   import LeafSpinner from '../icons/LeafSpinner.svelte'
   import EditIcon from '../icons/EditIcon.svelte'
   import ArchiveIcon from '../icons/ArchiveIcon.svelte'
+  import MediaLibraryIcon from '../icons/MediaLibraryIcon.svelte'
   import { isOfflineLeaf, isPriorityLeaf } from '../../lib/utils'
   import { portal } from '../../lib/actions'
 
@@ -27,6 +28,10 @@
     onSelectSibling?: ((id: string, type: 'note' | 'leaf') => void) | null
     currentWorld?: WorldType
     onWorldChange?: ((world: WorldType) => void) | null
+    /** メディアライブラリ画面へのナビゲート（world とは独立の View 遷移。#250） */
+    onNavigateMedia?: (() => void) | null
+    /** 現在メディアライブラリ画面を表示中か（世界メニューでの現在位置ハイライト用） */
+    isMediaView?: boolean
     isArchiveLoading?: boolean
     isSyncing?: boolean
   }
@@ -48,6 +53,8 @@
     onSelectSibling = null,
     currentWorld = 'home',
     onWorldChange = null,
+    onNavigateMedia = null,
+    isMediaView = false,
     isArchiveLoading = false,
     isSyncing = false,
   }: Props = $props()
@@ -77,8 +84,17 @@
   }
 
   function handleWorldSelect(world: WorldType) {
-    if (world !== currentWorld && onWorldChange) {
+    // メディア画面から Home/Archive を選んだ場合も world 切替を通す（View も home に戻る）
+    if ((world !== currentWorld || isMediaView) && onWorldChange) {
       onWorldChange(world)
+    }
+    worldDropdownOpen = false
+  }
+
+  function handleMediaSelect() {
+    // world は変えず View='media' へ遷移する（別ハンドラ。handleWorldChange に混ぜない）
+    if (onNavigateMedia) {
+      onNavigateMedia()
     }
     worldDropdownOpen = false
   }
@@ -232,7 +248,7 @@
             >
               <button
                 class="world-item"
-                class:current={currentWorld === 'home'}
+                class:current={currentWorld === 'home' && !isMediaView}
                 onclick={() => handleWorldSelect('home')}
               >
                 <span class="world-icon"><HomeIcon /></span>
@@ -240,7 +256,7 @@
               </button>
               <button
                 class="world-item"
-                class:current={currentWorld === 'archive'}
+                class:current={currentWorld === 'archive' && !isMediaView}
                 class:loading={isArchiveLoading}
                 onclick={() => handleWorldSelect('archive')}
               >
@@ -250,6 +266,12 @@
                   <span class="loading-indicator"><LeafSpinner size={14} /></span>
                 {/if}
               </button>
+              {#if onNavigateMedia}
+                <button class="world-item" class:current={isMediaView} onclick={handleMediaSelect}>
+                  <span class="world-icon"><MediaLibraryIcon /></span>
+                  {$_('breadcrumbs.worldMedia')}
+                </button>
+              {/if}
             </div>
           {/if}
         </div>

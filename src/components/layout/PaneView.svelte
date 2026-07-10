@@ -40,6 +40,7 @@
   import NoteView from '../views/NoteView.svelte'
   import EditorView from '../views/EditorView.svelte'
   import PreviewView from '../views/PreviewView.svelte'
+  import MediaLibraryView from '../views/MediaLibraryView.svelte'
 
   // フッターコンポーネント
   import HomeFooter from './footer/HomeFooter.svelte'
@@ -171,7 +172,13 @@
     : null}
   onSelectSibling={(id, type) => actions.selectSiblingFromBreadcrumb(id, type, pane)}
   currentWorld={paneWorld}
-  onWorldChange={(world) => actions.handleWorldChange(world, pane)}
+  onWorldChange={(world) => {
+    // メディア画面から world を選んだら先に Home へ抜ける（同一 world 選択でも View を戻す）
+    if (currentView === 'media') actions.goHome(pane)
+    actions.handleWorldChange(world, pane)
+  }}
+  onNavigateMedia={() => actions.navigateToMediaLibrary(pane)}
+  isMediaView={currentView === 'media'}
   isArchiveLoading={paneState.value.isArchiveLoading}
   isSyncing={isPulling.value || isPushing.value}
 />
@@ -260,6 +267,8 @@
       onScroll={handleScroll}
       onPriorityLinkClick={(leafId, line) => actions.handlePriorityLinkClick(leafId, line, pane)}
     />
+  {:else if currentView === 'media'}
+    <MediaLibraryView settings={settings.value} onClose={() => actions.goHome(pane)} />
   {/if}
 </main>
 

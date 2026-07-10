@@ -221,6 +221,27 @@ export function navigateToLeafFromPriority(leafId: string, pane: Pane) {
   }
 }
 
+/**
+ * メディアライブラリ画面（View='media'）へ遷移する（#250）。
+ *
+ * ワールド（Home/Archive）とは独立した View なので world は変えない。
+ * handleWorldChange に media を混ぜず、明示的な別ナビゲーション関数として分ける
+ * （media は world ではないため world ヘルパの exhaustive switch にも入れない）。
+ * 戻りは breadcrumbs の Home アイコン（goHome）で行う。
+ */
+export function navigateToMediaLibrary(pane: Pane = 'left') {
+  if (pane === 'left') {
+    leftNote.value = null
+    leftLeaf.value = null
+    leftView.value = 'media'
+  } else {
+    rightNote.value = null
+    rightLeaf.value = null
+    rightView.value = 'media'
+  }
+  refreshBreadcrumbs()
+}
+
 export function selectNote(note: Note, pane: Pane) {
   const state = getNavState()
   nav.selectNote(state, getNavDeps(), note, pane)
