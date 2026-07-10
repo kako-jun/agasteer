@@ -199,12 +199,17 @@ export async function attachMediaFiles(files: File[], deps: MediaAttachDeps): Pr
     // enqueue 成功＝実アップロード開始。完了/保留のトーストは背景 uploadDone 解決後に出す
     deps.notify({ kind: 'uploading', name: original.name })
     backgroundUploads.push(
-      result.uploadDone.then((uploaded) => {
-        if (uploaded) deps.notify({ kind: 'uploaded', name: file.name })
-        else if (typeof navigator !== 'undefined' && !navigator.onLine)
-          deps.notify({ kind: 'queuedOffline', name: file.name })
-        else deps.notify({ kind: 'queuedRetry', name: file.name })
-      })
+      result.uploadDone
+        .then((uploaded) => {
+          if (uploaded) deps.notify({ kind: 'uploaded', name: file.name })
+          else if (typeof navigator !== 'undefined' && !navigator.onLine)
+            deps.notify({ kind: 'queuedOffline', name: file.name })
+          else deps.notify({ kind: 'queuedRetry', name: file.name })
+        })
+        // 防御: uploadDone は現状 never-reject だが、その不変条件に依存しない。
+        // reject してもキューには残る（online 復帰で回収される）ため queuedRetry 扱いにし、
+        // 終端トーストの欠落と unhandledRejection を防ぐ
+        .catch(() => deps.notify({ kind: 'queuedRetry', name: file.name }))
     )
   }
   // 挿入はローカル処理（最適化 + enqueue）完了時点＝ネットワーク待ちの前に行う

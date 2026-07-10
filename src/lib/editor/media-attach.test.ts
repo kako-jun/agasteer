@@ -45,6 +45,22 @@ function makeFile(name: string, content = 'data'): File {
   return new File([content], name, { type: 'application/octet-stream' })
 }
 
+/** 解決/棄却を外部から制御できる Promise（背景 uploadDone のタイミング観測用） */
+function defer<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+/** マイクロタスク＋直近のマクロタスクを流しきる（insert が背景待ちの前に走ることの観測用） */
+function flushTasks(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 beforeEach(() => {
   uploadMediaMock.mockReset()
   optimizeImageFileMock.mockReset()
@@ -508,6 +524,52 @@ describe('attachMediaFiles', () => {
       expect(notices[1]).toEqual({ kind: 'queuedOffline', name: 'a.png' })
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('uploadDone が reject しても破綻しない: throw せず insert し queuedRetry 通知（unhandledRejection・console 汚染なし）', async () => {
+    // uploadPendingItem は現状 never-reject だが、その不変条件に依存しない防御（.catch）を守る。
+    // reject はキューに残る＝online 復帰で回収されるため queuedRetry が正しい意味
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const d = defer<boolean>()
+      uploadMediaMock.mockResolvedValue({
+        ok: true,
+        url: 'https://example.com/a.png',
+        uploadDone: d.promise,
+      })
+      const insert = vi.fn()
+      const notices: any[] = []
+      const done = attachMediaFiles([makeFile('a.png')], {
+        settings,
+        optimizeImages: false,
+        insert,
+        notify: (n) => notices.push(n),
+      })
+      // 挿入は背景 uploadDone 待ちの前に済んでいる
+      await flushTasks()
+      expect(insert).toHaveBeenCalledWith('![a.png](https://example.com/a.png)')
+
+      // .then().catch() は既に wired 済みの状態で reject する
+      d.reject(new Error('background upload crashed'))
+      await expect(done).resolves.toBeUndefined() // throw しない
+      await flushTasks()
+
+      expect(notices).toEqual([
+        { kind: 'uploading', name: 'a.png' },
+        { kind: 'queuedRetry', name: 'a.png' },
+      ])
+      expect(unhandled).toHaveLength(0)
+      expect(errorSpy).not.toHaveBeenCalled()
+      expect(warnSpy).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+      errorSpy.mockRestore()
+      warnSpy.mockRestore()
     }
   })
 })
