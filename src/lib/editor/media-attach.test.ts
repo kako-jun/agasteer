@@ -504,6 +504,9 @@ describe('i18n キー整合（media / footer / settings）', () => {
     'media.uploaded',
     'media.queuedOffline',
     'media.queuedRetry',
+    'media.preview.loading',
+    'media.preview.unavailable',
+    'media.preview.retry',
     'footer.attach',
     'settings.editor.mediaOptimize',
   ]

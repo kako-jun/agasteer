@@ -13,6 +13,7 @@ import {
   previewMediaMimeType,
   previewMediaFileName,
 } from './media-resolve'
+import { ALLOWED_MEDIA_EXTENSIONS } from '../api/media/validation'
 
 const MEDIA_BASE = 'https://raw.githubusercontent.com/kako-jun/notes-media/main'
 
@@ -65,6 +66,12 @@ describe('classifyPreviewMediaKind', () => {
       expect(classifyPreviewMediaKind(url)).toBeNull()
     }
   })
+
+  it('rejects raw URLs with a query or fragment', () => {
+    // parseRawMediaUrl はルート直下 1 セグメントのみ受理（クエリ・フラグメント不可）
+    expect(classifyPreviewMediaKind(`${MEDIA_BASE}/20260710-abcd1234-photo.png?token=x`)).toBeNull()
+    expect(classifyPreviewMediaKind(`${MEDIA_BASE}/20260710-abcd1234-photo.png#f`)).toBeNull()
+  })
 })
 
 describe('previewMediaMimeType', () => {
@@ -87,6 +94,14 @@ describe('previewMediaMimeType', () => {
 
   it('resolves MIME from a full raw URL (Blob 生成はフル URL を渡す)', () => {
     expect(previewMediaMimeType(`${MEDIA_BASE}/20260710-abcd1234-clip.mp4`)).toBe('video/mp4')
+  })
+
+  it('maps every allowed media extension to a specific MIME type (ホワイトリスト追加時の漏れ検出)', () => {
+    for (const ext of ALLOWED_MEDIA_EXTENSIONS) {
+      expect(previewMediaMimeType(`file.${ext}`), `MIME 対応表に拡張子がない: ${ext}`).not.toBe(
+        'application/octet-stream'
+      )
+    }
   })
 })
 
