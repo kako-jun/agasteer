@@ -71,12 +71,12 @@
     min-width: 140px;
     max-width: calc(100vw - 24px);
     text-align: center;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
     display: flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
+    line-height: 1.4;
   }
 
   /* #238: FF 風カウントダウン付きの2行レイアウト */
