@@ -74,6 +74,8 @@ Configure the following items:
 |  4  | **Permissions**       | Set "Contents" to "Read and write"                                                                                     |
 |  5  | **Generate token**    | Click the button                                                                                                       |
 
+> **📎 If you use file attachments**: Attachments are stored in a separate private repository named `{your-repo-name}-media`. This guide's configuration (selected repositories only, Contents permission only) cannot create repositories, so **create the `{your-repo-name}-media` repository yourself and select both repositories under "Repository access" in step 3** (with a classic token (`repo` scope) this is unnecessary — it is created automatically on first attachment).
+
 ### Step 5: Copy the token
 
 Copy the generated token.

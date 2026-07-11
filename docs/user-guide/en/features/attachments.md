@@ -116,11 +116,24 @@ From the "**›**" dropdown at the left of the breadcrumbs (the Home/Archive swi
 
 Delete a file with its delete button (🗑️). A confirmation dialog asks whether to delete.
 
-> **⚠️ Note**: If the media you delete is referenced by any note, that note will display broken (the image won't show, or the link will break). Before deleting, check that the file isn't used in your notes. This first version does not automatically detect whether a file is still referenced.
+> **⚠️ Note**: If the media you delete is referenced by any note, that note will display broken (the image won't show, or the link will break). Files labeled "**Unreferenced**" are not referenced anywhere and are safe to delete.
+
+---
+
+## About Storage Size
+
+The media repository uses a **history-less storage scheme**. Unlike a normal Git repository, past versions do not accumulate:
+
+- Storage is only the total of the files that currently exist
+- **Deleting a file actually frees its space** (nothing lingers in history)
+- No special action is needed (this happens automatically)
+
+> **📝 Note**: GitHub's displayed repository size may update with a delay, due to GitHub-side cleanup timing.
 
 ---
 
 ## Note
 
 - The media repository is private, so opening the inserted URL directly in a browser will not display it (GitHub authentication is required). The preview fetches it with authentication and displays it as described above
+- If you use a **fine-grained token** with the setup guide's configuration (selected repositories only, Contents permission only), the media repository cannot be created automatically (that configuration does not include repository-creation permission). Create a private repository named `{your-repo-name}-media` yourself and add it to the token's "Repository access" **alongside your notes repository**. With a classic token (`repo` scope), it is created automatically on first attachment
 - "Download/Share as image" includes attached images, but video and audio are not captured

@@ -23,6 +23,12 @@ import {
 import { validateMedia } from './media/validation'
 import { shouldCacheMediaSize, selectCacheEvictions } from './media/lru'
 import { MEDIA_API_TIMEOUT_MS, calcMediaPutTimeoutMs } from './media/timeouts'
+import { authHeaders, fetchWithTimeout, readJsonWithTimeout } from './media/http'
+import {
+  collapseMediaHistory,
+  extractMutationCommit,
+  recordMediaDefaultBranch,
+} from './media/history'
 import {
   putPendingMedia,
   getPendingMedia,
@@ -77,55 +83,20 @@ export function isMediaConfigured(settings: Settings): boolean {
   return Boolean(settings.token) && slashIndex > 0 && slashIndex < settings.repoName.length - 1
 }
 
-/** GitHub API の認証ヘッダ。media-library.ts（一覧・削除）と共用する */
-export function authHeaders(settings: Settings): Record<string, string> {
-  return { Authorization: `Bearer ${settings.token}` }
-}
-
 // ============================================
-// fetch タイムアウト（#252: 背景アップロードチェーンの head-of-line blocking 防止）
+// 分離モジュールの再公開（media-library.ts・テストの単一参照点）
 // ============================================
 
-// 閾値と算出は純粋層 media/timeouts.ts に分離。テスト・チューニングの単一参照点として再公開する
+// 閾値と算出は純粋層 media/timeouts.ts、HTTP ヘルパは media/http.ts、
+// 履歴を残さないコミット方式（#250）は media/history.ts に分離している
 export {
   MEDIA_API_TIMEOUT_MS,
   MEDIA_PUT_TIMEOUT_BASE_MS,
   MEDIA_PUT_MIN_BYTES_PER_SEC,
   calcMediaPutTimeoutMs,
 } from './media/timeouts'
-
-/**
- * AbortController によるタイムアウト付き fetch。
- *
- * #247 のグローバル直列化（uploadChain）は、チェーン内のどれか 1 つの fetch が
- * 永久 pending になると以後の背景アップロードが全て止まる（head-of-line blocking）。
- * チェーン経路の全 fetch に上限を入れ、ストールを reject → 既存の catch →
- * 「false（pending 残置）」に落とすことでチェーンを必ず前進させる。
- * pending に残ったアイテムは online 復帰・次回起動の initMediaOnlineRetry が回収する。
- *
- * AbortSignal.timeout() の一行で書けるが意図的に使わない: Node の実装は
- * vitest の fake timers（vi.useFakeTimers）に乗らず、タイムアウト挙動を
- * 決定的にテストできなくなるため（media-timeout.test.ts が時計を進めて検証する）。
- *
- * タイマーは応答**ヘッダ**到着で解除する（本文ストリーミングは対象外）。
- * ストールの典型（接続不能・応答が永遠に来ない）を有限化するのが目的で、
- * 進行中の大きい本文転送を途中で切らない。
- *
- * media-library.ts（一覧・削除）も共用する（#262）ため export する。
- */
-export async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController()
-  const timerId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timerId)
-  }
-}
+export { authHeaders, fetchWithTimeout, readJsonWithTimeout } from './media/http'
+export { collapseMediaHistory, extractMutationCommit } from './media/history'
 
 // ============================================
 // メディアリポの lazy 作成
@@ -165,6 +136,11 @@ export async function ensureMediaRepo(
     )
     if (repoRes.ok) {
       ensuredMediaRepos.add(mediaRepo)
+      // 本文読みは上限つき（チェーン経路で素の json() を待つと #252 の HOL 保証を破る）
+      const repoJson = (await readJsonWithTimeout(repoRes)) as { default_branch?: unknown } | null
+      if (typeof repoJson?.default_branch === 'string') {
+        recordMediaDefaultBranch(mediaRepo, repoJson.default_branch)
+      }
       return { ok: true }
     }
     if (repoRes.status !== 404) {
@@ -188,6 +164,14 @@ export async function ensureMediaRepo(
     // 422 = name already exists（並行タブとの作成 race）→ 存在するので成功扱い
     if (createRes.ok || createRes.status === 422) {
       ensuredMediaRepos.add(mediaRepo)
+      if (createRes.ok) {
+        const createJson = (await readJsonWithTimeout(createRes)) as {
+          default_branch?: unknown
+        } | null
+        if (typeof createJson?.default_branch === 'string') {
+          recordMediaDefaultBranch(mediaRepo, createJson.default_branch)
+        }
+      }
       return { ok: true }
     }
     return { ok: false, errorKind: 'repo_unavailable', httpStatus: createRes.status }
@@ -327,6 +311,54 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
       // 422 = 同名パスが並行作成された race。同名=同内容なので成功扱い
       if (!putRes.ok && putRes.status !== 422) {
         return false
+      }
+      // 履歴を残さないコミット方式（#250）: PUT が作ったコミットを、同じ tree を
+      // 指す親なしコミットに即置き換え、リポを常に 1 コミットに保つ。
+      // PUT 応答から commit/tree が取れないケース（422 race・本文ストール等）は
+      // スキップ（履歴が残るだけで、次回の変更時にまとめて畳まれる）
+      if (putRes.ok) {
+        const commit = extractMutationCommit(await readJsonWithTimeout(putRes))
+        if (commit) {
+          // バッチ最適化: 自分の後ろにまだ pending が残っているなら畳みを後続に
+          // 委ねる（中間の畳みは最後の 1 回に完全に包含されるため、複数添付で
+          // 3×(N-1) 回の無駄な API 呼び出しを避ける）。キューが失敗等で
+          // 途切れた場合も、次に成功した変更の畳みが履歴をまとめて回収する
+          const others = (await getAllPendingMedia()).filter(
+            (pendingItem) => pendingItem.filename !== item.filename
+          )
+          if (others.length === 0) {
+            const collapsed = await collapseMediaHistory(
+              settings,
+              parsed.repoFullName,
+              commit.sha,
+              commit.treeSha
+            )
+            if (collapsed === 'skipped_head_moved') {
+              // 並行変更を検知した＝どこかのデバイスの force 差し替えと交錯した
+              // 可能性がある。自ファイルが HEAD から落とされていないか確認し、
+              // 見えなければ dequeue せず pending に残す（リトライが dedup 経由で
+              // 再アップロードして自己修復する）。ここで黙って dequeue すると、
+              // アップロード成功済みのファイルが誰にも再送されず消失し得る
+              const verifyRes = await fetchWithTimeout(
+                `${contentsUrl}?t=${Date.now()}`,
+                {
+                  headers: {
+                    ...authHeaders(settings),
+                    Accept: 'application/vnd.github.object+json',
+                  },
+                },
+                MEDIA_API_TIMEOUT_MS
+              )
+              if (verifyRes.status === 404) {
+                console.warn(
+                  'Media upload was clobbered by a concurrent history collapse; keeping it pending for retry:',
+                  item.filename
+                )
+                return false
+              }
+            }
+          }
+        }
       }
     }
     await deletePendingMedia(item.filename)

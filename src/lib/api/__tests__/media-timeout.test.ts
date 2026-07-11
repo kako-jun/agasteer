@@ -305,6 +305,35 @@ describe('非チェーン系 fetch のタイムアウト（#262: 一覧・削除
   })
 })
 
+describe('チェーン上の本文読みタイムアウト（#250 readJsonWithTimeout・HOL 再導入防止）', () => {
+  it('PUT 応答のヘッダ後に本文がストールしてもチェーンは前進する（履歴畳みはスキップ）', async () => {
+    const media = await loadMedia()
+    // ヘッダは返るが本文が永遠に来ない Response（json() が解決しない）
+    const stalledBody = new Response(new ReadableStream({ start() {} }), { status: 201 })
+    const fetchStub = makeAbortableFetch((url, method) => {
+      if (method === 'PUT') return stalledBody
+      if (url.includes('/contents/')) return notFound()
+      return ok({ id: 1 })
+    })
+    vi.stubGlobal('fetch', fetchStub.fn)
+
+    const result = await media.uploadMedia(makeFile('x.png', 'data'), makeSettings())
+    assertEnqueued(result)
+
+    // 本文読みの上限（MEDIA_API_TIMEOUT_MS）経過で null → commit 情報なし → 畳みスキップ
+    await vi.advanceTimersByTimeAsync(media.MEDIA_API_TIMEOUT_MS)
+    await expect(result.uploadDone).resolves.toBe(true)
+    // チェーンは前進しており、後続アップロードが実行できる
+    const second = await media.uploadMedia(makeFile('y.png', 'data-2'), makeSettings())
+    assertEnqueued(second)
+    await vi.advanceTimersByTimeAsync(0)
+    // 2件目の存在チェックは 404 → PUT（ストール Response は 1 件目専用に消費済みでないため
+    // route は再び stalledBody を返すが、本文ストールでも uploadDone は有限時間で解決する）
+    await vi.advanceTimersByTimeAsync(media.MEDIA_API_TIMEOUT_MS)
+    await expect(second.uploadDone).resolves.toBe(true)
+  })
+})
+
 describe('retryPendingUploads のタイムアウト（自己回復経路）', () => {
   it('1件目がストールしても中断せず、タイムアウト後に 2 件目を試行する', async () => {
     const media = await loadMedia()

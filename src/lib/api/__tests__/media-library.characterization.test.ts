@@ -204,6 +204,54 @@ describe('deleteMediaAsset', () => {
     expect(mediaStore.fns.deletePendingMedia).toHaveBeenCalledWith('20260101-aa-x.png')
   })
 
+  it('削除コミットも親なしスナップショットに置き換える（履歴を残さないコミット方式 #250）', async () => {
+    mock
+      .on('DELETE', '/repo-media/contents/', {
+        status: 200,
+        json: { commit: { sha: 'c-del', tree: { sha: 't-del' } } },
+      })
+      .on('POST', '/repo-media/git/commits', { status: 201, json: { sha: 'c-orphan' } })
+      .on('GET', '/repo-media/git/ref/heads/main', { json: { object: { sha: 'c-del' } } })
+      .on('PATCH', '/repo-media/git/refs/heads/main', { json: {} })
+    const { deleteMediaAsset } = await loadLibrary()
+
+    const result = await deleteMediaAsset(makeSettings(), 'a.png', 'sha-1')
+    expect(result).toEqual({ ok: true })
+    const commitCall = mock.firstCall('POST', '/repo-media/git/commits')
+    expect(commitCall!.body).toEqual({
+      message: 'Agasteer media snapshot',
+      tree: 't-del',
+      parents: [],
+    })
+    expect(mock.firstCall('PATCH', '/repo-media/git/refs/heads/main')!.body).toEqual({
+      sha: 'c-orphan',
+      force: true,
+    })
+    mock.assertDrained()
+  })
+
+  it('削除応答に commit 情報が無ければ履歴畳みは行わない（従来モック互換）', async () => {
+    mock.on('DELETE', '/repo-media/contents/', { status: 200, json: {} })
+    const { deleteMediaAsset } = await loadLibrary()
+    const result = await deleteMediaAsset(makeSettings(), 'a.png', 'sha-1')
+    expect(result).toEqual({ ok: true })
+    expect(mock.callsMatching('POST', '/repo-media/git/commits')).toHaveLength(0)
+    mock.assertDrained()
+  })
+
+  it('履歴畳みが失敗しても削除自体は成功のまま（best-effort）', async () => {
+    mock
+      .on('DELETE', '/repo-media/contents/', {
+        status: 200,
+        json: { commit: { sha: 'c-del', tree: { sha: 't-del' } } },
+      })
+      .on('POST', '/repo-media/git/commits', { status: 500, json: {} })
+    const { deleteMediaAsset } = await loadLibrary()
+    const result = await deleteMediaAsset(makeSettings(), 'a.png', 'sha-1')
+    expect(result).toEqual({ ok: true })
+    mock.assertDrained()
+  })
+
   it('HTTP エラーは fetch_failed（evict しない）', async () => {
     mock.on('DELETE', '/repo-media/contents/', { status: 409, json: {} })
     const { deleteMediaAsset } = await loadLibrary()
