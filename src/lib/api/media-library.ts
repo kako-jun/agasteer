@@ -16,6 +16,7 @@ import {
   isMediaConfigured,
   fetchWithTimeout,
   authHeaders,
+  collapseMediaHistory,
   MEDIA_API_TIMEOUT_MS,
   type MediaErrorKind,
 } from './media'
@@ -149,6 +150,15 @@ export async function deleteMediaAsset(
     )
     if (!res.ok) {
       return { ok: false, errorKind: 'fetch_failed', httpStatus: res.status }
+    }
+    // 履歴を残さないコミット方式（#250）: 削除コミットも親なしスナップショットに
+    // 置き換える。これで削除したファイルの実体が履歴に残らず、容量が実際に減る。
+    // best-effort（失敗しても削除自体は成立。次回の変更時に畳まれる）
+    const deleteJson = await res.json().catch(() => null)
+    const commitSha = deleteJson?.commit?.sha
+    const treeSha = deleteJson?.commit?.tree?.sha
+    if (typeof commitSha === 'string' && typeof treeSha === 'string') {
+      await collapseMediaHistory(settings, mediaRepo, commitSha, treeSha)
     }
     // メディアはリポルート直下なので path = filename。cache は rawUrl、pending は filename がキー
     const rawUrl = buildRawMediaUrl(mediaRepo, path)

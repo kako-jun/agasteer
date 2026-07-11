@@ -135,6 +135,14 @@ export async function fetchWithTimeout(
 const ensuredMediaRepos = new Set<string>()
 
 /**
+ * メディアリポの default branch（フルネーム → ブランチ名）。
+ * ensureMediaRepo の存在確認/作成レスポンスから捕捉し、履歴スナップショット化
+ * （collapseMediaHistory）の ref 更新先に使う。未捕捉時は 'main' にフォールバック
+ * （auto_init 作成リポの既定。外れても ref GET が 404 → collapse をスキップするだけで無害）。
+ */
+const mediaDefaultBranches = new Map<string, string>()
+
+/**
  * メディアリポ `{owner}/{repo}-media` の存在を確認し、404 なら lazy 作成する。
  * private + auto_init（default branch と初期コミットを持たせ、Contents API を即使えるようにする）。
  *
@@ -165,6 +173,10 @@ export async function ensureMediaRepo(
     )
     if (repoRes.ok) {
       ensuredMediaRepos.add(mediaRepo)
+      const repoJson = await repoRes.json().catch(() => null)
+      if (typeof repoJson?.default_branch === 'string') {
+        mediaDefaultBranches.set(mediaRepo, repoJson.default_branch)
+      }
       return { ok: true }
     }
     if (repoRes.status !== 404) {
@@ -188,12 +200,103 @@ export async function ensureMediaRepo(
     // 422 = name already exists（並行タブとの作成 race）→ 存在するので成功扱い
     if (createRes.ok || createRes.status === 422) {
       ensuredMediaRepos.add(mediaRepo)
+      if (createRes.ok) {
+        const createJson = await createRes.json().catch(() => null)
+        if (typeof createJson?.default_branch === 'string') {
+          mediaDefaultBranches.set(mediaRepo, createJson.default_branch)
+        }
+      }
       return { ok: true }
     }
     return { ok: false, errorKind: 'repo_unavailable', httpStatus: createRes.status }
   } catch (error) {
     console.error('ensureMediaRepo failed:', error)
     return { ok: false, errorKind: 'repo_unavailable' }
+  }
+}
+
+// ============================================
+// 履歴スナップショット化（#250: 履歴を残さないコミット方式）
+// ============================================
+
+/**
+ * メディアリポの履歴を「直前の変更と同じ tree を指す親なしコミット 1 つ」に置き換える。
+ *
+ * メディアは世代管理が不要（最新の状態だけあればよい）なのに、Contents API の
+ * 変更はコミットを積み上げ、削除してもファイルは履歴に残り続けてリポが単調に
+ * 肥大する。そこで**変更のたびに**履歴を畳み、リポを常に 1 コミット＝現在の
+ * ファイルだけに保つ（手動メンテのボタンは設けない。ユーザー操作なしで常に最適）。
+ *
+ * 手順（すべて Contents 権限で足りる Git Database API。追加のトークン権限は不要）:
+ * 1. POST /git/commits: 変更コミットと同じ tree を指す親なしコミットを作る
+ * 2. GET /git/ref: HEAD がまだ自分の変更コミットか確認。違えば**スキップ**
+ *    （他デバイスの並行変更を force 更新で握り潰さないためのガード。
+ *    畳み損ねた履歴は次回の変更時にまとめて畳まれる＝自己修復）
+ * 3. PATCH /git/refs（force）: ref を親なしコミットへ差し替え
+ *
+ * 完全な CAS は GitHub API に無いため 2→3 の間の極小窓は残るが、単一ユーザー×
+ * 複数デバイスで同一秒に別デバイスが変更を入れる場合に限られ、実害は
+ * 「その変更が tree から落ちる」ではなく（tree は自分の変更コミット由来で不変）、
+ * 「相手のコミットが履歴から消える」のみ。相手のファイル自体は内容アドレス
+ * dedup により相手側の次回リトライ/存在チェックで整合する。
+ *
+ * best-effort: どの段階で失敗しても false を返すだけで呼び出し元の成功は覆さない
+ * （履歴が残るだけで、データ・URL・表示への影響はゼロ。次回変更時に再試行される）。
+ */
+export async function collapseMediaHistory(
+  settings: Settings,
+  repoFullName: string,
+  expectedHeadSha: string,
+  treeSha: string
+): Promise<boolean> {
+  const branch = mediaDefaultBranches.get(repoFullName) ?? 'main'
+  try {
+    const commitRes = await fetchWithTimeout(
+      `https://api.github.com/repos/${repoFullName}/git/commits`,
+      {
+        method: 'POST',
+        headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Agasteer media snapshot',
+          tree: treeSha,
+          parents: [],
+        }),
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
+    if (!commitRes.ok) {
+      return false
+    }
+    const newSha = (await commitRes.json())?.sha
+    if (typeof newSha !== 'string') {
+      return false
+    }
+    // HEAD が自分の変更コミットのままか確認（並行変更の握り潰し防止）
+    const refRes = await fetchWithTimeout(
+      `https://api.github.com/repos/${repoFullName}/git/ref/heads/${branch}`,
+      { headers: authHeaders(settings), cache: 'no-store' },
+      MEDIA_API_TIMEOUT_MS
+    )
+    if (!refRes.ok) {
+      return false
+    }
+    const currentSha = (await refRes.json())?.object?.sha
+    if (currentSha !== expectedHeadSha) {
+      return false
+    }
+    const patchRes = await fetchWithTimeout(
+      `https://api.github.com/repos/${repoFullName}/git/refs/heads/${branch}`,
+      {
+        method: 'PATCH',
+        headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sha: newSha, force: true }),
+      },
+      MEDIA_API_TIMEOUT_MS
+    )
+    return patchRes.ok
+  } catch (error) {
+    console.warn('Media history collapse failed (history kept, will retry on next change):', error)
+    return false
   }
 }
 
@@ -327,6 +430,18 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
       // 422 = 同名パスが並行作成された race。同名=同内容なので成功扱い
       if (!putRes.ok && putRes.status !== 422) {
         return false
+      }
+      // 履歴を残さないコミット方式（#250）: PUT が作ったコミットを、同じ tree を
+      // 指す親なしコミットに即置き換え、リポを常に 1 コミットに保つ。
+      // PUT 応答から commit/tree が取れないケース（422 race 等）はスキップ
+      //（履歴が 1 回分残るだけで、次回の変更時にまとめて畳まれる）
+      if (putRes.ok) {
+        const putJson = await putRes.json().catch(() => null)
+        const commitSha = putJson?.commit?.sha
+        const treeSha = putJson?.commit?.tree?.sha
+        if (typeof commitSha === 'string' && typeof treeSha === 'string') {
+          await collapseMediaHistory(settings, parsed.repoFullName, commitSha, treeSha)
+        }
       }
     }
     await deletePendingMedia(item.filename)

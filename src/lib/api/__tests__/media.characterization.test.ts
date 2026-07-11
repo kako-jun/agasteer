@@ -514,6 +514,111 @@ describe('uploadMedia', () => {
 // ============================================
 // ensureMediaRepo
 // ============================================
+describe('履歴を残さないコミット方式（#250 collapseMediaHistory 配線）', () => {
+  const GIT_COMMITS = '/repos/owner/repo-media/git/commits'
+  const REF_GET = '/repos/owner/repo-media/git/ref/heads/'
+  const REF_PATCH = '/repos/owner/repo-media/git/refs/heads/'
+  /** PUT 応答に commit 情報を含める（実 API と同形） */
+  const PUT_WITH_COMMIT = {
+    status: 201,
+    json: { content: {}, commit: { sha: 'c-put', tree: { sha: 't-put' } } },
+  }
+
+  it('PUT 成功後、同じ tree の親なしコミットを作り ref を force 更新してリポを1コミットに保つ', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1, default_branch: 'main' } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, PUT_WITH_COMMIT)
+      .on('POST', GIT_COMMITS, { status: 201, json: { sha: 'c-orphan' } })
+      .on('GET', REF_GET, { json: { object: { sha: 'c-put' } } })
+      .on('PATCH', REF_PATCH, { json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('a.png', 'data'), makeSettings())
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
+
+    // 親なしコミット（parents: []・PUT と同じ tree）
+    const commitCall = mock.firstCall('POST', GIT_COMMITS)
+    expect(commitCall!.body).toEqual({
+      message: 'Agasteer media snapshot',
+      tree: 't-put',
+      parents: [],
+    })
+    // ref は default branch へ force 更新
+    const patchCall = mock.firstCall('PATCH', REF_PATCH)
+    expect(patchCall!.url).toContain('/git/refs/heads/main')
+    expect(patchCall!.body).toEqual({ sha: 'c-orphan', force: true })
+    expect(mediaStore.pending.size).toBe(0)
+    mock.assertDrained()
+  })
+
+  it('HEAD が自分のコミットでない（他デバイスの並行変更）ときは force 更新をスキップする', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1, default_branch: 'main' } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, PUT_WITH_COMMIT)
+      .on('POST', GIT_COMMITS, { status: 201, json: { sha: 'c-orphan' } })
+      .on('GET', REF_GET, { json: { object: { sha: 'c-someone-else' } } })
+    // PATCH はキューしない = 呼ばれたら fetch-mock が throw して検出される
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('a.png', 'data'), makeSettings())
+    if (!res.ok) throw new Error('unreachable')
+    // collapse スキップでもアップロード自体は成功（best-effort）
+    expect(await res.uploadDone).toBe(true)
+    expect(mediaStore.pending.size).toBe(0)
+    mock.assertDrained()
+  })
+
+  it('親なしコミット作成が失敗しても ref には触れず、アップロード成功は覆らない', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1, default_branch: 'main' } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, PUT_WITH_COMMIT)
+      .on('POST', GIT_COMMITS, { status: 500, json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('a.png', 'data'), makeSettings())
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
+    mock.assertDrained()
+  })
+
+  it('PUT 応答に commit 情報が無ければ履歴畳みは行わない（422 race 等の防御）', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1 } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, { status: 200, json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('a.png', 'data'), makeSettings())
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
+    // git 系エンドポイントには一切触れない
+    expect(mock.callsMatching('POST', GIT_COMMITS)).toHaveLength(0)
+    mock.assertDrained()
+  })
+
+  it('default branch は ensureMediaRepo の応答から捕捉される（main 以外にも追従）', async () => {
+    mock
+      .on('GET', REPO_GET, { json: { id: 1, default_branch: 'trunk' } })
+      .on('GET', CONTENTS, { status: 404, json: {} })
+      .on('PUT', CONTENTS, PUT_WITH_COMMIT)
+      .on('POST', GIT_COMMITS, { status: 201, json: { sha: 'c-orphan' } })
+      .on('GET', '/git/ref/heads/trunk', { json: { object: { sha: 'c-put' } } })
+      .on('PATCH', '/git/refs/heads/trunk', { json: {} })
+    const media = await loadMedia()
+
+    const res = await media.uploadMedia(makeFile('a.png', 'data'), makeSettings())
+    if (!res.ok) throw new Error('unreachable')
+    expect(await res.uploadDone).toBe(true)
+    expect(mock.firstCall('GET', '/git/ref/heads/trunk')).toBeDefined()
+    mock.assertDrained()
+  })
+})
+
 describe('ensureMediaRepo', () => {
   it('リポ GET 404 なら POST /user/repos で private + auto_init の短縮名リポを作る', async () => {
     mock
