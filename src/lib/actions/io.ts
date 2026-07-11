@@ -16,7 +16,14 @@ import {
   updateLeaves,
   isArchiveLoaded,
 } from '../stores'
-import { processImportFile, isAgasteerZip, parseAgasteerZip } from '../data'
+import {
+  processImportFile,
+  applyImportedAttachments,
+  isAgasteerZip,
+  parseAgasteerZip,
+} from '../data'
+import { uploadMedia, isMediaConfigured } from '../api'
+import { optimizeImageFile } from '../utils/image-optimize'
 import { buildNotesZip, generateUniqueName } from '../utils'
 import { appState, appActions, getLeavesForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
@@ -129,6 +136,7 @@ export async function handleImportFromOtherApps(): Promise<void> {
 
       // 同名のノートが存在するかチェック
       const existingNote = allNotes.find((n) => n.name === newNote.name)
+      let dialogChoice: 'add' | null = null
       if (existingNote) {
         // 重複がある場合は確認ダイアログを表示
         const choice = await choiceAsync($_('modal.duplicateChoiceMessage'), [
@@ -144,7 +152,33 @@ export async function handleImportFromOtherApps(): Promise<void> {
           showPushToast($_('settings.importExport.importSkipped'), 'success')
           return
         }
+        dialogChoice = 'add'
+      }
 
+      // #249: 添付のアップロードと記法追記は「取り込みが確定した」この時点で行う。
+      // ダイアログの cancel / skip より前にアップロードすると、参照されない
+      // 孤児メディアがリポに残るため。uploadMedia は enqueue で URL 即確定
+      //（await はローカル処理のみ・オフラインでも成立。実アップロードは背景
+      // 直列チェーン + online 復帰リトライ）。画像の自動最適化は添付 UX と同じ
+      // 設定（mediaOptimizeImages 既定 ON）に従い、URL・ファイル名は最適化後の
+      // 内容で確定する。メディア未設定なら uploader を渡さず、レポートに
+      // unsupported として記録される
+      await applyImportedAttachments(
+        result.result,
+        $_,
+        isMediaConfigured(settings.value)
+          ? async (attachmentFile) => {
+              const optimize = settings.value.mediaOptimizeImages ?? true
+              const uploadFile = optimize ? await optimizeImageFile(attachmentFile) : attachmentFile
+              const uploaded = await uploadMedia(uploadFile, settings.value)
+              return 'errorKind' in uploaded
+                ? { ok: false, errorKind: uploaded.errorKind }
+                : { ok: true, url: uploaded.url, name: uploadFile.name }
+            }
+          : undefined
+      )
+
+      if (dialogChoice === 'add' && existingNote) {
         // choice === 'add': 既存ノートにリーフを追加
         const existingLeafTitles = allLeaves
           .filter((l) => l.noteId === existingNote.id)

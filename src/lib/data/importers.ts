@@ -1,13 +1,23 @@
 import JSZip from 'jszip'
 import type { Note, Leaf, Metadata } from '../types'
+import { buildMediaMarkdown } from '../api/media/markdown'
 
 export type ImportSource = 'simplenote' | 'google-keep' | 'cosense'
+
+/** zip から解決済みの添付ファイル（#249。アップロードは processImportFile が行う） */
+export interface ImportedAttachment {
+  name: string
+  data: ArrayBuffer
+  mimeType?: string
+}
 
 export interface ImportedLeafData {
   title: string
   content: string
   updatedAt?: number
   sanitized?: string
+  /** インポート元に付随していた添付（Google Keep の attachments 等）。#249 */
+  attachments?: ImportedAttachment[]
 }
 
 export interface ImportParseResult {
@@ -269,9 +279,8 @@ function convertKeepNote(
   }
 
   // Track unsupported features
-  if (note.attachments && note.attachments.length > 0) {
-    unsupportedCollector.add('attachments/images')
-  }
+  // attachments は #249 で取り込み対象になった。解決可否（zip 内にあるか・
+  // アップローダの有無）で unsupported 扱いにするかを呼び出し側が決める
   if (note.color && note.color !== 'DEFAULT') {
     unsupportedCollector.add('color')
   }
@@ -301,14 +310,23 @@ function convertKeepNote(
   }
 }
 
-function parseKeepJsonString(
+/**
+ * Keep ノート 1 件ぶんの JSON をパースして leaves に積む。
+ *
+ * resolveAttachment（#249）は zip インポート時のみ渡される。ノートの
+ * attachments[].filePath を zip 内のファイルに解決できたものは leaf.attachments に
+ * 載せ（アップロードは processImportFile が担う）、解決できなかった／resolver が
+ * 無い（単体 JSON インポート）ものは従来どおり unsupported 扱いにする。
+ */
+async function parseKeepJsonString(
   jsonStr: string,
   leaves: ImportedLeafData[],
   errors: string[],
   sanitizedTitles: string[],
   unsupportedCollector: Set<string>,
-  fileName: string
-): { skippedCount: number } {
+  fileName: string,
+  resolveAttachment?: (filePath: string, mimetype?: string) => Promise<ImportedAttachment | null>
+): Promise<{ skippedCount: number }> {
   let skippedCount = 0
   try {
     const parsed = JSON.parse(jsonStr)
@@ -325,7 +343,24 @@ function parseKeepJsonString(
       skippedCount++
       return { skippedCount }
     }
-    if (leaf && leaf.content.length > 0) {
+    // 添付の解決（#249）: 解決できたものだけ leaf に載せる
+    if (leaf && parsed.attachments && parsed.attachments.length > 0) {
+      const resolved: ImportedAttachment[] = []
+      for (const att of parsed.attachments) {
+        if (!att?.filePath || !resolveAttachment) continue
+        const attachment = await resolveAttachment(att.filePath, att.mimetype)
+        if (attachment) resolved.push(attachment)
+      }
+      if (resolved.length > 0) {
+        leaf.attachments = resolved
+      }
+      if (resolved.length < parsed.attachments.length) {
+        // 解決できなかった分（zip に実体なし・resolver なし＝単体 JSON）は従来どおり
+        unsupportedCollector.add('attachments/images')
+      }
+    }
+    if (leaf && (leaf.content.length > 0 || (leaf.attachments && leaf.attachments.length > 0))) {
+      // 本文が空でも添付が解決できたノート（画像だけのメモ）は取り込む
       leaves.push(leaf)
     } else {
       // Empty note
@@ -349,7 +384,7 @@ async function parseGoogleKeepJson(buffer: ArrayBuffer): Promise<ImportParseResu
     const sanitizedTitles: string[] = []
     const unsupportedCollector = new Set<string>()
 
-    const { skippedCount } = parseKeepJsonString(
+    const { skippedCount } = await parseKeepJsonString(
       text,
       leaves,
       errors,
@@ -382,6 +417,41 @@ async function parseGoogleKeepZip(buffer: ArrayBuffer): Promise<ImportParseResul
       (f) => !f.dir && f.name.toLowerCase().endsWith('.json')
     )
 
+    // 添付解決用（#249）: Takeout の attachments[].filePath はファイル名のみのことが
+    // 多く、実体は JSON と同じ階層に入る。パス完全一致 → ベース名一致の順で引く
+    const entriesByPath = new Map<string, JSZip.JSZipObject>()
+    const entriesByBaseName = new Map<string, JSZip.JSZipObject>()
+    for (const entry of Object.values(zip.files)) {
+      if (entry.dir) continue
+      entriesByPath.set(entry.name.toLowerCase(), entry)
+      const base = (entry.name.split('/').pop() || entry.name).toLowerCase()
+      if (!entriesByBaseName.has(base)) {
+        entriesByBaseName.set(base, entry)
+      }
+    }
+    // 解決順: JSON と同じ階層 → zip 内パス完全一致 → ベース名一致（first-wins）。
+    // Takeout は添付を JSON と同じ Keep/ 階層に置くため同階層優先で、
+    // 別フォルダに同名ファイルがある zip でも取り違えない
+    const resolveAttachment = async (
+      filePath: string,
+      mimetype: string | undefined,
+      jsonDir: string
+    ): Promise<ImportedAttachment | null> => {
+      const lower = filePath.toLowerCase()
+      const base = lower.split('/').pop() || lower
+      const entry =
+        entriesByPath.get(jsonDir ? `${jsonDir}/${base}` : base) ??
+        entriesByPath.get(lower) ??
+        entriesByBaseName.get(base)
+      if (!entry) return null
+      try {
+        const data = await entry.async('arraybuffer')
+        return { name: entry.name.split('/').pop() || entry.name, data, mimeType: mimetype }
+      } catch {
+        return null
+      }
+    }
+
     const leaves: ImportedLeafData[] = []
     const errors: string[] = []
     const sanitizedTitles: string[] = []
@@ -397,13 +467,15 @@ async function parseGoogleKeepZip(buffer: ArrayBuffer): Promise<ImportParseResul
         keepNoteFound = true
 
         const fileName = file.name.split('/').pop() || file.name
-        const { skippedCount } = parseKeepJsonString(
+        const jsonDir = file.name.toLowerCase().split('/').slice(0, -1).join('/')
+        const { skippedCount } = await parseKeepJsonString(
           content,
           leaves,
           errors,
           sanitizedTitles,
           unsupportedCollector,
-          fileName
+          fileName,
+          (filePath, mimetype) => resolveAttachment(filePath, mimetype, jsonDir)
         )
         totalSkipped += skippedCount
       } catch {
@@ -718,6 +790,8 @@ export interface ImportResult {
     content: string
     updatedAt: number
     order: number
+    /** 未処理の添付（#249）。applyImportedAttachments が消費して取り除く */
+    attachments?: ImportedAttachment[]
   }>
   errors?: string[]
 }
@@ -727,6 +801,17 @@ export interface ImportOptions {
   existingLeavesMaxOrder: number
   translate: (key: string, options?: { values?: Record<string, any> }) => string
 }
+
+/**
+ * 添付のアップロード関数（#249）。io.ts が uploadMedia（api/media）を注入する。
+ * uploadMedia は enqueue で URL 即確定・実アップロードは背景直列チェーンなので、
+ * ここでの await はローカル処理（最適化 + ハッシュ + IndexedDB 書き込み）だけで
+ * 返り、オフラインでも成立する（online 復帰で自動アップロード）。
+ * name は実際にアップロードされたファイル名（画像最適化で .webp に変わり得る）。
+ */
+export type ImportAttachmentUploader = (
+  file: File
+) => Promise<{ ok: true; url: string; name: string } | { ok: false; errorKind: string }>
 
 /**
  * ファイルをインポートし、Note/Leafデータを生成する。
@@ -764,6 +849,10 @@ export async function processImportFile(
     content: leaf.content,
     updatedAt: leaf.updatedAt ?? Date.now(),
     order: baseLeafOrder + 1 + idx,
+    // 添付は取り込み確定後に applyImportedAttachments がアップロード・記法追記して
+    // 取り除く（#249。ここで先にアップロードすると、重複ダイアログの cancel/skip で
+    // 参照されない孤児メディアがリポに残る）
+    attachments: leaf.attachments,
   }))
 
   // レポート生成
@@ -844,6 +933,89 @@ export async function processImportFile(
       importedLeaves,
       errors: parsed.errors,
     },
+  }
+}
+
+/**
+ * 取り込み確定後に添付をアップロードし、本文へ記法を追記する（#249）。
+ *
+ * processImportFile から分離されているのは順序のため: 重複ノートの確認ダイアログで
+ * cancel / skip され得るので、**保存が確定した経路だけ**がこれを呼ぶ。先に
+ * アップロードすると、取り込まれなかったメディアが参照ゼロの孤児としてリポに残る。
+ *
+ * - uploadAttachment あり: 各添付をアップロードし、成功分の記法
+ *   （画像 `![name](url)` / 他 `[name](url)`。name はアップロード後の実ファイル名）を
+ *   本文末尾に追記。レポートリーフに件数・取り込めなかった一覧を追記
+ * - uploadAttachment なし（メディア未設定）: アップロードせず、レポートに
+ *   unsupported として追記（従来挙動）
+ * - いずれの場合も leaf.attachments は取り除く（バイナリを store / IndexedDB /
+ *   Push スナップショットに載せない）。処理済みから順に外し、GC がバッファを
+ *   解放できるようにする（大量画像インポートのピークメモリ緩和）
+ */
+export async function applyImportedAttachments(
+  result: ImportResult,
+  translate: ImportOptions['translate'],
+  uploadAttachment?: ImportAttachmentUploader
+): Promise<void> {
+  const leavesWithAttachments = result.importedLeaves.filter(
+    (leaf) => leaf.attachments && leaf.attachments.length > 0
+  )
+  if (leavesWithAttachments.length === 0) return
+
+  if (!uploadAttachment) {
+    for (const leaf of leavesWithAttachments) {
+      delete leaf.attachments
+    }
+    result.reportLeaf.content += `\n${translate('settings.importExport.importReportUnsupportedGeneric', { values: { items: 'attachments/images' } })}`
+    return
+  }
+
+  let uploadedCount = 0
+  const skippedMedia: string[] = []
+  for (const leaf of leavesWithAttachments) {
+    const markdownLines: string[] = []
+    for (const attachment of leaf.attachments!) {
+      const file = new File(
+        [attachment.data],
+        attachment.name,
+        attachment.mimeType ? { type: attachment.mimeType } : undefined
+      )
+      const uploaded = await uploadAttachment(file)
+      // strict でない tsconfig では .ok の真偽値 narrowing が効かないため in 演算子で判別
+      if ('errorKind' in uploaded) {
+        // 形式外（Keep の .3gp 録音等）・サイズ超過・ローカル保存失敗など
+        skippedMedia.push(`${attachment.name} (${uploaded.errorKind})`)
+      } else {
+        markdownLines.push(buildMediaMarkdown(uploaded.name, uploaded.url))
+        uploadedCount++
+      }
+    }
+    delete leaf.attachments
+    if (markdownLines.length > 0) {
+      leaf.content = leaf.content
+        ? `${leaf.content}\n\n${markdownLines.join('\n')}`
+        : markdownLines.join('\n')
+    }
+  }
+
+  const mediaLines: string[] = []
+  if (uploadedCount > 0) {
+    mediaLines.push(
+      translate('settings.importExport.importReportMediaUploaded', {
+        values: { count: uploadedCount },
+      })
+    )
+  }
+  if (skippedMedia.length > 0) {
+    mediaLines.push(
+      translate('settings.importExport.importReportMediaSkippedHeader'),
+      ...skippedMedia.map((entry) =>
+        translate('settings.importExport.importReportMediaSkippedLine', { values: { entry } })
+      )
+    )
+  }
+  if (mediaLines.length > 0) {
+    result.reportLeaf.content += `\n${mediaLines.join('\n')}`
   }
 }
 
