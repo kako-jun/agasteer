@@ -135,5 +135,5 @@ The media repository uses a **history-less storage scheme**. Unlike a normal Git
 ## Note
 
 - The media repository is private, so opening the inserted URL directly in a browser will not display it (GitHub authentication is required). The preview fetches it with authentication and displays it as described above
-- If you use a **fine-grained token** (as in the setup guide), the media repository cannot be created automatically (the token lacks repository-creation permission). Create a private repository named `{your-repo-name}-media` yourself and add it to the token's "Repository access" **alongside your notes repository**. With a classic token (`repo` scope), it is created automatically on first attachment
+- If you use a **fine-grained token** with the setup guide's configuration (selected repositories only, Contents permission only), the media repository cannot be created automatically (that configuration does not include repository-creation permission). Create a private repository named `{your-repo-name}-media` yourself and add it to the token's "Repository access" **alongside your notes repository**. With a classic token (`repo` scope), it is created automatically on first attachment
 - "Download/Share as image" includes attached images, but video and audio are not captured
