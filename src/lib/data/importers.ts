@@ -346,23 +346,16 @@ async function parseKeepJsonString(
     // 添付の解決（#249）: 解決できたものだけ leaf に載せる
     if (leaf && parsed.attachments && parsed.attachments.length > 0) {
       const resolved: ImportedAttachment[] = []
-      let unresolved = 0
       for (const att of parsed.attachments) {
-        if (!att?.filePath || !resolveAttachment) {
-          unresolved++
-          continue
-        }
+        if (!att?.filePath || !resolveAttachment) continue
         const attachment = await resolveAttachment(att.filePath, att.mimetype)
-        if (attachment) {
-          resolved.push(attachment)
-        } else {
-          unresolved++
-        }
+        if (attachment) resolved.push(attachment)
       }
       if (resolved.length > 0) {
         leaf.attachments = resolved
       }
-      if (unresolved > 0) {
+      if (resolved.length < parsed.attachments.length) {
+        // 解決できなかった分（zip に実体なし・resolver なし＝単体 JSON）は従来どおり
         unsupportedCollector.add('attachments/images')
       }
     }
@@ -436,13 +429,20 @@ async function parseGoogleKeepZip(buffer: ArrayBuffer): Promise<ImportParseResul
         entriesByBaseName.set(base, entry)
       }
     }
+    // 解決順: JSON と同じ階層 → zip 内パス完全一致 → ベース名一致（first-wins）。
+    // Takeout は添付を JSON と同じ Keep/ 階層に置くため同階層優先で、
+    // 別フォルダに同名ファイルがある zip でも取り違えない
     const resolveAttachment = async (
       filePath: string,
-      mimetype?: string
+      mimetype: string | undefined,
+      jsonDir: string
     ): Promise<ImportedAttachment | null> => {
       const lower = filePath.toLowerCase()
       const base = lower.split('/').pop() || lower
-      const entry = entriesByPath.get(lower) ?? entriesByBaseName.get(base)
+      const entry =
+        entriesByPath.get(jsonDir ? `${jsonDir}/${base}` : base) ??
+        entriesByPath.get(lower) ??
+        entriesByBaseName.get(base)
       if (!entry) return null
       try {
         const data = await entry.async('arraybuffer')
@@ -467,6 +467,7 @@ async function parseGoogleKeepZip(buffer: ArrayBuffer): Promise<ImportParseResul
         keepNoteFound = true
 
         const fileName = file.name.split('/').pop() || file.name
+        const jsonDir = file.name.toLowerCase().split('/').slice(0, -1).join('/')
         const { skippedCount } = await parseKeepJsonString(
           content,
           leaves,
@@ -474,7 +475,7 @@ async function parseGoogleKeepZip(buffer: ArrayBuffer): Promise<ImportParseResul
           sanitizedTitles,
           unsupportedCollector,
           fileName,
-          resolveAttachment
+          (filePath, mimetype) => resolveAttachment(filePath, mimetype, jsonDir)
         )
         totalSkipped += skippedCount
       } catch {
@@ -789,6 +790,8 @@ export interface ImportResult {
     content: string
     updatedAt: number
     order: number
+    /** 未処理の添付（#249）。applyImportedAttachments が消費して取り除く */
+    attachments?: ImportedAttachment[]
   }>
   errors?: string[]
 }
@@ -797,17 +800,18 @@ export interface ImportOptions {
   existingNotesCount: number
   existingLeavesMaxOrder: number
   translate: (key: string, options?: { values?: Record<string, any> }) => string
-  /**
-   * 添付のアップロード（#249）。io.ts が uploadMedia（api/media）を注入する。
-   * uploadMedia は enqueue で URL 即確定・実アップロードは背景直列チェーンなので、
-   * ここでの await はローカル処理（ハッシュ + IndexedDB 書き込み）だけで返り、
-   * オフラインでも成立する（online 復帰で自動アップロード）。
-   * 未指定（メディア未設定）なら添付はアップロードせず unsupported 扱いにする。
-   */
-  uploadAttachment?: (
-    file: File
-  ) => Promise<{ ok: true; url: string } | { ok: false; errorKind: string }>
 }
+
+/**
+ * 添付のアップロード関数（#249）。io.ts が uploadMedia（api/media）を注入する。
+ * uploadMedia は enqueue で URL 即確定・実アップロードは背景直列チェーンなので、
+ * ここでの await はローカル処理（最適化 + ハッシュ + IndexedDB 書き込み）だけで
+ * 返り、オフラインでも成立する（online 復帰で自動アップロード）。
+ * name は実際にアップロードされたファイル名（画像最適化で .webp に変わり得る）。
+ */
+export type ImportAttachmentUploader = (
+  file: File
+) => Promise<{ ok: true; url: string; name: string } | { ok: false; errorKind: string }>
 
 /**
  * ファイルをインポートし、Note/Leafデータを生成する。
@@ -822,46 +826,8 @@ export async function processImportFile(
     return { success: false, error: 'unsupportedFile' }
   }
 
-  const { existingNotesCount, existingLeavesMaxOrder, translate, uploadAttachment } = options
+  const { existingNotesCount, existingLeavesMaxOrder, translate } = options
   const { source } = parsed
-
-  // 添付のアップロードと参照書き込み（#249）。
-  // URL は内容ハッシュから即確定するため、記法は本文末尾にその場で追記できる
-  //（実アップロードは背景。失敗分は pending に残り online 復帰で自動リトライ）。
-  const uploadedMediaNames: string[] = []
-  const skippedMedia: string[] = []
-  for (const leaf of parsed.leaves) {
-    if (!leaf.attachments || leaf.attachments.length === 0) continue
-    if (!uploadAttachment) {
-      // メディア未設定: 添付は取り込めない（従来どおり unsupported として報告）
-      if (!parsed.unsupported.includes('attachments/images')) {
-        parsed.unsupported.push('attachments/images')
-      }
-      continue
-    }
-    const markdownLines: string[] = []
-    for (const attachment of leaf.attachments) {
-      const file = new File(
-        [attachment.data],
-        attachment.name,
-        attachment.mimeType ? { type: attachment.mimeType } : undefined
-      )
-      const uploaded = await uploadAttachment(file)
-      // strict でない tsconfig では .ok の真偽値 narrowing が効かないため in 演算子で判別
-      if ('errorKind' in uploaded) {
-        // 形式外（Keep の .3gp 録音等）・サイズ超過・ローカル保存失敗など
-        skippedMedia.push(`${attachment.name} (${uploaded.errorKind})`)
-      } else {
-        markdownLines.push(buildMediaMarkdown(attachment.name, uploaded.url))
-        uploadedMediaNames.push(attachment.name)
-      }
-    }
-    if (markdownLines.length > 0) {
-      leaf.content = leaf.content
-        ? `${leaf.content}\n\n${markdownLines.join('\n')}`
-        : markdownLines.join('\n')
-    }
-  }
 
   const noteName = NOTE_NAMES[source]
 
@@ -883,6 +849,10 @@ export async function processImportFile(
     content: leaf.content,
     updatedAt: leaf.updatedAt ?? Date.now(),
     order: baseLeafOrder + 1 + idx,
+    // 添付は取り込み確定後に applyImportedAttachments がアップロード・記法追記して
+    // 取り除く（#249。ここで先にアップロードすると、重複ダイアログの cancel/skip で
+    // 参照されない孤児メディアがリポに残る）
+    attachments: leaf.attachments,
   }))
 
   // レポート生成
@@ -909,23 +879,6 @@ export async function processImportFile(
           ),
         ]
       : []
-
-  const mediaLines: string[] = []
-  if (uploadedMediaNames.length > 0) {
-    mediaLines.push(
-      translate('settings.importExport.importReportMediaUploaded', {
-        values: { count: uploadedMediaNames.length },
-      })
-    )
-  }
-  if (skippedMedia.length > 0) {
-    mediaLines.push(
-      translate('settings.importExport.importReportMediaSkippedHeader'),
-      ...skippedMedia.map((entry) =>
-        translate('settings.importExport.importReportMediaSkippedLine', { values: { entry } })
-      )
-    )
-  }
 
   const unsupportedLine =
     parsed.unsupported && parsed.unsupported.length > 0
@@ -955,7 +908,6 @@ export async function processImportFile(
     translate('settings.importExport.importReportSkipped', { values: { skipped } }),
     translate('settings.importExport.importReportPlacementGeneric', { values: { noteName } }),
     unsupportedLine,
-    ...mediaLines,
     ...sanitizedLines,
     translate('settings.importExport.importReportPerItemHeader'),
     ...perItemLines,
@@ -981,6 +933,89 @@ export async function processImportFile(
       importedLeaves,
       errors: parsed.errors,
     },
+  }
+}
+
+/**
+ * 取り込み確定後に添付をアップロードし、本文へ記法を追記する（#249）。
+ *
+ * processImportFile から分離されているのは順序のため: 重複ノートの確認ダイアログで
+ * cancel / skip され得るので、**保存が確定した経路だけ**がこれを呼ぶ。先に
+ * アップロードすると、取り込まれなかったメディアが参照ゼロの孤児としてリポに残る。
+ *
+ * - uploadAttachment あり: 各添付をアップロードし、成功分の記法
+ *   （画像 `![name](url)` / 他 `[name](url)`。name はアップロード後の実ファイル名）を
+ *   本文末尾に追記。レポートリーフに件数・取り込めなかった一覧を追記
+ * - uploadAttachment なし（メディア未設定）: アップロードせず、レポートに
+ *   unsupported として追記（従来挙動）
+ * - いずれの場合も leaf.attachments は取り除く（バイナリを store / IndexedDB /
+ *   Push スナップショットに載せない）。処理済みから順に外し、GC がバッファを
+ *   解放できるようにする（大量画像インポートのピークメモリ緩和）
+ */
+export async function applyImportedAttachments(
+  result: ImportResult,
+  translate: ImportOptions['translate'],
+  uploadAttachment?: ImportAttachmentUploader
+): Promise<void> {
+  const leavesWithAttachments = result.importedLeaves.filter(
+    (leaf) => leaf.attachments && leaf.attachments.length > 0
+  )
+  if (leavesWithAttachments.length === 0) return
+
+  if (!uploadAttachment) {
+    for (const leaf of leavesWithAttachments) {
+      delete leaf.attachments
+    }
+    result.reportLeaf.content += `\n${translate('settings.importExport.importReportUnsupportedGeneric', { values: { items: 'attachments/images' } })}`
+    return
+  }
+
+  let uploadedCount = 0
+  const skippedMedia: string[] = []
+  for (const leaf of leavesWithAttachments) {
+    const markdownLines: string[] = []
+    for (const attachment of leaf.attachments!) {
+      const file = new File(
+        [attachment.data],
+        attachment.name,
+        attachment.mimeType ? { type: attachment.mimeType } : undefined
+      )
+      const uploaded = await uploadAttachment(file)
+      // strict でない tsconfig では .ok の真偽値 narrowing が効かないため in 演算子で判別
+      if ('errorKind' in uploaded) {
+        // 形式外（Keep の .3gp 録音等）・サイズ超過・ローカル保存失敗など
+        skippedMedia.push(`${attachment.name} (${uploaded.errorKind})`)
+      } else {
+        markdownLines.push(buildMediaMarkdown(uploaded.name, uploaded.url))
+        uploadedCount++
+      }
+    }
+    delete leaf.attachments
+    if (markdownLines.length > 0) {
+      leaf.content = leaf.content
+        ? `${leaf.content}\n\n${markdownLines.join('\n')}`
+        : markdownLines.join('\n')
+    }
+  }
+
+  const mediaLines: string[] = []
+  if (uploadedCount > 0) {
+    mediaLines.push(
+      translate('settings.importExport.importReportMediaUploaded', {
+        values: { count: uploadedCount },
+      })
+    )
+  }
+  if (skippedMedia.length > 0) {
+    mediaLines.push(
+      translate('settings.importExport.importReportMediaSkippedHeader'),
+      ...skippedMedia.map((entry) =>
+        translate('settings.importExport.importReportMediaSkippedLine', { values: { entry } })
+      )
+    )
+  }
+  if (mediaLines.length > 0) {
+    result.reportLeaf.content += `\n${mediaLines.join('\n')}`
   }
 }
 

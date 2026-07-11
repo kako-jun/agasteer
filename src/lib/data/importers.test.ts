@@ -8,6 +8,7 @@ import {
   parseGoogleKeepFile,
   parseSimpleNoteFile,
   processImportFile,
+  applyImportedAttachments,
   type ImportParseResult,
 } from './importers'
 
@@ -433,60 +434,97 @@ describe('Google Keep zip の添付解決（#249）', () => {
   })
 })
 
-describe('processImportFile の添付アップロード（#249）', () => {
+describe('processImportFile と applyImportedAttachments（#249: 確定後アップロード）', () => {
   const baseOptions = {
     existingNotesCount: 0,
     existingLeavesMaxOrder: -1,
     translate: passthroughTranslate,
   }
 
-  it('アップロード成功で本文末尾に記法を追記し、レポートに件数が載る', async () => {
+  async function importWithAttachment() {
     const file = await makeKeepZip([KEEP_NOTE_WITH_ATTACHMENT], {
       'Takeout/Keep/photo.png': new Uint8Array([1, 2, 3]),
     })
-    const uploaded: string[] = []
-    const result = await processImportFile(file, {
-      ...baseOptions,
-      uploadAttachment: async (f) => {
-        uploaded.push(f.name)
-        return { ok: true, url: `https://raw.githubusercontent.com/o/r-media/main/${f.name}` }
-      },
-    })
-    expect(result.success).toBe(true)
+    const result = await processImportFile(file, baseOptions)
     if (!result.success) throw new Error('unreachable')
+    return result.result
+  }
+
+  it('processImportFile はアップロードせず、添付を importedLeaves に保持する（cancel/skip で孤児を作らない）', async () => {
+    const result = await importWithAttachment()
+    // 本文は未加工・添付は後段（applyImportedAttachments）待ち
+    expect(result.importedLeaves[0].content).toBe('see photo')
+    expect(result.importedLeaves[0].attachments).toHaveLength(1)
+  })
+
+  it('applyImportedAttachments 成功: 本文末尾に記法追記・レポートに件数・添付は取り除かれる', async () => {
+    const result = await importWithAttachment()
+    const uploaded: string[] = []
+    await applyImportedAttachments(result, passthroughTranslate, async (f) => {
+      uploaded.push(f.name)
+      return {
+        ok: true,
+        url: `https://raw.githubusercontent.com/o/r-media/main/${f.name}`,
+        name: f.name,
+      }
+    })
     expect(uploaded).toEqual(['photo.png'])
-    const leaf = result.result.importedLeaves[0]
+    const leaf = result.importedLeaves[0]
     expect(leaf.content).toBe(
       'see photo\n\n![photo.png](https://raw.githubusercontent.com/o/r-media/main/photo.png)'
     )
-    expect(result.result.reportLeaf.content).toContain(
+    expect(leaf.attachments).toBeUndefined()
+    expect(result.reportLeaf.content).toContain(
       'settings.importExport.importReportMediaUploaded {"count":1}'
     )
   })
 
+  it('画像最適化でファイル名が変わる場合、記法はアップロード後の名前（.webp）を使う', async () => {
+    const result = await importWithAttachment()
+    await applyImportedAttachments(result, passthroughTranslate, async () => ({
+      ok: true,
+      url: 'https://raw.githubusercontent.com/o/r-media/main/20260711-abcd1234-photo.webp',
+      name: '20260711-abcd1234-photo.webp',
+    }))
+    expect(result.importedLeaves[0].content).toContain('![20260711-abcd1234-photo.webp](')
+  })
+
   it('アップロード失敗（形式外等）は記法を追記せず、レポートにスキップ行が載る', async () => {
-    const file = await makeKeepZip([KEEP_NOTE_WITH_ATTACHMENT], {
-      'Takeout/Keep/photo.png': new Uint8Array([1]),
-    })
-    const result = await processImportFile(file, {
-      ...baseOptions,
-      uploadAttachment: async () => ({ ok: false, errorKind: 'format_not_allowed' }),
-    })
-    if (!result.success) throw new Error('unreachable')
-    expect(result.result.importedLeaves[0].content).toBe('see photo')
-    expect(result.result.reportLeaf.content).toContain(
+    const result = await importWithAttachment()
+    await applyImportedAttachments(result, passthroughTranslate, async () => ({
+      ok: false,
+      errorKind: 'format_not_allowed',
+    }))
+    expect(result.importedLeaves[0].content).toBe('see photo')
+    expect(result.importedLeaves[0].attachments).toBeUndefined()
+    expect(result.reportLeaf.content).toContain(
       'settings.importExport.importReportMediaSkippedLine {"entry":"photo.png (format_not_allowed)"}'
     )
   })
 
-  it('uploadAttachment 未指定（メディア未設定）は unsupported としてレポートされ本文は不変', async () => {
-    const file = await makeKeepZip([KEEP_NOTE_WITH_ATTACHMENT], {
-      'Takeout/Keep/photo.png': new Uint8Array([1]),
-    })
+  it('uploader 未指定（メディア未設定）: unsupported としてレポートに追記され、添付は取り除かれる', async () => {
+    const result = await importWithAttachment()
+    await applyImportedAttachments(result, passthroughTranslate)
+    expect(result.importedLeaves[0].content).toBe('see photo')
+    expect(result.importedLeaves[0].attachments).toBeUndefined()
+    expect(result.reportLeaf.content).toContain(
+      'settings.importExport.importReportUnsupportedGeneric {"items":"attachments/images"}'
+    )
+  })
+
+  it('添付が無ければ applyImportedAttachments は何もしない（レポート不変）', async () => {
+    const file = new File(
+      [JSON.stringify({ ...KEEP_NOTE_WITH_ATTACHMENT, attachments: undefined })],
+      'keep.json',
+      { type: 'application/json' }
+    )
     const result = await processImportFile(file, baseOptions)
     if (!result.success) throw new Error('unreachable')
-    expect(result.result.importedLeaves[0].content).toBe('see photo')
-    expect(result.result.reportLeaf.content).toContain('attachments/images')
+    const before = result.result.reportLeaf.content
+    await applyImportedAttachments(result.result, passthroughTranslate, async () => {
+      throw new Error('should not be called')
+    })
+    expect(result.result.reportLeaf.content).toBe(before)
   })
 
   it('画像以外（zip 添付）はリンク記法 [name](url) で追記される', async () => {
@@ -495,14 +533,32 @@ describe('processImportFile の添付アップロード（#249）', () => {
       attachments: [{ filePath: 'bundle.zip', mimetype: 'application/zip' }],
     }
     const file = await makeKeepZip([note], { 'Takeout/Keep/bundle.zip': new Uint8Array([1]) })
-    const result = await processImportFile(file, {
-      ...baseOptions,
-      uploadAttachment: async (f) => ({ ok: true, url: `https://example.com/${f.name}` }),
-    })
-    if (!result.success) throw new Error('unreachable')
-    expect(result.result.importedLeaves[0].content).toContain(
+    const parsed = await processImportFile(file, baseOptions)
+    if (!parsed.success) throw new Error('unreachable')
+    await applyImportedAttachments(parsed.result, passthroughTranslate, async (f) => ({
+      ok: true,
+      url: `https://example.com/${f.name}`,
+      name: f.name,
+    }))
+    expect(parsed.result.importedLeaves[0].content).toContain(
       '[bundle.zip](https://example.com/bundle.zip)'
     )
-    expect(result.result.importedLeaves[0].content).not.toContain('![bundle.zip]')
+    expect(parsed.result.importedLeaves[0].content).not.toContain('![bundle.zip]')
+  })
+})
+
+describe('添付解決の同階層優先（#249: ベース名衝突対策）', () => {
+  it('別フォルダに同名ファイルがあっても JSON と同じ階層の実体を選ぶ', async () => {
+    const zip = new JSZip()
+    zip.file('Takeout/Keep/note-0.json', JSON.stringify(KEEP_NOTE_WITH_ATTACHMENT))
+    // 別フォルダの同名ファイル（zip の列挙順で先に来ても選ばれないこと）
+    zip.file('Takeout/Drive/photo.png', new Uint8Array([9, 9, 9]))
+    zip.file('Takeout/Keep/photo.png', new Uint8Array([1, 2, 3]))
+    const buffer = await zip.generateAsync({ type: 'arraybuffer' })
+    const file = new File([buffer], 'takeout.zip', { type: 'application/zip' })
+
+    const result = await parseGoogleKeepFile(file)
+    const attachment = result!.leaves[0].attachments![0]
+    expect(new Uint8Array(attachment.data)).toEqual(new Uint8Array([1, 2, 3]))
   })
 })
