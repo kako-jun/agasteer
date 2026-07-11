@@ -98,6 +98,17 @@ async function flushMicrotasks(): Promise<void> {
   await vi.advanceTimersByTimeAsync(0)
 }
 
+/**
+ * ハング対象のモックが呼ばれる（＝raceWithTimeout のタイマーが同期的に登録される）
+ * まで待つ。到達までの経路に fake timers 外の実 async（file.arrayBuffer /
+ * crypto.subtle.digest / Response.json）が挟まるため、マイクロタスクのフラッシュ
+ * だけでは足りず、遅い CI 環境ではタイマー未登録のまま advance して発火し損ねる
+ * （実際に CI で flake した）。vi.waitFor は fake timers 下でも実時間でポーリングする
+ */
+async function waitForHangReached(fn: ReturnType<typeof vi.fn>): Promise<void> {
+  await vi.waitFor(() => expect(fn).toHaveBeenCalled())
+}
+
 beforeEach(() => {
   vi.resetModules()
   vi.useFakeTimers()
@@ -148,8 +159,7 @@ describe('uploadMedia の enqueue（putPendingMedia）ハング', () => {
     vi.stubGlobal('fetch', makeRoutedFetch(routeUploadHappyPath))
 
     const resultPromise = media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
-    // ファイル読み取り・ハッシュ計算のマイクロタスクを流し、race のタイマーを登録させる
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.putPendingMedia)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
 
     await expect(resultPromise).resolves.toEqual({ ok: false, errorKind: 'storage_failed' })
@@ -164,7 +174,7 @@ describe('uploadPendingItem のチェーン経路の IDB ハング', () => {
 
     const first = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
     assertEnqueued(first)
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.deletePendingMedia)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
     // アップロード自体は成立しているが dequeue できなかったので false（リトライで dedup 回収）
     await expect(first.uploadDone).resolves.toBe(false)
@@ -193,7 +203,7 @@ describe('uploadPendingItem のチェーン経路の IDB ハング', () => {
 
     const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
     assertEnqueued(result)
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.getAllPendingMedia)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
 
     await expect(result.uploadDone).resolves.toBe(false)
@@ -207,7 +217,7 @@ describe('uploadPendingItem のチェーン経路の IDB ハング', () => {
 
     const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
     assertEnqueued(result)
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.putCachedMedia)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
 
     await expect(result.uploadDone).resolves.toBe(true)
@@ -221,7 +231,7 @@ describe('uploadPendingItem のチェーン経路の IDB ハング', () => {
 
     const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
     assertEnqueued(result)
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.getAllCachedMediaMeta)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
 
     await expect(result.uploadDone).resolves.toBe(true)
@@ -242,7 +252,7 @@ describe('uploadPendingItem のチェーン経路の IDB ハング', () => {
 
     const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
     assertEnqueued(result)
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.deleteCachedMedia)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
 
     await expect(result.uploadDone).resolves.toBe(true)
@@ -355,7 +365,7 @@ describe('deleteMediaAsset の evict ハング（media-library.ts）', () => {
       '20260101-abcd1234-x.png',
       'sha-1'
     )
-    await flushMicrotasks()
+    await waitForHangReached(mediaStore.fns.deleteCachedMedia)
     await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
 
     await expect(resultPromise).resolves.toEqual({ ok: true })
