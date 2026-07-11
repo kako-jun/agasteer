@@ -17,6 +17,7 @@ import {
   isArchiveLoaded,
 } from '../stores'
 import { processImportFile, isAgasteerZip, parseAgasteerZip } from '../data'
+import { uploadMedia, isMediaConfigured } from '../api'
 import { buildNotesZip, generateUniqueName } from '../utils'
 import { appState, appActions, getLeavesForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
@@ -118,6 +119,19 @@ export async function handleImportFromOtherApps(): Promise<void> {
         existingNotesCount: allNotes.length ? Math.max(...allNotes.map((n) => n.order)) + 1 : 0,
         existingLeavesMaxOrder: allLeaves.length ? Math.max(...allLeaves.map((l) => l.order)) : -1,
         translate: $_,
+        // #249: エクスポート zip 内の添付（Google Keep の画像等）をメディアリポへ
+        // 自動アップロードし、本文に記法を追記する。URL は enqueue で即確定する
+        // ため await はローカル処理のみ（オフラインでも成立。実アップロードは
+        // 背景直列チェーン + online 復帰リトライ）。メディア未設定なら注入しない
+        //（添付は従来どおり unsupported としてレポートされる）
+        uploadAttachment: isMediaConfigured(settings.value)
+          ? async (attachmentFile) => {
+              const uploaded = await uploadMedia(attachmentFile, settings.value)
+              return 'errorKind' in uploaded
+                ? { ok: false, errorKind: uploaded.errorKind }
+                : { ok: true, url: uploaded.url }
+            }
+          : undefined,
       })
 
       if (!result.success) {

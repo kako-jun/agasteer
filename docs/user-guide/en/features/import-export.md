@@ -66,8 +66,9 @@ Import export files.
 
 - Checklists converted to `- [ ]` / `- [x]`
 - Links (annotations) appended at end of content
-- Image attachments, colors, labels, pinned state are not supported (recorded in report)
-- HTML files and image files are not used (JSON only)
+- **Attachments such as images are imported automatically**: files inside the zip are uploaded to the media repository and image syntax is appended at the end of each note (when GitHub is configured; the upload continues in the background, and failed items retry automatically when online). Files in unsupported formats (e.g. .3gp voice recordings) are recorded in the report
+- Colors, labels, and pinned state are not supported (recorded in report)
+- HTML files are not used (JSON only)
 - Notes with `isTrashed: true` are skipped
 
 ### Cosense (Scrapbox) Notes

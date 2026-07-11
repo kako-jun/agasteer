@@ -12,12 +12,7 @@
 
 import type { Settings } from '../types'
 import { uploadMedia, isMediaConfigured, type MediaErrorKind } from '../api/media'
-import {
-  ALLOWED_MEDIA_EXTENSIONS,
-  IMAGE_MEDIA_EXTENSIONS,
-  validateMedia,
-} from '../api/media/validation'
-import { getMediaExtension } from '../api/media/naming'
+import { ALLOWED_MEDIA_EXTENSIONS, validateMedia } from '../api/media/validation'
 import { beginMediaInsertPhase } from '../api/media/insert-phase'
 import { optimizeImageFile } from '../utils/image-optimize'
 
@@ -54,34 +49,10 @@ export function extractDataTransferFiles(
 // 挿入記法（純粋）
 // ============================================
 
-/**
- * ファイル名が画像（`![]()` で挿入する形式）かを判定する。
- * 画像拡張子の集合は validation.ts のホワイトリスト側を単一ソースにする。
- */
-export function isImageFileName(fileName: string): boolean {
-  return IMAGE_MEDIA_EXTENSIONS.has(getMediaExtension(fileName))
-}
-
-/**
- * リンクラベル用にファイル名をサニタイズする。
- * `[` `]` は記法を壊すため除去し、改行は空白に潰す。
- */
-export function sanitizeMediaLabel(fileName: string): string {
-  const label = fileName
-    .replace(/[[\]]/g, '')
-    .replace(/[\r\n]+/g, ' ')
-    .trim()
-  return label || 'file'
-}
-
-/**
- * 挿入する Markdown を組み立てる。
- * 画像は `![name](rawURL)`、動画/音声/zip は `[name](rawURL)`。
- */
-export function buildMediaMarkdown(fileName: string, url: string): string {
-  const link = `[${sanitizeMediaLabel(fileName)}](${url})`
-  return isImageFileName(fileName) ? `!${link}` : link
-}
+// 記法組み立てはインポート連携（#249）とも共用するため api/media/markdown.ts に
+// 移動した（純粋層）。既存の参照互換のためここから再公開する
+export { isImageFileName, sanitizeMediaLabel, buildMediaMarkdown } from '../api/media/markdown'
+import { buildMediaMarkdown } from '../api/media/markdown'
 
 /** ファイル選択 `<input type="file">` の accept 属性値（形式ホワイトリスト由来） */
 export const MEDIA_FILE_ACCEPT = Array.from(ALLOWED_MEDIA_EXTENSIONS)
