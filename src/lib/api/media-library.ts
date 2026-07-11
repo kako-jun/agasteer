@@ -20,8 +20,7 @@ import {
   collapseMediaHistory,
   extractMutationCommit,
   MEDIA_API_TIMEOUT_MS,
-  MEDIA_IDB_TIMEOUT_MS,
-  raceWithTimeout,
+  boundIdb,
   type MediaErrorKind,
 } from './media'
 import { getMediaRepoFullName, buildRawMediaUrl } from './media/naming'
@@ -168,8 +167,8 @@ export async function deleteMediaAsset(
     // 永遠に解決せず、削除ボタンがぶら下がったままになる）
     const rawUrl = buildRawMediaUrl(mediaRepo, path)
     await Promise.allSettled([
-      raceWithTimeout(deleteCachedMedia(rawUrl), MEDIA_IDB_TIMEOUT_MS, 'deleteCachedMedia'),
-      raceWithTimeout(deletePendingMedia(path), MEDIA_IDB_TIMEOUT_MS, 'deletePendingMedia'),
+      boundIdb(deleteCachedMedia(rawUrl), 'deleteCachedMedia'),
+      boundIdb(deletePendingMedia(path), 'deletePendingMedia'),
     ])
     return { ok: true }
   } catch (error) {

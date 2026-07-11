@@ -48,6 +48,8 @@ export function calcMediaPutTimeoutMs(payloadBytes: number): number {
  * #252 と同型の head-of-line blocking が再発するため、この閾値で有限化する。
  * ローカル操作なので正常時は数十 ms〜数百 ms。10 秒は「ハングの検出」であって
  * 低速の許容ではない（低速端末の大容量キャッシュ書き込みも桁が違う）。
+ * MEDIA_INSERT_WAIT_TIMEOUT_MS（sync/constants.ts）と同値なのは偶然で、
+ * 意味的な結合はない（あちらは preflight の待ち上限。片方だけ変えてよい）。
  */
 export const MEDIA_IDB_TIMEOUT_MS = 10_000
 
@@ -80,4 +82,14 @@ export function raceWithTimeout<T>(
       }
     )
   })
+}
+
+/**
+ * IndexedDB 操作を MEDIA_IDB_TIMEOUT_MS で有限化する省略形（#261）。
+ * メディア同期層（media.ts / media-library.ts）の全 IDB 呼び出しはこれを通す。
+ * 根拠と orphan 継続の無害性は raceWithTimeout / MEDIA_IDB_TIMEOUT_MS の
+ * docstring と docs/development/storage.md の mediaPending 節を参照。
+ */
+export function boundIdb<T>(operation: Promise<T>, label: string): Promise<T> {
+  return raceWithTimeout(operation, MEDIA_IDB_TIMEOUT_MS, label)
 }

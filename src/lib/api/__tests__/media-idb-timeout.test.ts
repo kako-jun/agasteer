@@ -213,6 +213,41 @@ describe('uploadPendingItem のチェーン経路の IDB ハング', () => {
     await expect(result.uploadDone).resolves.toBe(true)
     expect(mediaStore.pending.size).toBe(0)
   })
+
+  it('キャッシュメタ読み（getAllCachedMediaMeta）のハングも best-effort なので true を覆さない', async () => {
+    const media = await loadMedia()
+    mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(hangForever)
+    vi.stubGlobal('fetch', makeRoutedFetch(routeUploadHappyPath))
+
+    const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
+    assertEnqueued(result)
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
+
+    await expect(result.uploadDone).resolves.toBe(true)
+    expect(mediaStore.pending.size).toBe(0)
+  })
+
+  it('LRU 追い出し（deleteCachedMedia）のハングも best-effort なので true を覆さない', async () => {
+    const media = await loadMedia()
+    // 総量上限（200MB）を超える既存エントリを積み、追い出しを発生させる
+    mediaStore.cache.set('https://raw.githubusercontent.com/o/r-media/main/old.png', {
+      url: 'https://raw.githubusercontent.com/o/r-media/main/old.png',
+      size: 250 * 1024 * 1024,
+      lastAccessedAt: 1,
+      data: new ArrayBuffer(0),
+    })
+    mediaStore.fns.deleteCachedMedia.mockImplementationOnce(hangForever)
+    vi.stubGlobal('fetch', makeRoutedFetch(routeUploadHappyPath))
+
+    const result = await media.uploadMedia(makeFile('x.png', 'data-a'), makeSettings())
+    assertEnqueued(result)
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
+
+    await expect(result.uploadDone).resolves.toBe(true)
+    expect(mediaStore.pending.size).toBe(0)
+  })
 })
 
 describe('retryPendingUploads の getAllPendingMedia ハング', () => {
@@ -271,5 +306,58 @@ describe('resolveMedia のローカルルックアップのハング', () => {
     if (result.ok) {
       expect(new TextDecoder().decode(result.data)).toBe('media-bytes')
     }
+  })
+
+  it('pending ルックアップだけがハングした場合はキャッシュヒットで解決する（tier2 が生きる）', async () => {
+    const media = await loadMedia()
+    const url =
+      'https://raw.githubusercontent.com/test-owner/test-repo-media/main/20260101-abcd1234-x.png'
+    mediaStore.fns.getPendingMedia.mockImplementationOnce(hangForever)
+    mediaStore.cache.set(url, {
+      url,
+      data: new TextEncoder().encode('cached-bytes').buffer,
+      size: 12,
+      lastAccessedAt: 1,
+    })
+    // fetch に到達したら失敗にする（キャッシュヒットで返ることの証明）
+    vi.stubGlobal(
+      'fetch',
+      makeRoutedFetch(() => new Response('{}', { status: 500 }))
+    )
+
+    const resultPromise = media.resolveMedia(url, makeSettings())
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
+
+    const result = await resultPromise
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(new TextDecoder().decode(result.data)).toBe('cached-bytes')
+    }
+  })
+})
+
+describe('deleteMediaAsset の evict ハング（media-library.ts）', () => {
+  it('削除成功後の evict がハングしても ok:true が settle する（削除 UI がぶら下がらない）', async () => {
+    const media = await loadMedia()
+    const mediaLibrary = await import('../media-library')
+    mediaStore.fns.deleteCachedMedia.mockImplementationOnce(hangForever)
+    vi.stubGlobal(
+      'fetch',
+      makeRoutedFetch((url, method) => {
+        if (method === 'DELETE') return ok({}) // commit なし＝履歴畳みスキップ
+        return ok({ id: 1 })
+      })
+    )
+
+    const resultPromise = mediaLibrary.deleteMediaAsset(
+      makeSettings(),
+      '20260101-abcd1234-x.png',
+      'sha-1'
+    )
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(media.MEDIA_IDB_TIMEOUT_MS)
+
+    await expect(resultPromise).resolves.toEqual({ ok: true })
   })
 })

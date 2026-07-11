@@ -22,12 +22,7 @@ import {
 } from './media/naming'
 import { validateMedia } from './media/validation'
 import { shouldCacheMediaSize, selectCacheEvictions } from './media/lru'
-import {
-  MEDIA_API_TIMEOUT_MS,
-  MEDIA_IDB_TIMEOUT_MS,
-  calcMediaPutTimeoutMs,
-  raceWithTimeout,
-} from './media/timeouts'
+import { MEDIA_API_TIMEOUT_MS, calcMediaPutTimeoutMs, boundIdb } from './media/timeouts'
 import { authHeaders, fetchWithTimeout, readJsonWithTimeout } from './media/http'
 import {
   collapseMediaHistory,
@@ -101,6 +96,7 @@ export {
   MEDIA_PUT_MIN_BYTES_PER_SEC,
   calcMediaPutTimeoutMs,
   raceWithTimeout,
+  boundIdb,
 } from './media/timeouts'
 export { authHeaders, fetchWithTimeout, readJsonWithTimeout } from './media/http'
 export { collapseMediaHistory, extractMutationCommit } from './media/history'
@@ -199,19 +195,6 @@ export async function ensureMediaRepo(
 // タイムアウト（#261: boundIdb）が入っており、1 件のストールで以後の
 // 背景アップロードが止まり続けることはない。
 let uploadChain: Promise<unknown> = Promise.resolve()
-
-/**
- * IndexedDB 操作を MEDIA_IDB_TIMEOUT_MS で有限化する（#261）。
- * IDB のハング（Safari プライベートモード・storage pressure・別タブの
- * versionchange ブロック等）は request が settle しないまま止まるため、
- * try/catch だけでは防げない。タイムアウト時も元の操作は裏で継続するが、
- * ローカル操作なので #247 の直列化（409 回避）を壊さない（fetch の race 案を
- * 不採用にした理由が当たらない）。遅延完了しても冪等: delete の遅延実行は
- * 内容アドレス dedup が回収し、put の遅延実行は同キー上書きで無害。
- */
-function boundIdb<T>(operation: Promise<T>, label: string): Promise<T> {
-  return raceWithTimeout(operation, MEDIA_IDB_TIMEOUT_MS, label)
-}
 
 /**
  * メディアファイルをアップロードする。URL 確定＝完了を待たず即返す。
@@ -525,9 +508,13 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
   try {
     const cached = await boundIdb(getCachedMedia(url), 'getCachedMedia')
     if (cached) {
-      putCachedMedia({ ...cached, lastAccessedAt: Date.now() }).catch((error) => {
-        console.warn('Media cache touch failed (ignored):', error)
-      })
+      // fire-and-forget なのでハングしても待ちは生じないが、orphan Promise が
+      // エントリのクロージャを保持し続けないよう有限化の方針を揃える
+      boundIdb(putCachedMedia({ ...cached, lastAccessedAt: Date.now() }), 'putCachedMedia').catch(
+        (error) => {
+          console.warn('Media cache touch failed (ignored):', error)
+        }
+      )
       return { ok: true, data: cached.data }
     }
   } catch (error) {
