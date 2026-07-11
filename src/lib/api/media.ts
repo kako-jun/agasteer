@@ -22,7 +22,12 @@ import {
 } from './media/naming'
 import { validateMedia } from './media/validation'
 import { shouldCacheMediaSize, selectCacheEvictions } from './media/lru'
-import { MEDIA_API_TIMEOUT_MS, calcMediaPutTimeoutMs } from './media/timeouts'
+import {
+  MEDIA_API_TIMEOUT_MS,
+  MEDIA_IDB_TIMEOUT_MS,
+  calcMediaPutTimeoutMs,
+  raceWithTimeout,
+} from './media/timeouts'
 import { authHeaders, fetchWithTimeout, readJsonWithTimeout } from './media/http'
 import {
   collapseMediaHistory,
@@ -91,9 +96,11 @@ export function isMediaConfigured(settings: Settings): boolean {
 // 履歴を残さないコミット方式（#250）は media/history.ts に分離している
 export {
   MEDIA_API_TIMEOUT_MS,
+  MEDIA_IDB_TIMEOUT_MS,
   MEDIA_PUT_TIMEOUT_BASE_MS,
   MEDIA_PUT_MIN_BYTES_PER_SEC,
   calcMediaPutTimeoutMs,
+  raceWithTimeout,
 } from './media/timeouts'
 export { authHeaders, fetchWithTimeout, readJsonWithTimeout } from './media/http'
 export { collapseMediaHistory, extractMutationCommit } from './media/history'
@@ -188,9 +195,23 @@ export async function ensureMediaRepo(
 // 実アップロードは URL 確定後に背景で直列実行する。
 // Contents API は default branch へ直接コミットするため、同一リポへの
 // 並行 PUT は 409 になりうる。グローバルに直列化して衝突を避ける。
-// チェーン経路の全 fetch にはタイムアウト（#252）が入っており、
-// 1 件のストールで以後の背景アップロードが止まり続けることはない。
+// チェーン経路の全 fetch にはタイムアウト（#252）、全 IndexedDB 操作にも
+// タイムアウト（#261: boundIdb）が入っており、1 件のストールで以後の
+// 背景アップロードが止まり続けることはない。
 let uploadChain: Promise<unknown> = Promise.resolve()
+
+/**
+ * IndexedDB 操作を MEDIA_IDB_TIMEOUT_MS で有限化する（#261）。
+ * IDB のハング（Safari プライベートモード・storage pressure・別タブの
+ * versionchange ブロック等）は request が settle しないまま止まるため、
+ * try/catch だけでは防げない。タイムアウト時も元の操作は裏で継続するが、
+ * ローカル操作なので #247 の直列化（409 回避）を壊さない（fetch の race 案を
+ * 不採用にした理由が当たらない）。遅延完了しても冪等: delete の遅延実行は
+ * 内容アドレス dedup が回収し、put の遅延実行は同キー上書きで無害。
+ */
+function boundIdb<T>(operation: Promise<T>, label: string): Promise<T> {
+  return raceWithTimeout(operation, MEDIA_IDB_TIMEOUT_MS, label)
+}
 
 /**
  * メディアファイルをアップロードする。URL 確定＝完了を待たず即返す。
@@ -225,7 +246,11 @@ export async function uploadMedia(file: File, settings: Settings): Promise<Media
       mimeType: file.type,
       enqueuedAt: Date.now(),
     }
-    await putPendingMedia(item)
+    // #261: enqueue の IDB 書き込みがハングすると uploadMedia が永遠に返らず、
+    // 添付ループ（attachMediaFiles）ごと止まる。有限化して storage_failed に落とす。
+    // タイムアウト後に書き込みが遅延成立した場合、URL 未挿入のアイテムが pending に
+    // 残りリトライでアップロードされうるが、ライブラリに「未参照」として現れ削除できる
+    await boundIdb(putPendingMedia(item), 'putPendingMedia')
   } catch (error) {
     // File 読み取り失敗・IndexedDB 書き込み失敗。pending に実体が残らないため
     // URL を返さず失敗にする（結果オブジェクト契約: この層は throw しない）
@@ -323,7 +348,7 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
           // 委ねる（中間の畳みは最後の 1 回に完全に包含されるため、複数添付で
           // 3×(N-1) 回の無駄な API 呼び出しを避ける）。キューが失敗等で
           // 途切れた場合も、次に成功した変更の畳みが履歴をまとめて回収する
-          const others = (await getAllPendingMedia()).filter(
+          const others = (await boundIdb(getAllPendingMedia(), 'getAllPendingMedia')).filter(
             (pendingItem) => pendingItem.filename !== item.filename
           )
           if (others.length === 0) {
@@ -361,7 +386,11 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
         }
       }
     }
-    await deletePendingMedia(item.filename)
+    // #261: dequeue の IDB 削除がハングすると uploadDone が settle せずチェーンが
+    // 恒久ウェッジする（#252 と同型の head-of-line blocking）。有限化して false
+    // （pending 残置）に落とす。アップロード自体は成立済みなので、リトライは
+    // 存在チェック 200 の dedup で dequeue だけをやり直す
+    await boundIdb(deletePendingMedia(item.filename), 'deletePendingMedia')
     // アップロード済みデータを手元にも残す（20MB 超はキャッシュしない）
     await cacheMedia(item.url, item.data)
     return true
@@ -375,7 +404,14 @@ async function uploadPendingItem(item: MediaPendingItem, settings: Settings): Pr
 // pending キューのリトライ
 // ============================================
 
-/** online イベントは短時間に多重発火しうる（#203 と同様）ため in-flight ガードを置く */
+/**
+ * online イベントは短時間に多重発火しうる（#203 と同様）ため in-flight ガードを置く。
+ * 期限つきフラグにはしない: この関数内の await は fetch（#252）・IndexedDB（#261）
+ * とも全てタイムアウトで有限化されており、finally が必ず走る＝フラグが恒久的に
+ * 立ちっぱなしになる経路が構造的にない。期限奪還を足すと、正当に長い
+ * リトライ（大容量 × 複数件のサイズ比例 PUT タイムアウト）と並行して二重ループが
+ * 走り、同一リポへの並行 PUT（409 の温床）を自ら作ってしまう
+ */
 let retryInFlight = false
 
 /**
@@ -389,7 +425,9 @@ export async function retryPendingUploads(
   }
   retryInFlight = true
   try {
-    const items = await getAllPendingMedia()
+    // #261: 素の getAll がハングすると finally に到達せず、以後の全リトライが
+    // in-flight ガードで弾かれ続ける（pending キューが永遠にドレインできない）
+    const items = await boundIdb(getAllPendingMedia(), 'getAllPendingMedia')
     let uploaded = 0
     for (const item of items) {
       if (await uploadPendingItem(item, settings)) {
@@ -472,8 +510,10 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
   }
 
   // 1. pending: 未アップロードでもローカルにデータがある（オフライン直後の表示用）
+  // IDB ルックアップは有限化する（#261: ハングでプレビューが無限スピナーにならず、
+  // 次のティア＝キャッシュ/認証 fetch へフォールバックする）
   try {
-    const pending = await getPendingMedia(parsed.path)
+    const pending = await boundIdb(getPendingMedia(parsed.path), 'getPendingMedia')
     if (pending) {
       return { ok: true, data: pending.data }
     }
@@ -483,7 +523,7 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
 
   // 2. cache: ヒット時は lastAccessedAt を更新して LRU 順位を上げる（best-effort）
   try {
-    const cached = await getCachedMedia(url)
+    const cached = await boundIdb(getCachedMedia(url), 'getCachedMedia')
     if (cached) {
       putCachedMedia({ ...cached, lastAccessedAt: Date.now() }).catch((error) => {
         console.warn('Media cache touch failed (ignored):', error)
@@ -511,11 +551,19 @@ async function cacheMedia(url: string, data: ArrayBuffer): Promise<void> {
     return
   }
   try {
-    const metas = (await getAllCachedMediaMeta()).filter((meta) => meta.url !== url)
+    // #261: キャッシュ書き込み系の IDB ハングは、チェーン経路（uploadPendingItem）
+    // では uploadDone を settle させず背景アップロードを恒久停止させ、取得経路
+    // （resolveMedia）ではプレビュー解決を無限待ちにする。全て有限化する
+    const metas = (await boundIdb(getAllCachedMediaMeta(), 'getAllCachedMediaMeta')).filter(
+      (meta) => meta.url !== url
+    )
     for (const evictUrl of selectCacheEvictions(metas, data.byteLength)) {
-      await deleteCachedMedia(evictUrl)
+      await boundIdb(deleteCachedMedia(evictUrl), 'deleteCachedMedia')
     }
-    await putCachedMedia({ url, data, size: data.byteLength, lastAccessedAt: Date.now() })
+    await boundIdb(
+      putCachedMedia({ url, data, size: data.byteLength, lastAccessedAt: Date.now() }),
+      'putCachedMedia'
+    )
   } catch (error) {
     // キャッシュは補助機構。失敗しても本流（アップロード/取得）は成立している
     console.warn('Media cache write failed (ignored):', error)

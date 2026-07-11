@@ -20,6 +20,8 @@ import {
   collapseMediaHistory,
   extractMutationCommit,
   MEDIA_API_TIMEOUT_MS,
+  MEDIA_IDB_TIMEOUT_MS,
+  raceWithTimeout,
   type MediaErrorKind,
 } from './media'
 import { getMediaRepoFullName, buildRawMediaUrl } from './media/naming'
@@ -161,9 +163,14 @@ export async function deleteMediaAsset(
     if (commit) {
       await collapseMediaHistory(settings, mediaRepo, commit.sha, commit.treeSha)
     }
-    // メディアはリポルート直下なので path = filename。cache は rawUrl、pending は filename がキー
+    // メディアはリポルート直下なので path = filename。cache は rawUrl、pending は filename がキー。
+    // IDB 操作は有限化する（#261: allSettled は 1 件でも settle しない要素があると
+    // 永遠に解決せず、削除ボタンがぶら下がったままになる）
     const rawUrl = buildRawMediaUrl(mediaRepo, path)
-    await Promise.allSettled([deleteCachedMedia(rawUrl), deletePendingMedia(path)])
+    await Promise.allSettled([
+      raceWithTimeout(deleteCachedMedia(rawUrl), MEDIA_IDB_TIMEOUT_MS, 'deleteCachedMedia'),
+      raceWithTimeout(deletePendingMedia(path), MEDIA_IDB_TIMEOUT_MS, 'deletePendingMedia'),
+    ])
     return { ok: true }
   } catch (error) {
     console.error('deleteMediaAsset failed:', error)

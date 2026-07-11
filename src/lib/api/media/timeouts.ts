@@ -38,3 +38,46 @@ export const MEDIA_PUT_MIN_BYTES_PER_SEC = 50 * 1024
 export function calcMediaPutTimeoutMs(payloadBytes: number): number {
   return MEDIA_PUT_TIMEOUT_BASE_MS + Math.ceil((payloadBytes / MEDIA_PUT_MIN_BYTES_PER_SEC) * 1000)
 }
+
+/**
+ * IndexedDB 操作のタイムアウト（#261）。
+ *
+ * fetch と違い IndexedDB のハング（Safari プライベートモード・storage pressure・
+ * 別タブの versionchange ブロック等）は request が settle しないまま止まる。
+ * チェーン経路（uploadChain / retryPendingUploads）の IDB await が無期限だと
+ * #252 と同型の head-of-line blocking が再発するため、この閾値で有限化する。
+ * ローカル操作なので正常時は数十 ms〜数百 ms。10 秒は「ハングの検出」であって
+ * 低速の許容ではない（低速端末の大容量キャッシュ書き込みも桁が違う）。
+ */
+export const MEDIA_IDB_TIMEOUT_MS = 10_000
+
+/**
+ * Promise を race で有限化する（#261: IndexedDB 操作用）。
+ * タイムアウトで reject するが、**元の操作はキャンセルされず裏で継続する**
+ * （IndexedDB に abort API はない）。この orphan 継続は fetch と違いローカル操作
+ * なので 409 等の衝突リスクがなく、遅延完了しても冪等（delete の遅延実行は
+ * 内容アドレス dedup が回収、put の遅延実行は同キー上書き）である前提で使うこと。
+ * タイマーは settle 時に解除する（fake timers テストでの残留防止）。
+ */
+export function raceWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    )
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
