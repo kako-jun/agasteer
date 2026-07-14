@@ -398,7 +398,9 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     // （window.location.search を読む）がそれを解決して home でなく誤ったノート/
     // リーフに着地する。query を空にすれば旧パスを拾わず必ず home へ収束する。
     // 通常 pull（同期・F5・deep-link 復元）では repoChanged 検知に至らないため発火しない。
-    window.history.replaceState({}, '', window.location.pathname)
+    // history.state は保持したまま URL の query/hash だけ落とす（{} で潰すと
+    // PWA exit guard 等が積んだ history.state を壊す）。
+    window.history.replaceState(window.history.state, '', window.location.pathname)
   }
 
   updateSettings(next)
