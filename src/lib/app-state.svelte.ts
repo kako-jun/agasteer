@@ -691,6 +691,23 @@ export interface InitAppDeps {
 }
 
 /**
+ * #191: ハートビート間隔。約30秒ごとに wall-clock を刻む。
+ * マシンが起きていればタブが hidden でも背景タイマーは走り続ける
+ * （Chrome はスロットルするが最長〜60秒で止まらない）ので、間隔 < 閾値であることが重要。
+ */
+export const HEARTBEAT_INTERVAL_MS = 30 * 1000
+
+/**
+ * #191: 実サスペンド（OSスリープ / 長時間 frozen tab）判定。
+ * gap = 復帰時刻 − ハートビートが最後に刻んだ時刻。マシンが起きていれば背景 interval が
+ * gap を〜60秒以内に保つため、タブ切替・最小化では false。プロセスが凍結していた時だけ
+ * gap が閾値を超えて true になる。副作用を持たない純関数（ユニットテスト対象）。
+ */
+export function isLongSuspendGap(gap: number, threshold: number): boolean {
+  return gap > threshold
+}
+
+/**
  * アプリ初期化処理。App.svelte の onMount から呼ばれる。
  * cleanup 関数を返す。
  */
@@ -1002,9 +1019,14 @@ export function initApp(deps: InitAppDeps): () => void {
   }
   window.addEventListener('keydown', handleKeyDown)
 
-  // PWAバックグラウンド復帰時の処理
-  // 長時間バックグラウンドにいた場合は、Service Workerの状態やIndexedDBが不安定になる可能性があるためリロード
-  let lastVisibleTime = Date.now()
+  // PWAバックグラウンド復帰時の処理（#191）
+  // ハートビート interval が刻む「プロセスが生きていた最終時刻」からの gap で実サスペンド
+  // （OSスリープ / 長時間 frozen tab）を判定する。マシンが起きていれば背景 interval は
+  // 走り続ける（Chrome のスロットルでも最長〜60秒）ため、タブ切替・最小化では gap が小さく
+  // 発火しない。実サスペンド時のみ gap が閾値を超え、long-background モーダル + stale check を
+  // 実行する（リロードはしない）。以前は hidden だった実時間そのものを代理指標にしており、
+  // タブを 5 分以上隠しただけでも誤発火していた。
+  let lastHeartbeatTime = Date.now()
   const BACKGROUND_THRESHOLD_MS = 5 * 60 * 1000 // 5分
 
   // #203: 復帰直後は回線復帰の都合で 1 回目の stale check が check_failed になりがち。
@@ -1058,7 +1080,8 @@ export function initApp(deps: InitAppDeps): () => void {
   const handleVisibilityChange = async () => {
     if (document.visibilityState === 'visible') {
       const now = Date.now()
-      const elapsed = now - lastVisibleTime
+      // #191: hidden だった実時間ではなく、ハートビートが最後に刻んだ時刻からの gap を見る。
+      const gap = now - lastHeartbeatTime
 
       // #204: Push 中にスリープ → 復帰、で isPushing が true のまま固まっているケースを救う。
       // Phase A の Promise.race タイムアウトでもなお isPushing が true のままになるパス
@@ -1099,8 +1122,8 @@ export function initApp(deps: InitAppDeps): () => void {
       }
 
       try {
-        if (elapsed > BACKGROUND_THRESHOLD_MS) {
-          console.log(`PWA was in background for ${Math.round(elapsed / 1000)}s`)
+        if (isLongSuspendGap(gap, BACKGROUND_THRESHOLD_MS)) {
+          console.log(`Process was suspended for ~${Math.round(gap / 1000)}s (heartbeat gap)`)
           // モーダルを表示し、閉じたら状態確認を実行
           const t = get(_)
           await alertAsync(t('modal.longBackground'), 'center')
@@ -1118,7 +1141,8 @@ export function initApp(deps: InitAppDeps): () => void {
       } finally {
         if (consumePushHangFlag) appState.pushHangRecovered = false
       }
-      lastVisibleTime = now
+      // #191: gap 判定の後に基準を更新し、直後に visibilitychange が連発しても再発火しないようにする。
+      lastHeartbeatTime = Date.now()
 
       // PWA復帰時のレイアウト修復（フッターが画面外に出る問題の対策）
       requestAnimationFrame(() => {
@@ -1141,11 +1165,18 @@ export function initApp(deps: InitAppDeps): () => void {
           }
         })
       })
-    } else {
-      lastVisibleTime = Date.now()
     }
+    // #191: hidden 分岐は不要。ハートビート interval が visibility に関係なく wall-clock を刻む。
   }
   document.addEventListener('visibilitychange', handleVisibilityChange)
+
+  // #191: ハートビート。約30秒ごとに wall-clock を刻む。マシンが起きていればタブが hidden でも
+  // 背景 interval は走り続ける（Chrome のスロットルでも最長〜60秒）。プロセスが凍結
+  // （OSサスペンド / 長時間 frozen tab）した時だけ lastHeartbeatTime が古くなり、visible 復帰時の
+  // gap 判定で実サスペンドを検出できる。teardown で必ず clearInterval する。
+  const heartbeatInterval = setInterval(() => {
+    lastHeartbeatTime = Date.now()
+  }, HEARTBEAT_INTERVAL_MS)
 
   // オンライン復帰時の自動Pull リトライ
   // 初回Pull失敗（オフライン起動）後、ネットワーク復帰で自動的にPullを再試行する
@@ -1302,6 +1333,7 @@ export function initApp(deps: InitAppDeps): () => void {
     window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.removeEventListener('appinstalled', handleAppInstalled)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
+    clearInterval(heartbeatInterval)
     window.removeEventListener('online', handleOnline)
     cleanupMediaOnlineRetry()
     cleanupAutoPush()
