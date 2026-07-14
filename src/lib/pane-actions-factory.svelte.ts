@@ -481,8 +481,17 @@ export async function handleCloseSettings() {
     // pull失敗または設定が不完全 → 初回pull前の状態に戻す
     if (!appState.isPullCompleted) {
       appState.isFirstPriorityFetched = false
-      // pull失敗時も青丸を残さない（「予約中」の見かけのまま永続するのを防ぐ）
-      appState.repoChangePending = false
+      // pull失敗時も青丸を残さない（「予約中」の見かけのまま永続するのを防ぐ）。
+      // ただし pull を queue した場合（pendingRepoSync=true）は落とさない: この
+      // repoChangePending はリポ切替でのみ立つ「予約 pull が切替起因」の印で、
+      // queue 経由の pull 入口（git.ts pullFromGitHub）が isRepoSwitchPull として
+      // 消費しスクロール残骸をリセットする（#147 綻び2）。ここで落とすと queue 経路の
+      // 切替でリセットが不発になる。予約中のバッジは pendingRepoSync 側が担保するので
+      // 見た目は変わらない（App.svelte の pendingPull は両者の OR）。切替以外で queue
+      // した場合（token 変更・import）は repoChangePending がそもそも false なので影響なし。
+      if (!appState.pendingRepoSync) {
+        appState.repoChangePending = false
+      }
       resetForRepoSwitch()
       archiveLeafStatsStore.reset()
     }

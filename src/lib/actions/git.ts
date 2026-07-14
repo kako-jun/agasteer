@@ -646,6 +646,10 @@ export async function pullFromGitHub(
   // repoChangePending は handleSettingsChange の repo 切替検知でのみ true になり、
   // 通常 pull（F5・同期・deep-link 復元・起動時）では false のため、この控えは
   // 「リポ切替による pull かどうか」を安全に表す（下のスクロール残骸リセット判定に使う）。
+  // queue 経由の切替（同期ビジー中に切替 → 予約 pull）でも印は引き回される:
+  // handleCloseSettings は pendingRepoSync=true のとき repoChangePending を落とさず
+  // 予約 pull の入口（ここ）まで残す。よって repoChangePending 単体で false 化される
+  // ことはなく（direct pull は入口で消費、queue pull は入口まで保持）、両経路で発火する。
   const isRepoSwitchPull = appState.repoChangePending
   // pull開始と同時に「pull予約あり」バッジを落とす（進捗%に交代）
   appState.repoChangePending = false

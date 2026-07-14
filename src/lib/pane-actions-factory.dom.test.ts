@@ -28,7 +28,9 @@ const appState = vi.hoisted(() => ({
   isFirstPriorityFetched: true,
   isArchiveLoading: false,
   repoChangePending: false,
+  pendingRepoSync: false,
   pendingRehydrateRepo: null as string | null,
+  importOccurredInSettings: false,
 }))
 
 const mocks = vi.hoisted(() => ({
@@ -37,6 +39,9 @@ const mocks = vi.hoisted(() => ({
   rehydrateForRepo: vi.fn(async () => {}),
   archiveReset: vi.fn(),
   applyTheme: vi.fn(),
+  // handleCloseSettings の queue/idle 分岐を制御する（既定 undefined=falsy=idle）
+  shouldQueueRepoSync: vi.fn(),
+  pullFromGitHub: vi.fn(async () => {}),
 }))
 
 // handleSettingsChange が実際に触るモジュールだけ実体スタブを与える
@@ -72,17 +77,17 @@ vi.mock('./ui', () => ({
 // handleSettingsChange が呼ばない兄弟モジュールは実評価だけ止める（空モック）
 vi.mock('./i18n', () => ({ _: { subscribe: () => () => {} } }))
 vi.mock('svelte-i18n', () => ({ locale: { subscribe: () => () => {} } }))
-vi.mock('./sync/repo-sync-queue', () => ({ shouldQueueRepoSync: vi.fn() }))
+vi.mock('./sync/repo-sync-queue', () => ({ shouldQueueRepoSync: mocks.shouldQueueRepoSync }))
 vi.mock('./pane-navigation.svelte', () => ({}))
 vi.mock('./navigation', () => ({}))
-vi.mock('./actions/git', () => ({}))
+vi.mock('./actions/git', () => ({ pullFromGitHub: mocks.pullFromGitHub }))
 vi.mock('./actions/crud', () => ({}))
 vi.mock('./actions/move', () => ({}))
 vi.mock('./actions/io', () => ({}))
 vi.mock('./utils', () => ({}))
 vi.mock('./data', () => ({}))
 
-const { handleSettingsChange } = await import('./pane-actions-factory.svelte')
+const { handleSettingsChange, handleCloseSettings } = await import('./pane-actions-factory.svelte')
 
 describe('handleSettingsChange の URL query クリア (#147 綻び1)', () => {
   let replaceStateSpy: ReturnType<typeof vi.spyOn>
@@ -145,5 +150,65 @@ describe('handleSettingsChange の URL query クリア (#147 綻び1)', () => {
     expect(mocks.resetForRepoSwitch).toHaveBeenCalledTimes(1)
     expect(appState.repoChangePending).toBe(true)
     expect(window.location.search).toBe('')
+  })
+})
+
+/**
+ * handleCloseSettings の「queue 経由の切替でも scroll reset の印を引き回す」テスト（#147 綻び2 / S1）
+ *
+ * 同期ビジー中にリポ切替 → close すると予約 pull（pendingRepoSync=true）に載る。
+ * このとき repoChangePending を落とすと、予約 pull の入口（git.ts pullFromGitHub）が
+ * isRepoSwitchPull を拾えず scroll reset が不発になる（S1 の取りこぼし）。
+ * handleCloseSettings が pendingRepoSync=true のとき repoChangePending を保持することを縛る。
+ * repoChangePending=true → scroll reset 発火は git.test.ts 側で別途縛っている。
+ */
+describe('handleCloseSettings queue 経由切替の scroll reset 印引き回し (#147 綻び2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    // 同期ビジー（背景 Push 中）を再現。handleSettingsChange 側の syncBusy 判定にも効く
+    stores.isPushingBackground.value = true
+    appState.isPullCompleted = true
+    appState.isFirstPriorityFetched = true
+    appState.isArchiveLoading = false
+    appState.repoChangePending = false
+    appState.pendingRepoSync = false
+    appState.pendingRehydrateRepo = null
+    appState.importOccurredInSettings = false
+    mocks.rehydrateForRepo.mockResolvedValue(undefined)
+  })
+
+  it('queue 経由のリポ切替では予約 pull（pendingRepoSync）に載せつつ repoChangePending を落とさない', async () => {
+    // 同期ビジー → close で queue 分岐に入る
+    mocks.shouldQueueRepoSync.mockReturnValue(true)
+
+    handleSettingsChange({ repoName: 'owner/new-repo' })
+    // 切替検知で予約バッジが立ち、pull 未完了に戻る
+    expect(appState.repoChangePending).toBe(true)
+    expect(appState.isPullCompleted).toBe(false)
+
+    await handleCloseSettings()
+
+    // 予約 pull に載る。直接 pull は走らない
+    expect(appState.pendingRepoSync).toBe(true)
+    expect(mocks.pullFromGitHub).not.toHaveBeenCalled()
+    // S1 の核心: 予約 pull の入口まで切替印が残る（従来はここで false 化して取りこぼしていた）
+    expect(appState.repoChangePending).toBe(true)
+  })
+
+  it('不発火（通常 pull デグレ防止）: token 変更で queue した場合は切替印を立てない', async () => {
+    mocks.shouldQueueRepoSync.mockReturnValue(true)
+
+    handleSettingsChange({ token: 'new-token' })
+    // token 変更はリポ切替ではないので repoChangePending は立たない
+    expect(appState.repoChangePending).toBe(false)
+
+    await handleCloseSettings()
+
+    // queue には載るが、切替印は付かない → 予約 pull で scroll reset は起きない
+    expect(appState.pendingRepoSync).toBe(true)
+    expect(appState.repoChangePending).toBe(false)
   })
 })
