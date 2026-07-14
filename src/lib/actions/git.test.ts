@@ -1,3 +1,7 @@
+// @vitest-environment jsdom
+// #147 綻び2 のスクロールリセットは document.querySelectorAll と実 scrollTop を
+// 触るため jsdom が要る。既存 50 件は node でも jsdom でも全パスすることを確認済み
+// （setImmediate 等の Node グローバルは jsdom 環境でも利用可能）。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ValueStore<T> = { value: T }
@@ -42,6 +46,8 @@ const appState = vi.hoisted(() => ({
   selectedIndexRight: 0,
   loadingLeafIds: new Set<string>(),
   leafSkeletonMap: new Map(),
+  // #147 綻び2: リポ切替起因 Pull かの判定に使う（既定は通常 pull=false）
+  repoChangePending: false,
 }))
 
 const mocks = vi.hoisted(() => ({
@@ -1389,5 +1395,130 @@ describe('pullFromGitHub pullIncomplete partial cache (#207)', () => {
 
     expect(mocks.saveLeaves).not.toHaveBeenCalled()
     expect(mocks.saveNotes).not.toHaveBeenCalled()
+  })
+})
+
+describe('pullFromGitHub リポ切替時のスクロールリセット (#147 綻び2)', () => {
+  // Pull 成功分岐まで到達させるための最小成功結果
+  const pullSuccessResult = {
+    success: true,
+    message: 'github.pullSuccess',
+    variant: 'success' as const,
+    notes: [{ id: 'note-1', name: 'Note', parentId: null, order: 0 }],
+    leaves: [{ id: 'leaf-1', noteId: 'note-1', content: 'remote', order: 0 }],
+    metadata: { pushCount: 2 },
+    commitSha: 'remote-sha',
+  }
+
+  /**
+   * app-state.svelte.ts の PWA 復帰修復と同じ .left-column/.right-column 配下に
+   * .main-pane を用意し、初期 scrollTop（非0）を入れて残骸を再現する。
+   */
+  function setupPanes(leftTop: number, rightTop: number) {
+    document.body.innerHTML =
+      '<div class="left-column"><div class="main-pane"></div></div>' +
+      '<div class="right-column"><div class="main-pane"></div></div>'
+    const left = document.querySelector('.left-column .main-pane') as HTMLElement
+    const right = document.querySelector('.right-column .main-pane') as HTMLElement
+    left.scrollTop = leftTop
+    right.scrollTop = rightTop
+    return { left, right }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.isDirty.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    stores.notes.value = []
+    stores.leaves.value = []
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = false
+    appState.isPullCompleted = false
+    // #147: このフラグの真偽で scroll reset の発火が決まる（既定は通常 pull=false）
+    appState.repoChangePending = false
+
+    mocks.getPersistedDirtyFlag.mockReturnValue(false)
+    // up_to_date + isPullCompleted の早期 return を避け、実 Pull（success 分岐）へ進める
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+    mocks.saveNotes.mockResolvedValue(undefined)
+    mocks.saveLeaves.mockResolvedValue(undefined)
+    mocks.executePull.mockResolvedValue(pullSuccessResult)
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('リポ切替起因（repoChangePending=true）の Pull 成功で両 .main-pane の scrollTop が 0 になる', async () => {
+    appState.repoChangePending = true
+    const { left, right } = setupPanes(300, 150)
+
+    await pullFromGitHub(false)
+
+    expect(mocks.executePull).toHaveBeenCalledTimes(1)
+    expect(left.scrollTop).toBe(0)
+    expect(right.scrollTop).toBe(0)
+  })
+
+  it('不発火（デグレ防止の核心）: 通常 Pull（repoChangePending=false）成功では .main-pane の scrollTop に触れない', async () => {
+    // deep-link 復元でスクロールが飛ばないことを縛る。成功しても scroll は残す。
+    appState.repoChangePending = false
+    const { left, right } = setupPanes(300, 150)
+
+    await pullFromGitHub(false)
+
+    expect(mocks.executePull).toHaveBeenCalledTimes(1)
+    expect(left.scrollTop).toBe(300)
+    expect(right.scrollTop).toBe(150)
+  })
+
+  it('入口で控えた isRepoSwitchPull は Pull 中に repoChangePending が false 化されても保持され、成功時に scroll reset が走る', async () => {
+    // repoChangePending は pullFromGitHub 入口直後で false 化される（進捗%へ交代）。
+    // scroll reset が「成功時点の live フラグ」でなく「入口で控えた const」で
+    // 判定されることを縛る（＝false 化後でも reset が走る）。
+    appState.repoChangePending = true
+    const { left, right } = setupPanes(300, 150)
+
+    let pendingAtExecutePull: boolean | undefined
+    mocks.executePull.mockImplementation(async () => {
+      // executePull 到達時点では repoChangePending は既に落ちている
+      pendingAtExecutePull = appState.repoChangePending
+      return pullSuccessResult
+    })
+
+    await pullFromGitHub(false)
+
+    expect(pendingAtExecutePull).toBe(false)
+    // それでも入口 const 由来で scroll reset は走る
+    expect(left.scrollTop).toBe(0)
+    expect(right.scrollTop).toBe(0)
+  })
+
+  it('リポ切替起因でも Pull が失敗（success:false）なら scroll には触れない（reset は success 分岐内）', async () => {
+    appState.repoChangePending = true
+    const { left, right } = setupPanes(300, 150)
+    mocks.executePull.mockResolvedValue({
+      success: false,
+      message: 'github.pullFailed',
+      variant: 'error' as const,
+      notes: [],
+      leaves: [],
+      metadata: { pushCount: 2 },
+    })
+
+    await pullFromGitHub(false)
+
+    expect(left.scrollTop).toBe(300)
+    expect(right.scrollTop).toBe(150)
   })
 })
