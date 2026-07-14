@@ -257,7 +257,7 @@
     "leafCreated": "Leaf created",
     "pushTimeout": "Push response timed out. Watching for the result in the background; sync will recover automatically if it succeeded.",
     "pushLateSuccess": "The delayed push turned out to have succeeded. Sync state recovered.",
-    "pushInProgress": "Pushing… please don't switch apps or close Agasteer yet."
+    "pushInProgress": "Pushing… don't close or switch apps yet."
   },
   "media": {
     "uploading": "Uploading {name}...",
