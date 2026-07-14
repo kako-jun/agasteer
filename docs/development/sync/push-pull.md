@@ -625,6 +625,7 @@ sequenceDiagram
     HSC->>HSC: githubSettingsChangedInSettings = true
     HSC->>HSC: isPullCompleted = false
     HSC->>HSC: isFirstPriorityFetched = false
+    HSC->>HSC: repoChangePending = true
 
     HSC->>RFRS: resetForRepoSwitch()
     Note over RFRS: 1. resetArchive()<br/>  archiveNotes=[], archiveLeaves=[]<br/>  archiveMetadata=初期値<br/>  isArchiveLoaded=false
@@ -633,6 +634,8 @@ sequenceDiagram
     Note over RFRS: 4. clearAllChanges()<br/>  isStructureDirty=false<br/>  dirtyNoteIds=∅, dirtyLeafIds=∅
     Note over RFRS: 5. lastKnownCommitSha は新リポのスロットから<br/>  localStorage 経由で復元（#131）<br/>  lastPulledPushCount=0<br/>  isStale=false<br/>  lastPushTime=0<br/>  lastStaleCheckTime=0
     Note over RFRS: 6. leftWorld='home'<br/>  rightWorld='home'
+
+    HSC->>HSC: window.history.replaceState(state, '', pathname)<br/>URL query をクリア（旧パスと同名のノート/リーフが<br/>新リポにあると pull 後の restoreStateFromUrl が<br/>誤着地するのを防ぐ）<br/>history.state は保持
 
     User->>Settings: 設定画面を閉じる（×ボタン）
     Settings->>HCS: onClose()
@@ -643,18 +646,21 @@ sequenceDiagram
         HCS->>PFG: pullFromGitHub(false)
         Note over PFG: canSync OK, isArchiveLoading=false<br/>→ 処理開始
         PFG->>PFG: isPulling = true
+        Note over PFG: isRepoSwitchPull = repoChangePending<br/>（切替起因の印を控えてから repoChangePending=false）
         Note over PFG: isDirty=false（クリア済み）<br/>→ 確認ダイアログなし
         Note over PFG: 新リポが未初出なら lastKnownCommitSha===null<br/>→ 初回Pull扱い<br/>以前開いたリポなら保存済SHAがあり差分Pull可
         PFG->>PFG: clearAllData() + ストアクリア
         PFG->>PFG: executePull()
         Note over PFG: onStructure → notes表示可能<br/>onPriorityComplete →<br/>  isFirstPriorityFetched=true<br/>  isLoadingUI=false
         Note over PFG: 残りのリーフ取得...<br/>isPullCompleted=true
+        Note over PFG: isRepoSwitchPull なら await tick() 後に<br/>.main-pane の scrollTop=0<br/>（旧リポ一覧のスクロール残骸をリセット #147）
         PFG->>PFG: setLastPushedSnapshot()
         PFG->>PFG: lastKnownCommitSha=commitSha
         PFG->>PFG: isPulling = false
         HCS->>HCS: isClosingSettingsPull = false
     else Pull/Push/ArchiveLoad中
-        Note over HCS: 新Pullを発行しない<br/>resetForRepoSwitchで既にクリア済み<br/>次回手動Pull時に新リポからPull
+        Note over HCS: 即時Pullせず pendingRepoSync=true で予約<br/>（repoChangePending は落とさず引き回す）<br/>resetForRepoSwitchで既にクリア済み
+        Note over HCS: 進行中同期の finally 後に queue pull を1回実行<br/>→ pullFromGitHub 入口で isRepoSwitchPull=true<br/>→ scroll 残骸リセットも発火（#147）
     end
 
     HCS->>HCS: repoChangedInSettings = false
@@ -745,17 +751,17 @@ sequenceDiagram
 
 #### Bランク（UX問題 — 動作はするが改善が望ましい）
 
-| #   | 操作シナリオ                           | 期待動作                          | 対応するガード/関数                                                                                               | 深刻度 |
-| --- | -------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | :----: |
-| 13  | リポ切替直後にアーカイブ切替           | 新リポのアーカイブがPullされる    | `isArchiveLoaded=false` → `handleWorldChange()` → `pullArchive()`                                                 |   B    |
-| 14  | リポ切替連打（A→B→A）                  | 最終的にAのデータが表示される     | 各変更で`resetForRepoSwitch()`が呼ばれ最後の設定が残る。閉じる時に1回だけPull                                     |   B    |
-| 15  | 同じリポ名・トークンを再設定           | 何も起きない（リセット/Pullなし） | `repoChanged`/`tokenChanged`判定で`false` → `handleCloseSettings()`でスキップ                                     |   B    |
-| 15a | トークンだけ変更して閉じる             | Pullが走る（新トークンで再取得）  | `githubSettingsChangedInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                             |   B    |
-| 16  | テーマだけ変更して閉じる               | Pullされない                      | `githubSettingsChangedInSettings=false` かつ `importOccurredInSettings=false` → `handleCloseSettings()`でスキップ |   B    |
-| 17  | インポート後にリポ切替なしで閉じる     | インポートデータの同期Pullが走る  | `importOccurredInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                    |   B    |
-| 18  | リポ切替＋インポート両方実行して閉じる | Pullは1回だけ実行される           | `repoChangedInSettings \|\| importOccurredInSettings` → 1回の`pullFromGitHub()`                                   |   B    |
-| 19  | URL状態が旧リポのID参照                | ホームにフォールバック            | `restoreStateFromUrl()` → ID不一致 → ホーム表示                                                                   |   B    |
-| 20  | IndexedDB自動保存が旧データで上書き    | 新リポデータが保持される          | `pullFromGitHub()` → `clearAllData()` → 新データ保存                                                              |   B    |
+| #   | 操作シナリオ                           | 期待動作                          | 対応するガード/関数                                                                                                                                                                                          | 深刻度 |
+| --- | -------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----: |
+| 13  | リポ切替直後にアーカイブ切替           | 新リポのアーカイブがPullされる    | `isArchiveLoaded=false` → `handleWorldChange()` → `pullArchive()`                                                                                                                                            |   B    |
+| 14  | リポ切替連打（A→B→A）                  | 最終的にAのデータが表示される     | 各変更で`resetForRepoSwitch()`が呼ばれ最後の設定が残る。閉じる時に1回だけPull                                                                                                                                |   B    |
+| 15  | 同じリポ名・トークンを再設定           | 何も起きない（リセット/Pullなし） | `repoChanged`/`tokenChanged`判定で`false` → `handleCloseSettings()`でスキップ                                                                                                                                |   B    |
+| 15a | トークンだけ変更して閉じる             | Pullが走る（新トークンで再取得）  | `githubSettingsChangedInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                        |   B    |
+| 16  | テーマだけ変更して閉じる               | Pullされない                      | `githubSettingsChangedInSettings=false` かつ `importOccurredInSettings=false` → `handleCloseSettings()`でスキップ                                                                                            |   B    |
+| 17  | インポート後にリポ切替なしで閉じる     | インポートデータの同期Pullが走る  | `importOccurredInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                               |   B    |
+| 18  | リポ切替＋インポート両方実行して閉じる | Pullは1回だけ実行される           | `repoChangedInSettings \|\| importOccurredInSettings` → 1回の`pullFromGitHub()`                                                                                                                              |   B    |
+| 19  | URL状態が旧リポのID参照                | ホームに収束（URLがクリア済み）   | リポ切替時に `handleSettingsChange()` が `history.replaceState` で URL query を空にする → `restoreStateFromUrl()` は空URLを読み home へ収束（旧パスと同名のノート/リーフで ID が一致する誤着地も併せて回避） |   B    |
+| 20  | IndexedDB自動保存が旧データで上書き    | 新リポデータが保持される          | `pullFromGitHub()` → `clearAllData()` → 新データ保存                                                                                                                                                         |   B    |
 
 #### Cランク（軽微 — 現在の動作で問題なし）
 

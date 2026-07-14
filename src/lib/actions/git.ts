@@ -642,6 +642,15 @@ export async function pullFromGitHub(
 
   // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
   isPulling.value = true
+  // #147 綻び2: この Pull がリポ切替起因かを、直後にフラグが落ちる前に控える。
+  // repoChangePending は handleSettingsChange の repo 切替検知でのみ true になり、
+  // 通常 pull（F5・同期・deep-link 復元・起動時）では false のため、この控えは
+  // 「リポ切替による pull かどうか」を安全に表す（下のスクロール残骸リセット判定に使う）。
+  // queue 経由の切替（同期ビジー中に切替 → 予約 pull）でも印は引き回される:
+  // handleCloseSettings は pendingRepoSync=true のとき repoChangePending を落とさず
+  // 予約 pull の入口（ここ）まで残す。よって repoChangePending 単体で false 化される
+  // ことはなく（direct pull は入口で消費、queue pull は入口まで保持）、両経路で発火する。
+  const isRepoSwitchPull = appState.repoChangePending
   // pull開始と同時に「pull予約あり」バッジを落とす（進捗%に交代）
   appState.repoChangePending = false
   try {
@@ -811,6 +820,21 @@ export async function pullFromGitHub(
       appState.isPullCompleted = true
       appState.selectedIndexLeft = 0
       appState.selectedIndexRight = 0
+
+      // #147 綻び2: リポ切替起因の Pull のときだけ、旧リポの一覧で残った
+      // スクロール位置をリセットする。home→home では HomeView が remount されず
+      // .main-pane の scrollTop が残るため。selectedIndex=0 は全 pull 成功で走るが、
+      // scroll リセットは切替時に限定する（通常 pull で発火すると deep-link 復元時に
+      // スクロールが飛ぶデグレになる）。.main-pane の参照は app-state.svelte.ts の
+      // PWA 復帰レイアウト修復と同じ .left-column/.right-column 配下セレクタに合わせる。
+      if (isRepoSwitchPull) {
+        await tick()
+        document
+          .querySelectorAll('.left-column .main-pane, .right-column .main-pane')
+          .forEach((el) => {
+            ;(el as HTMLElement).scrollTop = 0
+          })
+      }
 
       const currentLeaves = leaves.value
       const currentLeafMap = new Map(currentLeaves.map((l) => [l.id, l]))
