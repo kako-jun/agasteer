@@ -151,6 +151,27 @@ describe('handleSettingsChange の URL query クリア (#147 綻び1)', () => {
     expect(appState.repoChangePending).toBe(true)
     expect(window.location.search).toBe('')
   })
+
+  // #147 Q1: query を落とす際に history.state を保持する（{} で潰さない）。
+  // top エントリの state には PWA exit guard 等が積んだキーが載っており、{} で
+  // 上書きすると popstate のガード検出（e.state?.[PWA_EXIT_GUARD_KEY]）が壊れる。
+  // 上の他テストは setup が state={} のため replaceState({}, …) の旧コードでも通って
+  // しまい Q1 を縛れない。ここでは非空 state を積み、その同一 state で replaceState が
+  // 呼ばれる（＝第1引数が {} でない）ことを縛って旧コードへの退行を検知する。
+  it('Q1: 非空の history.state を保持したまま URL query だけ落とす（replaceState({}) 退行検知）', () => {
+    const guardState = { 'pwa-exit-guard': true }
+    // seed 呼び出しは call-through で history.state を更新するが観測対象外にする
+    window.history.replaceState(guardState, '', '/notes/shared-name?leaf=old-leaf')
+    replaceStateSpy.mockClear()
+
+    handleSettingsChange({ repoName: 'owner/new-repo' })
+
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1)
+    // 第1引数が {} でなく元の state であることが Q1 の核心（旧コードだとここで落ちる）
+    expect(replaceStateSpy).toHaveBeenCalledWith(guardState, '', '/notes/shared-name')
+    expect(window.history.state).toEqual(guardState)
+    expect(window.location.search).toBe('')
+  })
 })
 
 /**
