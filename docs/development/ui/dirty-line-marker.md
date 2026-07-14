@@ -70,14 +70,19 @@ const getBaseContent = () => getLastPushedContent(leafId)
 基準と現在の行配列でLCSを計算し、LCSに含まれない行をダーティとしてマークする。
 単純な行番号比較では行の挿入/削除で後続行が全てダーティになるが、LCSなら順序を保持した共通部分を正しく検出できる。
 
+**改行コード正規化**: CodeMirror は doc を常に LF 化する一方、ベースライン（`getLastPushedContent()`）は原文の CRLF を保持するため、両者を関数冒頭で `\r\n?` → `\n` に正準化してから比較・split し、改行コード差だけで全行が誤ってダーティになるのを防ぐ（#199）。
+
 ```typescript
 export function computeDirtyLines(baseContent: string | null, currentContent: string): Set<number> {
+  // 改行コードをLFに正準化してから比較・split する（#199）
+  const b = baseContent === null ? null : baseContent.replace(/\r\n?/g, '\n')
+  const c = currentContent.replace(/\r\n?/g, '\n')
   // 基準がnull = 新規リーフ → 全行がダーティ
-  if (baseContent === null) {
+  if (b === null) {
     // 全行を追加
   }
-  const baseLines = baseContent.split('\n')
-  const currentLines = currentContent.split('\n')
+  const baseLines = b.split('\n')
+  const currentLines = c.split('\n')
   // LCSを計算し、LCSに含まれない行をダーティとしてマーク
   const lcsIndices = computeLCS(baseLines, currentLines)
   // lcsIndicesに含まれない行 → ダーティ

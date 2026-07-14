@@ -73,9 +73,13 @@ function computeLCS(baseLines: string[], currentLines: string[]): Set<number> {
 export function computeDirtyLines(baseContent: string | null, currentContent: string): Set<number> {
   const dirtyLines = new Set<number>()
 
+  // CodeMirror は doc を常に LF 化するため、ベースラインも LF に正準化して改行コード差での誤 dirty を防ぐ（#199）
+  const b = baseContent === null ? null : baseContent.replace(/\r\n?/g, '\n')
+  const c = currentContent.replace(/\r\n?/g, '\n')
+
   // 基準がnull = 新規リーフ → 全行がダーティ
-  if (baseContent === null) {
-    const lines = currentContent.split('\n')
+  if (b === null) {
+    const lines = c.split('\n')
     for (let i = 1; i <= lines.length; i++) {
       dirtyLines.add(i)
     }
@@ -83,12 +87,12 @@ export function computeDirtyLines(baseContent: string | null, currentContent: st
   }
 
   // 完全一致なら LCS をスキップ（O(n*m) を回避）
-  if (baseContent === currentContent) {
+  if (b === c) {
     return dirtyLines
   }
 
-  const baseLines = baseContent.split('\n')
-  const currentLines = currentContent.split('\n')
+  const baseLines = b.split('\n')
+  const currentLines = c.split('\n')
 
   // LCSを計算して、LCSに含まれない行をダーティとしてマーク
   const lcsIndices = computeLCS(baseLines, currentLines)
