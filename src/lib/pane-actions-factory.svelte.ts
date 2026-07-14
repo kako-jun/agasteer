@@ -393,6 +393,12 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
     appState.isFirstPriorityFetched = false
     appState.repoChangePending = true
     resetForRepoSwitch()
+    // #147 綻び1: リポ切替時のみ URL の query を落とす。旧 URL のパスと同名の
+    // ルートノート/リーフが新リポにあると、pull 後の restoreStateFromUrl
+    // （window.location.search を読む）がそれを解決して home でなく誤ったノート/
+    // リーフに着地する。query を空にすれば旧パスを拾わず必ず home へ収束する。
+    // 通常 pull（同期・F5・deep-link 復元）では repoChanged 検知に至らないため発火しない。
+    window.history.replaceState({}, '', window.location.pathname)
   }
 
   updateSettings(next)
