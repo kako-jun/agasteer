@@ -69,6 +69,8 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     font-size: 0.9rem;
     min-width: 140px;
+    /* 本文を1行に収める幅まで広げ、max-width で画面幅にキャップ（#270） */
+    width: max-content;
     max-width: calc(100vw - 24px);
     text-align: center;
     overflow-wrap: anywhere;
