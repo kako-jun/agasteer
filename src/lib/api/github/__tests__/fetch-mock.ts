@@ -29,6 +29,40 @@ export interface MockResponseSpec {
   text?: string
   /** レスポンスヘッダ（rate-limit ヘッダ等） */
   headers?: Record<string, string>
+  /**
+   * 応答を遅延させる（並列度の characterization 用・#231）。
+   * gate を渡すとその Promise が resolve するまで fetch は pending のまま
+   * （＝runWithConcurrency のスロットを掴んだまま）になる。
+   * 何も指定しなければ従来どおり即時 resolve（後方互換）。
+   */
+  gate?: Promise<unknown>
+  /** 応答を delay ミリ秒だけ遅延させる（gate と併用可） */
+  delay?: number
+}
+
+/** 手動 resolve できる Promise（deferred）。並列 in-flight を段階的に開放する用。 */
+export interface Deferred<T = void> {
+  promise: Promise<T>
+  resolve: (value?: T) => void
+  reject: (reason?: unknown) => void
+}
+
+export function createDeferred<T = void>(): Deferred<T> {
+  let resolve!: (value?: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res as (value?: T) => void
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+/** 特定の method + matcher にマッチする fetch の in-flight 数を追跡するトラッカ。 */
+export interface InFlightTracker {
+  /** 現在 pending 中の件数 */
+  readonly current: number
+  /** 観測された同時 in-flight の最大値 */
+  readonly max: number
 }
 
 export type UrlMatcher = string | RegExp | ((url: string) => boolean)
@@ -90,11 +124,22 @@ export interface FetchMock {
   assertDrained: () => void
   /** 未消費キューの件数（assertDrained の非例外版） */
   pendingCount: () => number
+  /** method + matcher にマッチする fetch の in-flight 数を追跡開始する。
+   *  gate/delay で応答を遅延させたとき、同時 in-flight のピークを観測できる。 */
+  track: (method: string, matcher: UrlMatcher) => InFlightTracker
+}
+
+interface TrackerState {
+  method: string
+  matcher: UrlMatcher
+  current: number
+  max: number
 }
 
 export function createFetchMock(): FetchMock {
   const queue: QueuedResponse[] = []
   const calls: RecordedCall[] = []
+  const trackers: TrackerState[] = []
 
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -145,7 +190,26 @@ export function createFetchMock(): FetchMock {
       )
     }
     const [matched] = queue.splice(idx, 1)
-    return specToResponse(matched.spec)
+
+    // in-flight 追跡: リクエスト受理〜応答 resolve までを bracket する。
+    // gate/delay で応答が pending の間はスロットを掴んだままなので、
+    // runWithConcurrency の同時実行数がここで観測できる。
+    const matchedTrackers = trackers.filter(
+      (t) => t.method.toUpperCase() === method && urlMatches(t.matcher, url)
+    )
+    for (const t of matchedTrackers) {
+      t.current++
+      if (t.current > t.max) t.max = t.current
+    }
+    try {
+      if (matched.spec.gate) await matched.spec.gate
+      if (matched.spec.delay) {
+        await new Promise((r) => setTimeout(r, matched.spec.delay))
+      }
+      return specToResponse(matched.spec)
+    } finally {
+      for (const t of matchedTrackers) t.current--
+    }
   })
 
   const mock: FetchMock = {
@@ -165,6 +229,18 @@ export function createFetchMock(): FetchMock {
     },
     pendingCount() {
       return queue.length
+    },
+    track(method, matcher) {
+      const state: TrackerState = { method, matcher, current: 0, max: 0 }
+      trackers.push(state)
+      return {
+        get current() {
+          return state.current
+        },
+        get max() {
+          return state.max
+        },
+      }
     },
     assertDrained() {
       if (queue.length > 0) {

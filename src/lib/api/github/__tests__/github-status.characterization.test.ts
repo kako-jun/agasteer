@@ -73,6 +73,11 @@ describe('fetchCurrentSha', () => {
     // キャッシュバスター ?t= が付く
     expect(call!.url).toMatch(/\/repos\/owner\/repo\/contents\/foo\/bar\.md\?t=\d+/)
     expect(call!.headers.Authorization).toBe('Bearer test-token')
+    // non-raw 経路（fetchGitHubContents を raw オプション無しで呼ぶ）なので
+    // Accept ヘッダは付かない（undefined）。pull のリーフ取得（raw）との差を pin。
+    expect(call!.headers.Accept).toBeUndefined()
+    // キャッシュバスター ?t= を必ず含む（現状挙動）。
+    expect(call!.url).toContain('?t=')
   })
 
   it('returns null when the file does not exist (non-ok response)', async () => {
