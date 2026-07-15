@@ -338,7 +338,7 @@ agasteer/
 
 **アクションモジュール（App.svelteから抽出）:**
 
-- `actions/git.ts`: Push/Pull/接続テスト
+- `actions/git.ts`: Push/Pull/接続テスト。#226 で責務別モジュールへ純移動し、`git.ts` 自体は import パス（`./actions/git`）と公開 API（`pushToGitHub` / `PushToGitHubOptions` / `pullFromGitHub` / `handleTestConnection`）を不変に保つための薄い barrel（再輸出のみ）になった。実体は `actions/git-push.ts`（`pushToGitHub` + `PushToGitHubOptions` + `PushTimeoutError` + #238 世代ガード `pushProgressGeneration` を内包）／`actions/git-pull.ts`（`pullFromGitHub` + `runPendingRepoSyncIfIdle`）／`actions/git-orphan.ts`（#235 タイムアウト後の遅延結果観測 `observeOrphanPush`）／`actions/git-connection.ts`（`handleTestConnection`）に分割。循環回避のため push→pull は静的 import の一方向のみで、pull→push（Push first・stale 再帰）は `appActions.pushToGitHub` 経由の間接呼びで維持する
 - `actions/move.ts`: ノート/リーフのワールド間移動（アーカイブ↔ホーム）
 - `actions/crud.ts`: ノート/リーフのCRUD操作、バッジ更新
 - `actions/io.ts`: ZIPエクスポート、他アプリからのインポート、Markdown/画像ダウンロード
