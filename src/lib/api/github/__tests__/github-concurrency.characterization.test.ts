@@ -121,8 +121,7 @@ describe('runWithConcurrency: caps concurrent leaf content fetches at the limit'
     expect(res.success).toBe(true)
     // 全 15 本が最終的に取得され、
     expect(res.leaves).toHaveLength(N)
-    // 同時 in-flight のピークは limit を超えない。
-    expect(contentTracker.max).toBeLessThanOrEqual(LIMIT)
+    // 同時 in-flight のピークは limit ちょうどに到達し、超えない。
     expect(contentTracker.max).toBe(LIMIT)
     expect(mock.callsMatching('GET', isContent)).toHaveLength(N)
   })
