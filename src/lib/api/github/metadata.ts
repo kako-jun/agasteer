@@ -69,7 +69,10 @@ export function normalizeMetadata(meta: Metadata, pushCountOverride?: number): M
  * parse 済み値を受けてデフォルト補完するだけ（振る舞い不変）。
  */
 export function normalizePulledMetadata(parsed: unknown): Metadata {
-  const p = (parsed ?? {}) as Partial<Metadata>
+  // 元インライン実装（parsed.version 直読み）と等価に保つ: parsed が null/undefined の
+  // 場合はプロパティ参照で throw し、呼び出し側 fetch 層の try/catch が warn + defaults に落とす。
+  // ここで `?? {}` して握り潰すと、その warn 経路が消えて振る舞いが変わる。
+  const p = parsed as Partial<Metadata>
   return {
     version: p.version || 1,
     notes: p.notes || {},

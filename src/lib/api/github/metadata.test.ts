@@ -126,19 +126,13 @@ describe('normalizePulledMetadata', () => {
     })
   })
 
-  it('falls back to defaults for null / undefined input', () => {
-    expect(normalizePulledMetadata(null)).toEqual({
-      version: 1,
-      notes: {},
-      leaves: {},
-      pushCount: 0,
-    })
-    expect(normalizePulledMetadata(undefined)).toEqual({
-      version: 1,
-      notes: {},
-      leaves: {},
-      pushCount: 0,
-    })
+  it('throws on null / undefined input (元インライン実装の parsed.version 直読みと等価)', () => {
+    // 旧実装は JSON.parse 結果に対し parsed.version を直読みしていたため、
+    // リテラル null（JSON.parse('null')）や undefined ではプロパティ参照で throw し、
+    // 呼び出し側 fetch 層の try/catch が warn + defaults に落としていた。
+    // ここで握り潰すと warn 経路が消えるため、純移動として throw を保存する。
+    expect(() => normalizePulledMetadata(null)).toThrow()
+    expect(() => normalizePulledMetadata(undefined)).toThrow()
   })
 
   it('coerces falsy version/pushCount (0) to defaults, matching || semantics', () => {
