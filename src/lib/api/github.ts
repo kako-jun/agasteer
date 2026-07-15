@@ -34,7 +34,13 @@ import { calculateGitBlobSha } from './github/sha'
 import { encodeContent, decodeBase64ToString } from './github/encoding'
 import { fetchGitHubContents, runWithConcurrency, validateGitHubSettings } from './github/http'
 import { normalizeMetadata, normalizePulledMetadata, detectChanges } from './github/metadata'
-import { collapseToTwoLevels } from './github/pull-map'
+import {
+  buildLeafFromTarget,
+  buildLeafTargets,
+  collapseToTwoLevels,
+  ensureNotePath,
+  getLeafPriority,
+} from './github/pull-map'
 import {
   PUSH_STAGE_REFS,
   PUSH_STAGE_BASE_TREE,
@@ -1124,36 +1130,6 @@ export async function pullFromGitHub(
 
     const noteMap = new Map<string, Note>()
 
-    const ensureNotePath = (pathParts: string[]): string => {
-      const collapsed = collapseToTwoLevels(pathParts)
-      let parentId: string | undefined
-      for (let i = 0; i < collapsed.length; i++) {
-        const partial = collapsed.slice(0, i + 1).join('/')
-        if (noteMap.has(partial)) {
-          parentId = noteMap.get(partial)!.id
-          continue
-        }
-        // metadata.jsonからメタ情報を取得
-        const meta = metadata.notes[partial] || {
-          id: crypto.randomUUID(),
-          order: noteMap.size,
-          badgeIcon: undefined,
-          badgeColor: undefined,
-        }
-        const note: Note = {
-          id: meta.id,
-          name: collapsed[i],
-          parentId,
-          order: meta.order,
-          badgeIcon: meta.badgeIcon,
-          badgeColor: meta.badgeColor,
-        }
-        noteMap.set(partial, note)
-        parentId = note.id
-      }
-      return parentId || ''
-    }
-
     // ベースパスのプレフィックスを作成（末尾スラッシュ付き）
     const basePathPrefix = `${NOTES_PATH}/`
     const basePathGitkeep = `${NOTES_PATH}/.gitkeep`
@@ -1175,7 +1151,7 @@ export async function pullFromGitHub(
       if (parts.length === 0) continue
 
       // .gitkeepがあるディレクトリのノートを復元
-      ensureNotePath(parts)
+      ensureNotePath({ pathParts: parts, noteMap, metadata })
     }
 
     // 次に.mdファイル（リーフ）を復元
@@ -1188,31 +1164,11 @@ export async function pullFromGitHub(
     )
 
     // コンテンツ取得用のターゲットを事前に作成（メタデータ取得はここで済ませる）
-    const leafTargets = notePaths.map((entry, idx) => {
-      const relativePath = entry.path.replace(new RegExp(`^${NOTES_PATH}/`), '')
-      const allParts = relativePath.split('/').filter(Boolean)
-      // ファイル名を先に分離してから、ノートパス部分だけをcollapseする
-      const fileName = allParts.pop() || ''
-      const noteParts = collapseToTwoLevels(allParts)
-      const title = fileName.replace(/\.md$/i, '') || 'Untitled'
-      const noteId = ensureNotePath(noteParts)
-      const leafPathOriginal = entry.path.replace(new RegExp(`^${NOTES_PATH}/`), '')
-      const leafPathCollapsed = [...noteParts, fileName].join('/')
-      const leafMeta = metadata.leaves[leafPathCollapsed] ||
-        metadata.leaves[leafPathOriginal] || {
-          id: crypto.randomUUID(),
-          updatedAt: Date.now(),
-          order: idx,
-          badgeIcon: undefined,
-          badgeColor: undefined,
-        }
-      return {
-        entry,
-        title,
-        noteId,
-        leafMeta,
-        relativePath: leafPathCollapsed,
-      }
+    const leafTargets = buildLeafTargets({
+      entries: notePaths,
+      basePath: NOTES_PATH,
+      metadata,
+      noteMap,
     })
 
     // ノート構造確定 → onStructureコールバック（優先情報を返してもらう）
@@ -1233,15 +1189,10 @@ export async function pullFromGitHub(
     // 優先度でソート（priorityがvoidの場合は空セット）
     const priorityLeafPaths = new Set(priority && 'leafPaths' in priority ? priority.leafPaths : [])
     const priorityNoteIds = new Set(priority && 'noteIds' in priority ? priority.noteIds : [])
+    const prioritySets = { leafPaths: priorityLeafPaths, noteIds: priorityNoteIds }
 
-    const getPriority = (target: (typeof leafTargets)[0]): number => {
-      // 第1優先: URLで指定されたリーフ
-      if (priorityLeafPaths.has(target.relativePath)) return 0
-      // 第2優先: URLで指定されたリーフと同じノート配下
-      if (priorityNoteIds.has(target.noteId)) return 1
-      // その他
-      return 2
-    }
+    const getPriority = (target: (typeof leafTargets)[0]): number =>
+      getLeafPriority(target, prioritySets)
 
     const sortedTargets = [...leafTargets].sort((a, b) => {
       const priorityDiff = getPriority(a) - getPriority(b)
@@ -1271,17 +1222,7 @@ export async function pullFromGitHub(
         // blob SHAキャッシュ: IndexedDBのSHAと一致すればfetchスキップ
         const cached = options?.cachedLeaves?.get(target.entry.sha)
         if (cached?.content) {
-          const leaf: Leaf = {
-            id: target.leafMeta.id,
-            title: target.title,
-            noteId: target.noteId,
-            content: cached.content,
-            updatedAt: target.leafMeta.updatedAt,
-            order: target.leafMeta.order,
-            badgeIcon: target.leafMeta.badgeIcon,
-            badgeColor: target.leafMeta.badgeColor,
-            blobSha: target.entry.sha,
-          }
+          const leaf = buildLeafFromTarget(target, cached.content, target.entry.sha)
           options?.onLeaf?.(leaf)
           if (getPriority(target) === 0) {
             priority1Completed++
@@ -1309,17 +1250,7 @@ export async function pullFromGitHub(
         }
         const content = await contentRes.text()
 
-        const leaf: Leaf = {
-          id: target.leafMeta.id,
-          title: target.title,
-          noteId: target.noteId,
-          content,
-          updatedAt: target.leafMeta.updatedAt,
-          order: target.leafMeta.order,
-          badgeIcon: target.leafMeta.badgeIcon,
-          badgeColor: target.leafMeta.badgeColor,
-          blobSha: target.entry.sha,
-        }
+        const leaf = buildLeafFromTarget(target, content, target.entry.sha)
 
         // 各リーフ取得完了時のコールバック
         options?.onLeaf?.(leaf)
@@ -1769,35 +1700,6 @@ export async function pullArchive(
 
     const noteMap = new Map<string, Note>()
 
-    const ensureNotePath = (pathParts: string[]): string => {
-      const collapsed = collapseToTwoLevels(pathParts)
-      let parentId: string | undefined
-      for (let i = 0; i < collapsed.length; i++) {
-        const partial = collapsed.slice(0, i + 1).join('/')
-        if (noteMap.has(partial)) {
-          parentId = noteMap.get(partial)!.id
-          continue
-        }
-        const meta = metadata.notes[partial] || {
-          id: crypto.randomUUID(),
-          order: noteMap.size,
-          badgeIcon: undefined,
-          badgeColor: undefined,
-        }
-        const note: Note = {
-          id: meta.id,
-          name: collapsed[i],
-          parentId,
-          order: meta.order,
-          badgeIcon: meta.badgeIcon,
-          badgeColor: meta.badgeColor,
-        }
-        noteMap.set(partial, note)
-        parentId = note.id
-      }
-      return parentId || ''
-    }
-
     const basePathPrefix = `${ARCHIVE_PATH}/`
     const basePathGitkeep = `${ARCHIVE_PATH}/.gitkeep`
 
@@ -1816,7 +1718,7 @@ export async function pullArchive(
         .replace(/\/\.gitkeep$/, '')
       const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
       if (parts.length === 0) continue
-      ensureNotePath(parts)
+      ensureNotePath({ pathParts: parts, noteMap, metadata })
     }
 
     // .mdファイル（リーフ）を復元
@@ -1828,30 +1730,11 @@ export async function pullArchive(
         !e.path.endsWith('.gitkeep')
     )
 
-    const leafTargets = leafPaths.map((entry, idx) => {
-      const relativePath = entry.path.replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
-      const allParts = relativePath.split('/').filter(Boolean)
-      const fileName = allParts.pop() || ''
-      const noteParts = collapseToTwoLevels(allParts)
-      const title = fileName.replace(/\.md$/i, '') || 'Untitled'
-      const noteId = ensureNotePath(noteParts)
-      const leafPathOriginal = entry.path.replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
-      const leafPathCollapsed = [...noteParts, fileName].join('/')
-      const leafMeta = metadata.leaves[leafPathCollapsed] ||
-        metadata.leaves[leafPathOriginal] || {
-          id: crypto.randomUUID(),
-          updatedAt: Date.now(),
-          order: idx,
-          badgeIcon: undefined,
-          badgeColor: undefined,
-        }
-      return {
-        entry,
-        title,
-        noteId,
-        leafMeta,
-        relativePath: leafPathCollapsed,
-      }
+    const leafTargets = buildLeafTargets({
+      entries: leafPaths,
+      basePath: ARCHIVE_PATH,
+      metadata,
+      noteMap,
     })
 
     // リーフを並列取得
@@ -1865,17 +1748,7 @@ export async function pullArchive(
         // blob SHAキャッシュ: IndexedDBのSHAと一致すればfetchスキップ
         const cached = options.cachedLeaves?.get(target.entry.sha)
         if (cached?.content) {
-          const leaf: Leaf = {
-            id: target.leafMeta.id,
-            title: target.title,
-            noteId: target.noteId,
-            content: cached.content,
-            updatedAt: target.leafMeta.updatedAt,
-            order: target.leafMeta.order,
-            badgeIcon: target.leafMeta.badgeIcon,
-            badgeColor: target.leafMeta.badgeColor,
-            blobSha: target.entry.sha,
-          }
+          const leaf = buildLeafFromTarget(target, cached.content, target.entry.sha)
           options.onLeafFetched?.(leaf)
           return leaf
         }
@@ -1896,17 +1769,7 @@ export async function pullArchive(
         }
         const content = await contentRes.text()
 
-        const leaf: Leaf = {
-          id: target.leafMeta.id,
-          title: target.title,
-          noteId: target.noteId,
-          content,
-          updatedAt: target.leafMeta.updatedAt,
-          order: target.leafMeta.order,
-          badgeIcon: target.leafMeta.badgeIcon,
-          badgeColor: target.leafMeta.badgeColor,
-          blobSha: target.entry.sha,
-        }
+        const leaf = buildLeafFromTarget(target, content, target.entry.sha)
 
         // 進捗報告
         options.onLeafFetched?.(leaf)
