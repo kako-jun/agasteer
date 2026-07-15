@@ -177,7 +177,7 @@ agasteer/
 │   │   │   ├── sha.ts                   # Git blob SHA計算（純粋）
 │   │   │   ├── rate-limit.ts            # レート制限解析（純粋）
 │   │   │   ├── metadata.ts              # メタデータ正規化・安定化・push差分判定・pull正規化（純粋・Phase 3）
-│   │   │   ├── pull-map.ts              # pullパスの2階層折り畳み（純粋・Phase 3）
+│   │   │   ├── pull-map.ts              # pullのパス折り畳み＋notes/leavesスケルトン構築（純粋・Phase 3 PR-1/PR-2）
 │   │   │   └── http.ts                  # Contents API fetch/並列ワーカー/設定検証（副作用層・Phase 2）
 │   │   ├── media.ts                     # メディア同期層（副作用層: lazy作成/アップロード/キュー/キャッシュ）#242
 │   │   ├── media/                       # メディア純粋層（github/ の分割パターン踏襲）
@@ -344,7 +344,7 @@ agasteer/
 
 **GitHub同期:**
 
-- `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）。純粋層は `github/` 配下へ分離（Phase 1: paths/encoding/sha/rate-limit）。低レベル副作用ヘルパー（Contents API fetch/並列ワーカー/設定検証）は Phase 2 で `github/http.ts` へ純移動（非公開のまま github.ts が import）。Phase 3 では push/pull 内の完全純粋関数（メタデータ正規化・安定文字列化・push差分判定 `detectChanges`・pull後正規化を `github/metadata.ts`、pullパスの2階層折り畳みを `github/pull-map.ts`）を純移動し、pull/pullArchive・push の重複を解消。push/pull の副作用層は github.ts に残し、純粋関数を re-export して公開 API を維持
+- `github.ts`: GitHub API統合（ファイル保存、SHA取得、Git Tree API）。純粋層は `github/` 配下へ分離（Phase 1: paths/encoding/sha/rate-limit）。低レベル副作用ヘルパー（Contents API fetch/並列ワーカー/設定検証）は Phase 2 で `github/http.ts` へ純移動（非公開のまま github.ts が import）。Phase 3 では push/pull 内の完全純粋関数（メタデータ正規化・安定文字列化・push差分判定 `detectChanges`・pull後正規化を `github/metadata.ts`、pullパスの2階層折り畳みを `github/pull-map.ts`）を純移動し、pull/pullArchive・push の重複を解消。PR-2 では pull 側の tree→スケルトン構築ロジック（`ensureNotePath`／`buildLeafTargets`／`getLeafPriority`／`buildLeafFromTarget`）を `github/pull-map.ts` に集約し、pullFromGitHub と pullArchive の重複インラインコードを解消（noteMap の mutate は保存、uuid/Date.now は optional 注入でデフォルト現状維持、副作用オーケストレーションは github.ts に残置）。push/pull の副作用層は github.ts に残し、純粋関数を re-export して公開 API を維持
 - `sync.ts`: Push/Pull処理の分離
 - `media.ts`: メディア同期層（#242）。別リポ `{owner}/{repo}-media` の lazy 作成・アップロード（pending キュー + online リトライ）・認証付き取得・LRU キャッシュ。`uploadMedia` は enqueue で即返し、実アップロードは背景の**グローバル直列チェーン**で流す（#247。同一リポへの並行 PUT が 409 になるのを直列化で回避。戻り値 `uploadDone: Promise<boolean>`。チェーン経路の fetch はタイムアウト付きで head-of-line blocking を防ぐ #252）。Push/Pull フロー・WorldType とは独立。純粋層は `media/` 配下（base64/naming/validation/lru）
 
