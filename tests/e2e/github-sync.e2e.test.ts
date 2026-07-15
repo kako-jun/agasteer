@@ -23,10 +23,10 @@
  * 誤って指すと中身を破壊する。だから「中身が消えてよい使い捨てリポ」+ ALLOW_WRITES
  * フラグの二重ガードを掛けている。
  *
- * ## 実 GitHub に対しての pass は未検証（重要）
- * このスキャフォールドを書いた時点では kako-jun のテスト用リポ/トークンが未用意のため、
- * 実 GitHub に対して実際に green になることは**未検証**。env を用意して走らせ、
- * 落ちたら追って直す前提。型・公開 API 整合・env 無しでの skip までは保証済み。
+ * ## 実 GitHub に対して検証済み
+ * 2026-07-15 に使い捨てリポ kako-jun/agasteer-test で実 GitHub 往復を green 確認済み
+ * （#226 Phase 3 リファクタの実機 golden path 検証）。実ネットワークは5秒を超えるため
+ * 各テストに E2E_TIMEOUT(60秒) を設定。env 無しでは従来どおり describe ごと skip。
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
@@ -76,6 +76,10 @@ const hasE2eEnv = Boolean(E2E_TOKEN && E2E_OWNER && E2E_REPO && E2E_ALLOW_WRITES
 // ============================================
 
 const REPO_NAME = `${E2E_OWNER}/${E2E_REPO}`
+
+// 実 GitHub 往復は push→pull で複数ラウンドトリップ＋blob 操作が走り、vitest 既定の
+// 5秒では足りずタイムアウトする。ネットワーク遅延に耐える余裕を持たせる。
+const E2E_TIMEOUT = 60000
 
 function makeSettings(): Settings {
   return {
@@ -202,80 +206,95 @@ describe.skipIf(!hasE2eEnv)('e2e: real GitHub sync round-trip', () => {
     if (!hasE2eEnv) return
     const { leaves, notes, metadata } = buildBaseState()
     await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
-  })
+  }, E2E_TIMEOUT)
 
   // 順序依存（直列）。push した状態を後続テストが前提にするため it.sequential 相当に
   // 並べる。vitest はファイル内テストを宣言順に直列実行する（並列化は別ファイル間のみ）。
 
-  it('e2e push then pull yields identical paths, content, and note structure', async () => {
-    const { leaves, notes, metadata } = buildBaseState()
+  it(
+    'e2e push then pull yields identical paths, content, and note structure',
+    async () => {
+      const { leaves, notes, metadata } = buildBaseState()
 
-    const pushed = await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
-    expect(pushed.success, `push failed: ${pushed.message} ${pushed.errorCode ?? ''}`).toBe(true)
+      const pushed = await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
+      expect(pushed.success, `push failed: ${pushed.message} ${pushed.errorCode ?? ''}`).toBe(true)
 
-    // 別の空状態へ pull
-    const pull = await pullFromGitHub(settings)
-    expect(pull.success, `pull failed: ${pull.message} ${pull.errorCode ?? ''}`).toBe(true)
+      // 別の空状態へ pull
+      const pull = await pullFromGitHub(settings)
+      expect(pull.success, `pull failed: ${pull.message} ${pull.errorCode ?? ''}`).toBe(true)
 
-    // 往復一致: パス→本文の Map が一致
-    const expectedMap = leafPathContentMap(leaves, notes)
-    const actualMap = leafPathContentMap(pull.leaves, pull.notes)
-    expect(actualMap.size).toBe(expectedMap.size)
-    for (const [path, content] of expectedMap) {
-      expect(actualMap.has(path), `missing leaf path after pull: ${path}`).toBe(true)
-      expect(actualMap.get(path)).toBe(content)
-    }
+      // 往復一致: パス→本文の Map が一致
+      const expectedMap = leafPathContentMap(leaves, notes)
+      const actualMap = leafPathContentMap(pull.leaves, pull.notes)
+      expect(actualMap.size).toBe(expectedMap.size)
+      for (const [path, content] of expectedMap) {
+        expect(actualMap.has(path), `missing leaf path after pull: ${path}`).toBe(true)
+        expect(actualMap.get(path)).toBe(content)
+      }
 
-    // ノート構造（サブフォルダ含む）一致
-    const expectedNotes = noteFullPaths(notes)
-    const actualNotes = noteFullPaths(pull.notes)
-    expect(actualNotes).toEqual(expectedNotes)
+      // ノート構造（サブフォルダ含む）一致
+      const expectedNotes = noteFullPaths(notes)
+      const actualNotes = noteFullPaths(pull.notes)
+      expect(actualNotes).toEqual(expectedNotes)
 
-    // metadata 健全性: pull した metadata.leaves に各リーフ相対パスのエントリがある
-    for (const path of expectedMap.keys()) {
-      expect(pull.metadata.leaves[path], `metadata.leaves missing entry for ${path}`).toBeDefined()
-    }
-  })
+      // metadata 健全性: pull した metadata.leaves に各リーフ相対パスのエントリがある
+      for (const path of expectedMap.keys()) {
+        expect(
+          pull.metadata.leaves[path],
+          `metadata.leaves missing entry for ${path}`
+        ).toBeDefined()
+      }
+    },
+    E2E_TIMEOUT
+  )
 
-  it('e2e idempotent push reports noChanges on identical state', async () => {
-    const { leaves, notes, metadata } = buildBaseState()
+  it(
+    'e2e idempotent push reports noChanges on identical state',
+    async () => {
+      const { leaves, notes, metadata } = buildBaseState()
 
-    // 1 回目（前テストの状態と同一なので noChanges になる想定だが、念のため push）
-    await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
+      // 1 回目（前テストの状態と同一なので noChanges になる想定だが、念のため push）
+      await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
 
-    // 2 回目: 同一状態 → 変更なし経路
-    const again = await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
-    expect(again.success).toBe(true)
-    expect(again.message).toBe('github.noChanges')
-    expect(again.changedLeafCount ?? 0).toBe(0)
-  })
+      // 2 回目: 同一状態 → 変更なし経路
+      const again = await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
+      expect(again.success).toBe(true)
+      expect(again.message).toBe('github.noChanges')
+      expect(again.changedLeafCount ?? 0).toBe(0)
+    },
+    E2E_TIMEOUT
+  )
 
-  it('e2e incremental: editing one leaf is reflected on next pull', async () => {
-    const { leaves, notes, metadata } = buildBaseState()
-    await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
+  it(
+    'e2e incremental: editing one leaf is reflected on next pull',
+    async () => {
+      const { leaves, notes, metadata } = buildBaseState()
+      await pushAllWithTreeAPI({ leaves, notes, settings, localMetadata: metadata })
 
-    // 1 リーフだけ本文を変更
-    const edited = leaves.map((l) =>
-      l.title === 'memo' ? { ...l, content: 'plain ascii note\n\nEDITED ✏️\n' } : l
-    )
+      // 1 リーフだけ本文を変更
+      const edited = leaves.map((l) =>
+        l.title === 'memo' ? { ...l, content: 'plain ascii note\n\nEDITED ✏️\n' } : l
+      )
 
-    const pushed = await pushAllWithTreeAPI({
-      leaves: edited,
-      notes,
-      settings,
-      localMetadata: metadata,
-    })
-    expect(pushed.success).toBe(true)
-    // 変更ありなので noChanges ではないこと、変更リーフ数 1 を期待
-    expect(pushed.message).not.toBe('github.noChanges')
-    expect(pushed.changedLeafCount).toBe(1)
+      const pushed = await pushAllWithTreeAPI({
+        leaves: edited,
+        notes,
+        settings,
+        localMetadata: metadata,
+      })
+      expect(pushed.success).toBe(true)
+      // 変更ありなので noChanges ではないこと、変更リーフ数 1 を期待
+      expect(pushed.message).not.toBe('github.noChanges')
+      expect(pushed.changedLeafCount).toBe(1)
 
-    const pull = await pullFromGitHub(settings)
-    expect(pull.success).toBe(true)
-    const actualMap = leafPathContentMap(pull.leaves, pull.notes)
-    // memo は Tech ノート直下なので相対パスは `Tech/memo.md`
-    expect(actualMap.get('Tech/memo.md')).toBe('plain ascii note\n\nEDITED ✏️\n')
-  })
+      const pull = await pullFromGitHub(settings)
+      expect(pull.success).toBe(true)
+      const actualMap = leafPathContentMap(pull.leaves, pull.notes)
+      // memo は Tech ノート直下なので相対パスは `Tech/memo.md`
+      expect(actualMap.get('Tech/memo.md')).toBe('plain ascii note\n\nEDITED ✏️\n')
+    },
+    E2E_TIMEOUT
+  )
 })
 
 // env 無しのときに「ちゃんと skip された」ことを可視化する軽量テスト（常に走る）。
