@@ -33,6 +33,7 @@ import {
 import { parseRateLimitResponse, type RateLimitInfo } from './github/rate-limit'
 import { calculateGitBlobSha } from './github/sha'
 import { encodeContent, decodeBase64ToString } from './github/encoding'
+import { fetchGitHubContents, runWithConcurrency, validateGitHubSettings } from './github/http'
 import {
   PUSH_STAGE_REFS,
   PUSH_STAGE_BASE_TREE,
@@ -138,63 +139,6 @@ export interface PullOptions {
 
 // コンテンツ取得を並列化する際の上限（HTTP/2では同時接続数制限が緩和されている）
 const CONTENT_FETCH_CONCURRENCY = 10
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T, index: number) => Promise<R | null>
-): Promise<R[]> {
-  const results: R[] = []
-  let index = 0
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const currentIndex = index++
-      if (currentIndex >= items.length) break
-      const item = items[currentIndex]
-      const result = await worker(item, currentIndex)
-      if (result !== null) {
-        results.push(result)
-      }
-    }
-  })
-  await Promise.all(workers)
-  return results
-}
-/**
- * GitHub設定を検証
- * @returns valid: true または valid: false と i18nキー
- */
-function validateGitHubSettings(settings: Settings): { valid: boolean; errorKey?: string } {
-  if (!settings.token) {
-    return { valid: false, errorKey: 'github.tokenNotSet' }
-  }
-  if (!settings.repoName || !settings.repoName.includes('/')) {
-    return { valid: false, errorKey: 'github.invalidRepoName' }
-  }
-  return { valid: true }
-}
-
-/**
- * GitHub Contents APIを呼ぶヘルパー関数（キャッシュバスター付き）
- */
-async function fetchGitHubContents(
-  path: string,
-  repoName: string,
-  token: string,
-  options?: { raw?: boolean }
-) {
-  const url = `https://api.github.com/repos/${repoName}/contents/${path}?t=${Date.now()}`
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-  }
-  // RawモードはBase64デコードを省きレスポンスサイズを抑える
-  if (options?.raw) {
-    headers.Accept = 'application/vnd.github.raw'
-  }
-  return fetch(url, {
-    headers,
-  })
-}
 
 /**
  * 既存ファイルのSHAを取得
