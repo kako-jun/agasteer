@@ -42,25 +42,38 @@ Enter the repository name you created (e.g., `memo`) in Agasteer's settings scre
 
 Obtain a token to use GitHub's API.
 
-### Step 1: Open Settings
+First, the steps branch on "**Will you use file attachments (images, videos, etc.)?**"
+
+- **Not using attachments** → go to [A. If you do not use attachments](#a-if-you-do-not-use-attachments-fine-grained-pat) below. A fine-grained PAT with minimal permissions.
+- **Using attachments** → go to [B. If you use attachments](#b-if-you-use-attachments) below. Choose between two options.
+
+> **Why it branches**: Attachments are stored in a separate private repository named `{your-repo-name}-media`, which the app tries to **create automatically** on the first attachment. That auto-creation requires permission to **create a new repository**. A minimal fine-grained PAT (selected repositories only, Contents permission only) cannot do this, so the attachment fails with `HTTP 403 Resource not accessible by personal access token` (fine-grained tokens cannot create new repositories by design). So if you use attachments, pick one of the options under B below.
+
+---
+
+### A. If you do not use attachments (fine-grained PAT)
+
+Minimal permissions are enough.
+
+#### Step 1: Open Settings
 
 Click your profile icon in the top right corner and select "Settings".
 
 ![Settings](../../images/setup/k1.webp)
 
-### Step 2: Open Developer settings
+#### Step 2: Open Developer settings
 
 Click "Developer settings" at the bottom of the left sidebar.
 
 ![Developer settings](../../images/setup/k2.webp)
 
-### Step 3: Select Fine-grained tokens
+#### Step 3: Select Fine-grained tokens
 
 Select "Personal access tokens" → "Fine-grained tokens", then click "Generate new token".
 
 ![Fine-grained tokens](../../images/setup/k3.webp)
 
-### Step 4: Configure the token
+#### Step 4: Configure the token
 
 Configure the following items:
 
@@ -74,9 +87,7 @@ Configure the following items:
 |  4  | **Permissions**       | Set "Contents" to "Read and write"                                                                                     |
 |  5  | **Generate token**    | Click the button                                                                                                       |
 
-> **📎 If you use file attachments**: Attachments are stored in a separate private repository named `{your-repo-name}-media`. This guide's configuration (selected repositories only, Contents permission only) cannot create repositories, so **create the `{your-repo-name}-media` repository yourself and select both repositories under "Repository access" in step 3** (with a classic token (`repo` scope) this is unnecessary — it is created automatically on first attachment).
-
-### Step 5: Copy the token
+#### Step 5: Copy the token
 
 Copy the generated token.
 
@@ -85,6 +96,33 @@ Copy the generated token.
 ![Copy token](../../images/setup/k5.webp)
 
 Enter the copied token in Agasteer's settings screen.
+
+---
+
+### B. If you use attachments
+
+You have the following two options. Attachments work with either one. Choose based on the trade-off between simplicity and how broad the permissions are.
+
+#### B-1. Classic token (`repo` scope) — simplest
+
+The `{your-repo-name}-media` repository is **created automatically on the first attachment**, so no preparation is needed.
+
+1. Open "Settings" → "Developer settings"
+2. Select "Personal access tokens" → "**Tokens (classic)**"
+3. Click "**Generate new token (classic)**"
+4. Set a Note (name) and an Expiration
+5. Under Scopes, check "**`repo`**"
+6. Click "**Generate token**" and copy the token shown
+
+> **⚠️ Trade-off**: The `repo` scope grants read/write access to **all repositories** on that account. You cannot narrow it to a specific repository. If you prefer minimal permissions, choose B-2.
+
+#### B-2. Fine-grained PAT (minimal permissions) — create the media repo yourself
+
+You can narrow the permissions, but you must **create the `{your-repo-name}-media` repository yourself first** (fine-grained tokens cannot auto-create a new repository).
+
+1. Following the same steps as "1. Create a Repository", create one more private repository named `{your-repo-name}-media` (e.g., if your notes repo is `memo`, create `memo-media`)
+2. Create the token following the **same Steps 1–5 as A above**, but under 3 "Repository access", select **both your notes repository and the `{your-repo-name}-media` repository**
+3. For 4 "Permissions", likewise set "Contents" to "Read and write"
 
 ---
 
