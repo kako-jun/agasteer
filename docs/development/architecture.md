@@ -213,7 +213,8 @@ agasteer/
 │   │   ├── theme.ts                     # テーマ管理
 │   │   ├── types.ts                     # TypeScript型定義
 │   │   └── ui/
-│   │       └── ui.svelte.ts             # トースト状態管理
+│   │       ├── ui.svelte.ts             # Pull トースト・モーダル状態管理（push は re-export）
+│   │       └── push-toast.svelte.ts     # Push トーストのペーシング状態機械（#238）
 │   ├── app.css                          # グローバルスタイル + テーマ定義
 │   ├── app.d.ts                         # TypeScript型宣言
 │   ├── App.svelte                       # ルートコンポーネント
@@ -360,7 +361,8 @@ agasteer/
 
 - `theme.ts`: テーマ適用ロジック
 - `routing.ts`: URLルーティング（パスベース、プレビュー対応）
-- `ui/ui.svelte.ts`: トースト状態管理
+- `ui/ui.svelte.ts`: Pull トースト・モーダル状態管理（Push トーストは `push-toast.svelte.ts` を同名 re-export し公開 API 不変）
+- `ui/push-toast.svelte.ts`: Push トーストのペーシング状態機械（カウントダウン・単調減少ガード・MIN_HOLD キュー、#238）
 - `font.ts`: カスタムフォント管理（IndexedDB保存、動的@font-face登録）
 
 **Svelteアクション（actions/）:**
