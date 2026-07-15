@@ -106,9 +106,11 @@ Methods:
 Check the following:
 
 1. Is the GitHub Token correct?
-2. Does the token have the `repo` scope (or Contents: Read and write)?
+2. Does the token have write access to your notes repository? (Contents: Read and write for a fine-grained token, or the `repo` scope for a classic token)
 3. Is the repository name in `owner/repo` format?
 4. Has the token expired?
+
+> **📎 If attachments fail**: Attachments are stored in a separate repository `{your-repo-name}-media`, which a minimal fine-grained token cannot auto-create, resulting in `HTTP 403`. For how to choose a token, see the [GitHub Integration Setup Guide](./github-setup.md#2-obtain-a-personal-access-token).
 
 ### Q: Pull is failing
 
