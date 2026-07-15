@@ -25,7 +25,6 @@ import {
   ARCHIVE_METADATA_PATH,
   getBasePath,
   getMetadataPath,
-  sanitizePathPart,
   getFolderPath,
   getNotePath,
   buildPath,
@@ -34,6 +33,8 @@ import { parseRateLimitResponse, type RateLimitInfo } from './github/rate-limit'
 import { calculateGitBlobSha } from './github/sha'
 import { encodeContent, decodeBase64ToString } from './github/encoding'
 import { fetchGitHubContents, runWithConcurrency, validateGitHubSettings } from './github/http'
+import { normalizeMetadata, normalizePulledMetadata, detectChanges } from './github/metadata'
+import { collapseToTwoLevels } from './github/pull-map'
 import {
   PUSH_STAGE_REFS,
   PUSH_STAGE_BASE_TREE,
@@ -291,50 +292,6 @@ export async function pushAllWithTreeAPI(
     } catch (e) {
       console.warn('Push progress callback threw:', e)
     }
-  }
-
-  const stableStringify = (value: any): string => {
-    if (value === null || typeof value !== 'object') {
-      return JSON.stringify(value)
-    }
-    if (Array.isArray(value)) {
-      return `[${value.map(stableStringify).join(',')}]`
-    }
-    const keys = Object.keys(value)
-      .filter((k) => value[k] !== undefined)
-      .sort()
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`
-  }
-
-  const normalizeMetadata = (meta: Metadata, pushCountOverride?: number): Metadata => {
-    const normalized: Metadata = {
-      version: meta.version ?? 1,
-      pushCount: pushCountOverride ?? meta.pushCount ?? 0,
-      notes: {},
-      leaves: {},
-    }
-
-    const noteKeys = Object.keys(meta.notes || {}).sort()
-    for (const key of noteKeys) {
-      const n = meta.notes[key]
-      const entry: any = { id: n.id, order: n.order }
-      if (n.badgeIcon !== undefined) entry.badgeIcon = n.badgeIcon
-      if (n.badgeColor !== undefined) entry.badgeColor = n.badgeColor
-      normalized.notes[key] = entry
-    }
-
-    const leafKeys = Object.keys(meta.leaves || {}).sort()
-    for (const key of leafKeys) {
-      const l = meta.leaves[key]
-      // __priority__は仮想リーフなのでupdatedAtを固定値0に正規化（比較時の差分を防ぐ）
-      const updatedAt = key === PRIORITY_LEAF_ID ? 0 : l.updatedAt
-      const entry: any = { id: l.id, updatedAt, order: l.order }
-      if (l.badgeIcon !== undefined) entry.badgeIcon = l.badgeIcon
-      if (l.badgeColor !== undefined) entry.badgeColor = l.badgeColor
-      normalized.leaves[key] = entry
-    }
-
-    return normalized
   }
 
   // 設定の検証
@@ -806,22 +763,18 @@ export async function pushAllWithTreeAPI(
     }
 
     // metadata差分を含めて変更チェック（pushCountのインクリメントは除外）
-    const normalizedExisting = normalizeMetadata(existingMetadata, currentPushCount)
-    const normalizedCurrent = normalizeMetadata(metadata, currentPushCount)
-    const metadataChanged =
-      stableStringify(normalizedExisting) !== stableStringify(normalizedCurrent)
-
-    // アーカイブメタデータの差分チェック（ロード済みの場合のみ）
-    let archiveMetadataChanged = false
-    if (isArchiveLoaded && archiveNotes && archiveLeaves && archiveMeta) {
-      const normalizedExistingArchive = normalizeMetadata(existingArchiveMetadata, 0)
-      const normalizedCurrentArchive = normalizeMetadata(archiveMeta, 0)
-      archiveMetadataChanged =
-        stableStringify(normalizedExistingArchive) !== stableStringify(normalizedCurrentArchive)
-    }
-
-    const leafChanged = changedHomeLeafPaths.length > 0 || changedArchiveLeafPaths.length > 0
-    const hasAnyChanges = leafChanged || metadataChanged || archiveMetadataChanged
+    const { metadataChanged, archiveMetadataChanged, leafChanged, hasAnyChanges } = detectChanges({
+      existingMetadata,
+      metadata,
+      currentPushCount,
+      changedHomeLeafPaths,
+      changedArchiveLeafPaths,
+      isArchiveLoaded,
+      archiveNotes,
+      archiveLeaves,
+      archiveMeta,
+      existingArchiveMetadata,
+    })
     if (!hasAnyChanges) {
       // 変更がない場合は何もせずに成功を返す
       return {
@@ -1162,12 +1115,7 @@ export async function pullFromGitHub(
           const blobData = await blobRes.json()
           const jsonText = decodeBase64ToString(blobData.content)
           const parsed = JSON.parse(jsonText)
-          metadata = {
-            version: parsed.version || 1,
-            notes: parsed.notes || {},
-            leaves: parsed.leaves || {},
-            pushCount: parsed.pushCount || 0,
-          }
+          metadata = normalizePulledMetadata(parsed)
         }
       } catch (e) {
         console.warn(`${NOTES_METADATA_PATH} not found or invalid, using defaults`)
@@ -1175,11 +1123,6 @@ export async function pullFromGitHub(
     }
 
     const noteMap = new Map<string, Note>()
-
-    const collapseToTwoLevels = (parts: string[]): string[] => {
-      if (parts.length <= 2) return parts.map((p) => sanitizePathPart(p))
-      return [sanitizePathPart(parts[0]), sanitizePathPart(parts.slice(1).join('/'))]
-    }
 
     const ensureNotePath = (pathParts: string[]): string => {
       const collapsed = collapseToTwoLevels(pathParts)
@@ -1817,12 +1760,7 @@ export async function pullArchive(
           const blobData = await blobRes.json()
           const jsonText = decodeBase64ToString(blobData.content)
           const parsed = JSON.parse(jsonText)
-          metadata = {
-            version: parsed.version || 1,
-            notes: parsed.notes || {},
-            leaves: parsed.leaves || {},
-            pushCount: parsed.pushCount || 0,
-          }
+          metadata = normalizePulledMetadata(parsed)
         }
       } catch (e) {
         console.warn(`${ARCHIVE_METADATA_PATH} not found or invalid, using defaults`)
@@ -1831,13 +1769,8 @@ export async function pullArchive(
 
     const noteMap = new Map<string, Note>()
 
-    const collapseToTwoLevelsLocal = (parts: string[]): string[] => {
-      if (parts.length <= 2) return parts.map((p) => sanitizePathPart(p))
-      return [sanitizePathPart(parts[0]), sanitizePathPart(parts.slice(1).join('/'))]
-    }
-
     const ensureNotePath = (pathParts: string[]): string => {
-      const collapsed = collapseToTwoLevelsLocal(pathParts)
+      const collapsed = collapseToTwoLevels(pathParts)
       let parentId: string | undefined
       for (let i = 0; i < collapsed.length; i++) {
         const partial = collapsed.slice(0, i + 1).join('/')
@@ -1881,7 +1814,7 @@ export async function pullArchive(
       const relativePath = entry.path
         .replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
         .replace(/\/\.gitkeep$/, '')
-      const parts = collapseToTwoLevelsLocal(relativePath.split('/').filter(Boolean))
+      const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
       if (parts.length === 0) continue
       ensureNotePath(parts)
     }
@@ -1899,7 +1832,7 @@ export async function pullArchive(
       const relativePath = entry.path.replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
       const allParts = relativePath.split('/').filter(Boolean)
       const fileName = allParts.pop() || ''
-      const noteParts = collapseToTwoLevelsLocal(allParts)
+      const noteParts = collapseToTwoLevels(allParts)
       const title = fileName.replace(/\.md$/i, '') || 'Untitled'
       const noteId = ensureNotePath(noteParts)
       const leafPathOriginal = entry.path.replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
