@@ -11,7 +11,6 @@ import type {
   FetchPushCountResult,
   FetchHeadShaResult,
 } from '../types'
-import { PRIORITY_LEAF_ID } from '../utils'
 
 // ============================================
 // 純粋層（github/ 配下へ分離・Phase 1）
@@ -25,8 +24,6 @@ import {
   ARCHIVE_METADATA_PATH,
   getBasePath,
   getMetadataPath,
-  getFolderPath,
-  getNotePath,
   buildPath,
 } from './github/paths'
 import { parseRateLimitResponse, type RateLimitInfo } from './github/rate-limit'
@@ -34,6 +31,7 @@ import { calculateGitBlobSha } from './github/sha'
 import { encodeContent, decodeBase64ToString } from './github/encoding'
 import { fetchGitHubContents, runWithConcurrency, validateGitHubSettings } from './github/http'
 import { normalizeMetadata, normalizePulledMetadata, detectChanges } from './github/metadata'
+import { buildPushMetadata, buildTreeItems } from './github/push-tree'
 import {
   buildLeafFromTarget,
   buildLeafTargets,
@@ -493,20 +491,6 @@ export async function pushAllWithTreeAPI(
       }
     }
 
-    // 5. 新しいTreeを構築（base_treeは使わない）
-    const treeItems: Array<{
-      path: string
-      mode: string
-      type: string
-      content?: string
-      sha?: string
-    }> = []
-
-    // notes/以外のファイルを保持
-    for (const item of preserveItems) {
-      treeItems.push(item)
-    }
-
     // .gitkeep用の空コンテンツのSHA（常に同じ）
     const emptyGitkeepSha = await calculateGitBlobSha('')
 
@@ -559,214 +543,43 @@ export async function pushAllWithTreeAPI(
     }
 
     // metadata.jsonを生成（pushCountはまだインクリメントしない）
-    const metadata: Metadata = {
-      version: 1,
-      notes: {},
-      leaves: {},
+    // notes/leaves → Metadata 構築・__priority__ 復元は push-tree.ts の純粋関数へ委譲
+    const metadata = buildPushMetadata({
+      notes,
+      leaves,
+      localMetadata,
+      existingMetadata,
       pushCount: currentPushCount,
-    }
-
-    // ノートのメタ情報を追加（undefinedは含めない）
-    for (const note of notes) {
-      const folderPath = getFolderPath(note, notes)
-      const meta: Record<string, unknown> = {
-        id: note.id,
-        order: note.order,
-      }
-      if (note.badgeIcon !== undefined) meta.badgeIcon = note.badgeIcon
-      if (note.badgeColor !== undefined) meta.badgeColor = note.badgeColor
-      metadata.notes[folderPath] = meta as Metadata['notes'][string]
-    }
-
-    // リーフのメタ情報を追加（undefinedは含めない）
-    for (const leaf of leaves) {
-      const fullPath = buildPath(leaf, notes, 'home')
-      // ベースパス(.agasteer/notes/)を除去して相対パスにする
-      const path = fullPath.replace(new RegExp(`^${NOTES_PATH}/`), '')
-      const meta: Record<string, unknown> = {
-        id: leaf.id,
-        updatedAt: leaf.updatedAt,
-        order: leaf.order,
-      }
-      if (leaf.badgeIcon !== undefined) meta.badgeIcon = leaf.badgeIcon
-      if (leaf.badgeColor !== undefined) meta.badgeColor = leaf.badgeColor
-      metadata.leaves[path] = meta as Metadata['leaves'][string]
-    }
-
-    // 仮想リーフ（Priority）のバッジ情報を保持
-    // 仮想リーフはGitにファイルとして保存されないが、バッジ情報はmetadataで永続化
-    // ローカルのmetadataストアを優先し、なければGitHubの既存metadataから復元
-    const priorityMeta =
-      localMetadata?.leaves?.[PRIORITY_LEAF_ID] || existingMetadata?.leaves?.[PRIORITY_LEAF_ID]
-    if (
-      priorityMeta &&
-      (priorityMeta.badgeIcon !== undefined || priorityMeta.badgeColor !== undefined)
-    ) {
-      metadata.leaves[PRIORITY_LEAF_ID] = {
-        id: PRIORITY_LEAF_ID,
-        updatedAt: 0, // 固定値（仮想リーフなので実際の更新時刻は不要、比較時の差分を防ぐ）
-        order: 0,
-        badgeIcon: priorityMeta.badgeIcon,
-        badgeColor: priorityMeta.badgeColor,
-      }
-    }
-
-    // .agasteer/notes/.gitkeep を追加（notesディレクトリが空でも削除されないように）
-    const notesGitkeepPath = `${NOTES_PATH}/.gitkeep`
-    const notesGitkeepExisting = existingNotesFiles.get(notesGitkeepPath)
-    treeItems.push({
-      path: notesGitkeepPath,
-      mode: '100644',
-      type: 'blob',
-      ...(notesGitkeepExisting === emptyGitkeepSha
-        ? { sha: notesGitkeepExisting }
-        : { content: '' }),
+      world: 'home',
     })
 
-    // 全ノートに対して.gitkeepを配置（リーフがなくてもディレクトリを保持）
-    for (const note of notes) {
-      const notePath = getNotePath(note, notes, 'home')
-      const gitkeepPath = `${notePath}/.gitkeep`
-      const gitkeepExisting = existingNotesFiles.get(gitkeepPath)
-      treeItems.push({
-        path: gitkeepPath,
-        mode: '100644',
-        type: 'blob',
-        ...(gitkeepExisting === emptyGitkeepSha ? { sha: gitkeepExisting } : { content: '' }),
-      })
-    }
-
-    const changedHomeLeafPaths: string[] = []
-    const changedArchiveLeafPaths: string[] = []
-
-    // 全リーフをTreeに追加（変化していないファイルは既存SHAを使用）
-    for (const leaf of leaves) {
-      const path = buildPath(leaf, notes, 'home')
-      const existingSha = existingNotesFiles.get(path)
-
-      if (existingSha) {
-        // 既存ファイルがある場合、SHAを計算して比較
-        const localSha = await calculateGitBlobSha(leaf.content)
-        if (localSha === existingSha) {
-          // 変化なし → 既存のSHAを使用（転送量削減）
-          treeItems.push({
-            path,
-            mode: '100644',
-            type: 'blob',
-            sha: existingSha,
-          })
-          continue
-        }
-      }
-
-      // 新規ファイルまたは変化あり → contentを送信
-      treeItems.push({
-        path,
-        mode: '100644',
-        type: 'blob',
-        content: leaf.content,
-      })
-      changedHomeLeafPaths.push(path)
-    }
-
-    // アーカイブの処理（hasAnyChangesチェックの前に実行し、アーカイブの変更も検出する）
+    // アーカイブがロード済みなら archive 用 Metadata も構築（pushCount は常に 0・priority なし）
+    // hasAnyChanges 判定（detectChanges）で archiveMeta の有無を見るため、
+    // ロード条件が満たされない場合は undefined のままにする（元挙動を保存）。
     let archiveMeta: Metadata | undefined
     if (isArchiveLoaded && archiveNotes && archiveLeaves) {
-      // アーカイブがロード済みの場合は、アーカイブデータも書き込む
-      archiveMeta = {
-        version: 1,
-        notes: {},
-        leaves: {},
-        pushCount: 0, // アーカイブ側のpushCountは使わない
-      }
-
-      // アーカイブノートのメタ情報
-      for (const note of archiveNotes) {
-        const folderPath = getFolderPath(note, archiveNotes)
-        const meta: Record<string, unknown> = {
-          id: note.id,
-          order: note.order,
-        }
-        if (note.badgeIcon !== undefined) meta.badgeIcon = note.badgeIcon
-        if (note.badgeColor !== undefined) meta.badgeColor = note.badgeColor
-        archiveMeta.notes[folderPath] = meta as Metadata['notes'][string]
-      }
-
-      // アーカイブリーフのメタ情報
-      for (const leaf of archiveLeaves) {
-        const fullPath = buildPath(leaf, archiveNotes, 'archive')
-        const path = fullPath.replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
-        const meta: Record<string, unknown> = {
-          id: leaf.id,
-          updatedAt: leaf.updatedAt,
-          order: leaf.order,
-        }
-        if (leaf.badgeIcon !== undefined) meta.badgeIcon = leaf.badgeIcon
-        if (leaf.badgeColor !== undefined) meta.badgeColor = leaf.badgeColor
-        archiveMeta.leaves[path] = meta as Metadata['leaves'][string]
-      }
-
-      // アーカイブの.gitkeep
-      const archiveGitkeepPath = `${ARCHIVE_PATH}/.gitkeep`
-      const archiveGitkeepExisting = existingArchiveFiles.get(archiveGitkeepPath)
-      treeItems.push({
-        path: archiveGitkeepPath,
-        mode: '100644',
-        type: 'blob',
-        ...(archiveGitkeepExisting === emptyGitkeepSha
-          ? { sha: archiveGitkeepExisting }
-          : { content: '' }),
-      })
-
-      // アーカイブノートの.gitkeep
-      for (const note of archiveNotes) {
-        const notePath = getNotePath(note, archiveNotes, 'archive')
-        const gitkeepPath = `${notePath}/.gitkeep`
-        const gitkeepExisting = existingArchiveFiles.get(gitkeepPath)
-        treeItems.push({
-          path: gitkeepPath,
-          mode: '100644',
-          type: 'blob',
-          ...(gitkeepExisting === emptyGitkeepSha ? { sha: gitkeepExisting } : { content: '' }),
-        })
-      }
-
-      // アーカイブリーフ
-      for (const leaf of archiveLeaves) {
-        const path = buildPath(leaf, archiveNotes, 'archive')
-        const existingSha = existingArchiveFiles.get(path)
-
-        if (existingSha) {
-          const localSha = await calculateGitBlobSha(leaf.content)
-          if (localSha === existingSha) {
-            treeItems.push({
-              path,
-              mode: '100644',
-              type: 'blob',
-              sha: existingSha,
-            })
-            continue
-          }
-        }
-
-        treeItems.push({
-          path,
-          mode: '100644',
-          type: 'blob',
-          content: leaf.content,
-        })
-        changedArchiveLeafPaths.push(path)
-      }
-
-      // アーカイブのmetadata.json
-      const archiveMetaContent = JSON.stringify(archiveMeta, null, 2)
-      treeItems.push({
-        path: ARCHIVE_METADATA_PATH,
-        mode: '100644',
-        type: 'blob',
-        content: archiveMetaContent,
+      archiveMeta = buildPushMetadata({
+        notes: archiveNotes,
+        leaves: archiveLeaves,
+        existingMetadata: existingArchiveMetadata,
+        pushCount: 0,
+        world: 'archive',
       })
     }
+
+    // tree エントリ配列（preserve/gitkeep/leaf blob/archive）を純粋関数で構築
+    const { treeItems, changedHomeLeafPaths, changedArchiveLeafPaths } = await buildTreeItems({
+      notes,
+      leaves,
+      archiveNotes,
+      archiveLeaves,
+      isArchiveLoaded,
+      existingNotesFiles,
+      existingArchiveFiles,
+      preserveItems,
+      emptyGitkeepSha,
+      archiveMetadata: archiveMeta,
+    })
 
     // metadata差分を含めて変更チェック（pushCountのインクリメントは除外）
     const { metadataChanged, archiveMetadataChanged, leafChanged, hasAnyChanges } = detectChanges({
