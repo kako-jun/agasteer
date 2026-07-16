@@ -35,3 +35,9 @@
 - 初回Pullが完了するまでデータが一切表示されないという制約が生まれた（オフライン時や低速回線ではブランク画面が続く）
 - 一方で「表示されているデータは常にGitHub由来である」という単純さを獲得し、正本の曖昧さに起因するバグのクラスを消し去った
 - IndexedDBは「Pullのたびに使い捨てられるキャッシュ」という位置づけが明文化され、以後のキャッシュ関連の実装判断（例: Pull失敗時の部分キャッシュ保護 `createBackup`/`restoreFromBackup`）もこの前提の上に積み上げられている
+
+## 追記（2026-04、#158）
+
+その後、起動のたびに必ずfull pullするコストが問題になった。Cloudflare Pagesにデプロイしてアプリのバージョンバンドルが変わるたびにService Workerがリロードを発生させ、そのたびに初回起動扱いで全リーフをGitHubから再取得していたため、commit `d6255d0`（"feat: #158 起動時の無条件 full pull を SHA 一致時スキップに変更"）でstale-check（`executeStaleCheck()`によるリモートHEAD SHAの軽量確認）を起動時に先行実行するよう変更した。`lastKnownCommitSha`と一致し、かつローカルキャッシュがclean（未Push変更なし）で復元に必要な`metadata`/`pushCount`も揃っている場合のみ、前回終了時のIndexedDBキャッシュから復元してfull pullを省略する（`src/lib/app-state.svelte.ts`）。SHAが異なる・未設定（初回接続）・チェック失敗・dirty cache・メタ情報欠落のいずれかであれば、従来通りfull pullにフォールバックする。
+
+これは本ADRの決定（GitHubをSSoTとする）と矛盾しない。あくまで「リモートと一致しているとGitHub自身が保証した場合のみ」ローカルキャッシュを信頼する形であり、キャッシュが正になることはなく、GitHubが正であるという原則そのものは変わっていない。詳細は`docs/development/data-model.md`参照。
