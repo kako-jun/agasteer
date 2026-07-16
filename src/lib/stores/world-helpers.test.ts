@@ -44,9 +44,7 @@ describe('getLeafStatsForWorldView', () => {
   })
 
   it('[決定表] world=archive, view=home のとき archiveStats を返す', () => {
-    expect(getLeafStatsForWorldView('archive', 'home', homeStats, archiveStats)).toBe(
-      archiveStats
-    )
+    expect(getLeafStatsForWorldView('archive', 'home', homeStats, archiveStats)).toBe(archiveStats)
   })
 
   it('[決定表/バグ再発防止の核] world=archive, view=edit のとき archiveStats ではなく homeStats を返す（#290: 「archiveなら常にarchiveStats」という単純化ミスの検出）', () => {
@@ -73,7 +71,9 @@ describe('getLeafStatsForWorldView', () => {
     expect(() =>
       getLeafStatsForWorldView<undefined>('archive', 'home', undefined, undefined)
     ).not.toThrow()
-    expect(getLeafStatsForWorldView<undefined>('archive', 'home', undefined, undefined)).toBeUndefined()
+    expect(
+      getLeafStatsForWorldView<undefined>('archive', 'home', undefined, undefined)
+    ).toBeUndefined()
   })
 
   it('[異常系] homeStats/archiveStats に null を渡しても例外を投げず null をそのまま返す', () => {
