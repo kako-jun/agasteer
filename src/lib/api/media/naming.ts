@@ -95,6 +95,15 @@ export function buildRawMediaUrl(mediaRepoFullName: string, fileName: string): s
 export interface ParsedRawMediaUrl {
   /** `owner/repo` 形式 */
   repoFullName: string
+  /**
+   * raw URL のブランチセグメント（常に `MEDIA_BRANCH` = `main`。上記コメント参照）。
+   *
+   * この値は raw URL の見た目上の識別子であり、取得側の `fetchMedia`（`media.ts`）は
+   * 取得にこの値を使わない（ref パラメータとして渡さない）。#264 で明文化した構造的
+   * 契約の詳細・この値を ref として使ってはいけない理由は `fetchMedia` の JSDoc
+   * （`media.ts`）を参照（このコメントでは再掲しない。ドリフト防止のため一次情報を
+   * 一箇所に保つ）。
+   */
   branch: string
   /** リポルートからのパス（メディアはルート直下のファイル名） */
   path: string

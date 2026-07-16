@@ -448,7 +448,23 @@ export function initMediaOnlineRetry(getSettings: () => Settings): () => void {
 /**
  * raw URL のメディアを認証付きで取得する。
  * raw URL をパースして Contents API（Accept: application/vnd.github.raw）経由で取る。
- * branch は指定せず default branch を使う（auto_init 作成直後は main）。
+ * branch は指定せず default branch を使う（auto_init 作成直後でも default branch は
+ * アカウント設定依存。詳細下記）。
+ *
+ * 構造的契約（#264）: `parseRawMediaUrl(url)` が返す `parsed.branch`（raw URL の
+ * ブランチセグメント。常に `main`）は**意図的にこの fetch に使わない**（ref
+ * パラメータを付けない・git ref としても渡さない）。このリクエストは常にリポの
+ * default branch を対象にする。アップロード（PUT contents・branch 未指定）・
+ * 一覧（git/trees/HEAD）も同じく default branch 追従なので、今はブランチが
+ * 一致していて壊れていない（第三の経路として `collapseMediaHistory`
+ * （`media/history.ts`）は `recordMediaDefaultBranch` で捕捉した実際の default
+ * branch 名を明示的に git ref API へ渡す方式で、同じく追従している）。
+ *
+ * 警告: 将来 `parsed.branch` を ref パラメータや git ref としてこの fetch に
+ * 使うよう「修正」しないこと。メディアリポは `POST /user/repos` + auto_init で
+ * 作られ、default branch はユーザーの GitHub 設定依存（古いアカウントは
+ * master のままの場合がある）。`parsed.branch`（常に main）を渡すと、
+ * default branch が master のアカウントで 404 になる。
  */
 export async function fetchMedia(url: string, settings: Settings): Promise<MediaFetchResult> {
   if (!isMediaConfigured(settings)) {
@@ -462,6 +478,8 @@ export async function fetchMedia(url: string, settings: Settings): Promise<Media
     // parseRawMediaUrl が安全文字に絞っているが、防御の二重化としてエンコードも掛ける
     // #262: ヘッダ到着までを 30 秒で有限化（失敗時はプレビューの「再試行」UI が受ける）。
     // タイマーはヘッダ到着で解除されるため、100MB 級の本文ダウンロードは切られない
+    // #264: parsed.branch は下記 URL に使わない（ref 未指定 = default branch 追従の
+    // 構造的契約。詳細は上の関数 JSDoc）
     const res = await fetchWithTimeout(
       `https://api.github.com/repos/${parsed.repoFullName}/contents/${encodeURIComponent(parsed.path)}`,
       {
@@ -484,7 +502,9 @@ export async function fetchMedia(url: string, settings: Settings): Promise<Media
 
 /**
  * raw URL からメディアの実体を解決する。解決順: pending → cache → 認証 fetch。
- * fetch 成功時は 20MB 以下なら LRU キャッシュに載せる。
+ * fetch 成功時は 20MB 以下なら LRU キャッシュに載せる（fire-and-forget。
+ * キャッシュは補助機構であり、書き込み完了を待たずに手元のデータを即座に返す。
+ * cacheMedia は内部で全エラーを catch し reject しないため unhandledRejection にはならない）。
  */
 export async function resolveMedia(url: string, settings: Settings): Promise<MediaFetchResult> {
   const parsed = parseRawMediaUrl(url)
@@ -510,6 +530,8 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
     if (cached) {
       // fire-and-forget なのでハングしても待ちは生じないが、orphan Promise が
       // エントリのクロージャを保持し続けないよう有限化の方針を揃える
+      // （ここは boundIdb への生の IDB 呼び出しなので外側 .catch() で拾う。
+      // 下の cacheMedia は呼び出し先の関数内部で catch 済みなので void で足りる）
       boundIdb(putCachedMedia({ ...cached, lastAccessedAt: Date.now() }), 'putCachedMedia').catch(
         (error) => {
           console.warn('Media cache touch failed (ignored):', error)
@@ -524,7 +546,9 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
   // 3. 認証付き fetch
   const result = await fetchMedia(url, settings)
   if (result.ok) {
-    await cacheMedia(url, result.data)
+    // fire-and-forget: キャッシュは補助機構。書き込み完了を待たず、手元の
+    // データを即座に返す（#269: IDB がハングしても読み取りパスを塞がない）
+    void cacheMedia(url, result.data)
   }
   return result
 }
