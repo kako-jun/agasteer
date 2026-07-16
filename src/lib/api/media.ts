@@ -484,7 +484,9 @@ export async function fetchMedia(url: string, settings: Settings): Promise<Media
 
 /**
  * raw URL からメディアの実体を解決する。解決順: pending → cache → 認証 fetch。
- * fetch 成功時は 20MB 以下なら LRU キャッシュに載せる。
+ * fetch 成功時は 20MB 以下なら LRU キャッシュに載せる（fire-and-forget。
+ * キャッシュは補助機構であり、書き込み完了を待たずに手元のデータを即座に返す。
+ * cacheMedia は内部で全エラーを catch し reject しないため unhandledRejection にはならない）。
  */
 export async function resolveMedia(url: string, settings: Settings): Promise<MediaFetchResult> {
   const parsed = parseRawMediaUrl(url)
@@ -510,6 +512,8 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
     if (cached) {
       // fire-and-forget なのでハングしても待ちは生じないが、orphan Promise が
       // エントリのクロージャを保持し続けないよう有限化の方針を揃える
+      // （ここは boundIdb への生の IDB 呼び出しなので外側 .catch() で拾う。
+      // 下の cacheMedia は呼び出し先の関数内部で catch 済みなので void で足りる）
       boundIdb(putCachedMedia({ ...cached, lastAccessedAt: Date.now() }), 'putCachedMedia').catch(
         (error) => {
           console.warn('Media cache touch failed (ignored):', error)
@@ -524,7 +528,9 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
   // 3. 認証付き fetch
   const result = await fetchMedia(url, settings)
   if (result.ok) {
-    await cacheMedia(url, result.data)
+    // fire-and-forget: キャッシュは補助機構。書き込み完了を待たず、手元の
+    // データを即座に返す（#269: IDB がハングしても読み取りパスを塞がない）
+    void cacheMedia(url, result.data)
   }
   return result
 }
