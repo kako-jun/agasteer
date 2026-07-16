@@ -33,6 +33,9 @@
     focusedPane,
     leftInitialLine,
     rightInitialLine,
+    leafStatsStore,
+    archiveLeafStatsStore,
+    getLeafStatsForWorldView,
   } from '../../lib/stores'
 
   // ビューコンポーネント
@@ -117,6 +120,10 @@
   // ペインのワールドに応じてノート・リーフストアを切り替え
   let paneWorld = $derived(pane === 'left' ? paneState.value.leftWorld : paneState.value.rightWorld)
   let isArchiveWorld = $derived(paneWorld === 'archive')
+  // ペインのワールド・ビューに応じてリーフ統計を切り替え（#290: 右ペインが左ペインのワールドに追従していたバグの修正）
+  let paneLeafStats = $derived(
+    getLeafStatsForWorldView(paneWorld, currentView, leafStatsStore, archiveLeafStatsStore)
+  )
   let activeNotes = $derived(isArchiveWorld ? archiveNotes.value : notes.value)
   let activeLeaves = $derived(isArchiveWorld ? archiveLeaves.value : leaves.value)
   let activeRootNotes = $derived(
@@ -274,8 +281,8 @@
 
 {#if currentView === 'home'}
   <StatsPanel
-    leafCount={paneState.value.totalLeafCount}
-    leafCharCount={paneState.value.totalLeafChars}
+    leafCount={paneLeafStats.totalLeafCount}
+    leafCharCount={paneLeafStats.totalLeafChars}
     pushCount={paneState.value.lastPulledPushCount}
   />
 {/if}

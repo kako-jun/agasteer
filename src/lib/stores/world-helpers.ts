@@ -3,7 +3,7 @@
  * ストアに依存しない純粋関数として定義
  */
 
-import type { Note, Leaf, WorldType } from '../types'
+import type { Note, Leaf, WorldType, View } from '../types'
 import type { Pane } from '../navigation'
 
 /**
@@ -90,4 +90,16 @@ export function getWorldForLeaf(leaf: Leaf, homeLeaves: Leaf[], archiveLeaves: L
  */
 export function getDialogPositionForPane(pane: Pane): 'bottom-left' | 'bottom-right' {
   return pane === 'left' ? 'bottom-left' : 'bottom-right'
+}
+
+/**
+ * ワールド・ビューに応じたリーフ統計を取得（Archiveワールドかつhomeビューの時だけArchive側の統計）
+ */
+export function getLeafStatsForWorldView<T>(
+  world: WorldType,
+  view: View,
+  homeStats: T,
+  archiveStats: T
+): T {
+  return world === 'archive' && view === 'home' ? archiveStats : homeStats
 }

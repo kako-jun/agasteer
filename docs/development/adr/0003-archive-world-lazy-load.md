@@ -42,3 +42,7 @@ commit `a7de6bc`（"feat: 検索機能のアーカイブ対応を実装"、2026-
 約1時間後のcommit `7225ce5`（"feat: アーカイブ切り替え時に統計表示で進捗を可視化"、2026-01-13）で、統計側にもArchive対応が追加された。Archive専用の`archiveLeafStatsStore`が導入され（`src/lib/stores/leaf-stats.svelte.ts`）、`src/lib/app-state.svelte.ts`（494-503行目付近）の`_totalLeafCount`/`_totalLeafChars`が切り替えを判定する。ただしこの判定は「現在アクティブなペイン」ではなく**左ペインのワールド・ビュー（`leftWorld`/`leftView`）に固定**されている（`leftWorld.value === 'archive' && leftView.value === 'home'`の時のみArchive側の統計を表示）。この値は`paneStateStore`経由で左右両方の`PaneView`（`StatsPanel`）へ共有されるため、右ペインの統計表示も実際には左ペインのワールドに追従する形になっている。これはADR-0002の左右対称原則（「コードに差があればバグ」）との整合性に疑問が残る実装詳細であり、別途調査の余地がある。
 
 ただし「検索・統計はHomeのみ」という当初の決定そのものが撤回されたわけではない。Archiveが未ロードの間（ユーザーが一度もArchiveへ切り替えていない間）は検索・統計の対象外のままであり、「Archiveは実際に切り替えるまでPullしない」という本ADRの遅延ロードの前提は変わっていない。
+
+## 追記（2026-07、#290）
+
+上記の「左ペインのワールド・ビューに固定」されていた統計表示は、#290でペイン対応に修正された。`src/lib/stores/world-helpers.ts`に純粋関数`getLeafStatsForWorldView(world, view, homeStats, archiveStats)`を追加し、`PaneView.svelte`が自分自身の`paneWorld`/`currentView`（既存のペイン対応derived、`paneWorld`と同じ左右振り分けパターン）でこれを呼ぶように変更。`app-state.svelte.ts`側の左ペイン固定だった`_totalLeafCount`/`_totalLeafChars`とその公開経路（`paneStateStore`/`PaneState`型の該当フィールド）は不要になったため削除した。これによりADR-0002の左右対称原則との不整合は解消され、「別途調査の余地がある」という上記の留保は解消済み。

@@ -135,8 +135,6 @@
       dragOverLeafId: derivedState.dragOverLeafId,
       loadingLeafIds: appState.loadingLeafIds,
       leafSkeletonMap: appState.leafSkeletonMap,
-      totalLeafCount: derivedState.totalLeafCount,
-      totalLeafChars: derivedState.totalLeafChars,
       lastPulledPushCount: lastPulledPushCount.value,
       currentPriorityLeaf: derivedState.currentPriorityLeaf,
       currentOfflineLeaf: derivedState.currentOfflineLeaf,
