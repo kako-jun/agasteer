@@ -1277,3 +1277,288 @@ describe('背景アップロードの直列性・結合（#247）', () => {
     expect(console.error).not.toHaveBeenCalled()
   })
 })
+
+// ============================================
+// fire-and-forget化のrace / unhandledRejection観点（#269）
+// ============================================
+describe('#269 resolveMedia キャッシュ書き込み fire-and-forget 化', () => {
+  describe('A: 変更の核心（真にブロックしていないことの回帰ガード）', () => {
+    it('A1: cacheMedia内部のgetAllCachedMediaMetaが未解決でもresolveMedia自身は即座に解決する', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' })
+      let resolveMeta!: (value: unknown[]) => void
+      mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveMeta = resolve
+          })
+      )
+      const media = await loadMedia()
+
+      const res = await media.resolveMedia(RAW_URL, makeSettings())
+
+      expect(res.ok).toBe(true)
+      // cacheMedia 内部はまだ getAllCachedMediaMeta 待ちで put に到達していない
+      expect(mediaStore.fns.putCachedMedia).not.toHaveBeenCalled()
+
+      // 後始末: 保留中の Promise を解決してから終える（宙に浮かせない）
+      resolveMeta([])
+      await flushAsync()
+    })
+
+    it('A2: 保留していたメタ取得が解決すればflushAsync後にputCachedMediaが呼ばれ実際にキャッシュが埋まる', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' })
+      let resolveMeta!: (value: unknown[]) => void
+      mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveMeta = resolve
+          })
+      )
+      const media = await loadMedia()
+
+      const res = await media.resolveMedia(RAW_URL, makeSettings())
+      expect(res.ok).toBe(true)
+      expect(mediaStore.cache.has(RAW_URL)).toBe(false) // この時点ではまだ埋まっていない
+
+      resolveMeta([])
+      await flushAsync()
+
+      expect(mediaStore.fns.putCachedMedia).toHaveBeenCalledTimes(1)
+      expect(mediaStore.cache.has(RAW_URL)).toBe(true)
+    })
+
+    it('A3（逆方向の回帰ガード）: uploadPendingItem（チェーン経路）はcacheMedia内部が解決するまでuploadDoneがpendingのまま', async () => {
+      mock
+        .on('GET', REPO_GET, { json: { id: 1 } })
+        .on('GET', CONTENTS, { status: 404, json: {} })
+        .on('PUT', CONTENTS, { status: 201, json: {} })
+      let resolveMeta!: (value: unknown[]) => void
+      mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveMeta = resolve
+          })
+      )
+      const media = await loadMedia()
+
+      const res = await media.uploadMedia(makeFile('hello.png', 'hello'), makeSettings())
+      if (!res.ok) throw new Error('unreachable')
+      let settled = false
+      void res.uploadDone.then(() => {
+        settled = true
+      })
+
+      await flushAsync()
+      // dequeue 自体は完了しているが、cacheMedia 内部のメタ取得待ちで uploadDone は未解決のまま
+      // （#269 の対象外＝チェーン経路は await が維持されている）
+      expect(mediaStore.fns.deletePendingMedia).toHaveBeenCalledTimes(1)
+      expect(settled).toBe(false)
+
+      resolveMeta([])
+      await flushAsync()
+      expect(settled).toBe(true)
+      expect(await res.uploadDone).toBe(true)
+      expect(mediaStore.cache.has(res.url)).toBe(true)
+    })
+  })
+
+  describe('B: unhandledRejectionが出ないことの確認', () => {
+    it('B1: fetch成功後にgetAllCachedMediaMetaがrejectしてもunhandledRejectionにならずconsole.warn 1回で済む', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' })
+      mediaStore.fns.getAllCachedMediaMeta.mockRejectedValueOnce(new Error('idb boom'))
+      const media = await loadMedia()
+      const rejections: unknown[] = []
+      const onUnhandled = (reason: unknown) => rejections.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+      try {
+        const res = await media.resolveMedia(RAW_URL, makeSettings())
+        await flushAsync()
+
+        expect(res.ok).toBe(true)
+        expect(rejections).toEqual([])
+        expect(console.warn).toHaveBeenCalledTimes(1)
+        expect(console.warn).toHaveBeenCalledWith(
+          'Media cache write failed (ignored):',
+          expect.anything()
+        )
+        expect(mediaStore.fns.putCachedMedia).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+    })
+
+    it('B2: eviction中のdeleteCachedMediaがrejectしてもunhandledRejectionにならずconsole.warn 1回で済む', async () => {
+      mediaStore.fns.getAllCachedMediaMeta.mockResolvedValueOnce([
+        { url: 'u-mid', size: 1_000_000, lastAccessedAt: 2 },
+        { url: 'u-old', size: 1_000_000, lastAccessedAt: 1 },
+        { url: 'u-big', size: 208_000_000, lastAccessedAt: 3 },
+      ])
+      mediaStore.fns.deleteCachedMedia.mockRejectedValueOnce(new Error('evict boom'))
+      mock.on('GET', CONTENTS, { text: 'a'.repeat(1_048_576) })
+      const media = await loadMedia()
+      const rejections: unknown[] = []
+      const onUnhandled = (reason: unknown) => rejections.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+      try {
+        const res = await media.resolveMedia(RAW_URL, makeSettings())
+        await flushAsync()
+
+        expect(res.ok).toBe(true)
+        expect(rejections).toEqual([])
+        expect(console.warn).toHaveBeenCalledTimes(1)
+        expect(console.warn).toHaveBeenCalledWith(
+          'Media cache write failed (ignored):',
+          expect.anything()
+        )
+        // eviction 失敗で put まで到達しない
+        expect(mediaStore.fns.putCachedMedia).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+    })
+
+    it('B3: putCachedMedia本体がrejectしてもunhandledRejectionにならずconsole.warn 1回で済む', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' })
+      mediaStore.fns.putCachedMedia.mockRejectedValueOnce(new Error('put boom'))
+      const media = await loadMedia()
+      const rejections: unknown[] = []
+      const onUnhandled = (reason: unknown) => rejections.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+      try {
+        const res = await media.resolveMedia(RAW_URL, makeSettings())
+        await flushAsync()
+
+        expect(res.ok).toBe(true)
+        expect(rejections).toEqual([])
+        expect(console.warn).toHaveBeenCalledTimes(1)
+        expect(console.warn).toHaveBeenCalledWith(
+          'Media cache write failed (ignored):',
+          expect.anything()
+        )
+        expect(mediaStore.cache.has(RAW_URL)).toBe(false)
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+    })
+  })
+
+  describe('C: 並行実行 / race', () => {
+    it('C1: 同一URLへ2回連続で呼ぶと（1回目のfire-and-forgetキャッシュ書込みが着地する前に2回目が走り）fetchが2回発火する（旧実装なら1回だった変化の固定化）', async () => {
+      // 注: いずれかを await してから2回目を呼ぶと、1回目の fire-and-forget 書き込みが
+      // 十分先に着地してしまい cache hit（fetch 1回）になる（C3 で確認済み）。
+      // 「flush を挟まない連続呼び出し」を再現するには、両方を await せず先に呼んでおく
+      mock.on('GET', CONTENTS, { text: 'REMOTE' }).on('GET', CONTENTS, { text: 'REMOTE' })
+      const media = await loadMedia()
+
+      const call1 = media.resolveMedia(RAW_URL, makeSettings())
+      const call2 = media.resolveMedia(RAW_URL, makeSettings())
+      const [res1, res2] = await Promise.all([call1, call2])
+
+      expect(res1.ok).toBe(true)
+      expect(res2.ok).toBe(true)
+      expect(mock.callsMatching('GET', CONTENTS)).toHaveLength(2)
+
+      await flushAsync() // 両方の fire-and-forget cache 書き込みを流しきる
+      expect(console.error).not.toHaveBeenCalled()
+      mock.assertDrained()
+    })
+
+    it('C2: 同一URLへ完全並行に2回resolveMediaしても例外・unhandledRejectionなく両方解決し、最終キャッシュは1件に収束する', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' }).on('GET', CONTENTS, { text: 'REMOTE' })
+      const media = await loadMedia()
+      const rejections: unknown[] = []
+      const onUnhandled = (reason: unknown) => rejections.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+      try {
+        const [res1, res2] = await Promise.all([
+          media.resolveMedia(RAW_URL, makeSettings()),
+          media.resolveMedia(RAW_URL, makeSettings()),
+        ])
+        expect(res1.ok).toBe(true)
+        expect(res2.ok).toBe(true)
+        expect(mock.callsMatching('GET', CONTENTS)).toHaveLength(2)
+
+        await flushAsync()
+        expect(mediaStore.cache.size).toBe(1) // 後勝ち上書きで壊れない（重複キーにならない）
+        expect(rejections).toEqual([])
+        expect(console.error).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+      mock.assertDrained()
+    })
+
+    it('C3: 連続2回発火後にflushAsyncを挟めば3回目はcache hitしfetchが増えない（重複ウィンドウは一過性）', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' }).on('GET', CONTENTS, { text: 'REMOTE' })
+      const media = await loadMedia()
+
+      // C1 と同様、flush を挟まない連続呼び出しを再現するため両方を先に呼んでおく
+      await Promise.all([
+        media.resolveMedia(RAW_URL, makeSettings()),
+        media.resolveMedia(RAW_URL, makeSettings()),
+      ])
+      expect(mock.callsMatching('GET', CONTENTS)).toHaveLength(2)
+
+      await flushAsync() // 先行 2 回分の cache 書き込みが完了するのを待つ
+
+      const res3 = await media.resolveMedia(RAW_URL, makeSettings())
+      expect(res3.ok).toBe(true)
+      expect(mock.callsMatching('GET', CONTENTS)).toHaveLength(2) // 3回目は増えない・cache hit
+      mock.assertDrained()
+    })
+  })
+
+  describe('D: console error / ログ汚染', () => {
+    it('D1: 正常系（fetch成功→キャッシュ書込み成功→flush後）でconsole.error/console.warnがともに0回', async () => {
+      mock.on('GET', CONTENTS, { text: 'REMOTE' })
+      const media = await loadMedia()
+
+      const res = await media.resolveMedia(RAW_URL, makeSettings())
+      await flushAsync()
+
+      expect(res.ok).toBe(true)
+      expect(mediaStore.cache.has(RAW_URL)).toBe(true)
+      expect(console.error).not.toHaveBeenCalled()
+      expect(console.warn).not.toHaveBeenCalled()
+      mock.assertDrained()
+    })
+  })
+
+  describe('G: 過去の事故パターンとの関係', () => {
+    it('G1: getAllCachedMediaMetaが10秒ハングしboundIdbがタイムアウトしても、resolveMediaの応答には影響せず、遅延解決してもunhandledRejectionにならない', async () => {
+      vi.useFakeTimers()
+      const rejections: unknown[] = []
+      const onUnhandled = (reason: unknown) => rejections.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+      try {
+        mock.on('GET', CONTENTS, { text: 'REMOTE' })
+        let resolveMeta!: (value: unknown[]) => void
+        mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveMeta = resolve
+            })
+        )
+        const media = await loadMedia()
+
+        const res = await media.resolveMedia(RAW_URL, makeSettings())
+        // (a) ハング中でも resolveMedia 自身の応答には一切影響しない
+        expect(res.ok).toBe(true)
+
+        // MEDIA_IDB_TIMEOUT_MS（10秒）分だけ仮想時間を進める（実待ちを避ける）
+        await vi.advanceTimersByTimeAsync(10_000)
+        expect(console.warn).toHaveBeenCalledWith(
+          'Media cache write failed (ignored):',
+          expect.anything()
+        )
+
+        // (b) タイムアウト後に元 Promise が遅れて settle しても unhandledRejection にならない
+        resolveMeta([])
+        await vi.advanceTimersByTimeAsync(0)
+        expect(rejections).toEqual([])
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+    })
+  })
+})
