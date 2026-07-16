@@ -95,6 +95,16 @@ export function buildRawMediaUrl(mediaRepoFullName: string, fileName: string): s
 export interface ParsedRawMediaUrl {
   /** `owner/repo` 形式 */
   repoFullName: string
+  /**
+   * raw URL のブランチセグメント（常に `MEDIA_BRANCH` = `main`。上記コメント参照）。
+   *
+   * この値は raw URL の見た目上の識別子であり、取得側の `fetchMedia`（`media.ts`）は
+   * 取得にこの値を使わない（ref パラメータとして渡さない）。これは #264 で明文化した
+   * 構造的契約: fetchMedia は常にリポの default branch を Contents API で取りに行き、
+   * この `branch` フィールドは無視する。default branch が `master` の古いアカウントで
+   * 404 を起こさないための不変条件なので、fetchMedia 側でこの値を ref として使う
+   * ように「修正」しないこと。
+   */
   branch: string
   /** リポルートからのパス（メディアはルート直下のファイル名） */
   path: string

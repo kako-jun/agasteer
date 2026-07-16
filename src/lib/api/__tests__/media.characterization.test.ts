@@ -971,6 +971,10 @@ describe('resolveMedia', () => {
     expect(console.error).not.toHaveBeenCalled()
   })
 
+  // #264: 下の call!.url の完全一致アサーションは、raw URL のブランチセグメント
+  // （常に main）が ref クエリパラメータとしてこの fetch に付かないこと（=
+  // fetchMedia は常に default branch を対象にする構造的契約）も併せて固定化する。
+  // URL に `?ref=main` 等が付けば厳密一致が崩れて検知できる。
   it('解決順3: 両ミスなら Contents API を raw Accept + 認証付きで fetch し cache に書く', async () => {
     mock.on('GET', `/repos/owner/repo-media/contents/${RAW_PATH}`, { text: 'REMOTE' })
     const media = await loadMedia()
