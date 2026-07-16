@@ -976,6 +976,7 @@ describe('resolveMedia', () => {
     const media = await loadMedia()
 
     const res = await media.resolveMedia(RAW_URL, makeSettings())
+    await flushAsync() // fire-and-forget 化した cache 書き込みを流しきる（#269）
 
     expect(res.ok).toBe(true)
     if (!res.ok) throw new Error('unreachable')
@@ -1059,6 +1060,7 @@ describe('resolveMedia', () => {
     const media = await loadMedia()
 
     const res = await media.resolveMedia(RAW_URL, makeSettings())
+    await flushAsync() // fire-and-forget 化した cache 書き込みを流しきる（#269）
 
     expect(res.ok).toBe(true)
     expect(mediaStore.fns.putCachedMedia).toHaveBeenCalledTimes(1)
@@ -1104,6 +1106,7 @@ describe('cacheMedia（LRU 配線）', () => {
     const media = await loadMedia()
 
     const res = await media.resolveMedia(RAW_URL, makeSettings())
+    await flushAsync() // fire-and-forget 化した cache 書き込みを流しきる（#269）
 
     expect(res.ok).toBe(true)
     expect(mediaStore.fns.deleteCachedMedia.mock.calls.map((c) => c[0])).toEqual(['u-old', 'u-mid'])
@@ -1123,6 +1126,7 @@ describe('cacheMedia（LRU 配線）', () => {
     const media = await loadMedia()
 
     const res = await media.resolveMedia(RAW_URL, makeSettings())
+    await flushAsync() // fire-and-forget 化した cache 書き込みを流しきる（#269）
 
     expect(res.ok).toBe(true)
     expect(mediaStore.fns.deleteCachedMedia).not.toHaveBeenCalled()
