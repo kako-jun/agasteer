@@ -26,13 +26,10 @@ import {
   isPulling,
   isPushing,
   isPushingBackground,
-  leftView,
-  rightView,
   githubConfigured,
   metadata,
   dragStore,
   leafStatsStore,
-  archiveLeafStatsStore,
   moveModalStore,
   pullProgressInfo,
   offlineLeafStore,
@@ -489,18 +486,7 @@ let _draggedLeaf = $derived(dragStore.draggedLeaf)
 let _dragOverNoteId = $derived(dragStore.dragOverNoteId)
 let _dragOverLeafId = $derived(dragStore.dragOverLeafId)
 
-// leafStatsStoreとmoveModalStoreへのリアクティブアクセス
-// 左ペインのワールドとビューに応じて統計を切り替え
-let _totalLeafCount = $derived(
-  leftWorld.value === 'archive' && leftView.value === 'home'
-    ? archiveLeafStatsStore.totalLeafCount
-    : leafStatsStore.totalLeafCount
-)
-let _totalLeafChars = $derived(
-  leftWorld.value === 'archive' && leftView.value === 'home'
-    ? archiveLeafStatsStore.totalLeafChars
-    : leafStatsStore.totalLeafChars
-)
+// moveModalStoreへのリアクティブアクセス
 let _moveModalOpen = $derived(moveModalStore.isOpen)
 let _moveTargetLeaf = $derived(moveModalStore.targetLeaf)
 let _moveTargetNote = $derived(moveModalStore.targetNote)
@@ -575,12 +561,6 @@ export const derivedState = {
   get dragOverLeafId() {
     return _dragOverLeafId
   },
-  get totalLeafCount() {
-    return _totalLeafCount
-  },
-  get totalLeafChars() {
-    return _totalLeafChars
-  },
   get moveModalOpen() {
     return _moveModalOpen
   },
@@ -650,8 +630,6 @@ let _paneState = $state<PaneState>({
   dragOverLeafId: null,
   loadingLeafIds: new Set(),
   leafSkeletonMap: new Map(),
-  totalLeafCount: 0,
-  totalLeafChars: 0,
   lastPulledPushCount: 0,
   currentPriorityLeaf: null,
   currentOfflineLeaf: null,

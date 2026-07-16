@@ -114,8 +114,6 @@ export interface PaneState {
   dragOverLeafId: string | null
   loadingLeafIds: Set<string>
   leafSkeletonMap: Map<string, any>
-  totalLeafCount: number
-  totalLeafChars: number
   lastPulledPushCount: number
   currentPriorityLeaf: Leaf | null
   currentOfflineLeaf: Leaf | null
