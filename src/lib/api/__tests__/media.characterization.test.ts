@@ -971,6 +971,10 @@ describe('resolveMedia', () => {
     expect(console.error).not.toHaveBeenCalled()
   })
 
+  // #264: 下の call!.url の完全一致アサーションは、raw URL のブランチセグメント
+  // （常に main）が ref クエリパラメータとしてこの fetch に付かないこと（=
+  // fetchMedia は常に default branch を対象にする構造的契約）も併せて固定化する。
+  // URL に `?ref=main` 等が付けば厳密一致が崩れて検知できる。
   it('解決順3: 両ミスなら Contents API を raw Accept + 認証付きで fetch し cache に書く', async () => {
     mock.on('GET', `/repos/owner/repo-media/contents/${RAW_PATH}`, { text: 'REMOTE' })
     const media = await loadMedia()
@@ -1087,6 +1091,22 @@ describe('fetchMedia', () => {
     expect(res).toEqual({ ok: false, errorKind: 'fetch_failed' })
     expect(res).not.toHaveProperty('httpStatus')
     expect(console.error).toHaveBeenCalledWith('fetchMedia failed:', expect.anything())
+  })
+
+  // #264 の構造的契約（parsed.branch を ref に付けない = 常に default branch を
+  // 取りに行く）を守るテスト。resolveMedia の「解決順3」テストは pending/cache
+  // 層を経由する間接テストなので、こちらは fetchMedia を直接呼ぶ最小構成にして
+  // 重複を避ける。
+  it('リクエスト URL は ref・クエリパラメータを一切付けず default branch を対象にする（#264 構造的契約）', async () => {
+    mock.on('GET', `/repos/owner/repo-media/contents/${RAW_PATH}`, { text: 'REMOTE' })
+    const media = await loadMedia()
+
+    const res = await media.fetchMedia(RAW_URL, makeSettings())
+
+    expect(res.ok).toBe(true)
+    const call = mock.firstCall('GET', `/repos/owner/repo-media/contents/${RAW_PATH}`)
+    expect(call!.url).toBe(`https://api.github.com/repos/owner/repo-media/contents/${RAW_PATH}`)
+    mock.assertDrained()
   })
 })
 
