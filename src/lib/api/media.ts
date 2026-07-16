@@ -512,6 +512,8 @@ export async function resolveMedia(url: string, settings: Settings): Promise<Med
     if (cached) {
       // fire-and-forget なのでハングしても待ちは生じないが、orphan Promise が
       // エントリのクロージャを保持し続けないよう有限化の方針を揃える
+      // （ここは boundIdb への生の IDB 呼び出しなので外側 .catch() で拾う。
+      // 下の cacheMedia は呼び出し先の関数内部で catch 済みなので void で足りる）
       boundIdb(putCachedMedia({ ...cached, lastAccessedAt: Date.now() }), 'putCachedMedia').catch(
         (error) => {
           console.warn('Media cache touch failed (ignored):', error)

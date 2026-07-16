@@ -17,7 +17,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 
 import { createFetchMock, makeSettings, type FetchMock } from '../github/__tests__/fetch-mock'
 import { MAX_MEDIA_SIZE_BYTES } from '../media/validation'
-import { MEDIA_CACHE_MAX_ENTRY_BYTES } from '../media/lru'
+import { MEDIA_CACHE_MAX_ENTRY_BYTES, type MediaCacheMeta } from '../media/lru'
 
 // ============================================
 // media-storage の in-memory モック
@@ -1285,7 +1285,7 @@ describe('#269 resolveMedia キャッシュ書き込み fire-and-forget 化', ()
   describe('A: 変更の核心（真にブロックしていないことの回帰ガード）', () => {
     it('A1: cacheMedia内部のgetAllCachedMediaMetaが未解決でもresolveMedia自身は即座に解決する', async () => {
       mock.on('GET', CONTENTS, { text: 'REMOTE' })
-      let resolveMeta!: (value: unknown[]) => void
+      let resolveMeta!: (value: MediaCacheMeta[]) => void
       mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -1307,7 +1307,7 @@ describe('#269 resolveMedia キャッシュ書き込み fire-and-forget 化', ()
 
     it('A2: 保留していたメタ取得が解決すればflushAsync後にputCachedMediaが呼ばれ実際にキャッシュが埋まる', async () => {
       mock.on('GET', CONTENTS, { text: 'REMOTE' })
-      let resolveMeta!: (value: unknown[]) => void
+      let resolveMeta!: (value: MediaCacheMeta[]) => void
       mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -1332,7 +1332,7 @@ describe('#269 resolveMedia キャッシュ書き込み fire-and-forget 化', ()
         .on('GET', REPO_GET, { json: { id: 1 } })
         .on('GET', CONTENTS, { status: 404, json: {} })
         .on('PUT', CONTENTS, { status: 201, json: {} })
-      let resolveMeta!: (value: unknown[]) => void
+      let resolveMeta!: (value: MediaCacheMeta[]) => void
       mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -1443,9 +1443,14 @@ describe('#269 resolveMedia キャッシュ書き込み fire-and-forget 化', ()
   })
 
   describe('C: 並行実行 / race', () => {
-    it('C1: 同一URLへ2回連続で呼ぶと（1回目のfire-and-forgetキャッシュ書込みが着地する前に2回目が走り）fetchが2回発火する（旧実装なら1回だった変化の固定化）', async () => {
-      // 注: いずれかを await してから2回目を呼ぶと、1回目の fire-and-forget 書き込みが
-      // 十分先に着地してしまい cache hit（fetch 1回）になる（C3 で確認済み）。
+    it('C1: 同一URLへ2回連続で呼ぶとfetchが2回発火する（並行呼び出し時の二重fetchはbest-effortキャッシュの既存の性質で、fire-and-forget化がそれを悪化させていないことの固定化）', async () => {
+      // 注: 両方の呼び出しは、相手のキャッシュ書込み（await でも fire-and-forget でも）が
+      // 着地するより先に cache miss 判定へ到達してしまうため、2回とも fetch が発火する。
+      // これは #269 以前から存在する best-effort キャッシュの既知の性質であり、
+      // fire-and-forget 化が新たに作り出したものではない（cacheMedia を await していた
+      // 旧実装に戻して同じテストを実行しても同じく fetch 2回になることを確認済み）。
+      // いずれかを await してから2回目を呼ぶと、1回目の書き込みが十分先に着地してしまい
+      // cache hit（fetch 1回）になる（C3 で確認済み）。
       // 「flush を挟まない連続呼び出し」を再現するには、両方を await せず先に呼んでおく
       mock.on('GET', CONTENTS, { text: 'REMOTE' }).on('GET', CONTENTS, { text: 'REMOTE' })
       const media = await loadMedia()
@@ -1532,7 +1537,7 @@ describe('#269 resolveMedia キャッシュ書き込み fire-and-forget 化', ()
       process.on('unhandledRejection', onUnhandled)
       try {
         mock.on('GET', CONTENTS, { text: 'REMOTE' })
-        let resolveMeta!: (value: unknown[]) => void
+        let resolveMeta!: (value: MediaCacheMeta[]) => void
         mediaStore.fns.getAllCachedMediaMeta.mockImplementationOnce(
           () =>
             new Promise((resolve) => {
