@@ -519,6 +519,12 @@ describe('pushToGitHub Phase 2成功時のmetadata.pushCount追従 (#293)', () =
     mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
   })
 
+  afterEach(() => {
+    // このdescribeブロックのテストはstores.metadata.value（vi.hoistedの共有オブジェクト）を
+    // 書き換えるため、後続の他describeブロックに漏れ出さないよう既定値に戻す。
+    stores.metadata.value = { version: 1, notes: {}, leaves: {}, pushCount: 1 }
+  })
+
   it('push成功（noChanges以外）でmetadata.value.pushCountがリモート最新値に更新され、lastPulledPushCountと揃う（デシジョンテーブル行2・主シナリオ）', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
@@ -547,7 +553,7 @@ describe('pushToGitHub Phase 2成功時のmetadata.pushCount追従 (#293)', () =
     expect(stores.metadata.value.pushCount).toBe(9)
   })
 
-  it('fetchRemotePushCountがnetwork_errorを返す場合、metadata.value.pushCount/lastPulledPushCountとも更新されず、push自体は例外を投げず成功トーストのまま完了する（デシジョンテーブル行3-6代表・異常系）', async () => {
+  it('fetchRemotePushCountがnetwork_errorを返す場合、metadata.value.pushCount/lastPulledPushCountとも更新されず、push完了処理自体は正常に終わり成功トーストのままになる（デシジョンテーブル行3-6代表・異常系）', async () => {
     mocks.fetchRemotePushCount.mockResolvedValue({ status: 'network_error' })
     mocks.executePush.mockResolvedValue(pushSuccessResult)
 
@@ -558,7 +564,11 @@ describe('pushToGitHub Phase 2成功時のmetadata.pushCount追従 (#293)', () =
     expect(mocks.showPushCompletionToast).toHaveBeenCalledWith('github.pushSuccess', 'success')
   })
 
-  it.each([{ status: 'auth_error' }, { status: 'settings_invalid' }, { status: 'empty_repository' }])(
+  it.each([
+    { status: 'auth_error' },
+    { status: 'settings_invalid' },
+    { status: 'empty_repository' },
+  ])(
     'fetchRemotePushCountが$statusを返す場合もmetadata.value.pushCountは更新されない（同値分割の裏取り）',
     async ({ status }) => {
       mocks.fetchRemotePushCount.mockResolvedValue({ status })
