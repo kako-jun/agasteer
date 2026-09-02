@@ -14,7 +14,10 @@ const stores = vi.hoisted(() => ({
   settings: createStore({ token: 'token', repoName: 'owner/repo', branch: 'main' }),
   notes: createStore([{ id: 'note-1', name: 'Note', parentId: null, order: 0 }]),
   leaves: createStore([{ id: 'leaf-1', noteId: 'note-1', content: 'content', order: 0 }]),
-  metadata: createStore({ pushCount: 1 }),
+  // #293: pushCount 以外のフィールド（version/notes/leaves）も実 Metadata 型に揃えておく。
+  // {pushCount:number} のみだと #293 テストで他フィールドの非破壊性を検証する際に
+  // excess property error（svelte-check）になるため。
+  metadata: createStore({ version: 1, notes: {}, leaves: {}, pushCount: 1 }),
   isDirty: createStore(true),
   isPulling: createStore(false),
   isPushing: createStore(false),
@@ -470,6 +473,174 @@ describe('pushToGitHub background phase (#206)', () => {
     await pushToGitHub()
 
     expect(mocks.showPushToast).toHaveBeenCalledWith('loading.pushing')
+  })
+})
+
+describe('pushToGitHub Phase 2成功時のmetadata.pushCount追従 (#293)', () => {
+  // pushCount 以外のフィールド（notes/leaves/version）を非破壊性検証に使うため、
+  // metadata の初期値は pushCount 以外にも意味のある内容を入れておく。
+  // 初期値 9 は「更新後の新しい値（5）」「falsy値（0）」どちらとも区別できるよう選ぶ。
+  const initialMetadata = () => ({
+    version: 7,
+    notes: { 'note-1': { id: 'note-1', order: 0 } },
+    leaves: { 'leaf-1': { id: 'leaf-1', updatedAt: 123, order: 0 } },
+    pushCount: 9,
+  })
+  const pushSuccessResult = {
+    success: true,
+    message: 'github.pushSuccess',
+    variant: 'success' as const,
+    commitSha: 'remote-sha',
+  }
+  const pushNoChangesResult = {
+    success: true,
+    message: 'github.noChanges',
+    variant: 'success' as const,
+    commitSha: 'remote-sha',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    stores.lastPushTime.value = 0
+    stores.lastPulledPushCount.value = 9
+    stores.notes.value = [{ id: 'note-1', name: 'Note', parentId: null, order: 0 }]
+    stores.leaves.value = [{ id: 'leaf-1', noteId: 'note-1', content: 'orig', order: 0 }]
+    stores.metadata.value = initialMetadata()
+    stores.archiveMetadata.value = { pushCount: 3 }
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+  })
+
+  afterEach(() => {
+    // このdescribeブロックのテストはstores.metadata.value（vi.hoistedの共有オブジェクト）を
+    // 書き換えるため、後続の他describeブロックに漏れ出さないよう既定値に戻す。
+    stores.metadata.value = { version: 1, notes: {}, leaves: {}, pushCount: 1 }
+  })
+
+  it('push成功（noChanges以外）でmetadata.value.pushCountがリモート最新値に更新され、lastPulledPushCountと揃う（デシジョンテーブル行2・主シナリオ）', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 5 })
+      mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+      await pushToGitHub()
+
+      expect(stores.metadata.value.pushCount).toBe(5)
+      expect(stores.lastPulledPushCount.value).toBe(5)
+      // 整合性: 両者は常に同じ値に揃う
+      expect(stores.metadata.value.pushCount).toBe(stores.lastPulledPushCount.value)
+      // ついでにログ汚染がないことも確認（軽微）
+      expect(errorSpy).not.toHaveBeenCalled()
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  it('push成功だが message==="github.noChanges" の場合、fetchRemotePushCount自体が呼ばれずmetadata.value.pushCountも変化しない（デシジョンテーブル行1）', async () => {
+    mocks.executePush.mockResolvedValue(pushNoChangesResult)
+
+    await pushToGitHub()
+
+    expect(mocks.fetchRemotePushCount).not.toHaveBeenCalled()
+    expect(stores.metadata.value.pushCount).toBe(9)
+  })
+
+  it('fetchRemotePushCountがnetwork_errorを返す場合、metadata.value.pushCount/lastPulledPushCountとも更新されず、push完了処理自体は正常に終わり成功トーストのままになる（デシジョンテーブル行3-6代表・異常系）', async () => {
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'network_error' })
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await expect(pushToGitHub()).resolves.toBeUndefined()
+
+    expect(stores.metadata.value.pushCount).toBe(9)
+    expect(stores.lastPulledPushCount.value).toBe(9)
+    expect(mocks.showPushCompletionToast).toHaveBeenCalledWith('github.pushSuccess', 'success')
+  })
+
+  it.each([
+    { status: 'auth_error' },
+    { status: 'settings_invalid' },
+    { status: 'empty_repository' },
+  ])(
+    'fetchRemotePushCountが$statusを返す場合もmetadata.value.pushCountは更新されない（同値分割の裏取り）',
+    async ({ status }) => {
+      mocks.fetchRemotePushCount.mockResolvedValue({ status })
+      mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+      await pushToGitHub()
+
+      expect(stores.metadata.value.pushCount).toBe(9)
+      expect(stores.lastPulledPushCount.value).toBe(9)
+    }
+  )
+
+  it('fetchRemotePushCount成功時のpushCountが0（falsy値）でも正しく反映される（||等の誤ったfalsyガードがないことの回帰防止）', async () => {
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 0 })
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub()
+
+    expect(stores.metadata.value.pushCount).toBe(0)
+    expect(stores.lastPulledPushCount.value).toBe(0)
+  })
+
+  it('metadata.value.pushCount更新時に他フィールド（version/notes/leaves）は失われない（非破壊性）', async () => {
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 5 })
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub()
+
+    expect(stores.metadata.value.pushCount).toBe(5)
+    expect(stores.metadata.value.version).toBe(7)
+    expect(stores.metadata.value.notes).toEqual({ 'note-1': { id: 'note-1', order: 0 } })
+    expect(stores.metadata.value.leaves).toEqual({
+      'leaf-1': { id: 'leaf-1', updatedAt: 123, order: 0 },
+    })
+  })
+
+  it('fetchRemotePushCount待機中に別処理がmetadata.valueの他フィールドを書き換えても、pushCount反映時に上書き消失しない（並行実行/race）', async () => {
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+    mocks.fetchRemotePushCount.mockImplementation(async () => {
+      // await 中に他処理が metadata.value の別フィールドを書き換える。
+      // 更新後の metadata.value = {...metadata.value, pushCount} が await 解決後の
+      // 最新値を読んでいなければ、この version:42 は上書きで消える。
+      stores.metadata.value = { ...stores.metadata.value, version: 42 }
+      return { status: 'success', pushCount: 5 }
+    })
+
+    await pushToGitHub()
+
+    expect(stores.metadata.value.pushCount).toBe(5)
+    expect(stores.metadata.value.version).toBe(42)
+  })
+
+  it('noChangesでもlastKnownCommitSha/isStaleは従来どおり更新されるが、metadata.value.pushCountはそれとは独立して不変（回帰確認）', async () => {
+    stores.isStale.value = true
+    mocks.executePush.mockResolvedValue(pushNoChangesResult)
+
+    await pushToGitHub()
+
+    expect(stores.lastKnownCommitSha.value).toBe('remote-sha')
+    expect(stores.isStale.value).toBe(false)
+    expect(mocks.fetchRemotePushCount).not.toHaveBeenCalled()
+    expect(stores.metadata.value.pushCount).toBe(9)
+  })
+
+  it('archiveMetadata.value.pushCountは本Push成功処理で変化しない（home/archiveの非対称性の回帰確認）', async () => {
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 5 })
+    mocks.executePush.mockResolvedValue(pushSuccessResult)
+
+    await pushToGitHub()
+
+    expect(stores.metadata.value.pushCount).toBe(5)
+    expect(stores.archiveMetadata.value.pushCount).toBe(3)
   })
 })
 

@@ -395,6 +395,10 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         const remoteResult = await fetchRemotePushCount(settings.value)
         if (remoteResult.status === 'success') {
           lastPulledPushCount.value = remoteResult.pushCount
+          // #293: metadata.pushCountも最新値へ追従させる。ここを更新しないと
+          // 衝突ダイアログの「ローカルpushCount」表示（git-push.ts:183）が
+          // 直近pull時点のまま凍結され、実際の乖離より大きく見える誤表示になる。
+          metadata.value = { ...metadata.value, pushCount: remoteResult.pushCount }
         }
       }
     }
