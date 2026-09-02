@@ -68,7 +68,9 @@ rate-limit やネットワークエラー時は `?` 表示にフォールバッ�
 
 ### Push成功後のcommit SHA更新
 
-Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`lastKnownCommitSha`を更新。これにより、連続Pushでstale警告が出ることを防ぎます。pushCountの更新は統計表示用に引き続き行われます。
+Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`lastKnownCommitSha`を更新。これにより、連続Pushでstale警告が出ることを防ぎます。
+
+併せて`fetchRemotePushCount`でリモートの最新pushCountを取得し、`lastPulledPushCount.value`と`metadata.value.pushCount`の両方をこの値に追従させます（noChangesのときは行いません）。`metadata.value.pushCount`は前述の`staleEditDiagnostic`（衝突ダイアログのローカルpushCount表示）が参照する値のため、ここを更新しないとPull済み時点の値のまま凍結され、実際の乖離より大きく誇張されて表示されます（#293。経緯は`git-push.ts`のコード内コメント参照）。
 
 **noChangesケースでも更新する:** Push対象の差分がなく`github.noChanges`が返った場合でも、戻り値の`commitSha`（現在のリモートHEAD）で`lastKnownCommitSha`を更新する。これを怠るとSHAがドリフトし、次回のstaleチェックで誤検出（pull/push選択ダイアログの誤表示）を引き起こす。一方、スナップショット更新とダーティクリアはnoChangesでは行わない（後述の設計原則に基づく）。
 
