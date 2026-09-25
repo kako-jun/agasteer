@@ -262,6 +262,7 @@ agasteer/
 │   │   │   ├── persistence-effects.svelte.ts # LocalStorage/IndexedDB永続化の$effect
 │   │   │   ├── repo-switch-reset.ts     # リポ切替時の状態リセット
 │   │   │   ├── rehydrate.svelte.ts      # リポ切替時のストア再水和（rehydrateForRepo直列化キュー、#297）
+│   │   │   ├── sync-signal.ts           # isPulling/isPushing/isPushingBackground/isArchiveLoading setterの変化通知（ポーリング代替、#314）
 │   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
 │   │   │   ├── context.ts               # Context API型定義（PaneActions/PaneStateのみ残存）
 │   │   │   ├── auto-save.svelte.ts      # 自動保存タイマー
@@ -304,6 +305,7 @@ agasteer/
 │   │   ├── ocr.ts                       # OCR（tesseract.js動的ロード）
 │   │   ├── pane-actions-factory.svelte.ts # PaneActions生成ファクトリ（D&D/移動モーダル/設定/シェア等）
 │   │   ├── pane-navigation.svelte.ts    # ペインナビゲーション（ビュー遷移・ワールド切替・パンくず・URL同期）
+│   │   ├── pane-navigation-url-restore.svelte.ts # restoreStateFromUrl の待ち合わせ（世代管理・同期アイドル待ち・アーカイブ待機・pane スナップショット比較、#314）
 │   │   ├── startup-cache.ts             # 起動時キャッシュの型定義
 │   │   ├── tour.ts                      # 初回ガイド（吹き出し表示管理）
 │   │   └── types.ts                     # TypeScript型定義
@@ -444,6 +446,7 @@ agasteer/
 
 - `stores/core-state.svelte.ts` ほか: Svelte 5 rune ベースの状態管理（notes, leaves, settings, isDirty等）。#300 で `stores.svelte.ts`（約930行）を core-state/pane-state/dirty-tracking/store-mutations/persistence-effects/repo-switch-reset に分割。`stores.svelte.ts` は互換 re-export バレルとして存置（stores/index.ts 経由でない直接importを壊さないため）
 - `stores/editor-registry.ts`: pane→composition flush関数のレジストリ（#186、push直前の強制flush用）
+- `stores/sync-signal.ts`: `isPulling`/`isPushing`/`isPushingBackground`（core-state.svelte.ts）・`isArchiveLoading`（app-state.svelte.ts）の setter が呼ぶ変化通知（`notifySyncActivityChanged()`）と、それを待つ`waitForSyncActivityChange()`。`restoreStateFromUrl()`の待機（`pane-navigation-url-restore.svelte.ts`）が50msポーリングの代わりに使う（#314 S1）。他の stores/app-state を import しない末端レイヤー（循環 import 回避）
 - `app-state.svelte.ts`: 共有リアクティブ状態（Svelte 5 runes、ワールドヘルパー、onMount初期化）
 
 **アクションモジュール（App.svelteから抽出）:**
@@ -536,7 +539,8 @@ CodeMirrorの拡張ロジックをDOM非依存の形に分離し、node環境の
 
 - `keyboard-nav.svelte.ts`: キーボードによるグリッドナビゲーション（App.svelteから抽出）
 - `pane-navigation.svelte.ts`: ペイン間のナビゲーション・ワールド切替・アーカイブ/リストア操作（App.svelteから抽出）
-- `archive-load.svelte.ts`: アーカイブ本体のロード（IndexedDBキャッシュ読み出し + `pullArchive`）とロック管理（`loadArchiveCacheFromDB()`, `performArchiveLoad()`。pane-navigation.svelte.tsから抽出、#301）。呼び出し元: `handleWorldChange` / `restoreStateFromUrl`（#307）。`performArchiveLoad()` は再入安全（#314）: 実行中に再度呼ばれても新しいロードは始めず、進行中の Promise を返して完了を待つ
+- `pane-navigation-url-restore.svelte.ts`: `restoreStateFromUrl()`の待ち合わせロジック（pane-navigation.svelte.tsから抽出、#314 N3。80行ハウスルール対応）。呼び出しごとの世代カウンタ（`beginRestoreGeneration()`/`isCurrentRestoreGeneration()`）、signal通知ベースの同期アイドル待ち（`waitForSyncIdle()`）、rehydrate→同期アイドル→アーカイブロードを同期再判定込みでループする`waitUntilArchiveReady()`、pane 単位のスナップショット比較（`snapshotPane()`/`shouldApplyResolvedPane()`）を持つ
+- `archive-load.svelte.ts`: アーカイブ本体のロード（IndexedDBキャッシュ読み出し + `pullArchive`）とロック管理（`loadArchiveCacheFromDB()`, `performArchiveLoad()`。pane-navigation.svelte.tsから抽出、#301）。呼び出し元: `handleWorldChange` / `restoreStateFromUrl`（#307）。`performArchiveLoad()` は再入安全（#314）: 実行中に再度呼ばれても新しいロードは始めず、進行中の Promise（`archiveLoadInFlight`）を返して完了を待つ。この Promise の寿命はロックが立っている期間と厳密に一致する（#314 M3）
 - `pane-actions-factory.svelte.ts`: `paneActions` オブジェクト生成・D&D・移動モーダル・設定変更・シェア・CRUDラッパー・HMR/PWAハンドラ（App.svelteから抽出）
 - `startup-cache.ts`: 起動時キャッシュ（`PersistedStartupCache`）の型定義
 - `tour.ts`: 初回ガイド（吹き出し表示）の状態管理
