@@ -64,6 +64,8 @@ import {
   getWorldForLeaf as _getWorldForLeaf,
 } from './stores'
 import type { PaneState } from './stores'
+// #314 S1: isArchiveLoading の setter から restoreStateFromUrl の待機者へ通知する
+import { notifySyncActivityChanged } from './stores/sync-signal'
 import {
   priorityItems,
   createPriorityLeaf,
@@ -309,6 +311,8 @@ export const appState = {
   },
   set isArchiveLoading(v: boolean) {
     _isArchiveLoading = v
+    // #314 S1: restoreStateFromUrl の waitForSyncIdle 待機者を起こす
+    notifySyncActivityChanged()
   },
   get isDualPane() {
     return _isDualPane
