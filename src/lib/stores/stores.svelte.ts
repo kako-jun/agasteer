@@ -952,73 +952,121 @@ export function resetForRepoSwitch(): void {
  * 初回（キャッシュなし）の場合はストアが空のままになり、
  * 既存の Pull ロジックが commitSha=null を見て初回 Pull を実行する。
  */
-export async function rehydrateForRepo(repoKey: string): Promise<void> {
+async function applyRehydrateForRepo(repoKey: string): Promise<void> {
   // #254: 添付フローの挿入フェーズが進行中なら着地を待つ。待たずにクリアすると、
   // アップロード済みメディアへの参照テキストが旧リポの store/DB に載る前に消え、
   // メディアが孤児化する（push/pull preflight と同じレースのリポ切替版）。
   // 着地後は下の flushPendingSaves が旧リポ DB へ永続化する。
   await waitForPendingMediaInserts()
 
-  // rehydrate 実行中は、ストアへの一時的な代入（null リセット等）が
-  // localStorage の新リポ slot に書き戻されないようガードする。
-  setRehydrating(true)
+  // 旧リポの保留保存を先に flush（データ損失防止）
   try {
-    // 旧リポの保留保存を先に flush（データ損失防止）
-    try {
-      await flushPendingSaves()
-      await flushPersistedMetadata()
-    } catch (error) {
-      console.error('Failed to flush pending saves before repo switch:', error)
-    }
-
-    // 旧リポのインメモリをクリア（視覚的な残留を防ぐ）
-    notes.value = []
-    leaves.value = []
-    archiveNotes.value = []
-    archiveLeaves.value = []
-
-    // 新リポの DB に切り替え
-    try {
-      await setCurrentRepo(repoKey)
-    } catch (error) {
-      console.error('Failed to open per-repo DB:', error)
-      // 失敗時は何もしない（Pull が走れば復旧する）
-      closeCurrentRepoDb()
-      return
-    }
-
-    // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
-    // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
-    try {
-      const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
-      notes.value = loadedNotes
-      leaves.value = loadedLeaves
-      // #168: リポ切替直後はキャッシュからのロードのみで pull が走らない経路もあるため、
-      // ホーム右下の統計が 0 にならないよう明示的に再計算する
-      leafStatsStore.rebuild(loadedLeaves, loadedNotes)
-      // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
-      setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
-      clearAllChanges()
-    } catch (error) {
-      console.error('Failed to load cached data for new repo:', error)
-    }
-
-    // lastKnownCommitSha を新リポの localStorage スロットから復元
-    // （この代入は $effect を発火させるが、isRehydrating ガードで
-    // setPersistedCommitSha への書き込みはスキップされる）
-    lastKnownCommitSha.value = getPersistedCommitSha()
-    metadata.value = (await getPersistedMetadata()) ?? {
-      version: 1,
-      notes: {},
-      leaves: {},
-      pushCount: 0,
-    }
-    isStale.value = false
-    lastPushTime.value = 0
-    lastStaleCheckTime.value = 0
-    lastPulledPushCount.value = getPersistedLastPulledPushCount() ?? 0
-  } finally {
-    // ガードを解除。以降の変更は通常通り per-repo slot に永続化される。
-    setRehydrating(false)
+    await flushPendingSaves()
+    await flushPersistedMetadata()
+  } catch (error) {
+    console.error('Failed to flush pending saves before repo switch:', error)
   }
+
+  // 旧リポのインメモリをクリア（視覚的な残留を防ぐ）
+  notes.value = []
+  leaves.value = []
+  archiveNotes.value = []
+  archiveLeaves.value = []
+
+  // 新リポの DB に切り替え
+  try {
+    await setCurrentRepo(repoKey)
+  } catch (error) {
+    console.error('Failed to open per-repo DB:', error)
+    // 失敗時は何もしない（Pull が走れば復旧する）
+    closeCurrentRepoDb()
+    return
+  }
+
+  // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
+  // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
+  try {
+    const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
+    notes.value = loadedNotes
+    leaves.value = loadedLeaves
+    // #168: リポ切替直後はキャッシュからのロードのみで pull が走らない経路もあるため、
+    // ホーム右下の統計が 0 にならないよう明示的に再計算する
+    leafStatsStore.rebuild(loadedLeaves, loadedNotes)
+    // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
+    setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
+    clearAllChanges()
+  } catch (error) {
+    console.error('Failed to load cached data for new repo:', error)
+  }
+
+  // lastKnownCommitSha を新リポの localStorage スロットから復元
+  // （この代入は $effect を発火させるが、isRehydrating ガードで
+  // setPersistedCommitSha への書き込みはスキップされる）
+  lastKnownCommitSha.value = getPersistedCommitSha()
+  metadata.value = (await getPersistedMetadata()) ?? {
+    version: 1,
+    notes: {},
+    leaves: {},
+    pushCount: 0,
+  }
+  isStale.value = false
+  lastPushTime.value = 0
+  lastStaleCheckTime.value = 0
+  lastPulledPushCount.value = getPersistedLastPulledPushCount() ?? 0
+}
+
+// #297: rehydrateForRepo 実行中の Promise（キュー処理も含む）。null なら idle。
+let rehydrateInFlight: Promise<void> | null = null
+// 実行中にさらに要求された repoKey。呼び出しのたびに上書きするので、
+// 常に「最後に要求された repoKey」だけが残り、中間の要求は破棄される。
+let nextRehydrateKey: string | null = null
+
+/**
+ * rehydrateForRepo を直列化して実行する（#297）。
+ *
+ * 実行中に別の repoKey で呼ばれた場合は割り込まず、`nextRehydrateKey` に
+ * 最後の要求だけを控えて現在実行中の Promise をそのまま返す。実行中の処理が
+ * 終わった時点で `nextRehydrateKey` が残っていれば、それを次の対象として
+ * 続けて適用する（中間の要求は上書きされて破棄済み）。すべての呼び出し元の
+ * Promise は、キューが空になり最後に適用された repoKey の rehydrate が
+ * 完了した時点でまとめて resolve する。
+ *
+ * `isRehydrating` ガードはこの一連の処理（キューが空になるまで）が
+ * すべて終わるまで解除しない。
+ */
+export function rehydrateForRepo(repoKey: string): Promise<void> {
+  if (rehydrateInFlight) {
+    nextRehydrateKey = repoKey
+    return rehydrateInFlight
+  }
+
+  rehydrateInFlight = (async () => {
+    // rehydrate 実行中は、ストアへの一時的な代入（null リセット等）が
+    // localStorage の新リポ slot に書き戻されないようガードする。
+    setRehydrating(true)
+    try {
+      let key = repoKey
+      for (;;) {
+        await applyRehydrateForRepo(key)
+        if (nextRehydrateKey === null) break
+        key = nextRehydrateKey
+        nextRehydrateKey = null
+      }
+    } finally {
+      // ガードを解除。以降の変更は通常通り per-repo slot に永続化される。
+      setRehydrating(false)
+      rehydrateInFlight = null
+    }
+  })()
+
+  return rehydrateInFlight
+}
+
+/**
+ * 実行中の rehydrateForRepo（キュー分も含む）が完全に終わるまで待つ（#297）。
+ * 実行中でなければ即座に解決する。pullFromGitHub / pushToGitHub の開始前に
+ * 呼び、rehydrate 途中で旧/新 DB を取り違えて同期しないようにする。
+ */
+export function waitForRehydrate(): Promise<void> {
+  return rehydrateInFlight ?? Promise.resolve()
 }
