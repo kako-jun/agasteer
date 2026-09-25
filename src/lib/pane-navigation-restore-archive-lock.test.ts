@@ -785,3 +785,75 @@ describe('restoreStateFromUrl の pane 別解決（#314 M4a: archive 不要な p
     await restorePromise
   })
 })
+
+describe('restoreStateFromUrl の同期再判定ループ（#314 S3: waitUntilArchiveReady の continue）', () => {
+  // waitUntilArchiveReady は waitForRehydrate()/waitForSyncIdle() の後、同期的に
+  // 「isRehydrating() || isSyncBusy()」を再判定し、busy なら待機ループに戻る
+  // （continue）。isRehydrating が常に false なテスト（他の describe 群）だけでは、
+  // この continue 分岐を消してもテストが落ちない（未テスト）。ここでは
+  // isRehydrating・isSyncBusy それぞれを「1回目だけ busy」にして、ループが
+  // 実際に2周し、busy の間は performArchiveLoad（pullArchive）が呼ばれないことを縛る。
+
+  it('isRehydrating が1回目 true・2回目以降 false の場合、waitForRehydrate は2回呼ばれ、true の間は pullArchive を呼ばない', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+    stores.isRehydrating.mockReturnValueOnce(true).mockReturnValue(false)
+
+    let waitForRehydrateCallsAtPullArchiveTime = -1
+    mocks.pullArchive.mockImplementationOnce(async () => {
+      waitForRehydrateCallsAtPullArchiveTime = stores.waitForRehydrate.mock.calls.length
+      return {
+        success: true,
+        notes: [{ id: 'n1' }],
+        leaves: [{ id: 'l1' }],
+        metadata: { pushCount: 1 },
+      }
+    })
+
+    await restoreStateFromUrl()
+
+    // continue で2周目に入っているので waitForRehydrate は2回呼ばれている
+    expect(stores.waitForRehydrate).toHaveBeenCalledTimes(2)
+    // pullArchive が呼ばれた時点で、既に2回目の waitForRehydrate まで終わっている
+    // （= isRehydrating が true だった1周目では呼ばれていない）
+    expect(waitForRehydrateCallsAtPullArchiveTime).toBe(2)
+  })
+
+  it('waitForSyncIdle 解決直後（同期チェック時点）に isPushing が true になっているケースでも、待ち直してから pullArchive を呼ぶ', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+
+    // isSyncBusy() は `isPulling.value || isPushing.value || ...` の順で評価される
+    // （isPulling は false のまま＝毎回 isPushing.value まで読まれる）。isPushing の
+    // getter を「2回目のアクセスだけ true」にすることで、waitForSyncIdle 内の
+    // while 条件（1回目のアクセス）では busy でなかったのに、その直後の
+    // waitUntilArchiveReady 側の同期再判定（2回目のアクセス）では busy、という
+    // レースを決定的に再現する（実タイミングに依存しない）。
+    let accessCount = 0
+    const pushingGetterSpy = vi
+      .spyOn(syncFlags.isPushing, 'value', 'get')
+      .mockImplementation(() => {
+        accessCount++
+        return accessCount === 2
+      })
+
+    let waitForRehydrateCallsAtPullArchiveTime = -1
+    mocks.pullArchive.mockImplementationOnce(async () => {
+      waitForRehydrateCallsAtPullArchiveTime = stores.waitForRehydrate.mock.calls.length
+      return {
+        success: true,
+        notes: [{ id: 'n1' }],
+        leaves: [{ id: 'l1' }],
+        metadata: { pushCount: 1 },
+      }
+    })
+
+    await restoreStateFromUrl()
+
+    // 2周目（isRehydrating と対称に、再判定で busy を検知して continue した分）
+    expect(stores.waitForRehydrate).toHaveBeenCalledTimes(2)
+    expect(waitForRehydrateCallsAtPullArchiveTime).toBe(2)
+
+    pushingGetterSpy.mockRestore()
+  })
+})

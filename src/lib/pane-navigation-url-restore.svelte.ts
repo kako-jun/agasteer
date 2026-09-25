@@ -21,6 +21,11 @@
  *   上書きしない。archive を必要としない pane は待たずに即解決する。
  * - S1: 50ms ポーリングではなく、対象フラグの setter からの通知
  *   （stores/sync-signal.ts）で待つ。
+ *
+ * #314 M-1: このモジュールの関数（waitUntilArchiveReady 等）は例外を握り潰さず
+ * そのまま呼び出し元へ伝播させる（呼び出し元 restoreStateFromUrl が try/finally で
+ * appState.isRestoringFromUrl の生死を管理する。ここで catch すると、その finally が
+ * 発火しない・isRestoringFromUrl が true のまま残る、という別のバグを生む）。
  */
 
 import type { WorldType, View } from './types'
@@ -84,14 +89,13 @@ function isSyncBusy(): boolean {
 
 /**
  * Pull/Push（背景含む）・アーカイブロードがすべてアイドルになるまで待つ。
- * ポーリングではなく、対象フラグの setter からの通知（waitForSignal）で待つ。
- * テストからは waitForSignal を差し替えて手動 resolve する。
+ * ポーリングではなく、対象フラグの setter からの通知（waitForSyncActivityChange）で
+ * 待つ。テストからは stores/sync-signal.ts を vi.mock して手動 resolve する
+ * （N-a: この関数自体は外部から直接呼ばれないため非公開・引数注入なしにしている）。
  */
-export async function waitForSyncIdle(
-  waitForSignal: () => Promise<void> = waitForSyncActivityChange
-): Promise<void> {
+async function waitForSyncIdle(): Promise<void> {
   while (isSyncBusy()) {
-    await waitForSignal()
+    await waitForSyncActivityChange()
   }
 }
 
@@ -101,24 +105,24 @@ export async function waitForSyncIdle(
 
 /**
  * アーカイブ読み込みが必要な URL 復元のために、rehydrate・同期アイドル・
- * アーカイブロードを待ち合わせる。世代が変わったら false を返してすぐ抜ける
- * （呼び出し元は pane を解決しない）。
+ * アーカイブロードを待ち合わせる。世代が変わったら何もせずすぐ抜ける
+ * （呼び出し元は pane を解決しない）。戻り値は呼び出し元（restoreStateFromUrl）
+ * では使わないため Promise<void>（N-b）。
  */
 export async function waitUntilArchiveReady(
   gen: number,
-  logContext?: ArchiveLoadLogContext,
-  waitForSignal?: () => Promise<void>
-): Promise<boolean> {
+  logContext?: ArchiveLoadLogContext
+): Promise<void> {
   // M4a: 「rehydrate 中でない かつ 同期が busy でない」を同期的に確認できるまで
   // 待つ。ここでループするのは「待ち直す」ためだけであり、ロード自体は
   // リトライしない（ロード失敗時に無限リトライしないよう、ロード開始は
   // このループの外で高々1回だけ行う）。
   for (;;) {
     await waitForRehydrate()
-    if (!isCurrentRestoreGeneration(gen)) return false
+    if (!isCurrentRestoreGeneration(gen)) return
 
-    await waitForSyncIdle(waitForSignal)
-    if (!isCurrentRestoreGeneration(gen)) return false
+    await waitForSyncIdle()
+    if (!isCurrentRestoreGeneration(gen)) return
 
     // 最後の await の直後、同期的に再判定する。ここで busy なら待機に戻る
     // （waitForRehydrate() と waitForSyncIdle() の間、または waitForSyncIdle() が
@@ -127,18 +131,16 @@ export async function waitUntilArchiveReady(
     break
   }
 
-  if (isArchiveLoaded.value) return true
+  if (isArchiveLoaded.value) return
   if (!(settings.value.token && settings.value.repoName)) {
     // ロードに必要な設定がない。呼び出し元は既存データ（空でもよい）で解決する。
-    return false
+    return
   }
 
   // ロードは高々1回だけ試みる（失敗しても呼び出し元は既存データで解決する。
   // performArchiveLoad 自体は再入安全＝#314 M3 なので、他所と競合しても
   // 二重ロードにはならない）。
   await performArchiveLoad(logContext)
-  if (!isCurrentRestoreGeneration(gen)) return false
-  return isArchiveLoaded.value
 }
 
 // ========================================
