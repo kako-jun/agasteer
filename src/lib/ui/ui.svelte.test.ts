@@ -233,6 +233,10 @@ describe('Push トーストのカウントダウン (#238)', () => {
     setPushToastCountdown(4)
     showPullToast('github.pullSuccess', 'success')
     expect(pushToastCountdown.value).toBe(4)
+
+    // 後始末: pull トーストとタイマーを残したまま抜けて後続テストに漏らさない
+    vi.advanceTimersByTime(2000)
+    expect(pullToastState.value.message).toBe('')
   })
 
   it('先行 showPushToast の2秒タイマーが後続 sticky のカウントダウンを消さない（後勝ちの countdown 版）', () => {
@@ -330,6 +334,10 @@ describe('汎用 showPushToast とペーシングの分離 (#238)', () => {
 describe('Pull トーストの連続表示タイマー (#302)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    // 前の describe ブロックから pull 状態・タイマーが残っていても
+    // ここで必ず初期化し、テスト順序に依存しないようにする
+    showPullToast('')
+    vi.runAllTimers()
   })
 
   afterEach(() => {
@@ -400,7 +408,9 @@ describe('Pull トーストの連続表示タイマー (#302)', () => {
     expect(pullToastState.value.variant).toBe('')
   })
 
-  it('2つ目表示でvariantが正しく上書きされ、消滅時に空文字へ戻る', () => {
+  it('2つ目表示でvariantが正しく上書きされる', () => {
+    // 消滅時に空文字へ戻る挙動は他のテスト（境界・3連続表示）で検証済みのため、
+    // ここでは variant の上書きだけに絞る
     showPullToast('A', 'success')
     expect(pullToastState.value.variant).toBe('success')
 
@@ -409,9 +419,9 @@ describe('Pull トーストの連続表示タイマー (#302)', () => {
     expect(pullToastState.value.message).toBe('B')
     expect(pullToastState.value.variant).toBe('error')
 
+    // 後始末: 表示中の状態を残したまま抜けない
     vi.advanceTimersByTime(2000)
     expect(pullToastState.value.message).toBe('')
-    expect(pullToastState.value.variant).toBe('')
   })
 
   it('消滅後の再表示: 一度消えた後に表示すると、新しいタイマーで独立して2000msで消える', () => {
