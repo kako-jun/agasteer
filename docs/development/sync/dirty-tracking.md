@@ -232,13 +232,13 @@ onMount: LocalStorageからisDirty=trueを検出
 
 スナップショットベースの差分検出により、これらの問題を解決しました：
 
-- **一元化**: 差分検出ロジックは`stores.svelte.ts`に集約
+- **一元化**: 差分検出ロジックは`stores/dirty-tracking.ts`に集約（#300でstores.svelte.tsから分割）
 - **自動化**: ストア更新時（`updateNotes`、`updateLeaves`等）に自動実行
 - **確実性**: 手動呼び出し不要のため、抜け漏れなし
 
 ### スナップショット変数
 
-stores.svelte.tsにモジュールレベルの変数として、Home用とArchive用それぞれのノート・リーフの最終Push/Pull状態を保持します。
+stores/dirty-tracking.tsにモジュールレベルの変数として、Home用とArchive用それぞれのノート・リーフの最終Push/Pull状態を保持します。
 
 ### 差分検出のタイミング
 
