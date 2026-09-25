@@ -75,6 +75,13 @@ export async function moveNoteToWorld(
 ): Promise<void> {
   const $_ = get(_)
 
+  // #297 must1: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+  // 判定より前に完了を待つ（pull/push と同じ形）。判定→待機→再判定なしで
+  // ロックを取得すると、待機中に Pull がロックを取りアーカイブロードと並走したり
+  // （排他表が崩れる）、逆に Pull が待機中に黙って return して消えたりする
+  // （push-pull.md 注8/12b）。
+  await waitForRehydrate()
+
   // Pull/Push中またはアーカイブロード中は移動を禁止
   // #206: 背景 Push 中もアーカイブ ⇄ Home 移動は禁止（実装上 Pull が走ることがあるため）
   if (isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading)
@@ -88,12 +95,6 @@ export async function moveNoteToWorld(
   if (targetWorld === 'archive' && !isArchiveLoaded.value) {
     const $settings = settings.value
     if ($settings.token && $settings.repoName) {
-      // #297 should5: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
-      // 先に完了を待つ。待たずに進むと、IndexedDB の切替（setCurrentRepo）が
-      // 途中の状態で pullArchive の保存処理（saveArchiveNotes/saveArchiveLeaves）が
-      // 走り、旧/新どちらの DB に書くか取り違える窓ができる。
-      await waitForRehydrate()
-
       appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
@@ -370,6 +371,13 @@ export async function moveLeafToWorld(
 ): Promise<void> {
   const $_ = get(_)
 
+  // #297 must1: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+  // 判定より前に完了を待つ（pull/push と同じ形）。判定→待機→再判定なしで
+  // ロックを取得すると、待機中に Pull がロックを取りアーカイブロードと並走したり
+  // （排他表が崩れる）、逆に Pull が待機中に黙って return して消えたりする
+  // （push-pull.md 注8/12b）。
+  await waitForRehydrate()
+
   // Pull/Push中またはアーカイブロード中は移動を禁止
   // #206: 背景 Push 中もアーカイブ ⇄ Home 移動は禁止（実装上 Pull が走ることがあるため）
   if (isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading)
@@ -383,12 +391,6 @@ export async function moveLeafToWorld(
   if (targetWorld === 'archive' && !isArchiveLoaded.value) {
     const $settings = settings.value
     if ($settings.token && $settings.repoName) {
-      // #297 should5: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
-      // 先に完了を待つ。待たずに進むと、IndexedDB の切替（setCurrentRepo）が
-      // 途中の状態で pullArchive の保存処理（saveArchiveNotes/saveArchiveLeaves）が
-      // 走り、旧/新どちらの DB に書くか取り違える窓ができる。
-      await waitForRehydrate()
-
       appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {

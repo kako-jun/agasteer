@@ -400,6 +400,22 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
       // DB を読むか取り違える窓ができる。
       await waitForRehydrate()
 
+      // #297 must1: 待機中に Pull/Push/AL がロックを取った、または別ペインの
+      // アーカイブロードが先に完了した場合はここで打ち切る。ワールド表示自体は
+      // 上で即座に切り替え済み（push-pull.md 注8）なので、ロード開始だけを
+      // 再判定でスキップする。再判定なしで進むと、待機中に取られた Pull と
+      // アーカイブロードが並走して排他表が崩れる／連続 Archive 操作で AL が
+      // 二重起動する。
+      if (
+        isPulling.value ||
+        isPushing.value ||
+        isPushingBackground.value ||
+        appState.isArchiveLoading ||
+        isArchiveLoaded.value
+      ) {
+        return
+      }
+
       // まずIndexedDBキャッシュから読み出し
       const { hasCachedData } = await loadArchiveCacheFromDB()
 
