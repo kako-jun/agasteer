@@ -6,6 +6,7 @@ import {
   clearPushToast,
   pushToastState,
   showPullToast,
+  pullToastState,
   setPushToastCountdown,
   pushToastCountdown,
   PUSH_COUNTDOWN_MIN_HOLD_MS,
@@ -232,6 +233,10 @@ describe('Push トーストのカウントダウン (#238)', () => {
     setPushToastCountdown(4)
     showPullToast('github.pullSuccess', 'success')
     expect(pushToastCountdown.value).toBe(4)
+
+    // 後始末: pull トーストとタイマーを残したまま抜けて後続テストに漏らさない
+    vi.advanceTimersByTime(2000)
+    expect(pullToastState.value.message).toBe('')
   })
 
   it('先行 showPushToast の2秒タイマーが後続 sticky のカウントダウンを消さない（後勝ちの countdown 版）', () => {
@@ -323,5 +328,115 @@ describe('汎用 showPushToast とペーシングの分離 (#238)', () => {
     // first は以後も現れない
     vi.advanceTimersByTime(2000)
     expect(pushToastState.value.message).toBe('')
+  })
+})
+
+describe('Pull トーストの連続表示タイマー (#302)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    // 前の describe ブロックから pull 状態・タイマーが残っていても
+    // ここで必ず初期化し、テスト順序に依存しないようにする
+    showPullToast('')
+    vi.runAllTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('単発表示: 1999msではまだ消えず、2000msちょうどで消える（境界）', () => {
+    showPullToast('github.pullSuccess', 'success')
+    expect(pullToastState.value.message).toBe('github.pullSuccess')
+    expect(pullToastState.value.variant).toBe('success')
+
+    vi.advanceTimersByTime(1999)
+    expect(pullToastState.value.message).toBe('github.pullSuccess')
+
+    vi.advanceTimersByTime(1)
+    expect(pullToastState.value.message).toBe('')
+    expect(pullToastState.value.variant).toBe('')
+  })
+
+  it('前のトーストの元の発火予定時刻を過ぎても、後から表示したトーストは消えない（#302 回帰核心）', () => {
+    // 修正前は setTimeout の張りっぱなしで、Aのタイマーが「今表示中か」を確認せず
+    // 無条件でstateを空にしていた。Aの本来の発火時刻(t=2000)を過ぎてもBが残ることを確認する。
+    showPullToast('A', 'success')
+    vi.advanceTimersByTime(500)
+    showPullToast('B', 'error')
+
+    // Aの元タイマー予定時刻(A呼び出しから2000ms = 累計2000ms)を過ぎてもBが残る
+    vi.advanceTimersByTime(1500)
+    expect(pullToastState.value.message).toBe('B')
+    expect(pullToastState.value.variant).toBe('error')
+
+    // 後始末: Bの自然消滅(表示から2000ms = 累計2500ms)まで進めてテスト間の状態漏れを防ぐ
+    vi.advanceTimersByTime(500)
+    expect(pullToastState.value.message).toBe('')
+  })
+
+  it('2つ目表示後1999msではまだ消えず、2000msちょうどで消える（境界）', () => {
+    showPullToast('A', 'success')
+    vi.advanceTimersByTime(500)
+    showPullToast('B', 'success')
+
+    vi.advanceTimersByTime(1999)
+    expect(pullToastState.value.message).toBe('B')
+
+    vi.advanceTimersByTime(1)
+    expect(pullToastState.value.message).toBe('')
+    expect(pullToastState.value.variant).toBe('')
+  })
+
+  it('3連続表示: 最後のトーストだけが消滅タイミングを支配する', () => {
+    showPullToast('A', 'success')
+    vi.advanceTimersByTime(300)
+    showPullToast('B', 'success')
+    vi.advanceTimersByTime(300)
+    showPullToast('C', 'error')
+
+    // Aの元タイマー予定時刻(累計2000ms)を過ぎてもCが残る
+    vi.advanceTimersByTime(1400)
+    expect(pullToastState.value.message).toBe('C')
+
+    // Bの元タイマー予定時刻(累計2300ms)を過ぎてもCが残る
+    vi.advanceTimersByTime(300)
+    expect(pullToastState.value.message).toBe('C')
+
+    // Cの表示から2000ms(累計2600ms)で消える
+    vi.advanceTimersByTime(300)
+    expect(pullToastState.value.message).toBe('')
+    expect(pullToastState.value.variant).toBe('')
+  })
+
+  it('2つ目表示でvariantが正しく上書きされる', () => {
+    // 消滅時に空文字へ戻る挙動は他のテスト（境界・3連続表示）で検証済みのため、
+    // ここでは variant の上書きだけに絞る
+    showPullToast('A', 'success')
+    expect(pullToastState.value.variant).toBe('success')
+
+    vi.advanceTimersByTime(500)
+    showPullToast('B', 'error')
+    expect(pullToastState.value.message).toBe('B')
+    expect(pullToastState.value.variant).toBe('error')
+
+    // 後始末: 表示中の状態を残したまま抜けない
+    vi.advanceTimersByTime(2000)
+    expect(pullToastState.value.message).toBe('')
+  })
+
+  it('消滅後の再表示: 一度消えた後に表示すると、新しいタイマーで独立して2000msで消える', () => {
+    showPullToast('A', 'success')
+    vi.advanceTimersByTime(2000)
+    expect(pullToastState.value.message).toBe('')
+
+    showPullToast('B', 'success')
+    expect(pullToastState.value.message).toBe('B')
+
+    vi.advanceTimersByTime(1999)
+    expect(pullToastState.value.message).toBe('B')
+
+    vi.advanceTimersByTime(1)
+    expect(pullToastState.value.message).toBe('')
+    expect(pullToastState.value.variant).toBe('')
   })
 })
