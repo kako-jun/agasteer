@@ -540,6 +540,10 @@ if (repoChanged) {
   resetForRepoSwitch()
 }
 updateSettings({ ...settings.value, ...payload })
+if (repoChanged) {
+  archiveLeafStatsStore.reset()
+  // idle → rehydrateForRepo() fire-and-forget / busy → pendingRehydrateRepo に退避（図2参照）
+}
 if (repoChanged || tokenChanged) {
   githubSettingsChangedInSettings = true
 }
@@ -628,7 +632,7 @@ sequenceDiagram
     User->>Settings: リポジトリ名を「new/repo」に変更
     Settings->>HSC: onSettingsChange({ repoName: "new/repo" })
 
-    Note over HSC: repoChanged =<br/>payload.repoName !== $settings.repoName<br/>→ true
+    Note over HSC: repoChanged =<br/>payload.repoName !== undefined &&<br/>payload.repoName !== $settings.repoName<br/>→ true
     HSC->>HSC: isPullCompleted = false
     HSC->>HSC: isFirstPriorityFetched = false
     HSC->>HSC: repoChangePending = true
@@ -653,7 +657,7 @@ sequenceDiagram
             HSC->>RH: rehydrateForRepo(payload.repoName)<br/>fire-and-forget（await せず、失敗は catch でログのみ）
             Note over RH: setCurrentRepo()でIndexedDB切替<br/>新リポのnotes/leavesをロード<br/>lastKnownCommitSha・metadata・<br/>lastPulledPushCountを新リポの<br/>スロットから復元（#131/#297）
         else Pull/Push(背景含む)/ArchiveLoadのいずれかがtrue
-            HSC->>HSC: pendingRehydrateRepo = payload.repoName<br/>（消化するのは HCS のアイドル分岐と<br/>runPendingRepoSyncIfIdle（git-pull.ts、予約pull直前）だけ。<br/>PFG自体は消化しない、#297 S-c）
+            HSC->>HSC: pendingRehydrateRepo = payload.repoName<br/>（消化するのは HCS のアイドル分岐と<br/>runPendingRepoSyncIfIdle（git-pull.ts、予約pull直前）だけ<br/>（無効設定でのクローズ時は rehydrate せず破棄）。<br/>PFG自体は消化しない、#297 S-c）
         end
     end
 
@@ -665,7 +669,7 @@ sequenceDiagram
     Note over HCS: まず waitForRehydrate() を await（#297 should2）<br/>shouldQueueRepoSync 判定より前に置く。待たずに判定すると、<br/>判定時点はアイドルでも待機中に取られたロックを見落として<br/>直接 pullFromGitHub を呼んでしまい、その内部の待機後の<br/>canSync 判定で黙って return する（キューにも積まれず消える）
 
     alt Pull/Push/ArchiveLoad中でない
-        Note over HCS: pendingRehydrateRepo が残っていれば<br/>先に await rehydrateForRepo(pendingRehydrateRepo)<br/>（handleCloseSettings 479-487行付近。#297 S-c）
+        Note over HCS: pendingRehydrateRepo が残っていれば<br/>先に await rehydrateForRepo(pendingRehydrateRepo)<br/>（handleCloseSettings のアイドル分岐。#297 S-c）
         HCS->>PFG: pullFromGitHub(false)
         Note over PFG: まず waitForRehydrate() を await（#297）<br/>rehydrateForRepo()が実行中ならここで完了を待つ<br/>（handleSettingsChange発火のfire-and-forget rehydrateも含む）<br/>rehydrateが失敗してもwaitForRehydrate()はrejectを握りつぶし、<br/>完了だけを待つ（must2: 例外がHCSの事後処理を飛ばさない）
         Note over PFG: canSync OK, isArchiveLoading=false<br/>→ 処理開始
