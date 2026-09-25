@@ -7,21 +7,10 @@
 
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
-import {
-  type Note,
-  type Leaf,
-  type Breadcrumb,
-  type WorldType,
-  type SearchMatch,
-  buildBlobShaCache,
-} from './types'
+import { type Note, type Leaf, type Breadcrumb, type WorldType, type SearchMatch } from './types'
 import type { Pane } from './navigation'
 import type { EditorPaneRef } from './editor/editor-pane-ref'
 import { waitForMatchingEditor } from './editor/wait-for-editor'
-// #297 S-c: 以前はここに runPendingRepoSyncIfIdle の複製（waitForRehydrate も
-// pendingRehydrateRepo の rehydrate もしない簡略版）があったが、git-pull.ts の
-// 実装（正本）に一本化した（git-push.ts と同じ import 形）。
-import { runPendingRepoSyncIfIdle } from './actions/git-pull'
 import * as nav from './navigation'
 import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
 import { _ } from './i18n'
@@ -48,14 +37,10 @@ import {
   offlineLeafStore,
   archiveNotes,
   archiveLeaves,
-  archiveMetadata,
   isArchiveLoaded,
-  archiveLeafStatsStore,
-  isDirty,
   getDialogPositionForPane,
   getNotesForWorld as _getNotesForWorld,
   getLeavesForWorld as _getLeavesForWorld,
-  setArchiveBaseline,
   scheduleOfflineSave,
   waitForRehydrate,
 } from './stores'
@@ -73,8 +58,7 @@ import {
   createOfflineLeaf,
   isOfflineLeaf,
 } from './utils'
-import { saveOfflineLeaf, saveArchiveNotes, saveArchiveLeaves } from './data'
-import { pullArchive, translateGitHubMessage } from './api'
+import { saveOfflineLeaf } from './data'
 import {
   showPushToast,
   showPullToast,
@@ -89,11 +73,9 @@ import {
   moveLeafToWorld as moveLeafToWorldAction,
 } from './actions/move'
 // #301: アーカイブロード（IndexedDBキャッシュ読み出し + pullArchive）は
-// archive-load.svelte.ts へ抽出済み。handleWorldChange はロード本体を
-// performArchiveLoad() 経由で呼ぶ。restoreStateFromUrl は独自のロード処理を
-// 持つため loadArchiveCacheFromDB のみを使う（#297 時点からの既存構成、
-// この Issue では二重実装の統合はしない）。
-import { loadArchiveCacheFromDB, performArchiveLoad } from './archive-load.svelte'
+// archive-load.svelte.ts へ抽出済み。handleWorldChange / restoreStateFromUrl
+// いずれもロード本体を performArchiveLoad() 経由で呼ぶ（#307 で二重実装を統合）。
+import { performArchiveLoad } from './archive-load.svelte'
 
 // ========================================
 // Navigation State helpers
@@ -772,61 +754,10 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
 
   const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
   if (needsArchive && !isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
-    // まずIndexedDBキャッシュから読み出し
-    const { hasCachedData } = await loadArchiveCacheFromDB()
-
-    appState.isArchiveLoading = true
-    if (!hasCachedData) {
-      archiveLeafStatsStore.reset()
-    }
-    // blob SHAキャッシュ用: dirtyでなければキャッシュ済みリーフからSHA→Leafのマップを構築
-    const cachedLeafMap = isDirty.value
-      ? new Map<string, Leaf>()
-      : buildBlobShaCache(archiveLeaves.value)
-    try {
-      const result = await pullArchive(settings.value, {
-        onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
-        cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
-      })
-      if (result.success) {
-        archiveNotes.value = result.notes
-        archiveLeaves.value = result.leaves
-        archiveMetadata.value = result.metadata
-        isArchiveLoaded.value = true
-        setArchiveBaseline(result.notes, result.leaves)
-        saveArchiveNotes(result.notes).catch((err) =>
-          console.error('Failed to persist archive notes:', err)
-        )
-        saveArchiveLeaves(result.leaves).catch((err) =>
-          console.error('Failed to persist archive leaves:', err)
-        )
-      } else {
-        // キャッシュがなければエラー表示
-        if (!hasCachedData) {
-          const t = get(_)
-          showPullToast(
-            translateGitHubMessage(
-              result.message,
-              t,
-              result.rateLimitInfo,
-              undefined,
-              result.errorCode,
-              result.httpStatus
-            ),
-            'error'
-          )
-        }
-      }
-    } catch (e) {
-      console.error('Archive pull failed during URL restore:', e)
-      if (!hasCachedData) {
-        const t = get(_)
-        showPullToast(t('toast.pullFailed'), 'error')
-      }
-    } finally {
-      appState.isArchiveLoading = false
-      await runPendingRepoSyncIfIdle()
-    }
+    // #307: ロード本体・ロック（appState.isArchiveLoading）は performArchiveLoad に統合
+    // 済み（#297 S-b と同じロック窓が handleWorldChange 側だけ塞がれていたのを解消）。
+    // このガード（!isArchiveLoaded && token && repoName）は呼び出し側に残す。
+    await performArchiveLoad('during URL restore')
   }
 
   const leftNotesData = _getNotesForWorld(leftWorldInfo.world, notes.value, archiveNotes.value)

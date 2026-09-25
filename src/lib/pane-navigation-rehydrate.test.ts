@@ -13,7 +13,7 @@
  * どう変わるかを観測する。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ValueStore<T> = { value: T }
 function createStore<T>(value: T): ValueStore<T> {
@@ -199,6 +199,15 @@ beforeEach(() => {
     success: false,
     message: 'github.pullFailed',
   })
+})
+
+// nit1: console.error スパイを個々のテスト末尾の mockRestore() に頼ると、
+// アサーション失敗などでその行まで到達しなかった場合にスパイが後続テストへ
+// 漏れる。afterEach で確実に戻す。vi.restoreAllMocks() は他の vi.fn() モックも
+// 呼び出し履歴込みで初期状態へ戻すが、per-test の上書きは元々 beforeEach で
+// 毎回明示的に張り直しているため壊れない。
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
@@ -507,5 +516,22 @@ describe('handleWorldChange のアーカイブロードのロック取得タイ�
     await changePromise
 
     expect(appState.isArchiveLoading).toBe(false)
+  })
+})
+
+// #307: restoreStateFromUrl も performArchiveLoad(logContext) 経由に統合されたが、
+// handleWorldChange は引き続き logContext なしで performArchiveLoad() を呼ぶ契約を持つ
+// （呼び出し元ごとに catch のログ文言を出し分けるため）。restoreStateFromUrl 側の
+// 'during URL restore' 付きログは pane-navigation-restore-archive-lock.test.ts で
+// 縛っており、ここでは logContext 未指定側が退行していないことだけを確認する。
+describe('handleWorldChange のアーカイブロード失敗時ログ文言 (#307: logContext 未指定の回帰確認)', () => {
+  it('pullArchive が失敗した場合、console.error は接尾辞なしの「Archive pull failed:」のまま', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const error = new Error('boom')
+    mocks.pullArchive.mockRejectedValueOnce(error)
+
+    await handleWorldChange('archive', 'left')
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Archive pull failed:', error)
   })
 })

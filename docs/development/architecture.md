@@ -536,7 +536,7 @@ CodeMirrorの拡張ロジックをDOM非依存の形に分離し、node環境の
 
 - `keyboard-nav.svelte.ts`: キーボードによるグリッドナビゲーション（App.svelteから抽出）
 - `pane-navigation.svelte.ts`: ペイン間のナビゲーション・ワールド切替・アーカイブ/リストア操作（App.svelteから抽出）
-- `archive-load.svelte.ts`: アーカイブ本体のロード（IndexedDBキャッシュ読み出し + `pullArchive`）とロック管理（`loadArchiveCacheFromDB()`, `performArchiveLoad()`。pane-navigation.svelte.tsから抽出、#301）
+- `archive-load.svelte.ts`: アーカイブ本体のロード（IndexedDBキャッシュ読み出し + `pullArchive`）とロック管理（`loadArchiveCacheFromDB()`, `performArchiveLoad()`。pane-navigation.svelte.tsから抽出、#301）。呼び出し元: `handleWorldChange` / `restoreStateFromUrl`（#307）
 - `pane-actions-factory.svelte.ts`: `paneActions` オブジェクト生成・D&D・移動モーダル・設定変更・シェア・CRUDラッパー・HMR/PWAハンドラ（App.svelteから抽出）
 - `startup-cache.ts`: 起動時キャッシュ（`PersistedStartupCache`）の型定義
 - `tour.ts`: 初回ガイド（吹き出し表示）の状態管理
