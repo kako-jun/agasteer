@@ -64,6 +64,8 @@ import {
   getWorldForLeaf as _getWorldForLeaf,
 } from './stores'
 import type { PaneState } from './stores'
+// #314 S1: isArchiveLoading の setter から restoreStateFromUrl の待機者へ通知する
+import { notifySyncActivityChanged } from './stores/sync-signal'
 import {
   priorityItems,
   createPriorityLeaf,
@@ -309,6 +311,8 @@ export const appState = {
   },
   set isArchiveLoading(v: boolean) {
     _isArchiveLoading = v
+    // #314 S1: restoreStateFromUrl の waitForSyncIdle 待機者を起こす
+    notifySyncActivityChanged()
   },
   get isDualPane() {
     return _isDualPane
@@ -425,7 +429,10 @@ export interface AppActionsRegistry {
   selectLeaf: (leaf: Leaf, pane: Pane) => void
   goHome: (pane: Pane) => void
   refreshBreadcrumbs: () => void
-  restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void> | void
+  // #314 S-6: 常に async 関数（pane-navigation.svelte.ts の実装）を登録するため
+  // 戻り値は必ず Promise<void>。呼び出し側が未 await でも .catch() を付けられるよう
+  // `| void` は持たせない。
+  restoreStateFromUrl: () => Promise<void>
   rebuildLeafStats: (leaves: Leaf[], notes: Note[]) => void
   resetLeafStats: () => void
   closeMoveModal: () => void
@@ -664,7 +671,7 @@ export interface InitAppDeps {
     precomputedStale?: StaleCheckResult
   ) => Promise<void>
   pushToGitHub: (options?: PushToGitHubOptions) => Promise<void>
-  restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
+  restoreStateFromUrl: () => Promise<void>
   handleGlobalKeyDown: (e: KeyboardEvent) => void
 }
 
@@ -849,7 +856,6 @@ export function initApp(deps: InitAppDeps): () => void {
       // adoptAsBaseline=false: dirty cache をそのまま開く（最低限 global dirty を維持）
       const applyPersistedStartupCache = async (
         cache: PersistedStartupCache,
-        initialStartup: boolean,
         adoptAsBaseline: boolean
       ): Promise<number> => {
         notes.value = cache.notes
@@ -872,17 +878,14 @@ export function initApp(deps: InitAppDeps): () => void {
           isStructureDirty.value = true
         }
         appState.isFirstPriorityFetched = true
-        if (initialStartup) {
-          appState.isRestoringFromUrl = true
-          try {
-            await deps.restoreStateFromUrl(true)
-          } finally {
-            // restoreStateFromUrl が例外を投げてもフラグが残らないようにする
-            appState.isRestoringFromUrl = false
-          }
-        } else {
-          await deps.restoreStateFromUrl(false)
-        }
+        // #314 S-A: isRestoringFromUrl の生死管理は restoreStateFromUrl 自身の
+        // 世代カウンタ（isCurrentRestoreGeneration）に一本化する。以前は起動時
+        // （initialStartup）だけここで isRestoringFromUrl を手動 true→false
+        // トグルしていたが、この finally は無条件に false へ戻すため、世代2の
+        // restoreStateFromUrl がアーカイブ待機で pending のままの間に世代1側の
+        // この finally が先に false へ戻してしまうと、抑制が早く外れて
+        // updateUrlFromState() が pushState を余分に積む窓があった（Q1 と同種）。
+        await deps.restoreStateFromUrl()
         return cache.notes.length + cache.leaves.length
       }
 
@@ -902,7 +905,7 @@ export function initApp(deps: InitAppDeps): () => void {
 
       if (canSkipFullPull) {
         try {
-          const restoredCount = await applyPersistedStartupCache(persistedCache, true, true)
+          const restoredCount = await applyPersistedStartupCache(persistedCache, true)
           if (restoredCount === 0) {
             // localStorage に SHA が残っているのに IndexedDB が空。
             // 2 つの可能性がある:
@@ -935,7 +938,7 @@ export function initApp(deps: InitAppDeps): () => void {
           true,
           async () => {
             try {
-              await applyPersistedStartupCache(persistedCache, false, !persistedCache.wasDirty)
+              await applyPersistedStartupCache(persistedCache, !persistedCache.wasDirty)
             } catch (error) {
               console.error('Failed to load from IndexedDB:', error)
               // 失敗した場合は Pull を実行
@@ -995,7 +998,10 @@ export function initApp(deps: InitAppDeps): () => void {
     }
 
     // 通常のpopstate処理
-    deps.restoreStateFromUrl()
+    // #314 S-6: ブラウザの戻る/進むは呼び出し元を await できないため未 await。
+    // restoreStateFromUrl が例外を投げる経路（M-1）では未処理の Promise rejection に
+    // なるため、明示的に catch してログに落とす（git-pull.ts の2箇所と同じ理由）。
+    void deps.restoreStateFromUrl().catch((e) => console.error('restoreStateFromUrl failed:', e))
   }
   window.addEventListener('popstate', handlePopState)
 

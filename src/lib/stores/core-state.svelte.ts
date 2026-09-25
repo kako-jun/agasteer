@@ -27,6 +27,10 @@ import {
   getPersistedCommitSha,
   getPersistedLastPulledPushCount,
 } from '../data/storage'
+// #314 S1: isPulling/isPushing/isPushingBackground の setter から、待機者
+// （restoreStateFromUrl の waitForSyncIdle）へ変化を通知する。sync-signal.ts は
+// 他の stores/app-state を import しない末端レイヤーなので循環 import は起きない。
+import { notifySyncActivityChanged } from './sync-signal'
 
 // ============================================
 // 基本ストア（Home用）
@@ -258,6 +262,7 @@ export const isPulling = {
   },
   set value(v: boolean) {
     _isPulling = v
+    notifySyncActivityChanged()
   },
 }
 
@@ -268,6 +273,7 @@ export const isPushing = {
   },
   set value(v: boolean) {
     _isPushing = v
+    notifySyncActivityChanged()
   },
 }
 
@@ -283,6 +289,7 @@ export const isPushingBackground = {
   },
   set value(v: boolean) {
     _isPushingBackground = v
+    notifySyncActivityChanged()
   },
 }
 

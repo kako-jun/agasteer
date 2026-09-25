@@ -256,3 +256,13 @@ export function waitForRehydrate(): Promise<void> {
   if (!rehydrateInFlight) return Promise.resolve()
   return waitForRehydrateLoop()
 }
+
+/**
+ * rehydrateForRepo（キュー分も含む）が現在実行中かどうかを同期的に返す（#314 M4a）。
+ * restoreStateFromUrl の「rehydrate 中でない かつ Pull/Push/背景Push/アーカイブロードが
+ * busy でない」という同期再判定ループで、waitForRehydrate() の await 直後に
+ * 状態が変わっていないか確認するために使う。
+ */
+export function isRehydrating(): boolean {
+  return rehydrateInFlight !== null
+}
