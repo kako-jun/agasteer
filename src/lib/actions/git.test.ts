@@ -51,6 +51,8 @@ const appState = vi.hoisted(() => ({
   leafSkeletonMap: new Map(),
   // #147 綻び2: リポ切替起因 Pull かの判定に使う（既定は通常 pull=false）
   repoChangePending: false,
+  // #297 S-c: 同期中にリポ切替された場合の保留 rehydrate 先
+  pendingRehydrateRepo: null as string | null,
 }))
 
 const mocks = vi.hoisted(() => ({
@@ -92,6 +94,11 @@ const mocks = vi.hoisted(() => ({
   createBackup: vi.fn(async () => ({ notes: [], leaves: [] })),
   restoreFromBackup: vi.fn(),
   clearAllData: vi.fn(),
+  // #297: 既定は「rehydrate 実行中でない」＝即解決。個別テストで
+  // mockReturnValueOnce により制御可能な Promise に差し替える。
+  waitForRehydrate: vi.fn(() => Promise.resolve()),
+  // #297 S-c: 同期中にリポ切替された場合、予約 pull 開始前に呼ばれる
+  rehydrateForRepo: vi.fn(async () => {}),
 }))
 
 vi.mock('../stores', () => ({
@@ -109,6 +116,8 @@ vi.mock('../stores', () => ({
   flushAllEditors: mocks.flushAllEditors,
   getActiveEditorPane: mocks.getActiveEditorPane,
   tryRescueStalePush: mocks.tryRescueStalePush,
+  waitForRehydrate: mocks.waitForRehydrate,
+  rehydrateForRepo: mocks.rehydrateForRepo,
 }))
 
 vi.mock('../api', () => ({
@@ -176,6 +185,9 @@ vi.mock('svelte', () => ({
 }))
 
 const { pushToGitHub, pullFromGitHub } = await import('./git')
+// #297 S-c: runPendingRepoSyncIfIdle は git.ts バレルには re-export されていない
+// （正本は git-pull.ts）ため、単体テストのために直接 import する。
+const { runPendingRepoSyncIfIdle } = await import('./git-pull')
 // #254: insert-phase はモックせず実物を使う（push/pull preflight が待つことの結合検証）
 const { beginMediaInsertPhase } = await import('../api/media/insert-phase')
 
@@ -1691,5 +1703,197 @@ describe('pullFromGitHub リポ切替時のスクロールリセット (#147 綻
 
     expect(left.scrollTop).toBe(300)
     expect(right.scrollTop).toBe(150)
+  })
+})
+
+describe('pullFromGitHub / pushToGitHub は rehydrate 完了を待つ (#297)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isArchiveLoading = false
+  })
+
+  it('pullFromGitHub は rehydrate 完了まで canSync 判定・ロック取得を開始しない', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+    // canSync 判定に到達した時点で早期returnさせ、以降の本処理には踏み込ませない
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    const pullPromise = pullFromGitHub(false)
+    await flushTasks()
+
+    expect(mocks.canSync).not.toHaveBeenCalled()
+    expect(stores.isPulling.value).toBe(false)
+
+    resolveRehydrate()
+    await pullPromise
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('pushToGitHub は rehydrate 完了まで canSync 判定・ロック取得を開始しない', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    const pushPromise = pushToGitHub()
+    await flushTasks()
+
+    expect(mocks.canSync).not.toHaveBeenCalled()
+    expect(stores.isPushing.value).toBe(false)
+
+    resolveRehydrate()
+    await pushPromise
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+    expect(stores.isPushing.value).toBe(false)
+  })
+})
+
+// #297 T8 は削除済み（2巡目レビュー S3）。waitForRehydrate をモックした状態で
+// 「reject を握って resolve する」ことをシミュレートしても、pullFromGitHub/
+// pushToGitHub 側から見れば「ただ resolve した Promise を await した」場合と
+// 区別がつかず、正常系（既定の mocks.waitForRehydrate = 即 resolve）の他テストと
+// 同じ経路しか踏めていなかった（無意味）。
+// 「reject を握って resolve する」という実装契約そのものは、waitForRehydrate の
+// 実体を使う rehydrate-serialize.test.ts の must2 で既に検証済み。git.test.ts
+// 側で実体の waitForRehydrate を使って区別可能なテストを組むには、
+// applyRehydrateForRepo が依存する ../data/storage・../data/metadata-storage・
+// ./auto-save.svelte・./stores/leaf-stats.svelte・../api/media/insert-phase を
+// 追加でモックし、real ../stores.svelte（929行の god file）まで読み込む必要が
+// あり、この観点（「呼び出し元が reject を意識しない」）のためだけに導入するには
+// 見合わないと判断し削除する。
+
+describe('rehydrate idle 時の pullFromGitHub/pushToGitHub 二重起動 (#297 T9)', () => {
+  const defaultCanSyncImpl = () => ({ canPull: true, canPush: true })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    appState.isPullCompleted = true
+    mocks.getActiveEditorPane.mockReturnValue(null)
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'network_error' })
+    // #297 T9: 既定の canSync モックは常時許可の静的値のため、この describe では
+    // 実ロック状態（isPulling/isPushing/isPushingBackground）に応じた判定に差し替える。
+    // 1本目が同期的にロックを確定してから2本目のcanSyncが評価される順序を検証したい。
+    // #297 T9: mocks.canSync は `vi.fn(() => ({...}))`（0引数）で宣言されているため、
+    // mockImplementation の型はその0引数シグネチャに縛られる。実引数は optional にして
+    // 型エラーを避けつつ、実際の呼び出し（常に3引数）では通常どおり値を受け取る。
+    mocks.canSync.mockImplementation(
+      (isPulling?: boolean, isPushing?: boolean, isPushingBackground?: boolean) => ({
+        canPull: !isPulling && !isPushing && !isPushingBackground,
+        canPush: !isPulling && !isPushing && !isPushingBackground,
+      })
+    )
+  })
+
+  afterEach(() => {
+    // 他のdescribeブロックへ差し替えた実装を持ち越さない
+    mocks.canSync.mockImplementation(defaultCanSyncImpl)
+  })
+
+  it('pullFromGitHubを同時に2回呼ぶと1本目がisPullingロックを確定し、2本目はcanSyncで弾かれる', async () => {
+    const p1 = pullFromGitHub(false)
+    const p2 = pullFromGitHub(false)
+
+    await Promise.all([p1, p2])
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(2)
+    expect(mocks.canSync).toHaveBeenNthCalledWith(1, false, false, false)
+    // 2本目の呼び出し時点では1本目が既にisPulling=trueを確定済み
+    expect(mocks.canSync).toHaveBeenNthCalledWith(2, true, false, false)
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('pushToGitHubを同時に2回呼ぶと1本目がisPushingロックを確定し、2本目はcanSyncで弾かれる', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    const p1 = pushToGitHub()
+    const p2 = pushToGitHub()
+
+    await Promise.all([p1, p2])
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(2)
+    expect(mocks.canSync).toHaveBeenNthCalledWith(1, false, false, false)
+    // 2本目の呼び出し時点では1本目が既にisPushing=trueを確定済み
+    expect(mocks.canSync).toHaveBeenNthCalledWith(2, false, true, false)
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+    expect(stores.isPushing.value).toBe(false)
+    expect(stores.isPushingBackground.value).toBe(false)
+  })
+})
+
+/**
+ * runPendingRepoSyncIfIdle（git-pull.ts の正本）は、予約 pull を開始する前に
+ * appState.pendingRehydrateRepo が立っていればそれを rehydrate してから pull する
+ * （#297 S-c）。
+ *
+ * 以前は move.ts / pane-navigation.svelte.ts にこのロジックを持たない複製
+ * （waitForRehydrate も pendingRehydrateRepo の rehydrate もせず pullFromGitHub を
+ * 直接呼ぶだけの簡略版）があり、AL 完了後の予約 pull で旧リポの DB に新リポの
+ * pull 結果を書いてしまう窓があった。一本化後は AL 完了経路も含めて全て
+ * このロジックを通る。
+ */
+describe('runPendingRepoSyncIfIdle は保留中の rehydrate を先に行ってから予約 pull する (#297 S-c)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isArchiveLoading = false
+    appState.pendingRepoSync = true
+    appState.pendingRehydrateRepo = 'owner/other-repo'
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    // 予約 pull（pullFromGitHub 内部）が canSync に到達したことを、rehydrate との
+    // 呼び出し順を観測するためだけの目印として使う。以降の本処理には踏み込ませない
+    // （このテストの関心は rehydrate→pull の順序と消費後のクリアだけ）。
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+  })
+
+  it('pendingRehydrateRepo があれば、予約 pull（canSync 到達）より前に rehydrateForRepo が呼ばれ、消費後は null にクリアされる', async () => {
+    await runPendingRepoSyncIfIdle()
+
+    expect(mocks.rehydrateForRepo).toHaveBeenCalledWith('owner/other-repo')
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+    expect(mocks.rehydrateForRepo.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.canSync.mock.invocationCallOrder[0]
+    )
+    expect(appState.pendingRehydrateRepo).toBeNull()
+    expect(appState.pendingRepoSync).toBe(false)
+  })
+
+  it('pendingRehydrateRepo がなければ rehydrateForRepo を呼ばずに予約 pull する（回帰確認）', async () => {
+    appState.pendingRehydrateRepo = null
+
+    await runPendingRepoSyncIfIdle()
+
+    expect(mocks.rehydrateForRepo).not.toHaveBeenCalled()
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
   })
 })

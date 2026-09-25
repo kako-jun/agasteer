@@ -75,10 +75,12 @@ vi.mock('./stores', () => ({
 
 vi.mock('./app-state.svelte', () => ({
   appState,
-  appActions: { pullFromGitHub: vi.fn() },
   derivedState: { currentOfflineLeaf: null },
   getNotesForPane: vi.fn(() => []),
   getLeavesForPane: vi.fn(() => []),
+  getWorldForPane: vi.fn((pane: 'left' | 'right') =>
+    pane === 'left' ? stores.leftWorld.value : stores.rightWorld.value
+  ),
 }))
 
 vi.mock('./ui', () => ({
@@ -130,7 +132,9 @@ vi.mock('./editor/wait-for-editor', () => ({
   waitForMatchingEditor: vi.fn(async () => null),
 }))
 
-vi.mock('./sync/repo-sync-queue', () => ({
+// #297 S-c: pane-navigation.svelte.ts は runPendingRepoSyncIfIdle の複製を廃止し、
+// git-pull.ts の実装（正本）を直接 import するようになった。
+vi.mock('./actions/git-pull', () => ({
   runPendingRepoSyncIfIdle: vi.fn(async () => {}),
 }))
 

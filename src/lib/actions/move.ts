@@ -29,6 +29,7 @@ import {
   archiveLeafStatsStore,
   setArchiveBaseline,
   applyLeafFieldUpdate,
+  waitForRehydrate,
 } from '../stores'
 import {
   saveNotes,
@@ -42,27 +43,11 @@ import { pullArchive, translateGitHubMessage } from '../api'
 import { generateUniqueName } from '../utils'
 import { appState, appActions, getWorldForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
-import { runPendingRepoSyncIfIdle } from '../sync/repo-sync-queue'
-
-async function runPendingRepoSyncAfterArchiveLoad(): Promise<void> {
-  const hasValidConfig = !!(settings.value.token && settings.value.repoName)
-  await runPendingRepoSyncIfIdle(
-    {
-      isPulling: isPulling.value,
-      // #206: 背景 Push 中も busy として扱う
-      isPushing: isPushing.value || isPushingBackground.value,
-      isArchiveLoading: appState.isArchiveLoading,
-    },
-    hasValidConfig,
-    appState.pendingRepoSync,
-    () => {
-      appState.pendingRepoSync = false
-    },
-    async () => {
-      await appActions.pullFromGitHub(false)
-    }
-  )
-}
+// #297 S-c: 以前はここに runPendingRepoSyncIfIdle の複製
+// （runPendingRepoSyncAfterArchiveLoad。waitForRehydrate も pendingRehydrateRepo の
+// rehydrate もしない簡略版）があったが、git-pull.ts の実装（正本）に一本化した
+// （git-push.ts / pane-navigation.svelte.ts と同じ import 形）。
+import { runPendingRepoSyncIfIdle } from './git-pull'
 
 /**
  * ノートをワールド間で移動する（Home ⇔ Archive）
@@ -73,6 +58,13 @@ export async function moveNoteToWorld(
   pane: Pane
 ): Promise<void> {
   const $_ = get(_)
+
+  // #297 must1: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+  // 判定より前に完了を待つ（pull/push と同じ形）。判定→待機→再判定なしで
+  // ロックを取得すると、待機中に Pull がロックを取りアーカイブロードと並走したり
+  // （排他表が崩れる）、逆に Pull が待機中に黙って return して消えたりする
+  // （push-pull.md 注8/12b）。
+  await waitForRehydrate()
 
   // Pull/Push中またはアーカイブロード中は移動を禁止
   // #206: 背景 Push 中もアーカイブ ⇄ Home 移動は禁止（実装上 Pull が走ることがあるため）
@@ -131,7 +123,7 @@ export async function moveNoteToWorld(
         return
       } finally {
         appState.isArchiveLoading = false
-        await runPendingRepoSyncAfterArchiveLoad()
+        await runPendingRepoSyncIfIdle()
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
@@ -363,6 +355,13 @@ export async function moveLeafToWorld(
 ): Promise<void> {
   const $_ = get(_)
 
+  // #297 must1: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+  // 判定より前に完了を待つ（pull/push と同じ形）。判定→待機→再判定なしで
+  // ロックを取得すると、待機中に Pull がロックを取りアーカイブロードと並走したり
+  // （排他表が崩れる）、逆に Pull が待機中に黙って return して消えたりする
+  // （push-pull.md 注8/12b）。
+  await waitForRehydrate()
+
   // Pull/Push中またはアーカイブロード中は移動を禁止
   // #206: 背景 Push 中もアーカイブ ⇄ Home 移動は禁止（実装上 Pull が走ることがあるため）
   if (isPulling.value || isPushing.value || isPushingBackground.value || appState.isArchiveLoading)
@@ -420,7 +419,7 @@ export async function moveLeafToWorld(
         return
       } finally {
         appState.isArchiveLoading = false
-        await runPendingRepoSyncAfterArchiveLoad()
+        await runPendingRepoSyncIfIdle()
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）

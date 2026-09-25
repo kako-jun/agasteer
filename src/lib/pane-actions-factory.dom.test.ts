@@ -37,6 +37,9 @@ const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
   resetForRepoSwitch: vi.fn(),
   rehydrateForRepo: vi.fn(async () => {}),
+  // #297 should2: 既定は「rehydrate 実行中でない」＝即解決。個別テストで
+  // mockReturnValueOnce により制御可能な Promise に差し替える。
+  waitForRehydrate: vi.fn(() => Promise.resolve()),
   archiveReset: vi.fn(),
   applyTheme: vi.fn(),
   // handleCloseSettings の queue/idle 分岐を制御する（既定 undefined=falsy=idle）
@@ -53,6 +56,7 @@ vi.mock('./stores', () => ({
   updateSettings: mocks.updateSettings,
   resetForRepoSwitch: mocks.resetForRepoSwitch,
   rehydrateForRepo: mocks.rehydrateForRepo,
+  waitForRehydrate: mocks.waitForRehydrate,
   archiveLeafStatsStore: { reset: mocks.archiveReset },
 }))
 
@@ -231,5 +235,141 @@ describe('handleCloseSettings queue 経由切替の scroll reset 印引き回し
     // queue には載るが、切替印は付かない → 予約 pull で scroll reset は起きない
     expect(appState.pendingRepoSync).toBe(true)
     expect(appState.repoChangePending).toBe(false)
+  })
+})
+
+/**
+ * handleCloseSettings は shouldQueueRepoSync 判定より前に waitForRehydrate() を
+ * 待つ（#297 should2 / T12）。
+ *
+ * 待たずに判定すると、判定した瞬間は idle でも、waitForRehydrate() 待機中に
+ * 背景 Push がロックを取った場合、待機後にそのまま pullFromGitHub を直接呼んで
+ * しまう。実装では pullFromGitHub 自身が waitForRehydrate() を待った後に
+ * canSync で黙って return するため、queue にも積まれず Pull が消える
+ * （このテストでは pullFromGitHub をモックしているため「消える」ことまでは
+ * 再現できないが、shouldQueueRepoSync に渡る状態が待機後の値であること＝
+ * queue 分岐に正しく入ることを直接縛る）。
+ */
+describe('handleCloseSettings は rehydrate 完了を待ってからアイドル判定する (#297 should2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isPullCompleted = true
+    appState.isFirstPriorityFetched = true
+    appState.isArchiveLoading = false
+    appState.repoChangePending = false
+    appState.pendingRepoSync = false
+    appState.pendingRehydrateRepo = null
+    appState.importOccurredInSettings = false
+    mocks.rehydrateForRepo.mockResolvedValue(undefined)
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    // 渡された時点の state をそのまま busy 判定に使う（呼び出しタイミングを縛るため）
+    mocks.shouldQueueRepoSync.mockImplementation(
+      (state: { isPulling: boolean; isPushing: boolean; isArchiveLoading: boolean }) =>
+        state.isPulling || state.isPushing || state.isArchiveLoading
+    )
+  })
+
+  it('waitForRehydrate 待機中に背景 Push がロックを取った場合、待機後の状態で判定してキューに積む（直接 Pull は呼ばない）', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    handleSettingsChange({ token: 'new-token' })
+    const closePromise = handleCloseSettings()
+
+    // waitForRehydrate 待機中（まだ判定前）に背景 Push がロックを取る
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mocks.shouldQueueRepoSync).not.toHaveBeenCalled()
+    stores.isPushingBackground.value = true
+
+    resolveRehydrate()
+    await closePromise
+
+    // 待機後に判定しているので busy と正しく判定してキューに積む
+    expect(appState.pendingRepoSync).toBe(true)
+    expect(mocks.pullFromGitHub).not.toHaveBeenCalled()
+  })
+
+  it('waitForRehydrate がアイドルで即解決するなら従来どおり判定・実行される（回帰確認）', async () => {
+    handleSettingsChange({ token: 'new-token' })
+    await handleCloseSettings()
+
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+    expect(appState.pendingRepoSync).toBe(false)
+  })
+})
+
+/**
+ * handleCloseSettings はフラグ（githubSettingsChangedInSettings 等）を関数末尾でなく
+ * 冒頭で退避・クリアする（#297 N-b）。
+ *
+ * 末尾でクリアすると、この関数が waitForRehydrate/pullFromGitHub を待っている間に
+ * 設定を再度開いてリポ/トークンを変更した分（フラグが再度 true になる）まで、
+ * 1回目の呼び出しの末尾クリアで消してしまい、2回目の close でその変更が無視される。
+ */
+describe('handleCloseSettings はフラグを冒頭で退避してクリアする (#297 N-b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isPullCompleted = true
+    appState.isFirstPriorityFetched = true
+    appState.isArchiveLoading = false
+    appState.repoChangePending = false
+    appState.pendingRepoSync = false
+    appState.pendingRehydrateRepo = null
+    appState.importOccurredInSettings = false
+    mocks.rehydrateForRepo.mockResolvedValue(undefined)
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    // 常にアイドル（queue しない）→ 直接 pullFromGitHub 分岐に入れる
+    mocks.shouldQueueRepoSync.mockReturnValue(false)
+  })
+
+  it('1回目の close が待機中に設定を再度開いてリポを変更すると、2回目の close でその変更が処理される（待機中に消えない）', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    handleSettingsChange({ repoName: 'owner/repo-b' })
+    const closePromise1 = handleCloseSettings()
+
+    // closePromise1 が waitForRehydrate で止まっている間に、設定を開き直して
+    // さらに別リポへ変更する（githubSettingsChangedInSettings が再度 true になる）
+    await Promise.resolve()
+    await Promise.resolve()
+    handleSettingsChange({ repoName: 'owner/repo-c' })
+
+    resolveRehydrate()
+    await closePromise1
+
+    // 1回目の close は完了（1回目の変更分の pull は実行済み）
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+
+    // 2回目の close で、待機中に積まれた変更（repo-c への切替）がちゃんと処理される
+    // （末尾クリアで消えていれば、ここで pullFromGitHub は増えない＝バグの再現）
+    await handleCloseSettings()
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(2)
+  })
+
+  it('待機中に変更がなければ、2回目の close は何もしない（回帰確認）', async () => {
+    handleSettingsChange({ repoName: 'owner/repo-b' })
+    await handleCloseSettings()
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+
+    await handleCloseSettings()
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
   })
 })

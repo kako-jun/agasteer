@@ -39,6 +39,7 @@ import {
   getDialogPositionForPane,
   resetForRepoSwitch,
   rehydrateForRepo,
+  waitForRehydrate,
   isStructureDirty,
 } from './stores'
 import {
@@ -125,8 +126,6 @@ import { createOfflineLeaf } from './utils'
 // ========================================
 // Non-reactive local state
 // ========================================
-let isClosingSettingsPull = false
-let repoChangedInSettings = false
 let githubSettingsChangedInSettings = false
 
 // ========================================
@@ -388,7 +387,6 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
   const tokenChanged = payload.token !== undefined && payload.token !== settings.value.token
   const next = { ...settings.value, ...payload }
   if (repoChanged) {
-    repoChangedInSettings = true
     appState.isPullCompleted = false
     appState.isFirstPriorityFetched = false
     appState.repoChangePending = true
@@ -440,7 +438,27 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
 }
 
 export async function handleCloseSettings() {
-  if (githubSettingsChangedInSettings || appState.importOccurredInSettings) {
+  // #297 N-b: 判定に使うフラグは冒頭で退避してから即クリアする。関数末尾で
+  // クリアすると、この関数が待機中（waitForRehydrate/pullFromGitHub 等）に
+  // 設定を再度開いてリポ/トークンを変更した分（githubSettingsChangedInSettings が
+  // 再度 true になる）まで、この呼び出しの末尾クリアで消してしまい、次回クローズで
+  // その変更が無視される。冒頭で退避・クリアし、以降は退避値だけを参照する。
+  const githubSettingsChanged = githubSettingsChangedInSettings
+  const importOccurred = appState.importOccurredInSettings
+  githubSettingsChangedInSettings = false
+  appState.importOccurredInSettings = false
+
+  if (githubSettingsChanged || importOccurred) {
+    // #297 should2: rehydrateForRepo 実行中（handleSettingsChange の fire-and-forget
+    // rehydrate 等）なら、shouldQueueRepoSync のアイドル判定より前に完了を待つ。
+    // 待たずに読むと、待機中に Push/AL がロックを取った場合でも「アイドル」と
+    // 誤判定して即 pullFromGitHub を呼び、その内部の waitForRehydrate() 待機中に
+    // ロックが奪われて canSync で黙って return する（pendingRepoSync も立てて
+    // いないため、Pull がキューにも積まれず消える）。
+    // waitForRehydrate() は reject を握りつぶし完了だけを待つため、この直後で
+    // 自前に rehydrateForRepo() を起動・await する経路とも衝突しない。
+    await waitForRehydrate()
+
     const hasValidConfig = !!(settings.value.token && settings.value.repoName)
     if (hasValidConfig) {
       if (
@@ -467,9 +485,7 @@ export async function handleCloseSettings() {
             console.error('Failed to rehydrate stores before pull:', error)
           }
         }
-        isClosingSettingsPull = true
         await pullFromGitHub(false)
-        isClosingSettingsPull = false
       }
     } else {
       appState.isPullCompleted = false
@@ -496,9 +512,6 @@ export async function handleCloseSettings() {
       archiveLeafStatsStore.reset()
     }
   }
-  repoChangedInSettings = false
-  githubSettingsChangedInSettings = false
-  appState.importOccurredInSettings = false
 }
 
 // ========================================

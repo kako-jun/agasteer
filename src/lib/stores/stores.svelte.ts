@@ -16,27 +16,15 @@ import {
   setPersistedCommitSha,
   setPersistedLastPulledPushCount,
   clearArchiveData,
-  setCurrentRepo,
-  closeCurrentRepoDb,
-  loadLeaves,
-  loadNotes,
 } from '../data/storage'
 // #295 S4: metadata 永続化はstorage.tsから分離済み
-import {
-  getPersistedMetadata,
-  flushPersistedMetadata,
-  setPersistedMetadata,
-} from '../data/metadata-storage'
+import { setPersistedMetadata } from '../data/metadata-storage'
 import {
   scheduleLeavesSave,
   scheduleNotesSave,
   scheduleArchiveLeavesSave,
   scheduleArchiveNotesSave,
-  flushPendingSaves,
 } from './auto-save.svelte'
-import { leafStatsStore } from './leaf-stats.svelte'
-// #254: リポ切替前にメディア添付の挿入着地を待つ（詳細は insert-phase.ts）
-import { waitForPendingMediaInserts } from '../api/media/insert-phase'
 
 // ============================================
 // 基本ストア（Home用）
@@ -938,87 +926,4 @@ export function resetForRepoSwitch(): void {
   rightLeaf.value = null
   leftView.value = 'home'
   rightView.value = 'home'
-}
-
-/**
- * 指定リポの IndexedDB に切り替え、キャッシュ済みのノート/リーフを
- * Svelte ストアへロードする（#131）。
- *
- * - 切り替え前に保留中の保存を flush する
- * - 新リポの per-repo DB を open し、ノート/リーフ/アーカイブをロード
- * - ロード結果を「最後にPushしたスナップショット」として扱い、ダーティ判定の基準にする
- * - 新リポの lastKnownCommitSha を localStorage から復元する
- *
- * 初回（キャッシュなし）の場合はストアが空のままになり、
- * 既存の Pull ロジックが commitSha=null を見て初回 Pull を実行する。
- */
-export async function rehydrateForRepo(repoKey: string): Promise<void> {
-  // #254: 添付フローの挿入フェーズが進行中なら着地を待つ。待たずにクリアすると、
-  // アップロード済みメディアへの参照テキストが旧リポの store/DB に載る前に消え、
-  // メディアが孤児化する（push/pull preflight と同じレースのリポ切替版）。
-  // 着地後は下の flushPendingSaves が旧リポ DB へ永続化する。
-  await waitForPendingMediaInserts()
-
-  // rehydrate 実行中は、ストアへの一時的な代入（null リセット等）が
-  // localStorage の新リポ slot に書き戻されないようガードする。
-  setRehydrating(true)
-  try {
-    // 旧リポの保留保存を先に flush（データ損失防止）
-    try {
-      await flushPendingSaves()
-      await flushPersistedMetadata()
-    } catch (error) {
-      console.error('Failed to flush pending saves before repo switch:', error)
-    }
-
-    // 旧リポのインメモリをクリア（視覚的な残留を防ぐ）
-    notes.value = []
-    leaves.value = []
-    archiveNotes.value = []
-    archiveLeaves.value = []
-
-    // 新リポの DB に切り替え
-    try {
-      await setCurrentRepo(repoKey)
-    } catch (error) {
-      console.error('Failed to open per-repo DB:', error)
-      // 失敗時は何もしない（Pull が走れば復旧する）
-      closeCurrentRepoDb()
-      return
-    }
-
-    // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
-    // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
-    try {
-      const [loadedNotes, loadedLeaves] = await Promise.all([loadNotes(), loadLeaves()])
-      notes.value = loadedNotes
-      leaves.value = loadedLeaves
-      // #168: リポ切替直後はキャッシュからのロードのみで pull が走らない経路もあるため、
-      // ホーム右下の統計が 0 にならないよう明示的に再計算する
-      leafStatsStore.rebuild(loadedLeaves, loadedNotes)
-      // 読み込んだ内容をダーティ判定のベースラインに設定（Pull 成功前と同じ扱い）
-      setLastPushedSnapshot(loadedNotes, loadedLeaves, [], [])
-      clearAllChanges()
-    } catch (error) {
-      console.error('Failed to load cached data for new repo:', error)
-    }
-
-    // lastKnownCommitSha を新リポの localStorage スロットから復元
-    // （この代入は $effect を発火させるが、isRehydrating ガードで
-    // setPersistedCommitSha への書き込みはスキップされる）
-    lastKnownCommitSha.value = getPersistedCommitSha()
-    metadata.value = (await getPersistedMetadata()) ?? {
-      version: 1,
-      notes: {},
-      leaves: {},
-      pushCount: 0,
-    }
-    isStale.value = false
-    lastPushTime.value = 0
-    lastStaleCheckTime.value = 0
-    lastPulledPushCount.value = getPersistedLastPulledPushCount() ?? 0
-  } finally {
-    // ガードを解除。以降の変更は通常通り per-repo slot に永続化される。
-    setRehydrating(false)
-  }
 }

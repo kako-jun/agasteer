@@ -257,7 +257,8 @@
     "leafCreated": "Leaf created",
     "pushTimeout": "Push response timed out. Watching for the result in the background; sync will recover automatically if it succeeded.",
     "pushLateSuccess": "The delayed push turned out to have succeeded. Sync state recovered.",
-    "pushInProgress": "Pushing… don't close or switch apps yet."
+    "pushInProgress": "Pushing… don't close or switch apps yet.",
+    "archiveOpenBlocked": "Couldn't open the archive because a sync is in progress"
   },
   "media": {
     "uploading": "Uploading {name}...",

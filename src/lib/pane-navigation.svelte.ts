@@ -18,7 +18,10 @@ import {
 import type { Pane } from './navigation'
 import type { EditorPaneRef } from './editor/editor-pane-ref'
 import { waitForMatchingEditor } from './editor/wait-for-editor'
-import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from './sync/repo-sync-queue'
+// #297 S-c: 以前はここに runPendingRepoSyncIfIdle の複製（waitForRehydrate も
+// pendingRehydrateRepo の rehydrate もしない簡略版）があったが、git-pull.ts の
+// 実装（正本）に一本化した（git-push.ts と同じ import 形）。
+import { runPendingRepoSyncIfIdle } from './actions/git-pull'
 import * as nav from './navigation'
 import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
 import { _ } from './i18n'
@@ -54,13 +57,14 @@ import {
   getLeavesForWorld as _getLeavesForWorld,
   setArchiveBaseline,
   scheduleOfflineSave,
+  waitForRehydrate,
 } from './stores'
 import {
-  appActions,
   appState,
   derivedState,
   getNotesForPane,
   getLeavesForPane,
+  getWorldForPane,
 } from './app-state.svelte'
 import {
   priorityItems,
@@ -132,26 +136,6 @@ export function syncNavState(state: nav.NavigationState) {
   focusedPane.value = state.focusedPane
   appState.selectedIndexLeft = state.selectedIndexLeft
   appState.selectedIndexRight = state.selectedIndexRight
-}
-
-async function runPendingRepoSyncIfIdle(): Promise<void> {
-  const hasValidConfig = !!(settings.value.token && settings.value.repoName)
-  await runPendingRepoSyncIfIdleShared(
-    {
-      isPulling: isPulling.value,
-      // #206: 背景 Push 中も busy として扱う
-      isPushing: isPushing.value || isPushingBackground.value,
-      isArchiveLoading: appState.isArchiveLoading,
-    },
-    hasValidConfig,
-    appState.pendingRepoSync,
-    () => {
-      appState.pendingRepoSync = false
-    },
-    async () => {
-      await appActions.pullFromGitHub(false)
-    }
-  )
 }
 
 // ========================================
@@ -375,6 +359,82 @@ async function loadArchiveCacheFromDB(): Promise<{ hasCachedData: boolean }> {
 // World switching / Archive / Restore
 // ========================================
 
+/**
+ * アーカイブ本体をロードする（IndexedDBキャッシュ読み出し + pullArchive）。
+ * #297 S-b: handleWorldChange から呼ばれる。ロック（appState.isArchiveLoading）の
+ * 取得・解除・runPendingRepoSyncIfIdle の呼び出しは呼び出し側（performArchiveLoad）の
+ * 責務にし、ここでは実際のロード処理だけを行う（二重実装しない）。
+ */
+async function loadArchiveIntoStores(): Promise<void> {
+  // まずIndexedDBキャッシュから読み出し
+  const { hasCachedData } = await loadArchiveCacheFromDB()
+  if (!hasCachedData) {
+    archiveLeafStatsStore.reset()
+  }
+  // blob SHAキャッシュ用: dirtyでなければキャッシュ済みリーフからSHA→Leafのマップを構築
+  const cachedLeafMap = isDirty.value
+    ? new Map<string, Leaf>()
+    : buildBlobShaCache(archiveLeaves.value)
+  try {
+    const result = await pullArchive(settings.value, {
+      onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
+      cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
+    })
+    if (result.success) {
+      archiveNotes.value = result.notes
+      archiveLeaves.value = result.leaves
+      archiveMetadata.value = result.metadata
+      isArchiveLoaded.value = true
+      setArchiveBaseline(result.notes, result.leaves)
+      saveArchiveNotes(result.notes).catch((err) =>
+        console.error('Failed to persist archive notes:', err)
+      )
+      saveArchiveLeaves(result.leaves).catch((err) =>
+        console.error('Failed to persist archive leaves:', err)
+      )
+    } else {
+      const t = get(_)
+      // キャッシュがなければエラー表示
+      if (!hasCachedData) {
+        showPullToast(
+          translateGitHubMessage(
+            result.message,
+            t,
+            result.rateLimitInfo,
+            undefined,
+            result.errorCode,
+            result.httpStatus
+          ),
+          'error'
+        )
+      }
+    }
+  } catch (e) {
+    console.error('Archive pull failed:', e)
+    if (!hasCachedData) {
+      const t = get(_)
+      showPullToast(t('toast.pullFailed'), 'error')
+    }
+  }
+}
+
+/**
+ * アーカイブロードのロック取得〜解除〜保留同期の再開までを一括で行う。
+ * #297 S-b: 再判定通過直後・IndexedDB読込前（await の前）に同期でロックを取る
+ * （loadArchiveCacheFromDB は isArchiveLoading を参照しないため、ここで先に
+ * 取っても安全。取らないと IndexedDB 読込中に AL ロックが無い窓ができ、
+ * その間に Pull が割り込める）。
+ */
+async function performArchiveLoad(): Promise<void> {
+  appState.isArchiveLoading = true
+  try {
+    await loadArchiveIntoStores()
+  } finally {
+    appState.isArchiveLoading = false
+    await runPendingRepoSyncIfIdle()
+  }
+}
+
 export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
   const currentPaneWorld = pane === 'left' ? leftWorld.value : rightWorld.value
   if (world === currentPaneWorld) return
@@ -393,62 +453,60 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
 
   if (world === 'archive' && !isArchiveLoaded.value && !appState.isArchiveLoading) {
     if (settings.value.token && settings.value.repoName) {
-      // まずIndexedDBキャッシュから読み出し
-      const { hasCachedData } = await loadArchiveCacheFromDB()
+      // #297 should5: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+      // 先に完了を待つ。待たずに進むと、IndexedDB の切替（setCurrentRepo）が
+      // 途中の状態で loadArchiveCacheFromDB/pullArchive が走り、旧/新どちらの
+      // DB を読むか取り違える窓ができる。
+      await waitForRehydrate()
 
-      // キャッシュの有無にかかわらずpullArchiveで最新化
-      appState.isArchiveLoading = true
-      if (!hasCachedData) {
-        archiveLeafStatsStore.reset()
+      // #297 must1/N-a: 待機中に、そのペインが archive 表示でなくなった、または
+      // 設定が無効化された場合はここで打ち切る（再開の意味がない）。
+      if (
+        getWorldForPane(pane) !== 'archive' ||
+        !(settings.value.token && settings.value.repoName)
+      ) {
+        return
       }
-      // blob SHAキャッシュ用: dirtyでなければキャッシュ済みリーフからSHA→Leafのマップを構築
-      const cachedLeafMap = isDirty.value
-        ? new Map<string, Leaf>()
-        : buildBlobShaCache(archiveLeaves.value)
-      try {
-        const result = await pullArchive(settings.value, {
-          onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
-          cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
-        })
-        if (result.success) {
-          archiveNotes.value = result.notes
-          archiveLeaves.value = result.leaves
-          archiveMetadata.value = result.metadata
-          isArchiveLoaded.value = true
-          setArchiveBaseline(result.notes, result.leaves)
-          saveArchiveNotes(result.notes).catch((err) =>
-            console.error('Failed to persist archive notes:', err)
-          )
-          saveArchiveLeaves(result.leaves).catch((err) =>
-            console.error('Failed to persist archive leaves:', err)
-          )
+
+      // 別ペインのアーカイブロードが先に完了した、または進行中の場合もここで打ち切る
+      // （AL 自体はアーカイブをロードするので、その完了を待てば足りる）。この場合は
+      // ワールド表示を戻さない: 進行中/完了済みのロードがこのペインの画面も正しく
+      // 埋めるため、home へ戻す必要がない（下の Pull/Push ケースとの違い）。
+      if (appState.isArchiveLoading || isArchiveLoaded.value) {
+        return
+      }
+
+      // #297 4巡目: Pull/Push はアーカイブをロードしないため、ここで打ち切ると
+      // ワールド表示だけ archive のまま未ロード（画面が空）で残ってしまう。
+      // かつては自動再開（pendingArchiveLoad）で救っていたが、保留中の rehydrate を
+      // 無視して旧リポの IndexedDB に新リポのアーカイブを保存する／例外が Pull/Push に
+      // 伝播する／配線が未テスト、といった新たなバグを生んだため撤去した。
+      // 代わりにワールド表示を切替前（= home）へ戻し、冒頭の busy 判定がこの
+      // ワールド切替自体を拒否したときと同じ結果にする（「archive 表示なのに
+      // 未ロード」の残留状態を作らない）。直接 store を更新するだけにし、
+      // handleWorldChange を再帰呼び出ししない（再帰すると busy チェックで
+      // 即 return し、戻し処理自体が発火しない）。
+      if (isPulling.value || isPushing.value || isPushingBackground.value) {
+        if (pane === 'left') {
+          leftWorld.value = currentPaneWorld
         } else {
-          const t = get(_)
-          // キャッシュがなければエラー表示
-          if (!hasCachedData) {
-            showPullToast(
-              translateGitHubMessage(
-                result.message,
-                t,
-                result.rateLimitInfo,
-                undefined,
-                result.errorCode,
-                result.httpStatus
-              ),
-              'error'
-            )
-          }
+          rightWorld.value = currentPaneWorld
         }
-      } catch (e) {
-        console.error('Archive pull failed:', e)
-        if (!hasCachedData) {
-          const t = get(_)
-          showPullToast(t('toast.pullFailed'), 'error')
+        // #297 Q1: 待機中にこのペインが archive の外へ出る操作（メディア画面遷移等）を
+        // していた場合、goHome で上書きしない。view がまだ home（= 直前の初回 goHome
+        // から動いていない）のときだけ goHome する。
+        const currentPaneView = pane === 'left' ? leftView.value : rightView.value
+        if (currentPaneView === 'home') {
+          goHome(pane)
         }
-      } finally {
-        appState.isArchiveLoading = false
-        await runPendingRepoSyncIfIdle()
+        refreshBreadcrumbs()
+        // #297 N3: Pull/Push が理由でワールド表示を戻したことを一言案内する
+        // （黙って archive → home に戻すと、開けなかったことがユーザーに伝わらない）
+        showPullToast(get(_)('toast.archiveOpenBlocked'))
+        return
       }
+
+      await performArchiveLoad()
     }
   }
 }
