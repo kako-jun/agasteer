@@ -492,8 +492,17 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
         } else {
           rightWorld.value = currentPaneWorld
         }
-        goHome(pane)
+        // #297 Q1: 待機中にこのペインが archive の外へ出る操作（メディア画面遷移等）を
+        // していた場合、goHome で上書きしない。view がまだ home（= 直前の初回 goHome
+        // から動いていない）のときだけ goHome する。
+        const currentPaneView = pane === 'left' ? leftView.value : rightView.value
+        if (currentPaneView === 'home') {
+          goHome(pane)
+        }
         refreshBreadcrumbs()
+        // #297 N3: Pull/Push が理由でワールド表示を戻したことを一言案内する
+        // （黙って archive → home に戻すと、開けなかったことがユーザーに伝わらない）
+        showPullToast(get(_)('toast.archiveOpenBlocked'))
         return
       }
 
