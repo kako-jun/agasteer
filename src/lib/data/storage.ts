@@ -25,7 +25,7 @@ import { encryptToken, decryptToken, isEncryptedToken, obfuscateToken } from '..
  * ストレージエラークラス
  * IndexedDBの操作に関するエラーを種類別に分類
  *
- * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
+ * @internal data 層内部用（storage.ts / metadata-storage.ts 間の共有。barrel 外からの利用は想定しない）
  */
 export class StorageError extends Error {
   public readonly type: 'db_open' | 'db_blocked' | 'db_upgrade' | 'db_operation' | 'db_closed'
@@ -145,7 +145,7 @@ export function syncRepoNameCache(repoName: string | null | undefined): void {
  * export: metadata-storage.ts の migrateMetadataFromLocalStorage が
  * 旧形式 byRepo[].metadata の読み出しに使う（#295 S4）。
  *
- * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
+ * @internal data 層内部用（storage.ts / metadata-storage.ts 間の共有。barrel 外からの利用は想定しない）
  */
 export function loadStorageData(): StorageData {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -200,7 +200,7 @@ export function loadStorageData(): StorageData {
  * export: metadata-storage.ts の migrateMetadataFromLocalStorage が
  * 移行完了後の byRepo[].metadata 除去に使う（#295 S4）。
  *
- * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
+ * @internal data 層内部用（storage.ts / metadata-storage.ts 間の共有。barrel 外からの利用は想定しない）
  */
 export function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
@@ -445,7 +445,7 @@ export function shouldShowPwaInstallBanner(): boolean {
  * export: metadata-storage.ts の getPersistedMetadata/setPersistedMetadata が
  * 同じキャッシュを共有するために使う（#295 S4）。
  *
- * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
+ * @internal data 層内部用（storage.ts / metadata-storage.ts 間の共有。barrel 外からの利用は想定しない）
  */
 export function currentRepoKey(): string | null {
   if (cachedRepoName === undefined) {
@@ -459,7 +459,7 @@ export function currentRepoKey(): string | null {
 /**
  * 指定リポの状態を読む。存在しなければデフォルト。
  *
- * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
+ * @internal data 層内部用（storage.ts / metadata-storage.ts 間の共有。barrel 外からの利用は想定しない）
  */
 export function getPerRepoState(repoKey: string): PerRepoState {
   const data = loadStorageData()
