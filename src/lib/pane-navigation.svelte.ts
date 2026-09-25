@@ -12,7 +12,7 @@ import type { Pane } from './navigation'
 import type { EditorPaneRef } from './editor/editor-pane-ref'
 import { waitForMatchingEditor } from './editor/wait-for-editor'
 import * as nav from './navigation'
-import { resolvePath, buildPath, extractWorldPrefix } from './navigation'
+import { buildPath, extractWorldPrefix } from './navigation'
 import { _ } from './i18n'
 import { locale } from 'svelte-i18n'
 import {
@@ -76,6 +76,9 @@ import {
 // archive-load.svelte.ts へ抽出済み。handleWorldChange / restoreStateFromUrl
 // いずれもロード本体を performArchiveLoad() 経由で呼ぶ（#307 で二重実装を統合）。
 import { performArchiveLoad } from './archive-load.svelte'
+// #314 N3: restoreStateFromUrl の待ち合わせロジック（世代管理・同期アイドル待ち・
+// アーカイブ待機・pane スナップショット比較）を分離したモジュール。
+import * as urlRestore from './pane-navigation-url-restore.svelte'
 
 // ========================================
 // Navigation State helpers
@@ -704,151 +707,98 @@ export function updateUrlFromState() {
 }
 
 /**
- * Pull/Push（背景 Push 含む）がすべてアイドルになるまで待つ（#314）。
- *
- * isPulling/isPushing/isPushingBackground は core-state.svelte.ts の $state の
- * getter/setter で、Svelte ストアのような subscribe を持たない。waitForRehydrate()
- * と違い Pull/Push 側にはまだ in-flight Promise の仕組みが無く、新設するには
- * git-pull.ts / git-push.ts の複数のロック解放地点すべてに配線する必要がある
- * 大掛かりな変更になる。sync/resume-retry.ts の sleep 注入と同じ考え方で、
- * 状態を変更しない単純なポーリングに留める（`sleep` はテストから注入できる）。
+ * 旧形式（?note=uuid&leaf=uuid、または無指定）の URL を解決する（互換性維持）。
+ * #314 N3: restoreStateFromUrl を80行以内に保つため、現行の left/right 形式とは
+ * 独立したこの分岐を別関数に切り出した。アーカイブ待機は関与しない。
  */
-const SYNC_IDLE_POLL_INTERVAL_MS = 50
+function resolveLegacyUrlParams(params: URLSearchParams) {
+  const noteId = params.get('note')
+  const leafId = params.get('leaf')
 
-function isSyncBusy(): boolean {
-  return isPulling.value || isPushing.value || isPushingBackground.value
-}
-
-export async function waitForSyncIdle(
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-): Promise<void> {
-  while (isSyncBusy()) {
-    await sleep(SYNC_IDLE_POLL_INTERVAL_MS)
+  if (leafId) {
+    const leaf = leaves.value.find((n) => n.id === leafId)
+    const note = leaf ? notes.value.find((f) => f.id === leaf.noteId) : undefined
+    if (leaf && note) {
+      leftNote.value = note
+      leftLeaf.value = leaf
+      leftView.value = 'edit'
+      leftWorld.value = 'home'
+    }
+    return
   }
+  if (noteId) {
+    const note = notes.value.find((f) => f.id === noteId)
+    if (note) {
+      leftNote.value = note
+      leftLeaf.value = null
+      leftView.value = 'note'
+      leftWorld.value = 'home'
+    }
+    return
+  }
+  leftNote.value = null
+  leftLeaf.value = null
+  leftView.value = 'home'
+  leftWorld.value = 'home'
 }
 
+/**
+ * URL の left/right パスから pane 状態を復元する（#314）。
+ *
+ * 待ち合わせ（rehydrate待ち・Pull/Push/背景Push/アーカイブロードのアイドル待ち・
+ * アーカイブロード本体・世代管理・pane スナップショット比較）は
+ * pane-navigation-url-restore.svelte.ts に集約されている（N3: このファイル自体は
+ * 80行以内に保つ）。archive を必要としない（または既にロード済みの）pane は
+ * 待たずに即解決し、archive 待ちが要る pane だけ待機後に解決する（M4a: home pane が
+ * Pull 全体を待つ退行を防ぐ）。
+ */
 export async function restoreStateFromUrl(alreadyRestoring = false) {
+  const gen = urlRestore.beginRestoreGeneration()
   const params = new URLSearchParams(window.location.search)
   let leftPath = params.get('left')
-  let rightPath = params.get('right')
+  const rightPath = params.get('right')
 
   // 互換性: 旧形式（?note=uuid&leaf=uuid）もサポート
   if (!leftPath && !rightPath) {
-    const noteId = params.get('note')
-    const leafId = params.get('leaf')
-
-    if (leafId) {
-      const leaf = leaves.value.find((n) => n.id === leafId)
-      if (leaf) {
-        const note = notes.value.find((f) => f.id === leaf.noteId)
-        if (note) {
-          leftNote.value = note
-          leftLeaf.value = leaf
-          leftView.value = 'edit'
-          leftWorld.value = 'home'
-        }
-      }
-    } else if (noteId) {
-      const note = notes.value.find((f) => f.id === noteId)
-      if (note) {
-        leftNote.value = note
-        leftLeaf.value = null
-        leftView.value = 'note'
-        leftWorld.value = 'home'
-      }
-    } else {
-      leftNote.value = null
-      leftLeaf.value = null
-      leftView.value = 'home'
-      leftWorld.value = 'home'
-    }
+    resolveLegacyUrlParams(params)
     return
   }
 
   if (!alreadyRestoring) {
     appState.isRestoringFromUrl = true
   }
-
-  if (!leftPath) {
-    leftPath = '/'
-  }
+  if (!leftPath) leftPath = '/'
 
   const leftWorldInfo = extractWorldPrefix(leftPath)
-  const rightWorldInfo = rightPath ? extractWorldPrefix(rightPath) : { world: 'home' as const }
+  // 単ペイン表示中は right パスを無視する（#314: 使われない pane のために
+  // アーカイブロードを待つ必要はない。最終的に「follow left」で上書きされる）。
+  const rp: string | null = rightPath && appState.isDualPane ? rightPath : null
+  const rightWorldInfo = rp ? extractWorldPrefix(rp) : { world: 'home' as const }
 
-  const needsArchive = leftWorldInfo.world === 'archive' || rightWorldInfo.world === 'archive'
-  if (needsArchive && !isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
-    // #307: ロード本体・ロック（appState.isArchiveLoading）は performArchiveLoad に統合
-    // 済み（#297 S-b と同じロック窓が handleWorldChange 側だけ塞がれていたのを解消）。
-    // このガード（!isArchiveLoaded && token && repoName）は呼び出し側に残す。
-    //
-    // #314: handleWorldChange と同じ前段に揃える。まず rehydrate の完了を待つ
-    // （リポ切替の DB 切替途中でアーカイブを読み書きし、旧/新 DB を取り違えるのを防ぐ）。
-    await waitForRehydrate()
+  const hasArchiveConfig = !!(settings.value.token && settings.value.repoName)
+  const leftNeedsWait =
+    leftWorldInfo.world === 'archive' && !isArchiveLoaded.value && hasArchiveConfig
+  const rightNeedsWait =
+    !!rp && rightWorldInfo.world === 'archive' && !isArchiveLoaded.value && hasArchiveConfig
 
-    // #314: Pull/Push（背景含む）中は AL と並走させない。onPriorityComplete
-    // （git-pull.ts）から isPulling=true のまま await されずに呼ばれる経路があり、
-    // 待たずに進むと performArchiveLoad が Pull の途中に割り込んでしまう
-    // （push-pull.md の排他表「Pull 中の AL はブロック」と食い違う）。
-    // handleWorldChange は busy ならワールド表示を home に戻して諦めるが、
-    // restoreStateFromUrl は URL を必ず解決する必要があるためスキップはせず、
-    // 同期完了を待ってから続行する（onPriorityComplete 側は await せず呼ぶだけなので、
-    // ここで待ってもその Pull 自体をブロックしない。Pull は自身の finally で
-    // isPulling を落として完了する。#314 で deadlock しないことを確認済み）。
-    await waitForSyncIdle()
+  const leftSnapshot = urlRestore.snapshotPane('left')
+  const rightSnapshot = urlRestore.snapshotPane('right')
+  if (!leftNeedsWait) urlRestore.resolvePaneFromPath('left', leftPath, leftWorldInfo.world)
+  if (rp && !rightNeedsWait) urlRestore.resolvePaneFromPath('right', rp, rightWorldInfo.world)
 
-    // 待機中に別経路（handleWorldChange 等）で既にロード済み、または設定が
-    // 無効化された場合は改めてロードしない（handleWorldChange の再判定と同じ考え方）。
-    if (!isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
-      await performArchiveLoad('during URL restore')
+  if (leftNeedsWait || rightNeedsWait) {
+    await urlRestore.waitUntilArchiveReady(gen, 'during URL restore')
+    if (!urlRestore.isCurrentRestoreGeneration(gen)) return
+
+    if (leftNeedsWait && urlRestore.shouldApplyResolvedPane(gen, 'left', leftSnapshot)) {
+      urlRestore.resolvePaneFromPath('left', leftPath, leftWorldInfo.world)
+    }
+    if (rp && rightNeedsWait && urlRestore.shouldApplyResolvedPane(gen, 'right', rightSnapshot)) {
+      urlRestore.resolvePaneFromPath('right', rp, rightWorldInfo.world)
     }
   }
 
-  const leftNotesData = _getNotesForWorld(leftWorldInfo.world, notes.value, archiveNotes.value)
-  const leftLeavesData = _getLeavesForWorld(leftWorldInfo.world, leaves.value, archiveLeaves.value)
-
-  const leftResolution = resolvePath(leftPath, leftNotesData, leftLeavesData)
-  leftWorld.value = leftResolution.world
-
-  if (leftResolution.type === 'home') {
-    leftNote.value = null
-    leftLeaf.value = null
-    leftView.value = 'home'
-  } else if (leftResolution.type === 'note') {
-    leftNote.value = leftResolution.note
-    leftLeaf.value = null
-    leftView.value = 'note'
-  } else if (leftResolution.type === 'leaf') {
-    leftNote.value = leftResolution.note
-    leftLeaf.value = leftResolution.leaf
-    leftView.value = leftResolution.isPreview ? 'preview' : 'edit'
-  }
-
-  if (rightPath && appState.isDualPane) {
-    const rightNotesData = _getNotesForWorld(rightWorldInfo.world, notes.value, archiveNotes.value)
-    const rightLeavesData = _getLeavesForWorld(
-      rightWorldInfo.world,
-      leaves.value,
-      archiveLeaves.value
-    )
-
-    const rightResolution = resolvePath(rightPath, rightNotesData, rightLeavesData)
-    rightWorld.value = rightResolution.world
-
-    if (rightResolution.type === 'home') {
-      rightNote.value = null
-      rightLeaf.value = null
-      rightView.value = 'home'
-    } else if (rightResolution.type === 'note') {
-      rightNote.value = rightResolution.note
-      rightLeaf.value = null
-      rightView.value = 'note'
-    } else if (rightResolution.type === 'leaf') {
-      rightNote.value = rightResolution.note
-      rightLeaf.value = rightResolution.leaf
-      rightView.value = rightResolution.isPreview ? 'preview' : 'edit'
-    }
-  } else {
+  if (!rp) {
     rightNote.value = leftNote.value
     rightLeaf.value = leftLeaf.value
     rightView.value = leftView.value
