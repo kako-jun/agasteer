@@ -2,6 +2,8 @@
  * ストア関連のエクスポート
  */
 export * from './stores.svelte'
+// #297: rehydrateForRepo / waitForRehydrate はここへ分離済み（stores.svelte.ts の god-file化対策）
+export * from './rehydrate.svelte'
 export * from './context'
 export * from './leaf-stats.svelte'
 export * from './drag-state.svelte'

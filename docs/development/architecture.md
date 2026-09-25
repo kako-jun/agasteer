@@ -255,6 +255,7 @@ agasteer/
 │   │   │   └── media-resolve.ts         # 添付メディアの表示解決（Blob URL差し替え、#244）
 │   │   ├── stores/                       # 状態管理モジュール
 │   │   │   ├── stores.svelte.ts         # Svelte 5 rune ベース状態管理（notes/leaves/settings等）
+│   │   │   ├── rehydrate.svelte.ts      # リポ切替時のストア再水和（rehydrateForRepo直列化キュー、#297）
 │   │   │   ├── world-helpers.ts         # ワールド判定ヘルパー（純粋関数）
 │   │   │   ├── context.ts               # Context API型定義（PaneActions/PaneStateのみ残存）
 │   │   │   ├── auto-save.svelte.ts      # 自動保存タイマー

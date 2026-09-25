@@ -65,7 +65,8 @@ vi.mock('../api/media/insert-phase', () => ({
   waitForPendingMediaInserts: mocks.waitForPendingMediaInserts,
 }))
 
-const { rehydrateForRepo, waitForRehydrate } = await import('./stores.svelte')
+// #297 nit11: rehydrateForRepo/waitForRehydrate は rehydrate.svelte.ts へ分離済み
+const { rehydrateForRepo, waitForRehydrate } = await import('./rehydrate.svelte')
 
 /** 明示的に resolve/reject を外から制御できる Promise */
 function deferred<T = void>() {
