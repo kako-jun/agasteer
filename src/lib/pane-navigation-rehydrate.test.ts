@@ -13,7 +13,7 @@
  * どう変わるかを観測する。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ValueStore<T> = { value: T }
 function createStore<T>(value: T): ValueStore<T> {
@@ -199,6 +199,15 @@ beforeEach(() => {
     success: false,
     message: 'github.pullFailed',
   })
+})
+
+// nit1: console.error スパイを個々のテスト末尾の mockRestore() に頼ると、
+// アサーション失敗などでその行まで到達しなかった場合にスパイが後続テストへ
+// 漏れる。afterEach で確実に戻す。vi.restoreAllMocks() は他の vi.fn() モックも
+// 呼び出し履歴込みで初期状態へ戻すが、per-test の上書きは元々 beforeEach で
+// 毎回明示的に張り直しているため壊れない。
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
@@ -524,7 +533,5 @@ describe('handleWorldChange のアーカイブロード失敗時ログ文言 (#3
     await handleWorldChange('archive', 'left')
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('Archive pull failed:', error)
-
-    consoleErrorSpy.mockRestore()
   })
 })

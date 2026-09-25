@@ -19,7 +19,7 @@
  * window.location.search を読むため、このファイルだけ jsdom 環境にする。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ValueStore<T> = { value: T }
 function createStore<T>(value: T): ValueStore<T> {
@@ -89,6 +89,11 @@ const mocks = vi.hoisted(() => ({
   // 縛られて mockReturnValue({ world: 'archive' }) が型エラーになる。
   extractWorldPrefix: vi.fn((): { world: string } => ({ world: 'home' })),
   resolvePath: vi.fn((): { type: string; world: string } => ({ type: 'home', world: 'archive' })),
+  // nit3: 正常系での永続化呼び出し（saveArchiveNotes/saveArchiveLeaves/setArchiveBaseline）を
+  // assert できるよう、他の mocks 同様に外から参照できる場所に置く。
+  saveArchiveNotes: vi.fn(async () => {}),
+  saveArchiveLeaves: vi.fn(async () => {}),
+  setArchiveBaseline: vi.fn(),
 }))
 
 vi.mock('./stores', () => ({
@@ -97,7 +102,7 @@ vi.mock('./stores', () => ({
   getDialogPositionForPane: vi.fn(() => ({ top: 0, left: 0 })),
   getNotesForWorld: vi.fn(() => []),
   getLeavesForWorld: vi.fn(() => []),
-  setArchiveBaseline: vi.fn(),
+  setArchiveBaseline: mocks.setArchiveBaseline,
   scheduleOfflineSave: vi.fn(),
 }))
 
@@ -139,8 +144,8 @@ vi.mock('./data', () => ({
   saveOfflineLeaf: vi.fn(),
   // loadArchiveIntoStores の成功パスは戻り値に .catch() を呼ぶため、
   // 単なる vi.fn()（undefined を返す）だと成功時に TypeError を誘発する。
-  saveArchiveNotes: vi.fn(async () => {}),
-  saveArchiveLeaves: vi.fn(async () => {}),
+  saveArchiveNotes: mocks.saveArchiveNotes,
+  saveArchiveLeaves: mocks.saveArchiveLeaves,
   loadArchiveNotes: mocks.loadArchiveNotes,
   loadArchiveLeaves: mocks.loadArchiveLeaves,
 }))
@@ -208,7 +213,23 @@ beforeEach(() => {
   })
   mocks.extractWorldPrefix.mockReturnValue({ world: 'home' })
   mocks.resolvePath.mockReturnValue({ type: 'home', world: 'archive' })
+  // loadArchiveIntoStores の成功パスは戻り値に .catch() を呼ぶため、単なる
+  // vi.fn()（undefined を返す）だと成功時に TypeError を誘発する。他のmock同様、
+  // テストごとに明示的に張り直しておく（mockResolvedValueOnce 等の個別上書きは
+  // afterEach の vi.restoreAllMocks() でクリアされるため）。
+  mocks.saveArchiveNotes.mockResolvedValue(undefined)
+  mocks.saveArchiveLeaves.mockResolvedValue(undefined)
   setUrl('left=%2Fhome%2Fx')
+})
+
+// nit1: console.error スパイを個々のテスト末尾の mockRestore() に頼ると、
+// アサーション失敗などでその行まで到達しなかった場合にスパイが後続テストへ
+// 漏れる。afterEach で確実に戻す。vi.restoreAllMocks() は他の vi.fn() モックも
+// 呼び出し履歴込みで初期状態（vi.fn(初期実装) の初期実装）へ戻すため、
+// per-test の上書き（mockResolvedValueOnce 等）は消えるが、それらは元々
+// beforeEach で毎回明示的に張り直しているため壊れない。
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('restoreStateFromUrl の前段ガード（デシジョンテーブル、#307）', () => {
@@ -288,8 +309,10 @@ describe('restoreStateFromUrl の正常系（#307: performArchiveLoad 統合後�
     expect(mocks.runPendingRepoSyncIfIdle).toHaveBeenCalledTimes(1)
     // catch 分岐（異常系）に落ちていないことも確認する
     expect(consoleErrorSpy).not.toHaveBeenCalled()
-
-    consoleErrorSpy.mockRestore()
+    // nit3(b): 取得結果の永続化（IndexedDB保存・baseline更新）まで行われることを縛る
+    expect(mocks.saveArchiveNotes).toHaveBeenCalledWith(resultNotes)
+    expect(mocks.saveArchiveLeaves).toHaveBeenCalledWith(resultLeaves)
+    expect(mocks.setArchiveBaseline).toHaveBeenCalledWith(resultNotes, resultLeaves)
   })
 })
 
@@ -312,12 +335,11 @@ describe('restoreStateFromUrl のロック窓（#307: IndexedDB 読込中も isA
 
     const restorePromise = restoreStateFromUrl()
 
-    // マイクロタスクを流して loadArchiveCacheFromDB の途中まで進める
-    await Promise.resolve()
-    await Promise.resolve()
-    await Promise.resolve()
-
-    // IndexedDB読込（loadArchiveNotes）がまだ解決していない時点で、既にロック済み
+    // performArchiveLoad はロック取得（同期）の後で初めて await に入るため、
+    // restoreStateFromUrl → performArchiveLoad → loadArchiveIntoStores →
+    // loadArchiveCacheFromDB → Promise.all(loadArchiveNotes(), loadArchiveLeaves())
+    // の呼び出し連鎖は途中に await を挟まず、呼び出し直後（同期）に既に
+    // ロック済みになっている。マイクロタスクを流す必要はない。
     expect(appState.isArchiveLoading).toBe(true)
     expect(mocks.pullArchive).not.toHaveBeenCalled()
 
@@ -342,7 +364,26 @@ describe('restoreStateFromUrl の異常系（#307: ログ文言の出し分け�
     expect(consoleErrorSpy).toHaveBeenCalledWith('Archive pull failed during URL restore:', error)
     expect(appState.isArchiveLoading).toBe(false)
     expect(mocks.runPendingRepoSyncIfIdle).toHaveBeenCalledTimes(1)
+  })
+})
 
-    consoleErrorSpy.mockRestore()
+describe('restoreStateFromUrl の異常系（#307 nit3: IndexedDB 読出し失敗は伝播する）', () => {
+  // loadArchiveCacheFromDB（Promise.all(loadArchiveNotes(), loadArchiveLeaves())）の
+  // 呼び出しは loadArchiveIntoStores の try/catch の外にあるため、ここでの reject は
+  // 捕捉されずそのまま呼び出し元へ伝播する（pullArchive の失敗が内部で catch されて
+  // 揉み消されるのとは異なる経路）。performArchiveLoad の finally（ロック解除 +
+  // runPendingRepoSyncIfIdle）だけは例外時も必ず実行されることを縛る。
+  it('loadArchiveNotes が reject した場合、ロック解除と runPendingRepoSyncIfIdle 呼び出しは起きるが、例外は呼び出し元に伝播する', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+
+    const error = new Error('idb boom')
+    mocks.loadArchiveNotes.mockRejectedValueOnce(error)
+
+    await expect(restoreStateFromUrl()).rejects.toBe(error)
+
+    expect(appState.isArchiveLoading).toBe(false)
+    expect(mocks.runPendingRepoSyncIfIdle).toHaveBeenCalledTimes(1)
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
   })
 })
