@@ -752,6 +752,24 @@ export function initApp(deps: InitAppDeps): () => void {
       } catch (error) {
         console.error('Failed to open per-repo DB on startup:', error)
       }
+      // #295 M1: stale check / Pull を始める前に、永続化済み metadata で store を
+      // 初期化する。従来はこれを applyPersistedStartupCache() 内でしか行っておらず、
+      // full pull 経路（SHA不一致・check_failed・dirty→pull で確認ダイアログを
+      // 経由しない場合）では onStructure（Pull成功時）まで metadata.value がモジュール
+      // 初期値の空メタデータのままだった。この状態で Pull が失敗すると
+      // （git-pull.ts のバックアップ復元は notes/leaves のみで metadata は対象外）、
+      // 直後に呼ばれる initStoreEffects() の初回 effect 実行が空 metadata を
+      // IndexedDB へ書き戻し、保存済みの値を消してしまっていた。ここで先に
+      // 復元しておけば、後続の applyPersistedStartupCache() / onStructure が
+      // 同じ値（または最新値）で上書きするだけになり、矛盾は生じない。
+      // isRehydrating ガードは rehydrateForRepo() 用で、この起動時初期化には
+      // initStoreEffects() 未登録（cleanupStoreEffects はまだ no-op）のため無関係。
+      metadata.value = (await getPersistedMetadata()) ?? {
+        version: 1,
+        notes: {},
+        leaves: {},
+        pushCount: 0,
+      }
     }
 
     // i18n初期化（翻訳読み込み完了を待機）
@@ -812,8 +830,8 @@ export function initApp(deps: InitAppDeps): () => void {
     const isConfigured = loadedSettings.token && loadedSettings.repoName
     if (isConfigured) {
       // #158: IndexedDB / localStorage に保持したキャッシュをロードする。
-      // notes / leaves は IndexedDB、metadata / pushCount / dirty は per-repo
-      // localStorage slot から復元する。
+      // notes / leaves は IndexedDB、metadata も IndexedDB（#295: agasteer/metadata DB）、
+      // pushCount / dirty は per-repo localStorage slot から復元する。
       const loadPersistedStartupCache = async (): Promise<PersistedStartupCache> => {
         // 保留中の変更を先に IndexedDB へ保存
         await flushPendingSaves()
@@ -821,7 +839,7 @@ export function initApp(deps: InitAppDeps): () => void {
           wasDirty: getPersistedDirtyFlag(),
           notes: await loadNotes(),
           leaves: await loadLeaves(),
-          metadata: getPersistedMetadata(),
+          metadata: await getPersistedMetadata(),
           lastPulledPushCount: getPersistedLastPulledPushCount(),
         }
       }

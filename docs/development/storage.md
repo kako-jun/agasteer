@@ -12,10 +12,11 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 `agasteer`（単一キーに全データをJSONで保存）
 
-### データ構造（#131以降）
+### データ構造（storageVersion 2）
 
 ```json
 {
+  "storageVersion": 2,
   "settings": {
     "token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "repoName": "yamada/my-notes",
@@ -37,6 +38,7 @@ Agasteerのデータ永続化スキーマについて説明します。
     "yamada/my-notes": {
       "isDirty": false,
       "lastKnownCommitSha": "a1b2c3d4...",
+      "lastPulledPushCount": 12,
       "pushInFlightAt": 1703000000000
     },
     "yamada/other-repo": {
@@ -62,15 +64,18 @@ Agasteerのデータ永続化スキーマについて説明します。
 
 **リポジトリ単位の同期状態**（#131で導入）。キーは `"<owner>/<repo>"`。
 
-| フィールド           | 型                  | 説明                                                                   |
-| -------------------- | ------------------- | ---------------------------------------------------------------------- |
-| `isDirty`            | boolean             | 未保存の変更があるか（起動時のダーティ復元用）                         |
-| `lastKnownCommitSha` | string \| null      | 最後にリモートと同期したHEAD commit SHA（stale検出用）                 |
-| `pushInFlightAt`     | number \| undefined | Push API呼び出し中のタイムスタンプ（スリープ時のレスポンス消失検出用） |
+| フィールド            | 型                  | 説明                                                                   |
+| --------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `isDirty`             | boolean             | 未保存の変更があるか（起動時のダーティ復元用）                         |
+| `lastKnownCommitSha`  | string \| null      | 最後にリモートと同期したHEAD commit SHA（stale検出用）                 |
+| `pushInFlightAt`      | number \| undefined | Push API呼び出し中のタイムスタンプ（スリープ時のレスポンス消失検出用） |
+| `lastPulledPushCount` | number \| undefined | 最後にPullしたときのpushCount（統計復元用）                            |
 
 `pushInFlightAt` は飛行中でない場合は JSON から **欠損** する（`null` ではなく undefined のため）。サンプルでは飛行中の時刻を示している。
 
 リポを切り替えると、`currentRepoKey`（`settings.repoName`）から対応するスロットが読み書きされる。別リポの同期状態は維持されるため、戻ってきたときに差分Pullを再利用できる。
+
+`metadata.notes` / `metadata.leaves` は件数に比例して増えるため、storageVersion 2 では localStorage に保存しない。旧形式の `byRepo[repo].metadata` は起動時に全リポ分を IndexedDB の `agasteer/metadata` にコピーし、読み戻し確認後に localStorage から除く。途中で失敗した場合は旧値を保持し、次回起動時に再試行する。`storageVersion` のない既存データもこの処理の対象になる。
 
 - 起動時に `settings.repoName` が未設定の場合、`getPersistedDirtyFlag()` は `false` を返す（dirty復元はスキップ）。ユーザーが設定画面からリポを指定した後に改めて per-repo slot が参照される。
 - 起動直後にアプリは eager に `setCurrentRepo(settings.repoName)` を呼んで per-repo DB を開く。設定画面を開く前にノート/リーフ一覧を表示するためで、遅延オープンにするとホーム画面表示までブロックされるためこの方式を採用している。
@@ -138,11 +143,19 @@ Object.keys(localStorage).filter((k) => k.startsWith('agasteer-corrupt-'))
 
 ### 用途
 
-ノート・リーフのキャッシュ、およびリポに依存しないユーザーアセット（フォント・背景画像）の保存。
+ノート・リーフと同期 metadata のキャッシュ、およびリポに依存しないユーザーアセット（フォント・背景画像）の保存。
 
 ### データベース構成（#131以降、リポ単位の名前空間化）
 
-IndexedDBは**リポジトリ単位のDB**と**共有DB**の2系統に分かれる。
+IndexedDBは**リポジトリ単位のDB**、**共有DB**、**metadata DB**の3系統に分かれる。
+
+#### metadata DB（storageVersion 2）
+
+- **名前**: `agasteer/metadata`（バージョン1）
+- **オブジェクトストア**: `byRepo`（キーは `owner/repo`、値は GitHub の home metadata と同形の `Metadata`）
+- **用途**: 起動時の同期済み metadata 復元。変更時はリポごとの書き込みを直列化する
+- **移行**: 旧 localStorage の metadata を保存・読み戻しできた後で旧フィールドを除く。GitHub 上の `metadata.json` の形式は変更しない
+- **アクセサの分離**: DB 定義・読み書き（`openMetadataDb`/`readMetadata`/`writeMetadata`/`flushPersistedMetadata`/`getPersistedMetadata`/`setPersistedMetadata`）と旧 localStorage からの移行（`migrateMetadataFromLocalStorage`）は `src/lib/data/metadata-storage.ts` に分離（storage.ts は per-repo/共有DBの定義のみ、#295）。循環 import を避けるため、storage.ts → metadata-storage.ts の呼び出しは `loadSettings()` 内の1箇所だけ動的 import で行う
 
 #### リポ単位DB（per-repo DB）
 

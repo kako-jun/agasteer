@@ -5,7 +5,7 @@
 
 import type { Settings, Note, Leaf, Metadata, View, WorldType } from '../types'
 import type { Pane } from '../navigation'
-// 循環参照回避: data/index.tsではなく、直接storageからインポート
+// 循環参照回避: data/index.tsではなく、直接storage/metadata-storageからインポート
 import {
   defaultSettings,
   saveSettings,
@@ -13,16 +13,20 @@ import {
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
   getPersistedCommitSha,
   getPersistedLastPulledPushCount,
-  getPersistedMetadata,
   setPersistedCommitSha,
   setPersistedLastPulledPushCount,
-  setPersistedMetadata,
   clearArchiveData,
   setCurrentRepo,
   closeCurrentRepoDb,
   loadLeaves,
   loadNotes,
 } from '../data/storage'
+// #295 S4: metadata 永続化はstorage.tsから分離済み
+import {
+  getPersistedMetadata,
+  flushPersistedMetadata,
+  setPersistedMetadata,
+} from '../data/metadata-storage'
 import {
   scheduleLeavesSave,
   scheduleNotesSave,
@@ -68,9 +72,7 @@ export const leaves = {
   },
 }
 
-let _metadata = $state<Metadata>(
-  getPersistedMetadata() ?? { version: 1, notes: {}, leaves: {}, pushCount: 0 }
-)
+let _metadata = $state<Metadata>({ version: 1, notes: {}, leaves: {}, pushCount: 0 })
 export const metadata = {
   get value() {
     return _metadata
@@ -399,11 +401,13 @@ export function initStoreEffects(): () => void {
       if (isRehydrating) return
       setPersistedCommitSha(value)
     })
-    // metadata → LocalStorage永続化
+    // metadata → IndexedDB永続化
     $effect(() => {
       const value = metadata.value
       if (isRehydrating) return
-      setPersistedMetadata(value)
+      void setPersistedMetadata(value).catch((error) => {
+        console.error('Failed to persist metadata:', error)
+      })
     })
     // lastPulledPushCount → LocalStorage永続化
     $effect(() => {
@@ -962,6 +966,7 @@ export async function rehydrateForRepo(repoKey: string): Promise<void> {
     // 旧リポの保留保存を先に flush（データ損失防止）
     try {
       await flushPendingSaves()
+      await flushPersistedMetadata()
     } catch (error) {
       console.error('Failed to flush pending saves before repo switch:', error)
     }
@@ -1002,7 +1007,12 @@ export async function rehydrateForRepo(repoKey: string): Promise<void> {
     // （この代入は $effect を発火させるが、isRehydrating ガードで
     // setPersistedCommitSha への書き込みはスキップされる）
     lastKnownCommitSha.value = getPersistedCommitSha()
-    metadata.value = getPersistedMetadata() ?? { version: 1, notes: {}, leaves: {}, pushCount: 0 }
+    metadata.value = (await getPersistedMetadata()) ?? {
+      version: 1,
+      notes: {},
+      leaves: {},
+      pushCount: 0,
+    }
     isStale.value = false
     lastPushTime.value = 0
     lastStaleCheckTime.value = 0

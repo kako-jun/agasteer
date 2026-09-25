@@ -24,6 +24,8 @@ import { encryptToken, decryptToken, isEncryptedToken, obfuscateToken } from '..
 /**
  * ストレージエラークラス
  * IndexedDBの操作に関するエラーを種類別に分類
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export class StorageError extends Error {
   public readonly type: 'db_open' | 'db_blocked' | 'db_upgrade' | 'db_operation' | 'db_closed'
@@ -85,7 +87,7 @@ export interface PerRepoState {
   isDirty: boolean
   lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
   pushInFlightAt?: number // Push API呼び出し中のタイムスタンプ（スリープによるレスポンス消失検出用）
-  metadata?: Metadata // 直近同期済みの home metadata（skip 起動時のバッジ復元用）
+  metadata?: Metadata // 旧形式のみ。起動時に IndexedDB へ移行する
   lastPulledPushCount?: number // 直近同期済みの pushCount（skip 起動時の統計復元用）
 }
 
@@ -97,6 +99,7 @@ const defaultPerRepoState: PerRepoState = {
  * LocalStorage全体の構造（#131以降）
  */
 interface StorageData {
+  storageVersion?: 2
   settings: Settings
   globalState: GlobalState
   byRepo: Record<string, PerRepoState>
@@ -138,8 +141,13 @@ export function syncRepoNameCache(repoName: string | null | undefined): void {
 
 /**
  * LocalStorage全体を読み込む
+ *
+ * export: metadata-storage.ts の migrateMetadataFromLocalStorage が
+ * 旧形式 byRepo[].metadata の読み出しに使う（#295 S4）。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
-function loadStorageData(): StorageData {
+export function loadStorageData(): StorageData {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
@@ -148,6 +156,7 @@ function loadStorageData(): StorageData {
       }
       // 新形式を優先。旧形式は state を捨てる（#131 で後方互換なし）
       const merged: StorageData = {
+        storageVersion: parsed.storageVersion,
         settings: { ...defaultSettings, ...(parsed.settings ?? {}) } as Settings,
         globalState: { ...defaultGlobalState, ...(parsed.globalState ?? {}) },
         byRepo: parsed.byRepo ?? {},
@@ -187,11 +196,18 @@ function loadStorageData(): StorageData {
 
 /**
  * LocalStorage全体を保存
+ *
+ * export: metadata-storage.ts の migrateMetadataFromLocalStorage が
+ * 移行完了後の byRepo[].metadata 除去に使う（#295 S4）。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
-function saveStorageData(data: StorageData): void {
+export function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   updateRepoNameCache(data.settings.repoName)
 }
+
+// metadata の IndexedDB 永続化（DB定義・読み書き・移行）は src/lib/data/metadata-storage.ts を参照。
 
 // IndexedDB 設定
 const DB_VERSION = 2 // #242 で mediaPending/mediaCache を追加（v1→v2 は store 追加のみの後方互換移行）
@@ -261,8 +277,10 @@ async function runV131MigrationIfNeeded(): Promise<void> {
     }
   })
   if (deleted) {
-    data.v131Migrated = true
-    saveStorageData(data)
+    // 他の非同期移行が localStorage を更新している可能性がある。
+    const latest = loadStorageData()
+    latest.v131Migrated = true
+    saveStorageData(latest)
   }
 }
 
@@ -278,6 +296,15 @@ if (typeof indexedDB !== 'undefined' && typeof localStorage !== 'undefined') {
  * トークンが暗号化されている場合は復号する
  */
 export async function loadSettings(): Promise<Settings> {
+  try {
+    // 動的 import: metadata-storage.ts はこのファイルの loadStorageData 等を
+    // 静的 import するため、ここで静的 import すると循環 import になる（#295 S4）。
+    const { migrateMetadataFromLocalStorage } = await import('./metadata-storage')
+    await migrateMetadataFromLocalStorage()
+  } catch (error) {
+    // コピーが完了しない限り旧データは消さない。リポ復元時にも旧値を読める。
+    console.error('Failed to migrate metadata to IndexedDB:', error)
+  }
   const data = loadStorageData()
   const settings = { ...defaultSettings, ...data.settings }
   settings.theme = normalizeTheme(settings.theme)
@@ -414,8 +441,13 @@ export function shouldShowPwaInstallBanner(): boolean {
  * 高頻度に呼ばれるため、キャッシュ未初期化時のみ localStorage を読み込み、
  * 以降は loadStorageData()/saveStorageData() を通るたびに更新される
  * キャッシュから返す。
+ *
+ * export: metadata-storage.ts の getPersistedMetadata/setPersistedMetadata が
+ * 同じキャッシュを共有するために使う（#295 S4）。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
-function currentRepoKey(): string | null {
+export function currentRepoKey(): string | null {
   if (cachedRepoName === undefined) {
     // まだ一度も localStorage を読んでいない場合のみ読み込む。
     // 読み込み自体が updateRepoNameCache を呼ぶため、以降は localStorage を触らない。
@@ -426,6 +458,8 @@ function currentRepoKey(): string | null {
 
 /**
  * 指定リポの状態を読む。存在しなければデフォルト。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export function getPerRepoState(repoKey: string): PerRepoState {
   const data = loadStorageData()
@@ -486,22 +520,6 @@ export function getPersistedCommitSha(): string | null {
  */
 export function setPersistedCommitSha(sha: string | null): void {
   updateCurrentRepoState({ lastKnownCommitSha: sha })
-}
-
-/**
- * home metadata を取得（現在リポ。起動時の復元用）
- */
-export function getPersistedMetadata(): Metadata | null {
-  const key = currentRepoKey()
-  if (!key) return null
-  return getPerRepoState(key).metadata ?? null
-}
-
-/**
- * home metadata を保存（現在リポ）
- */
-export function setPersistedMetadata(metadata: Metadata): void {
-  updateCurrentRepoState({ metadata })
 }
 
 /**
