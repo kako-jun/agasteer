@@ -593,12 +593,13 @@ if (repoChanged) {
 
 **ブロック機構の実装箇所:**
 
-| ガード条件                             | チェック箇所                        | 影響する操作           |
-| -------------------------------------- | ----------------------------------- | ---------------------- |
-| `isPulling.value \|\| isPushing.value` | `canSync()` in `sync-handlers.ts`   | Pull, Push             |
-| `isArchiveLoading`                     | 各関数の冒頭で個別チェック          | Pull, Push, WS, 移動   |
-| `!isFirstPriorityFetched`              | UI側: `isLoadingUI`によるガラス効果 | 編集, 作成, 削除, 移動 |
-| `!isPullCompleted`                     | フッタボタンの`disabled`属性        | 作成, 削除             |
+| ガード条件                              | チェック箇所                                                         | 影響する操作           |
+| --------------------------------------- | -------------------------------------------------------------------- | ---------------------- |
+| `isPulling.value \|\| isPushing.value`  | `canSync()` in `sync-handlers.ts`                                    | Pull, Push             |
+| `isArchiveLoading`                      | 各関数の冒頭で個別チェック                                           | Pull, Push, WS, 移動   |
+| rehydrate実行中（`waitForRehydrate()`） | `pullFromGitHub()`/`pushToGitHub()`冒頭、`canSync`判定より前（#297） | Pull, Push             |
+| `!isFirstPriorityFetched`               | UI側: `isLoadingUI`によるガラス効果                                  | 編集, 作成, 削除, 移動 |
+| `!isPullCompleted`                      | フッタボタンの`disabled`属性                                         | 作成, 削除             |
 
 ---
 
@@ -644,6 +645,7 @@ sequenceDiagram
     alt Pull/Push/ArchiveLoad中でない
         HCS->>HCS: isClosingSettingsPull = true
         HCS->>PFG: pullFromGitHub(false)
+        Note over PFG: まず waitForRehydrate() を await（#297）<br/>rehydrateForRepo()が実行中ならここで完了を待つ<br/>（handleSettingsChange発火のfire-and-forget rehydrateも含む）
         Note over PFG: canSync OK, isArchiveLoading=false<br/>→ 処理開始
         PFG->>PFG: isPulling = true
         Note over PFG: isRepoSwitchPull = repoChangePending<br/>（切替起因の印を控えてから repoChangePending=false）
@@ -740,29 +742,30 @@ sequenceDiagram
 
 #### Aランク（重大 — 誤動作の可能性）
 
-| #   | 操作シナリオ                               | 期待動作                                | 対応するガード/関数                                                                                                               | 深刻度 |
-| --- | ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | :----: |
-| 6   | Pull中にリポ切替                           | 進行中Pull完了後に新repo pullへ収束する | `handleCloseSettings()` → `pendingRepoSync=true` → Pull finally後に予約pull実行                                                   |   A    |
-| 7   | Push中にリポ切替                           | Push完了後に新repo pullへ収束する       | `handleCloseSettings()` → `pendingRepoSync=true` → Push finally後に予約pull実行                                                   |   A    |
-| 8   | アーカイブロード中にリポ切替               | archive完了後に新repo pullへ収束する    | `handleCloseSettings()` → `pendingRepoSync=true` → archive load finally後に予約pull実行                                           |   A    |
-| 9   | lastKnownCommitShaが旧リポのまま残る       | staleチェックが新リポのSHAと比較する    | #131以降、SHAはリポ単位で localStorage に保持。`rehydrateForRepo()` で新リポのスロットから再読込（未初出なら`null`→初回Pull扱い） |   A    |
-| 10  | lastPushedSnapshotが旧リポのまま残る       | dirty検出が新リポ基準で動作する         | `resetForRepoSwitch()` → 全スナップショット配列を`[]`にクリア                                                                     |   A    |
-| 11  | 自動Push（42秒タイマー）がリポ切替後に発火 | 旧データを新リポにPushしない            | `resetForRepoSwitch()` → `clearAllChanges()` → `isDirty=false` → 自動Push条件不成立                                               |   A    |
-| 12  | staleチェックがリポ切替をまたぐ            | 旧リポのSHAでstale判定しない            | `lastStaleCheckTime=0` → `canPerformCheck()=false` → 新Pull完了までチェック抑制                                                   |   A    |
+| #   | 操作シナリオ                                                              | 期待動作                                                            | 対応するガード/関数                                                                                                                                                                                            | 深刻度 |
+| --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----: |
+| 6   | Pull中にリポ切替                                                          | 進行中Pull完了後に新repo pullへ収束する                             | `handleCloseSettings()` → `pendingRepoSync=true` → Pull finally後に予約pull実行                                                                                                                                |   A    |
+| 7   | Push中にリポ切替                                                          | Push完了後に新repo pullへ収束する                                   | `handleCloseSettings()` → `pendingRepoSync=true` → Push finally後に予約pull実行                                                                                                                                |   A    |
+| 8   | アーカイブロード中にリポ切替                                              | archive完了後に新repo pullへ収束する                                | `handleCloseSettings()` → `pendingRepoSync=true` → archive load finally後に予約pull実行                                                                                                                        |   A    |
+| 9   | lastKnownCommitShaが旧リポのまま残る                                      | staleチェックが新リポのSHAと比較する                                | #131以降、SHAはリポ単位で localStorage に保持。`rehydrateForRepo()` で新リポのスロットから再読込（未初出なら`null`→初回Pull扱い）                                                                              |   A    |
+| 10  | lastPushedSnapshotが旧リポのまま残る                                      | dirty検出が新リポ基準で動作する                                     | `resetForRepoSwitch()` → 全スナップショット配列を`[]`にクリア                                                                                                                                                  |   A    |
+| 11  | 自動Push（42秒タイマー）がリポ切替後に発火                                | 旧データを新リポにPushしない                                        | `resetForRepoSwitch()` → `clearAllChanges()` → `isDirty=false` → 自動Push条件不成立                                                                                                                            |   A    |
+| 12  | staleチェックがリポ切替をまたぐ                                           | 旧リポのSHAでstale判定しない                                        | `lastStaleCheckTime=0` → `canPerformCheck()=false` → 新Pull完了までチェック抑制                                                                                                                                |   A    |
+| 12a | `rehydrateForRepo()`実行中にPull/Push開始（設定を閉じた直後の即時Pull等） | rehydrate完了を待ってからPull/Push本体（`canSync`判定含む）が始まる | `pullFromGitHub()`/`pushToGitHub()`冒頭で`waitForRehydrate()`をawait（#297）。待たずに進むと、notes/leaves クリアや DB 切替の途中（settings.repoName は新リポ済みだが store は旧リポのまま等）で同期してしまう |   A    |
 
 #### Bランク（UX問題 — 動作はするが改善が望ましい）
 
-| #   | 操作シナリオ                           | 期待動作                          | 対応するガード/関数                                                                                                                                                                                          | 深刻度 |
-| --- | -------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----: |
-| 13  | リポ切替直後にアーカイブ切替           | 新リポのアーカイブがPullされる    | `isArchiveLoaded=false` → `handleWorldChange()` → `pullArchive()`                                                                                                                                            |   B    |
-| 14  | リポ切替連打（A→B→A）                  | 最終的にAのデータが表示される     | 各変更で`resetForRepoSwitch()`が呼ばれ最後の設定が残る。閉じる時に1回だけPull                                                                                                                                |   B    |
-| 15  | 同じリポ名・トークンを再設定           | 何も起きない（リセット/Pullなし） | `repoChanged`/`tokenChanged`判定で`false` → `handleCloseSettings()`でスキップ                                                                                                                                |   B    |
-| 15a | トークンだけ変更して閉じる             | Pullが走る（新トークンで再取得）  | `githubSettingsChangedInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                        |   B    |
-| 16  | テーマだけ変更して閉じる               | Pullされない                      | `githubSettingsChangedInSettings=false` かつ `importOccurredInSettings=false` → `handleCloseSettings()`でスキップ                                                                                            |   B    |
-| 17  | インポート後にリポ切替なしで閉じる     | インポートデータの同期Pullが走る  | `importOccurredInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                               |   B    |
-| 18  | リポ切替＋インポート両方実行して閉じる | Pullは1回だけ実行される           | `repoChangedInSettings \|\| importOccurredInSettings` → 1回の`pullFromGitHub()`                                                                                                                              |   B    |
-| 19  | URL状態が旧リポのID参照                | ホームに収束（URLがクリア済み）   | リポ切替時に `handleSettingsChange()` が `history.replaceState` で URL query を空にする → `restoreStateFromUrl()` は空URLを読み home へ収束（旧パスと同名のノート/リーフで ID が一致する誤着地も併せて回避） |   B    |
-| 20  | IndexedDB自動保存が旧データで上書き    | 新リポデータが保持される          | `pullFromGitHub()` → `clearAllData()` → 新データ保存                                                                                                                                                         |   B    |
+| #   | 操作シナリオ                           | 期待動作                          | 対応するガード/関数                                                                                                                                                                                                                                                                            | 深刻度 |
+| --- | -------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----: |
+| 13  | リポ切替直後にアーカイブ切替           | 新リポのアーカイブがPullされる    | `isArchiveLoaded=false` → `handleWorldChange()` → `pullArchive()`                                                                                                                                                                                                                              |   B    |
+| 14  | リポ切替連打（A→B→A）                  | 最終的にAのデータが表示される     | 各変更で`resetForRepoSwitch()`が呼ばれ最後の設定が残る。閉じる時に1回だけPull。`rehydrateForRepo()`自体も直列化済み（#297）: 実行中に別の切替要求が来ても中間（B）は破棄し、最後に要求された repoKey（A）だけを完了後に適用するため、rehydrate が2本並行して notes/leaves が混線することはない |   B    |
+| 15  | 同じリポ名・トークンを再設定           | 何も起きない（リセット/Pullなし） | `repoChanged`/`tokenChanged`判定で`false` → `handleCloseSettings()`でスキップ                                                                                                                                                                                                                  |   B    |
+| 15a | トークンだけ変更して閉じる             | Pullが走る（新トークンで再取得）  | `githubSettingsChangedInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                                                                                                          |   B    |
+| 16  | テーマだけ変更して閉じる               | Pullされない                      | `githubSettingsChangedInSettings=false` かつ `importOccurredInSettings=false` → `handleCloseSettings()`でスキップ                                                                                                                                                                              |   B    |
+| 17  | インポート後にリポ切替なしで閉じる     | インポートデータの同期Pullが走る  | `importOccurredInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                                                                                                                 |   B    |
+| 18  | リポ切替＋インポート両方実行して閉じる | Pullは1回だけ実行される           | `repoChangedInSettings \|\| importOccurredInSettings` → 1回の`pullFromGitHub()`                                                                                                                                                                                                                |   B    |
+| 19  | URL状態が旧リポのID参照                | ホームに収束（URLがクリア済み）   | リポ切替時に `handleSettingsChange()` が `history.replaceState` で URL query を空にする → `restoreStateFromUrl()` は空URLを読み home へ収束（旧パスと同名のノート/リーフで ID が一致する誤着地も併せて回避）                                                                                   |   B    |
+| 20  | IndexedDB自動保存が旧データで上書き    | 新リポデータが保持される          | `pullFromGitHub()` → `clearAllData()` → 新データ保存                                                                                                                                                                                                                                           |   B    |
 
 #### Cランク（軽微 — 現在の動作で問題なし）
 
