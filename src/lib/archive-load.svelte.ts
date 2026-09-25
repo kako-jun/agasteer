@@ -137,6 +137,14 @@ async function loadArchiveIntoStores(logContext?: ArchiveLoadLogContext): Promis
  * pullArchive 実行中にロックが外れる窓ができていた（#314 二重ロード）。
  * この Promise を使って再入をデデュープし、進行中のロードがあれば新しいロードを
  * 始めずその完了を待って同じ Promise を返す。
+ *
+ * #314 M3: この変数の寿命は「ロックが立っている期間」と厳密に一致させる
+ * （isArchiveLoading=false にするのと同じ finally 内で null に戻す）。以前は
+ * 外側の `.finally()` で runPendingRepoSyncIfIdle() の完了後に null化しており、
+ * ロック解放後・runPendingRepoSyncIfIdle 完了前の窓で archiveLoadInFlight が
+ * まだ「実行中」を指したままだった。この窓でリポが切り替わり別の
+ * performArchiveLoad 呼び出しが来ると、新リポ向けの新しいロードではなく
+ * 旧リポの（実質完了済みの）Promise を再利用してしまう危険があった。
  */
 let archiveLoadInFlight: Promise<void> | null = null
 
@@ -154,6 +162,11 @@ let archiveLoadInFlight: Promise<void> | null = null
  * 実行中のロードのログ文言のまま。ログ文言の出し分けは catch 時の診断目的のみで
  * 挙動には影響しないため、rehydrateForRepo のような「最後の要求のキーを追従して
  * 適用する」キューは不要と判断した）。
+ * #314 M3: 再入デデュープ対象（archiveLoadInFlight として返す Promise）はロード
+ * 本体＋ロック解放までで、runPendingRepoSyncIfIdle() はそこに含めない。
+ * 予約同期の再開は「最初にロードを始めた呼び出し」の流れとして in-flight の
+ * 外側で行う（再入で dedupe された呼び出し元はこれを待たない。挙動＝「ロード後に
+ * 予約同期が走る」という副作用自体は保つが、二重に呼ばれることはない）。
  */
 export function performArchiveLoad(logContext?: ArchiveLoadLogContext): Promise<void> {
   if (archiveLoadInFlight) {
@@ -163,17 +176,22 @@ export function performArchiveLoad(logContext?: ArchiveLoadLogContext): Promise<
   // 呼び出し直後（このまま同期的に）isArchiveLoading=true まで到達する必要が
   // あるため、async IIFE を即座に呼び出す（後続の待ち合わせは IIFE 内部の await
   // 以降に閉じ込める）。
-  archiveLoadInFlight = (async () => {
+  const loadPromise = (async () => {
     appState.isArchiveLoading = true
     try {
       await loadArchiveIntoStores(logContext)
     } finally {
+      // ロック解放と in-flight のクリアを同じ finally 内・同じタイミングで行う
+      // （M3: 「ロックは外れたが in-flight はまだ古い Promise を指す」窓を作らない）。
       appState.isArchiveLoading = false
-      await runPendingRepoSyncIfIdle()
+      archiveLoadInFlight = null
     }
-  })().finally(() => {
-    archiveLoadInFlight = null
-  })
+  })()
 
-  return archiveLoadInFlight
+  archiveLoadInFlight = loadPromise
+
+  // 最初の呼び出し元の流れとして、ロード完了後に保留中の同期を再開する。
+  // archiveLoadInFlight は既に上の finally で null 済みなので、この待機中に
+  // 来た再入は新しいロードとして扱われる。
+  return loadPromise.finally(() => runPendingRepoSyncIfIdle())
 }
