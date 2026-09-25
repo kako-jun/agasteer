@@ -40,6 +40,17 @@ export const pushToastCountdown = {
  */
 export const PUSH_COUNTDOWN_MIN_HOLD_MS = 400
 
+/**
+ * Push トースト状態への書き込み世代（displayPushToast / showStickyPushToast /
+ * clearPushToast が pushToastState.value を書き換えるたびにインクリメント）。
+ *
+ * displayPushToast の自動消滅タイマーは、自分が書き込んだ時点の世代を保持し、
+ * 発火時に最新世代と一致するときだけ状態を触る（後勝ち）。メッセージ文字列の
+ * 比較だと同一文言を連続表示したとき旧タイマーが新しい表示を誤って消してしま
+ * うため、比較キーは世代カウンタにする（#308）。
+ */
+let toastGeneration = 0
+
 /** 表示待ちの残りステージ数キュー（単調減少ガード通過済みの値だけが入る） */
 let countdownQueue: number[] = []
 /** 表示中の数字の最低保持タイマー。非 null の間は次の値を表示しない */
@@ -134,10 +145,12 @@ function displayPushToast(message: string, variant: 'success' | 'error' | '') {
   pushToastState.value = { message, variant }
   // 完了/エラートーストへの差し替え時点でカウントダウンは役目を終える
   _pushToastCountdown = null
+  const myGeneration = ++toastGeneration
   setTimeout(() => {
-    // 自分が出したトーストがまだ表示中のときだけ触る。
-    // 後から別のトースト（sticky 含む）に差し替わっていたら触らない（後勝ち）。
-    if (pushToastState.value.message !== message) return
+    // 自分が書き込んだ世代がまだ最新のときだけ触る。
+    // 後から別の表示（同一文言の再表示・sticky・clear 含む）に差し替わっていたら
+    // 触らない（後勝ち）。
+    if (toastGeneration !== myGeneration) return
     // 遅延中の Push 完了トーストがあれば、消す代わりにそれを表示する
     // （pending の完了トーストは必ず最終的に表示されることの保証）
     const pending = pendingSuccessToast
@@ -164,6 +177,9 @@ export function showStickyPushToast(message: string) {
   // 単調減少ガードのリセットが許されるのはこのタイミングだけ（#238）
   resetCountdownPacing()
   _pushToastCountdown = null
+  // 世代を進め、先行 displayPushToast の自動消滅タイマーがこの sticky 表示を
+  // 消せないようにする（後勝ち）
+  toastGeneration++
 }
 
 /**
@@ -189,4 +205,7 @@ export function clearPushToast() {
   pushToastState.value = { message: '', variant: '' }
   resetCountdownPacing()
   _pushToastCountdown = null
+  // 世代を進め、先行 displayPushToast の自動消滅タイマーがこの clear を
+  // 上書きして pending の完了トーストを再表示させないようにする
+  toastGeneration++
 }
