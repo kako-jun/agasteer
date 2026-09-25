@@ -97,8 +97,6 @@ const mocks = vi.hoisted(() => ({
   // #297: 既定は「rehydrate 実行中でない」＝即解決。個別テストで
   // mockReturnValueOnce により制御可能な Promise に差し替える。
   waitForRehydrate: vi.fn(() => Promise.resolve()),
-  // #297 S-a: 既定は no-op。専用テストで呼び出し回数/タイミングを検証する。
-  resumeArchiveLoadIfPending: vi.fn(async () => {}),
   // #297 S-c: 同期中にリポ切替された場合、予約 pull 開始前に呼ばれる
   rehydrateForRepo: vi.fn(async () => {}),
 }))
@@ -165,9 +163,6 @@ vi.mock('../app-state.svelte', () => ({
     rebuildLeafStats: vi.fn(),
     restoreStateFromUrl: vi.fn(),
     getEditorView: vi.fn(() => ({ focusEditor: mocks.focusEditor })),
-    // #297 S-a: runPendingRepoSyncIfIdle（Pull/Push の finally から必ず呼ばれる）
-    // の末尾で呼ばれるため、未定義だとほぼ全テストが TypeError で落ちる
-    resumeArchiveLoadIfPending: mocks.resumeArchiveLoadIfPending,
   },
 }))
 

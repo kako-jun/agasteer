@@ -361,10 +361,9 @@ async function loadArchiveCacheFromDB(): Promise<{ hasCachedData: boolean }> {
 
 /**
  * アーカイブ本体をロードする（IndexedDBキャッシュ読み出し + pullArchive）。
- * #297 S-a/S-b: handleWorldChange と resumeArchiveLoadIfPending の両方から
- * 共有する本体。ロック（appState.isArchiveLoading）の取得・解除・
- * runPendingRepoSyncIfIdle の呼び出しは呼び出し側（performArchiveLoad）の責務にし、
- * ここでは実際のロード処理だけを行う（二重実装しない）。
+ * #297 S-b: handleWorldChange から呼ばれる。ロック（appState.isArchiveLoading）の
+ * 取得・解除・runPendingRepoSyncIfIdle の呼び出しは呼び出し側（performArchiveLoad）の
+ * 責務にし、ここでは実際のロード処理だけを行う（二重実装しない）。
  */
 async function loadArchiveIntoStores(): Promise<void> {
   // まずIndexedDBキャッシュから読み出し
@@ -436,43 +435,6 @@ async function performArchiveLoad(): Promise<void> {
   }
 }
 
-/**
- * #297 S-a: handleWorldChange が Pull/Push を理由に打ち切ったアーカイブロードを、
- * 同期完了後に自動再開する。git-pull.ts の runPendingRepoSyncIfIdle から
- * appActions 経由で呼ばれる（pane-navigation.svelte.ts → git-pull.ts の import が
- * 既にあるため、逆方向の直接importは循環になる。レジストリ経由で解決する）。
- */
-export async function resumeArchiveLoadIfPending(): Promise<void> {
-  if (!appState.pendingArchiveLoad) return
-
-  // どちらのペインも archive を表示していない、既にロード済み、または設定が
-  // 無効ならもう再開する意味がないのでフラグだけ下ろす。
-  const anyPaneShowsArchive =
-    getWorldForPane('left') === 'archive' || getWorldForPane('right') === 'archive'
-  if (
-    !anyPaneShowsArchive ||
-    isArchiveLoaded.value ||
-    !(settings.value.token && settings.value.repoName)
-  ) {
-    appState.pendingArchiveLoad = false
-    return
-  }
-
-  if (
-    isPulling.value ||
-    isPushing.value ||
-    isPushingBackground.value ||
-    appState.isArchiveLoading
-  ) {
-    // まだ busy: この関数はビジー状態が解消した完了フックで再度呼ばれるので、
-    // フラグは維持したまま待つ（ここで消すと二度と再開されなくなる）。
-    return
-  }
-
-  appState.pendingArchiveLoad = false
-  await performArchiveLoad()
-}
-
 export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
   const currentPaneWorld = pane === 'left' ? leftWorld.value : rightWorld.value
   if (world === currentPaneWorld) return
@@ -507,18 +469,31 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
       }
 
       // 別ペインのアーカイブロードが先に完了した、または進行中の場合もここで打ち切る
-      // （AL 自体はアーカイブをロードするので、その完了を待てば足りる）。
+      // （AL 自体はアーカイブをロードするので、その完了を待てば足りる）。この場合は
+      // ワールド表示を戻さない: 進行中/完了済みのロードがこのペインの画面も正しく
+      // 埋めるため、home へ戻す必要がない（下の Pull/Push ケースとの違い）。
       if (appState.isArchiveLoading || isArchiveLoaded.value) {
         return
       }
 
-      // #297 S-a: Pull/Push はアーカイブをロードしないため、ここで打ち切ると
-      // アーカイブが未ロードのまま残る（画面が空になる）。保留フラグを立てて
-      // ワールド表示自体は上で即座に切り替え済み（push-pull.md 注8）のまま、
-      // 同期完了後の runPendingRepoSyncIfIdle → resumeArchiveLoadIfPending で
-      // 自動的にロードを再開する。
+      // #297 4巡目: Pull/Push はアーカイブをロードしないため、ここで打ち切ると
+      // ワールド表示だけ archive のまま未ロード（画面が空）で残ってしまう。
+      // かつては自動再開（pendingArchiveLoad）で救っていたが、保留中の rehydrate を
+      // 無視して旧リポの IndexedDB に新リポのアーカイブを保存する／例外が Pull/Push に
+      // 伝播する／配線が未テスト、といった新たなバグを生んだため撤去した。
+      // 代わりにワールド表示を切替前（= home）へ戻し、冒頭の busy 判定がこの
+      // ワールド切替自体を拒否したときと同じ結果にする（「archive 表示なのに
+      // 未ロード」の残留状態を作らない）。直接 store を更新するだけにし、
+      // handleWorldChange を再帰呼び出ししない（再帰すると busy チェックで
+      // 即 return し、戻し処理自体が発火しない）。
       if (isPulling.value || isPushing.value || isPushingBackground.value) {
-        appState.pendingArchiveLoad = true
+        if (pane === 'left') {
+          leftWorld.value = currentPaneWorld
+        } else {
+          rightWorld.value = currentPaneWorld
+        }
+        goHome(pane)
+        refreshBreadcrumbs()
         return
       }
 

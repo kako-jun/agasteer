@@ -79,13 +79,6 @@ export async function runPendingRepoSyncIfIdle(): Promise<void> {
       await pullFromGitHub(false)
     }
   )
-
-  // #297 S-a: Pull/Push を理由に打ち切られた handleWorldChange のアーカイブロードを
-  // ここで自動再開する。runPendingRepoSyncIfIdle は Pull/Push/AL 完了の finally から
-  // 一本化して呼ばれるため（git-push.ts / move.ts / pane-navigation.svelte.ts）、
-  // ここに置けば全経路をまとめて対応できる。pendingArchiveLoad が立っていない、
-  // または対象ペインが archive 表示でなくなっていれば no-op。
-  await appActions.resumeArchiveLoadIfPending()
 }
 
 /**

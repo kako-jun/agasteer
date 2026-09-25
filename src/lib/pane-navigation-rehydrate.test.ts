@@ -53,8 +53,6 @@ const appState = vi.hoisted(() => ({
   isDualPane: true,
   isArchiveLoading: false,
   pendingRepoSync: false,
-  // #297 S-a: Pull/Push を理由に打ち切られたアーカイブロードの再開待ちフラグ
-  pendingArchiveLoad: false,
   isFirstPriorityFetched: true,
   isRestoringFromUrl: false,
   selectedIndexLeft: 0,
@@ -76,7 +74,7 @@ const mocks = vi.hoisted(() => ({
     reset: vi.fn(),
     rebuild: vi.fn(),
   },
-  // #297 N-a/S-a: 実装は beforeEach で実ストアを読む実装に差し替える
+  // #297 N-a: 実装は beforeEach で実ストアを読む実装に差し替える
   // （handleWorldChange が leftWorld/rightWorld を書き換えた結果を
   // 再判定で読めることの検証に使う）。
   getWorldForPane: vi.fn(),
@@ -168,7 +166,7 @@ vi.mock('svelte-i18n', () => ({
 vi.mock('svelte', () => ({ tick: vi.fn(async () => {}) }))
 vi.mock('svelte/store', () => ({ get: vi.fn(() => (k: string) => k) }))
 
-const { handleWorldChange, resumeArchiveLoadIfPending } = await import('./pane-navigation.svelte')
+const { handleWorldChange } = await import('./pane-navigation.svelte')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -186,7 +184,6 @@ beforeEach(() => {
   stores.isArchiveLoaded.value = false
   stores.settings.value = { token: 't', repoName: 'owner/repo' }
   appState.isArchiveLoading = false
-  appState.pendingArchiveLoad = false
   mocks.getWorldForPane.mockImplementation((pane: 'left' | 'right') =>
     pane === 'left' ? stores.leftWorld.value : stores.rightWorld.value
   )
@@ -240,7 +237,12 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
   // Pull/AL がロックを取ってもそのままアーカイブロードへ進んでしまい、
   // Pull とアーカイブロードが並走したり（排他表崩壊）、連続 Archive 操作で
   // AL が二重起動したりする。待機後に再判定して打ち切ることを直接縛る。
-  it('waitForRehydrate 待機中に isPulling が true になった場合、待機後の再判定でアーカイブロードを開始しない', async () => {
+  //
+  // #297 4巡目: 再判定が Pull/Push を理由に打ち切った場合、以前は
+  // pendingArchiveLoad による自動再開でアーカイブ未ロードのまま残る問題を
+  // 救っていたが、新たなバグ（旧DBへの誤保存・例外伝播・未テスト配線）を
+  // 生んだため撤去した。代わりにワールド表示を切替前（home）へ戻す。
+  it('waitForRehydrate 待機中に isPulling が true になった場合、待機後の再判定でアーカイブロードを開始せず、ペインのワールドが元に戻る', async () => {
     let resolveRehydrate!: () => void
     stores.waitForRehydrate.mockReturnValueOnce(
       new Promise<void>((resolve) => {
@@ -262,11 +264,12 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
     expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
     expect(mocks.loadArchiveLeaves).not.toHaveBeenCalled()
     expect(mocks.pullArchive).not.toHaveBeenCalled()
-    // ワールド表示自体は判定より前に即座に切り替わっている（push-pull.md 注8）
-    expect(stores.leftWorld.value).toBe('archive')
+    // ワールド表示は判定より前に一度 archive へ切り替わるが（push-pull.md 注8）、
+    // Pull が理由で未ロードのまま打ち切られたので、切替前（home）に戻される
+    expect(stores.leftWorld.value).toBe('home')
   })
 
-  it('waitForRehydrate 待機中に appState.isArchiveLoading が true になった場合（別ペインのアーカイブロード等）、待機後の再判定でアーカイブロードを開始しない', async () => {
+  it('waitForRehydrate 待機中に appState.isArchiveLoading が true になった場合（別ペインのアーカイブロード等）、待機後の再判定でアーカイブロードを開始せず、ワールド表示も戻さない', async () => {
     let resolveRehydrate!: () => void
     stores.waitForRehydrate.mockReturnValueOnce(
       new Promise<void>((resolve) => {
@@ -287,6 +290,9 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
     expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
     expect(mocks.loadArchiveLeaves).not.toHaveBeenCalled()
     expect(mocks.pullArchive).not.toHaveBeenCalled()
+    // AL が理由（進行中）の打ち切りは戻さない: 進行中のロードがこのペインの
+    // 画面も正しく埋めるため、home へ戻す必要がない（Pull/Push ケースとの違い）
+    expect(stores.leftWorld.value).toBe('archive')
   })
 })
 
@@ -311,8 +317,9 @@ describe('handleWorldChange の再判定 (#297 N-a: ペイン状態/設定の再
 
     expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
     expect(mocks.pullArchive).not.toHaveBeenCalled()
-    // Pull/Push が理由ではないので自動再開の保留フラグも立てない
-    expect(appState.pendingArchiveLoad).toBe(false)
+    // ユーザーが既に home へ移った後なので、そのペインには一切触らない
+    // （home のまま。archive への巻き戻し等は起きない）
+    expect(stores.leftWorld.value).toBe('home')
   })
 
   it('待機中に設定（token/repoName）が無効化された場合、待機後の再判定でアーカイブロードを開始しない', async () => {
@@ -334,6 +341,35 @@ describe('handleWorldChange の再判定 (#297 N-a: ペイン状態/設定の再
 
     expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
     expect(mocks.pullArchive).not.toHaveBeenCalled()
+  })
+
+  // #297 4巡目 (c): 待機中に Pull が busy になっても、ユーザーが既に別ワールドへ
+  // 移っていれば「元に戻す」対象はそのペインの現在の選択ではない。再判定の
+  // 世界チェック（getWorldForPane(pane) !== 'archive'）が Pull チェックより先に
+  // 発火し、busy 分岐（戻す処理）まで到達しないことを直接縛る。
+  it('待機中に Pull が busy になっても、ペインが既に別ワールドへ移っていれば触らない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    // 待機中にユーザー操作で home に戻り、かつ Pull も busy になった
+    stores.leftWorld.value = 'home'
+    stores.isPulling.value = true
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    // ユーザーの選択（home）のまま。戻す処理による上書きは発生しない
+    expect(stores.leftWorld.value).toBe('home')
   })
 })
 
@@ -360,97 +396,5 @@ describe('handleWorldChange のアーカイブロードのロック取得タイ�
     await changePromise
 
     expect(appState.isArchiveLoading).toBe(false)
-  })
-})
-
-describe('resumeArchiveLoadIfPending / handleWorldChange の自動再開 (#297 S-a)', () => {
-  it('Pull 中に Archive へ切替 → pendingArchiveLoad が立ち、Pull 完了後の resumeArchiveLoadIfPending でアーカイブが自動ロードされる', async () => {
-    let resolveRehydrate!: () => void
-    stores.waitForRehydrate.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveRehydrate = resolve
-      })
-    )
-
-    const changePromise = handleWorldChange('archive', 'left')
-    await Promise.resolve()
-    await Promise.resolve()
-    // waitForRehydrate 待機中に Pull が始まった
-    stores.isPulling.value = true
-    resolveRehydrate()
-    await changePromise
-
-    expect(mocks.pullArchive).not.toHaveBeenCalled()
-    expect(appState.pendingArchiveLoad).toBe(true)
-    // ワールド表示自体は即座に切り替わったまま（画面が空にならない）
-    expect(stores.leftWorld.value).toBe('archive')
-
-    // Pull 完了。既存フック（git-pull.ts の runPendingRepoSyncIfIdle）相当として
-    // resumeArchiveLoadIfPending を呼ぶ。
-    stores.isPulling.value = false
-    await resumeArchiveLoadIfPending()
-
-    expect(mocks.loadArchiveNotes).toHaveBeenCalledTimes(1)
-    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
-    expect(appState.pendingArchiveLoad).toBe(false)
-  })
-
-  it('ペインが home に戻っていれば、resumeArchiveLoadIfPending はロードせずフラグだけ下ろす', async () => {
-    let resolveRehydrate!: () => void
-    stores.waitForRehydrate.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveRehydrate = resolve
-      })
-    )
-
-    const changePromise = handleWorldChange('archive', 'left')
-    await Promise.resolve()
-    await Promise.resolve()
-    stores.isPulling.value = true
-    resolveRehydrate()
-    await changePromise
-
-    expect(appState.pendingArchiveLoad).toBe(true)
-
-    // Pull完了までの間にユーザーが home に戻った
-    stores.leftWorld.value = 'home'
-    stores.isPulling.value = false
-    await resumeArchiveLoadIfPending()
-
-    expect(mocks.pullArchive).not.toHaveBeenCalled()
-    expect(appState.pendingArchiveLoad).toBe(false)
-  })
-
-  it('まだ他の同期がビジーなら resumeArchiveLoadIfPending は何もせずフラグを維持する', async () => {
-    let resolveRehydrate!: () => void
-    stores.waitForRehydrate.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveRehydrate = resolve
-      })
-    )
-
-    const changePromise = handleWorldChange('archive', 'left')
-    await Promise.resolve()
-    await Promise.resolve()
-    stores.isPulling.value = true
-    resolveRehydrate()
-    await changePromise
-
-    expect(appState.pendingArchiveLoad).toBe(true)
-
-    // Pull がまだ継続中に呼ばれても何もしない（フラグは次の完了フックのために残す）
-    await resumeArchiveLoadIfPending()
-
-    expect(mocks.pullArchive).not.toHaveBeenCalled()
-    expect(appState.pendingArchiveLoad).toBe(true)
-  })
-
-  it('pendingArchiveLoad が立っていなければ resumeArchiveLoadIfPending は何もしない（回帰確認）', async () => {
-    appState.pendingArchiveLoad = false
-
-    await resumeArchiveLoadIfPending()
-
-    expect(mocks.pullArchive).not.toHaveBeenCalled()
-    expect(mocks.runPendingRepoSyncIfIdle).not.toHaveBeenCalled()
   })
 })
