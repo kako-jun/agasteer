@@ -255,7 +255,8 @@ agasteer/
 │   │   │   └── media-resolve.ts         # 添付メディアの表示解決（Blob URL差し替え、#244）
 │   │   ├── stores/                       # 状態管理モジュール（#300で関心ごとに分割）
 │   │   │   ├── stores.svelte.ts         # 分割後の re-export 互換バレル（直接importしている既存コード用）
-│   │   │   ├── core-state.svelte.ts     # $state宣言本体（notes/leaves/settings/archive/pane/同期フラグ等）
+│   │   │   ├── core-state.svelte.ts     # $state宣言本体（notes/leaves/settings/archive/同期フラグ等）
+│   │   │   ├── pane-state.svelte.ts     # 左右ペインの表示状態（leftNote/rightLeaf/leftView等）
 │   │   │   ├── dirty-tracking.ts        # 差分検出・Pushスナップショット管理
 │   │   │   ├── store-mutations.ts       # ノート/リーフ更新・in-place field mutationヘルパー
 │   │   │   ├── persistence-effects.svelte.ts # LocalStorage/IndexedDB永続化の$effect
@@ -609,17 +610,25 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 
 #### 3. 状態管理層（lib/stores/）
 
-**責務**: アプリケーション全体の状態管理。#300 で `stores.svelte.ts` を関心ごとに分割済み（構成はディレクトリツリー参照）。以下は概略で、個別ストア名は #228 でのドキュメント全体追従時に精査する。
+**責務**: アプリケーション全体の状態管理。#300 で `stores.svelte.ts` を関心ごとに分割済み（構成はディレクトリツリー参照）。以下は概略（詳細は各モジュールのコメント参照）。
 
-**$state() ベースのリアクティブ状態:**
+**$state() ベースのリアクティブ状態（core-state.svelte.ts）:**
 
-- settings, notes, leaves, isDirty, toast（Home用）
-- archiveNotes, archiveLeaves, isArchiveLoaded（Archive用）
-- currentWorld（現在のワールド）
+- settings, notes, leaves, metadata, isDirty（Home用）
+- archiveNotes, archiveLeaves, archiveMetadata, isArchiveLoaded（Archive用）
+- leftWorld, rightWorld（ペインごとの現在ワールド）
+
+**ペイン表示状態（pane-state.svelte.ts）:**
+
+- leftNote, rightNote, leftLeaf, rightLeaf（ペインごとの表示中ノート/リーフ）
+- leftView, rightView, leftInitialLine, rightInitialLine
+
+**注**: Pull/Push トーストの状態（旧 `toast`）は lib/stores/ ではなく `lib/ui/push-toast.svelte.ts` の `pushToastState` で管理する。
 
 **$derived() ベースの派生状態:**
 
-- allNotes（ソート済みノート）
+- rootNotes（ルート直下ノート、order順ソート）
+- githubConfigured（token/repoName 設定済みかどうか）
 
 **ワールドヘルパー（world-helpers.ts）:**
 
@@ -633,7 +642,7 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 **pane-navigation.svelte.tsでのワールド対応:**
 pane-navigation.svelte.tsでは上記純粋関数のラッパーを定義し、ストアから値を取得して渡す形で使用。これにより一貫性のあるワールド対応を実現しています。
 
-**注**: Version 5.0のリファクタリングにより、左右ペインの状態は**ローカル変数**で管理されるようになりました。`currentView`, `currentNote`, `currentLeaf`等のストアは削除され、完全な左右対称設計を実現しています。
+**注**: Version 5.0のリファクタリングでは、`currentView`/`currentNote`/`currentLeaf`等の単一ストアを廃止し、左右ペインの状態をいったんローカル変数で管理する完全左右対称設計に移行しました。その後の修正（リポ切替時の即時クリア対応等）を経て、現在は左右ペインの表示状態（leftNote/rightNote/leftLeaf/rightLeaf/leftView/rightView等）も他のワールド状態と同様に `pane-state.svelte.ts` の $state ベースのストアとして管理されています（左右対称設計そのものは維持）。
 
 #### 4. データ永続化層（lib/data/storage.ts）
 
