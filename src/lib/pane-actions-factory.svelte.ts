@@ -39,6 +39,7 @@ import {
   getDialogPositionForPane,
   resetForRepoSwitch,
   rehydrateForRepo,
+  waitForRehydrate,
   isStructureDirty,
 } from './stores'
 import {
@@ -441,6 +442,16 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
 
 export async function handleCloseSettings() {
   if (githubSettingsChangedInSettings || appState.importOccurredInSettings) {
+    // #297 should2: rehydrateForRepo 実行中（handleSettingsChange の fire-and-forget
+    // rehydrate 等）なら、shouldQueueRepoSync のアイドル判定より前に完了を待つ。
+    // 待たずに読むと、待機中に Push/AL がロックを取った場合でも「アイドル」と
+    // 誤判定して即 pullFromGitHub を呼び、その内部の waitForRehydrate() 待機中に
+    // ロックが奪われて canSync で黙って return する（pendingRepoSync も立てて
+    // いないため、Pull がキューにも積まれず消える）。
+    // waitForRehydrate() は reject を握りつぶし完了だけを待つため、この直後で
+    // 自前に rehydrateForRepo() を起動・await する経路とも衝突しない。
+    await waitForRehydrate()
+
     const hasValidConfig = !!(settings.value.token && settings.value.repoName)
     if (hasValidConfig) {
       if (

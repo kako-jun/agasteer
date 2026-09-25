@@ -44,6 +44,13 @@ import { _ } from '../i18n'
 import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from '../sync/repo-sync-queue'
 
 export async function runPendingRepoSyncIfIdle(): Promise<void> {
+  // #297 should2: rehydrateForRepo 実行中なら先に完了を待ってからアイドル判定する。
+  // 待たずに isPulling/isPushing/isArchiveLoading を読むと、待機中に Push/AL が
+  // ロックを取った場合でもここでは「アイドル」と誤判定して pendingRepoSync を
+  // クリアしてしまい、その直後 pullFromGitHub 側の waitForRehydrate() 待機中に
+  // ロックが奪われて canSync で黙って return する — キューにも積まれず Pull が消える。
+  await waitForRehydrate()
+
   const hasValidConfig = !!(settings.value.token && settings.value.repoName)
   await runPendingRepoSyncIfIdleShared(
     {
