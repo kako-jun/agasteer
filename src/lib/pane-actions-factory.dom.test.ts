@@ -306,3 +306,70 @@ describe('handleCloseSettings は rehydrate 完了を待ってからアイドル
     expect(appState.pendingRepoSync).toBe(false)
   })
 })
+
+/**
+ * handleCloseSettings はフラグ（githubSettingsChangedInSettings 等）を関数末尾でなく
+ * 冒頭で退避・クリアする（#297 N-b）。
+ *
+ * 末尾でクリアすると、この関数が waitForRehydrate/pullFromGitHub を待っている間に
+ * 設定を再度開いてリポ/トークンを変更した分（フラグが再度 true になる）まで、
+ * 1回目の呼び出しの末尾クリアで消してしまい、2回目の close でその変更が無視される。
+ */
+describe('handleCloseSettings はフラグを冒頭で退避してクリアする (#297 N-b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isPullCompleted = true
+    appState.isFirstPriorityFetched = true
+    appState.isArchiveLoading = false
+    appState.repoChangePending = false
+    appState.pendingRepoSync = false
+    appState.pendingRehydrateRepo = null
+    appState.importOccurredInSettings = false
+    mocks.rehydrateForRepo.mockResolvedValue(undefined)
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    // 常にアイドル（queue しない）→ 直接 pullFromGitHub 分岐に入れる
+    mocks.shouldQueueRepoSync.mockReturnValue(false)
+  })
+
+  it('1回目の close が待機中に設定を再度開いてリポを変更すると、2回目の close でその変更が処理される（待機中に消えない）', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    handleSettingsChange({ repoName: 'owner/repo-b' })
+    const closePromise1 = handleCloseSettings()
+
+    // closePromise1 が waitForRehydrate で止まっている間に、設定を開き直して
+    // さらに別リポへ変更する（githubSettingsChangedInSettings が再度 true になる）
+    await Promise.resolve()
+    await Promise.resolve()
+    handleSettingsChange({ repoName: 'owner/repo-c' })
+
+    resolveRehydrate()
+    await closePromise1
+
+    // 1回目の close は完了（1回目の変更分の pull は実行済み）
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+
+    // 2回目の close で、待機中に積まれた変更（repo-c への切替）がちゃんと処理される
+    // （末尾クリアで消えていれば、ここで pullFromGitHub は増えない＝バグの再現）
+    await handleCloseSettings()
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(2)
+  })
+
+  it('待機中に変更がなければ、2回目の close は何もしない（回帰確認）', async () => {
+    handleSettingsChange({ repoName: 'owner/repo-b' })
+    await handleCloseSettings()
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+
+    await handleCloseSettings()
+    expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+  })
+})
