@@ -91,7 +91,8 @@ vi.mock('./actions/io', () => ({}))
 vi.mock('./utils', () => ({}))
 vi.mock('./data', () => ({}))
 
-const { handleSettingsChange, handleCloseSettings } = await import('./pane-actions-factory.svelte')
+const { handleSettingsChange, handleCloseSettings, isClosingSettingsPullForTest } =
+  await import('./pane-actions-factory.svelte')
 
 describe('handleSettingsChange の URL query クリア (#147 綻び1)', () => {
   let replaceStateSpy: ReturnType<typeof vi.spyOn>
@@ -371,5 +372,44 @@ describe('handleCloseSettings はフラグを冒頭で退避してクリアす�
 
     await handleCloseSettings()
     expect(mocks.pullFromGitHub).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * handleCloseSettings は isClosingSettingsPull を try/finally で管理する（#297 N3）。
+ *
+ * 素朴な代入（true → await → false）だと pullFromGitHub が例外を投げた場合に
+ * true のまま残る。isClosingSettingsPull 自体は現状どこからも読まれない防御的
+ * フラグだが（rehydrate.svelte.ts の waitForRehydrateLoop コメント参照）、
+ * 将来の消費者が「pull 中は true」という不変条件に依存できるよう、例外時も
+ * 確実に false に戻ることをここで縛る。
+ */
+describe('handleCloseSettings は例外時も isClosingSettingsPull を false に戻す (#297 N3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isPullCompleted = true
+    appState.isFirstPriorityFetched = true
+    appState.isArchiveLoading = false
+    appState.repoChangePending = false
+    appState.pendingRepoSync = false
+    appState.pendingRehydrateRepo = null
+    appState.importOccurredInSettings = false
+    mocks.rehydrateForRepo.mockResolvedValue(undefined)
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    // 常にアイドル（queue しない）→ 直接 pullFromGitHub 分岐に入れる
+    mocks.shouldQueueRepoSync.mockReturnValue(false)
+  })
+
+  it('pullFromGitHub が例外を投げても isClosingSettingsPull は false に戻る', async () => {
+    handleSettingsChange({ repoName: 'owner/repo-b' })
+    mocks.pullFromGitHub.mockRejectedValueOnce(new Error('pull failed'))
+
+    await expect(handleCloseSettings()).rejects.toThrow('pull failed')
+
+    expect(isClosingSettingsPullForTest()).toBe(false)
   })
 })
