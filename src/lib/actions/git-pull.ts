@@ -307,7 +307,12 @@ export async function pullFromGitHub(
         // onPriorityComplete は型上 `() => void` で、executePull はこの戻り値を
         // await しない。restoreStateFromUrl 内の待機（isPulling 等が false になる
         // のを待つ）は、この Pull 自身の isPulling=false（finally）をブロックしない。
-        appActions.restoreStateFromUrl(false)
+        // #314 S-6: この呼び出しは await されないため、restoreStateFromUrl が
+        // 例外を投げる経路（M-1: 例えば IndexedDB reject）では未処理の Promise
+        // rejection になる。ここで明示的に catch してログに落とす。
+        void appActions
+          .restoreStateFromUrl(false)
+          .catch((e) => console.error('restoreStateFromUrl failed:', e))
       },
     }
 
@@ -417,7 +422,10 @@ export async function pullFromGitHub(
           notes.value = backup.notes
           leaves.value = backup.leaves
           appActions.rebuildLeafStats(backup.leaves, backup.notes)
-          appActions.restoreStateFromUrl(false)
+          // #314 S-6: 同上（await しないため、例外経路は明示的に catch する）。
+          void appActions
+            .restoreStateFromUrl(false)
+            .catch((e) => console.error('restoreStateFromUrl failed:', e))
           appState.isFirstPriorityFetched = true
         } catch (restoreError) {
           console.error('Failed to restore from backup:', restoreError)

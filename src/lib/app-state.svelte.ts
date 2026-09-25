@@ -429,7 +429,10 @@ export interface AppActionsRegistry {
   selectLeaf: (leaf: Leaf, pane: Pane) => void
   goHome: (pane: Pane) => void
   refreshBreadcrumbs: () => void
-  restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void> | void
+  // #314 S-6: 常に async 関数（pane-navigation.svelte.ts の実装）を登録するため
+  // 戻り値は必ず Promise<void>。呼び出し側が未 await でも .catch() を付けられるよう
+  // `| void` は持たせない。
+  restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
   rebuildLeafStats: (leaves: Leaf[], notes: Note[]) => void
   resetLeafStats: () => void
   closeMoveModal: () => void
@@ -999,7 +1002,10 @@ export function initApp(deps: InitAppDeps): () => void {
     }
 
     // 通常のpopstate処理
-    deps.restoreStateFromUrl()
+    // #314 S-6: ブラウザの戻る/進むは呼び出し元を await できないため未 await。
+    // restoreStateFromUrl が例外を投げる経路（M-1）では未処理の Promise rejection に
+    // なるため、明示的に catch してログに落とす（git-pull.ts の2箇所と同じ理由）。
+    void deps.restoreStateFromUrl().catch((e) => console.error('restoreStateFromUrl failed:', e))
   }
   window.addEventListener('popstate', handlePopState)
 
