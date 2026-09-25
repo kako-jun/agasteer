@@ -211,6 +211,9 @@ let _isRestoringFromUrl = $state(false)
 let _importOccurredInSettings = $state(false)
 let _atGuardEntry = $state(false)
 let _pendingRepoSync = $state(false)
+// #297 S-a: handleWorldChange のアーカイブロードが Pull/Push を理由に打ち切られたとき、
+// 同期完了後に自動再開するための保留フラグ（pendingRepoSync と同じ流儀）。
+let _pendingArchiveLoad = $state(false)
 let _repoChangePending = $state(false)
 // 他同期（pull/push/archive load）実行中に設定された新リポ名。同期完了後に
 // rehydrateForRepo を走らせてから pull を開始するため、ここで待機させる。
@@ -388,6 +391,12 @@ export const appState = {
   set pendingRepoSync(v: boolean) {
     _pendingRepoSync = v
   },
+  get pendingArchiveLoad() {
+    return _pendingArchiveLoad
+  },
+  set pendingArchiveLoad(v: boolean) {
+    _pendingArchiveLoad = v
+  },
   /**
    * リポジトリ設定変更直後〜新repoのpullが開始されるまでの「予約中」フラグ。
    * pendingRepoSync（他同期完了を待つキュー）とは別概念で、
@@ -446,6 +455,13 @@ export interface AppActionsRegistry {
   getDialogPositionForPane: (pane: Pane) => ModalPosition
   getEditorView: (pane: Pane) => any
   getPreviewView: (pane: Pane) => any
+  /**
+   * #297 S-a: Pull/Push を理由に打ち切られたアーカイブロード（pendingArchiveLoad）を、
+   * 対象ペインがまだ archive 表示かつ未ロードなら再開する。git-pull.ts の
+   * runPendingRepoSyncIfIdle から呼ばれる（実装は pane-navigation.svelte.ts、
+   * 循環import回避のためレジストリ経由で呼ぶ）。
+   */
+  resumeArchiveLoadIfPending: () => Promise<void>
 }
 
 let _appActions: AppActionsRegistry | null = null

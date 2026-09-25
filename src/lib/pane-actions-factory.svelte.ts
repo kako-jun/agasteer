@@ -86,6 +86,7 @@ import {
   cancelEditBreadcrumb,
   restoreStateFromUrl,
   updateUrlFromState,
+  resumeArchiveLoadIfPending,
 } from './pane-navigation.svelte'
 import { reorderItems } from './navigation'
 import {
@@ -623,6 +624,7 @@ export function setupAppActionsAndContext(pushDisabledReasonGetter: () => string
       pane === 'left' ? appState.leftEditorView : appState.rightEditorView,
     getPreviewView: (pane: Pane) =>
       pane === 'left' ? appState.leftPreviewView : appState.rightPreviewView,
+    resumeArchiveLoadIfPending,
   })
 
   const paneActions: PaneActions = {

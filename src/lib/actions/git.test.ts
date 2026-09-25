@@ -51,6 +51,8 @@ const appState = vi.hoisted(() => ({
   leafSkeletonMap: new Map(),
   // #147 綻び2: リポ切替起因 Pull かの判定に使う（既定は通常 pull=false）
   repoChangePending: false,
+  // #297 S-c: 同期中にリポ切替された場合の保留 rehydrate 先
+  pendingRehydrateRepo: null as string | null,
 }))
 
 const mocks = vi.hoisted(() => ({
@@ -95,6 +97,10 @@ const mocks = vi.hoisted(() => ({
   // #297: 既定は「rehydrate 実行中でない」＝即解決。個別テストで
   // mockReturnValueOnce により制御可能な Promise に差し替える。
   waitForRehydrate: vi.fn(() => Promise.resolve()),
+  // #297 S-a: 既定は no-op。専用テストで呼び出し回数/タイミングを検証する。
+  resumeArchiveLoadIfPending: vi.fn(async () => {}),
+  // #297 S-c: 同期中にリポ切替された場合、予約 pull 開始前に呼ばれる
+  rehydrateForRepo: vi.fn(async () => {}),
 }))
 
 vi.mock('../stores', () => ({
@@ -113,6 +119,7 @@ vi.mock('../stores', () => ({
   getActiveEditorPane: mocks.getActiveEditorPane,
   tryRescueStalePush: mocks.tryRescueStalePush,
   waitForRehydrate: mocks.waitForRehydrate,
+  rehydrateForRepo: mocks.rehydrateForRepo,
 }))
 
 vi.mock('../api', () => ({
@@ -158,6 +165,9 @@ vi.mock('../app-state.svelte', () => ({
     rebuildLeafStats: vi.fn(),
     restoreStateFromUrl: vi.fn(),
     getEditorView: vi.fn(() => ({ focusEditor: mocks.focusEditor })),
+    // #297 S-a: runPendingRepoSyncIfIdle（Pull/Push の finally から必ず呼ばれる）
+    // の末尾で呼ばれるため、未定義だとほぼ全テストが TypeError で落ちる
+    resumeArchiveLoadIfPending: mocks.resumeArchiveLoadIfPending,
   },
 }))
 
@@ -180,6 +190,9 @@ vi.mock('svelte', () => ({
 }))
 
 const { pushToGitHub, pullFromGitHub } = await import('./git')
+// #297 S-c: runPendingRepoSyncIfIdle は git.ts バレルには re-export されていない
+// （正本は git-pull.ts）ため、単体テストのために直接 import する。
+const { runPendingRepoSyncIfIdle } = await import('./git-pull')
 // #254: insert-phase はモックせず実物を使う（push/pull preflight が待つことの結合検証）
 const { beginMediaInsertPhase } = await import('../api/media/insert-phase')
 
@@ -1837,5 +1850,55 @@ describe('rehydrate idle 時の pullFromGitHub/pushToGitHub 二重起動 (#297 T
     expect(mocks.executePush).toHaveBeenCalledTimes(1)
     expect(stores.isPushing.value).toBe(false)
     expect(stores.isPushingBackground.value).toBe(false)
+  })
+})
+
+/**
+ * runPendingRepoSyncIfIdle（git-pull.ts の正本）は、予約 pull を開始する前に
+ * appState.pendingRehydrateRepo が立っていればそれを rehydrate してから pull する
+ * （#297 S-c）。
+ *
+ * 以前は move.ts / pane-navigation.svelte.ts にこのロジックを持たない複製
+ * （waitForRehydrate も pendingRehydrateRepo の rehydrate もせず pullFromGitHub を
+ * 直接呼ぶだけの簡略版）があり、AL 完了後の予約 pull で旧リポの DB に新リポの
+ * pull 結果を書いてしまう窓があった。一本化後は AL 完了経路も含めて全て
+ * このロジックを通る。
+ */
+describe('runPendingRepoSyncIfIdle は保留中の rehydrate を先に行ってから予約 pull する (#297 S-c)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.settings.value = { token: 'token', repoName: 'owner/repo', branch: 'main' }
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isArchiveLoading = false
+    appState.pendingRepoSync = true
+    appState.pendingRehydrateRepo = 'owner/other-repo'
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    // 予約 pull（pullFromGitHub 内部）が canSync に到達したことを、rehydrate との
+    // 呼び出し順を観測するためだけの目印として使う。以降の本処理には踏み込ませない
+    // （このテストの関心は rehydrate→pull の順序と消費後のクリアだけ）。
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+  })
+
+  it('pendingRehydrateRepo があれば、予約 pull（canSync 到達）より前に rehydrateForRepo が呼ばれ、消費後は null にクリアされる', async () => {
+    await runPendingRepoSyncIfIdle()
+
+    expect(mocks.rehydrateForRepo).toHaveBeenCalledWith('owner/other-repo')
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+    expect(mocks.rehydrateForRepo.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.canSync.mock.invocationCallOrder[0]
+    )
+    expect(appState.pendingRehydrateRepo).toBeNull()
+    expect(appState.pendingRepoSync).toBe(false)
+  })
+
+  it('pendingRehydrateRepo がなければ rehydrateForRepo を呼ばずに予約 pull する（回帰確認）', async () => {
+    appState.pendingRehydrateRepo = null
+
+    await runPendingRepoSyncIfIdle()
+
+    expect(mocks.rehydrateForRepo).not.toHaveBeenCalled()
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
   })
 })

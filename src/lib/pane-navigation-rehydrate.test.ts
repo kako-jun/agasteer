@@ -53,6 +53,8 @@ const appState = vi.hoisted(() => ({
   isDualPane: true,
   isArchiveLoading: false,
   pendingRepoSync: false,
+  // #297 S-a: Pull/Push を理由に打ち切られたアーカイブロードの再開待ちフラグ
+  pendingArchiveLoad: false,
   isFirstPriorityFetched: true,
   isRestoringFromUrl: false,
   selectedIndexLeft: 0,
@@ -74,6 +76,11 @@ const mocks = vi.hoisted(() => ({
     reset: vi.fn(),
     rebuild: vi.fn(),
   },
+  // #297 N-a/S-a: 実装は beforeEach で実ストアを読む実装に差し替える
+  // （handleWorldChange が leftWorld/rightWorld を書き換えた結果を
+  // 再判定で読めることの検証に使う）。
+  getWorldForPane: vi.fn(),
+  runPendingRepoSyncIfIdle: vi.fn(async () => {}),
 }))
 
 vi.mock('./stores', () => ({
@@ -88,10 +95,12 @@ vi.mock('./stores', () => ({
 
 vi.mock('./app-state.svelte', () => ({
   appState,
-  appActions: { pullFromGitHub: vi.fn() },
   derivedState: { currentOfflineLeaf: null },
   getNotesForPane: vi.fn(() => []),
   getLeavesForPane: vi.fn(() => []),
+  // #297 N-a/S-a: handleWorldChange の再判定・resumeArchiveLoadIfPending が使う。
+  // 既定は両ペインとも 'home'（個別テストで上書き）。
+  getWorldForPane: mocks.getWorldForPane,
 }))
 
 vi.mock('./ui', () => ({
@@ -142,8 +151,10 @@ vi.mock('./editor/wait-for-editor', () => ({
   waitForMatchingEditor: vi.fn(async () => null),
 }))
 
-vi.mock('./sync/repo-sync-queue', () => ({
-  runPendingRepoSyncIfIdle: vi.fn(async () => {}),
+// #297 S-c: pane-navigation.svelte.ts は runPendingRepoSyncIfIdle の複製を廃止し、
+// git-pull.ts の実装（正本）を直接 import するようになった。
+vi.mock('./actions/git-pull', () => ({
+  runPendingRepoSyncIfIdle: mocks.runPendingRepoSyncIfIdle,
 }))
 
 vi.mock('./i18n', () => ({
@@ -157,7 +168,7 @@ vi.mock('svelte-i18n', () => ({
 vi.mock('svelte', () => ({ tick: vi.fn(async () => {}) }))
 vi.mock('svelte/store', () => ({ get: vi.fn(() => (k: string) => k) }))
 
-const { handleWorldChange } = await import('./pane-navigation.svelte')
+const { handleWorldChange, resumeArchiveLoadIfPending } = await import('./pane-navigation.svelte')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -175,6 +186,11 @@ beforeEach(() => {
   stores.isArchiveLoaded.value = false
   stores.settings.value = { token: 't', repoName: 'owner/repo' }
   appState.isArchiveLoading = false
+  appState.pendingArchiveLoad = false
+  mocks.getWorldForPane.mockImplementation((pane: 'left' | 'right') =>
+    pane === 'left' ? stores.leftWorld.value : stores.rightWorld.value
+  )
+  mocks.runPendingRepoSyncIfIdle.mockImplementation(async () => {})
   stores.waitForRehydrate.mockImplementation(() => Promise.resolve())
   mocks.loadArchiveNotes.mockResolvedValue([])
   mocks.loadArchiveLeaves.mockResolvedValue([])
@@ -271,5 +287,170 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
     expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
     expect(mocks.loadArchiveLeaves).not.toHaveBeenCalled()
     expect(mocks.pullArchive).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleWorldChange の再判定 (#297 N-a: ペイン状態/設定の再確認)', () => {
+  it('待機中にペインが archive 表示でなくなった場合、待機後の再判定でアーカイブロードを開始しない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    // 待機中に別の操作で home に戻った（例: 連続クリック）
+    stores.leftWorld.value = 'home'
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    // Pull/Push が理由ではないので自動再開の保留フラグも立てない
+    expect(appState.pendingArchiveLoad).toBe(false)
+  })
+
+  it('待機中に設定（token/repoName）が無効化された場合、待機後の再判定でアーカイブロードを開始しない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.settings.value = { token: '', repoName: '' }
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleWorldChange のアーカイブロードのロック取得タイミング (#297 S-b)', () => {
+  it('再判定通過直後、IndexedDB読込（loadArchiveCacheFromDB）が終わる前から isArchiveLoading が true になっている', async () => {
+    let resolveLoadNotes!: (v: unknown[]) => void
+    mocks.loadArchiveNotes.mockReturnValueOnce(
+      new Promise<unknown[]>((resolve) => {
+        resolveLoadNotes = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    // マイクロタスクを流して loadArchiveCacheFromDB の途中まで進める
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    // IndexedDB読込（loadArchiveNotes）がまだ解決していない時点で、既にロック済み
+    expect(appState.isArchiveLoading).toBe(true)
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+
+    resolveLoadNotes([])
+    await changePromise
+
+    expect(appState.isArchiveLoading).toBe(false)
+  })
+})
+
+describe('resumeArchiveLoadIfPending / handleWorldChange の自動再開 (#297 S-a)', () => {
+  it('Pull 中に Archive へ切替 → pendingArchiveLoad が立ち、Pull 完了後の resumeArchiveLoadIfPending でアーカイブが自動ロードされる', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+    await Promise.resolve()
+    await Promise.resolve()
+    // waitForRehydrate 待機中に Pull が始まった
+    stores.isPulling.value = true
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(appState.pendingArchiveLoad).toBe(true)
+    // ワールド表示自体は即座に切り替わったまま（画面が空にならない）
+    expect(stores.leftWorld.value).toBe('archive')
+
+    // Pull 完了。既存フック（git-pull.ts の runPendingRepoSyncIfIdle）相当として
+    // resumeArchiveLoadIfPending を呼ぶ。
+    stores.isPulling.value = false
+    await resumeArchiveLoadIfPending()
+
+    expect(mocks.loadArchiveNotes).toHaveBeenCalledTimes(1)
+    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
+    expect(appState.pendingArchiveLoad).toBe(false)
+  })
+
+  it('ペインが home に戻っていれば、resumeArchiveLoadIfPending はロードせずフラグだけ下ろす', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.isPulling.value = true
+    resolveRehydrate()
+    await changePromise
+
+    expect(appState.pendingArchiveLoad).toBe(true)
+
+    // Pull完了までの間にユーザーが home に戻った
+    stores.leftWorld.value = 'home'
+    stores.isPulling.value = false
+    await resumeArchiveLoadIfPending()
+
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(appState.pendingArchiveLoad).toBe(false)
+  })
+
+  it('まだ他の同期がビジーなら resumeArchiveLoadIfPending は何もせずフラグを維持する', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.isPulling.value = true
+    resolveRehydrate()
+    await changePromise
+
+    expect(appState.pendingArchiveLoad).toBe(true)
+
+    // Pull がまだ継続中に呼ばれても何もしない（フラグは次の完了フックのために残す）
+    await resumeArchiveLoadIfPending()
+
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(appState.pendingArchiveLoad).toBe(true)
+  })
+
+  it('pendingArchiveLoad が立っていなければ resumeArchiveLoadIfPending は何もしない（回帰確認）', async () => {
+    appState.pendingArchiveLoad = false
+
+    await resumeArchiveLoadIfPending()
+
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(mocks.runPendingRepoSyncIfIdle).not.toHaveBeenCalled()
   })
 })
