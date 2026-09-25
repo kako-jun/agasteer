@@ -19,7 +19,9 @@
  * ここでは deps.pullFromGitHub を「何もしない」モックにして、Pull が onStructure に
  * 到達しない（＝失敗した）状況を再現する。shouldUseStartupCache は false 固定にして
  * full pull 経路を強制し、deps.pullFromGitHub が呼ばれた時点の `metadata.value` が
- * 既に永続化済みの値になっていることを確認する。
+ * 既に永続化済みの値になっていることを確認する。さらに initStoreEffects() の初回
+ * effect 発火（setPersistedMetadata 相当）が空 metadata で呼ばれていないことも
+ * persistMetadataSpy で直接確認し、事故本体（空値の書き戻し）を検知する。
  *
  * 周辺モジュールの網羅的な vi.mock は app-state-heartbeat.svelte.test.ts（#191）と
  * 同じ流儀に合わせている。
@@ -36,6 +38,16 @@ const PERSISTED_METADATA = {
   leaves: { 'note/leaf.md': { id: 'leaf-1', updatedAt: 1, order: 0 } },
   pushCount: 7,
 }
+
+// `./stores` モック内の metadata ストア（下の vi.mock ファクトリと initStoreEffects
+// モックの両方から同じインスタンスを参照するため、モジュールスコープに置く）。
+const metadataStore = vstore({ ...EMPTY_METADATA })
+
+// stores.svelte.ts 本体の initStoreEffects() は $effect.root 内の metadata 用
+// $effect が登録直後に一度発火し、その時点の metadata.value で
+// setPersistedMetadata() を呼ぶ。このスパイはその発火を模倣し、事故本体
+// （空 metadata の書き戻し）を直接検知する。
+const persistMetadataSpy = vi.fn()
 
 // ../main を差し替え: waitForSwCheck を即解決にして起動 IIFE を GitHub 設定チェックまで進める。
 vi.mock('../main', () => ({
@@ -86,7 +98,13 @@ vi.mock('./data', () => ({
 vi.mock('./stores', () => ({
   initActivityDetection: vi.fn(() => vi.fn()),
   setupBeforeUnloadSave: vi.fn(() => vi.fn()),
-  initStoreEffects: vi.fn(() => vi.fn()),
+  // 実装（stores.svelte.ts）の $effect.root 内 metadata 用 $effect は登録直後に
+  // 一度発火し、その時点の metadata.value を setPersistedMetadata() に渡す。
+  // ここではその初回発火だけを persistMetadataSpy 経由で模倣する（#295 M1）。
+  initStoreEffects: vi.fn(() => {
+    persistMetadataSpy(JSON.parse(JSON.stringify(metadataStore.value)))
+    return vi.fn()
+  }),
   startStaleChecker: vi.fn(),
   stopStaleChecker: vi.fn(),
   executeStaleCheck: vi.fn(async () => ({}) as unknown),
@@ -111,7 +129,7 @@ vi.mock('./stores', () => ({
   rightWorld: vstore('home'),
   leftView: vstore('tree'),
   rightView: vstore('tree'),
-  metadata: vstore({ ...EMPTY_METADATA }),
+  metadata: metadataStore,
   archiveMetadata: vstore({ pushCount: 0 }),
   isArchiveLoaded: vstore(false),
   offlineLeafStore: vstore<Record<string, unknown> | null>(null),
@@ -193,6 +211,8 @@ describe('#295 M1: 起動時のmetadata初期化順序', () => {
       'requestAnimationFrame',
       vi.fn(() => 0)
     )
+    metadataStore.value = { ...EMPTY_METADATA }
+    persistMetadataSpy.mockClear()
   })
 
   afterEach(() => {
@@ -201,7 +221,7 @@ describe('#295 M1: 起動時のmetadata初期化順序', () => {
   })
 
   it('full pull 経路でPullが失敗しても、Pull開始時点で永続化済みmetadataが復元済み', async () => {
-    const { metadata } = await import('./stores')
+    const { metadata, initStoreEffects } = await import('./stores')
     const { initApp } = await import('./app-state.svelte')
 
     let metadataAtPullTime: unknown
@@ -219,6 +239,16 @@ describe('#295 M1: 起動時のmetadata初期化順序', () => {
     // 修正前はここが EMPTY_METADATA のままだった
     // （applyPersistedStartupCache 経由の復元しかなく、この経路では未到達のため）。
     expect(metadataAtPullTime).toEqual(PERSISTED_METADATA)
+
+    // initStoreEffects() は起動シーケンスの最後（Pull試行後）に呼ばれる。
+    // その初回 effect 発火（persistMetadataSpy）が空 metadata を
+    // IndexedDB へ書き戻していないことを直接確認する（事故本体そのものの回帰防止）。
+    await vi.waitFor(() => {
+      expect(initStoreEffects).toHaveBeenCalled()
+    })
+    expect(persistMetadataSpy).toHaveBeenCalledTimes(1)
+    expect(persistMetadataSpy).not.toHaveBeenCalledWith(EMPTY_METADATA)
+    expect(persistMetadataSpy).toHaveBeenCalledWith(PERSISTED_METADATA)
 
     teardown()
   })

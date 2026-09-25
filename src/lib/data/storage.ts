@@ -24,6 +24,8 @@ import { encryptToken, decryptToken, isEncryptedToken, obfuscateToken } from '..
 /**
  * ストレージエラークラス
  * IndexedDBの操作に関するエラーを種類別に分類
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export class StorageError extends Error {
   public readonly type: 'db_open' | 'db_blocked' | 'db_upgrade' | 'db_operation' | 'db_closed'
@@ -142,6 +144,8 @@ export function syncRepoNameCache(repoName: string | null | undefined): void {
  *
  * export: metadata-storage.ts の migrateMetadataFromLocalStorage が
  * 旧形式 byRepo[].metadata の読み出しに使う（#295 S4）。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export function loadStorageData(): StorageData {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -195,20 +199,15 @@ export function loadStorageData(): StorageData {
  *
  * export: metadata-storage.ts の migrateMetadataFromLocalStorage が
  * 移行完了後の byRepo[].metadata 除去に使う（#295 S4）。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   updateRepoNameCache(data.settings.repoName)
 }
 
-// 数万件分の metadata は localStorage の容量を超えるため、リポごとのキーで
-// IndexedDB (`agasteer/metadata`) に保存する。DB 定義・読み書き・旧 localStorage
-// からの移行（migrateMetadataFromLocalStorage）は src/lib/data/metadata-storage.ts
-// に分離している（#295 S4: god-file 化していた本ファイルの分割）。
-// metadata-storage.ts はこのファイルの loadStorageData/saveStorageData/
-// currentRepoKey/getPerRepoState/StorageError を使うため、本ファイル側は
-// metadata-storage.ts を静的 import しない（循環 import 回避）。loadSettings()
-// からの移行呼び出しだけ動的 import で行う。
+// metadata の IndexedDB 永続化（DB定義・読み書き・移行）は src/lib/data/metadata-storage.ts を参照。
 
 // IndexedDB 設定
 const DB_VERSION = 2 // #242 で mediaPending/mediaCache を追加（v1→v2 は store 追加のみの後方互換移行）
@@ -445,6 +444,8 @@ export function shouldShowPwaInstallBanner(): boolean {
  *
  * export: metadata-storage.ts の getPersistedMetadata/setPersistedMetadata が
  * 同じキャッシュを共有するために使う（#295 S4）。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export function currentRepoKey(): string | null {
   if (cachedRepoName === undefined) {
@@ -457,6 +458,8 @@ export function currentRepoKey(): string | null {
 
 /**
  * 指定リポの状態を読む。存在しなければデフォルト。
+ *
+ * @internal metadata-storage.ts 専用（barrel export はしているが外部からの利用は想定しない）
  */
 export function getPerRepoState(repoKey: string): PerRepoState {
   const data = loadStorageData()
