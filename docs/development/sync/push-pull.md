@@ -496,7 +496,7 @@ Pull失敗時のバックアップ復元は**初回Pull（`isInitialStartup = tr
 
 さらに、**トークンまたはリポジトリ名が空の場合**（`hasValidConfig = false`）は**Pullを実行せず、初回Pull前の状態に戻す**（`isPullCompleted = false` → `isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。これにより、設定が不完全な状態でデータ操作が行われることを防ぐ。
 
-Pull/Push/アーカイブロード中に設定画面を閉じた場合は、即時Pullではなく**予約Pull**に切り替える。`pendingRepoSync = true` を立て、進行中の同期処理が完了した直後に、最新の `settings.repoName` / `settings.token` に対して `pullFromGitHub(false)` を1回だけ自動実行する。
+Pull/Push（背景Push含む）/アーカイブロード中に設定画面を閉じた場合は、即時Pullではなく**予約Pull**に切り替える。`pendingRepoSync = true` を立て、進行中の同期処理が完了した直後に、最新の `settings.repoName` / `settings.token` に対して `pullFromGitHub(false)` を1回だけ自動実行する。
 
 **Pullが失敗した場合**も同様に、`isPullCompleted = false`となるため初回Pull前の状態にリセットされる（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。
 
@@ -665,10 +665,12 @@ sequenceDiagram
 
     User->>Settings: 設定画面を閉じる（×ボタン）
     Settings->>HCS: onClose()
-    Note over HCS: githubSettingsChangedInSettings === true
+    Note over HCS: #297 N-b: 判定に使うフラグは関数冒頭で退避してから即クリアする。<br/>末尾でクリアすると、この呼び出しが待機中<br/>（waitForRehydrate/pullFromGitHub 等）に設定を再度開いて<br/>変更した分（githubSettingsChangedInSettings が再度 true になる）まで<br/>消してしまい、次回クローズでその変更が無視される
+    HCS->>HCS: githubSettingsChanged = githubSettingsChangedInSettings<br/>importOccurred = importOccurredInSettings<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false
+    Note over HCS: githubSettingsChanged === true（退避値で判定）
     Note over HCS: まず waitForRehydrate() を await（#297 should2）<br/>shouldQueueRepoSync 判定より前に置く。待たずに判定すると、<br/>判定時点はアイドルでも待機中に取られたロックを見落として<br/>直接 pullFromGitHub を呼んでしまい、その内部の待機後の<br/>canSync 判定で黙って return する（キューにも積まれず消える）
 
-    alt Pull/Push/ArchiveLoad中でない
+    alt Pull/Push(背景含む)/ArchiveLoad中でない
         Note over HCS: pendingRehydrateRepo が残っていれば<br/>先に await rehydrateForRepo(pendingRehydrateRepo)<br/>（handleCloseSettings のアイドル分岐。#297 S-c）
         HCS->>PFG: pullFromGitHub(false)
         Note over PFG: まず waitForRehydrate() を await（#297）<br/>rehydrateForRepo()が実行中ならここで完了を待つ<br/>（handleSettingsChange発火のfire-and-forget rehydrateも含む）<br/>rehydrateが失敗してもwaitForRehydrate()はrejectを握りつぶし、<br/>完了だけを待つ（must2: 例外がHCSの事後処理を飛ばさない）
@@ -685,13 +687,10 @@ sequenceDiagram
         PFG->>PFG: setLastPushedSnapshot()
         PFG->>PFG: lastKnownCommitSha=commitSha
         PFG->>PFG: isPulling = false
-    else Pull/Push/ArchiveLoad中
+    else Pull/Push(背景含む)/ArchiveLoad中
         Note over HCS: 即時Pullせず pendingRepoSync=true で予約<br/>（repoChangePending は落とさず引き回す）<br/>resetForRepoSwitchで既にクリア済み
         Note over HCS: 進行中同期の finally 後に queue pull を1回実行<br/>→ pullFromGitHub 入口で isRepoSwitchPull=true<br/>→ scroll 残骸リセットも発火（#147）
     end
-
-    HCS->>HCS: githubSettingsChangedInSettings = false
-    HCS->>HCS: importOccurredInSettings = false
 
     Note over User: 新リポのホームが表示される
 
@@ -894,7 +893,7 @@ sequenceDiagram
 
 **修正後:**
 
-- `handleCloseSettings()`で`isPulling.value || isPushing.value || isArchiveLoading`をチェック
+- `handleCloseSettings()`で`isPulling.value || isPushing.value || isPushingBackground.value || isArchiveLoading`をチェック
 - いずれかがtrueの場合、即時Pullではなく `pendingRepoSync = true` を記録
 - `resetForRepoSwitch()`で既にデータクリア済みなので、進行中の旧Pull結果は操作対象として残らない
 - 進行中の同期が finally に入った時点で予約を確認し、新repo pull を1回だけ実行する
@@ -908,22 +907,28 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start[handleCloseSettings 開始] --> CheckFlags{githubSettingsChangedInSettings<br/>OR<br/>importOccurredInSettings?}
+    Start[handleCloseSettings 開始] --> ClearFlags["#297 N-b: 冒頭で退避してすぐクリア<br/>githubSettingsChanged = githubSettingsChangedInSettings<br/>importOccurred = importOccurredInSettings<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false"]
 
-    CheckFlags -->|両方false| SkipPull[Pull不要<br/>テーマ等の変更のみ]
-    SkipPull --> ClearFlags
+    ClearFlags --> CheckFlags{githubSettingsChanged<br/>OR<br/>importOccurred?<br/>（退避値で判定）}
 
-    CheckFlags -->|どちらかtrue| CheckValid{hasValidConfig?<br/>token && repoName}
+    CheckFlags -->|両方false: Pull不要<br/>テーマ等の変更のみ| End[handleCloseSettings 完了]
 
-    CheckValid -->|No: 設定が不完全| SetNotCompleted[isPullCompleted = false]
+    CheckFlags -->|どちらかtrue| WaitRehydrate[await waitForRehydrate<br/>#297 should2<br/>shouldQueueRepoSync 判定より前に置く]
+
+    WaitRehydrate --> CheckValid{hasValidConfig?<br/>token && repoName}
+
+    CheckValid -->|No: 設定が不完全| SetNotCompleted["isPullCompleted = false<br/>pendingRepoSync = false<br/>repoChangePending = false<br/>pendingRehydrateRepo = null"]
     SetNotCompleted --> CheckReset
 
-    CheckValid -->|Yes: 設定あり| CheckSync{isPulling OR<br/>isPushing OR<br/>isArchiveLoading?}
+    CheckValid -->|Yes: 設定あり| CheckSync{isPulling OR<br/>isPushing OR<br/>isPushingBackground OR<br/>isArchiveLoading?}
 
-    CheckSync -->|Yes: いずれか実行中| SkipSafe[新Pullをスキップ<br/>resetForRepoSwitchで<br/>既にデータクリア済み]
-    SkipSafe --> CheckReset
+    CheckSync -->|Yes: いずれか実行中| QueuePull["pendingRepoSync = true で予約<br/>（repoChangePending は落とさず引き回す）<br/>resetForRepoSwitchで既にデータクリア済み<br/>→ 進行中同期の finally 後に<br/>予約 pull を1回実行"]
+    QueuePull --> CheckReset
 
-    CheckSync -->|No: 全て空き| Pull[await pullFromGitHub false]
+    CheckSync -->|No: 全て空き| PendingRH{pendingRehydrateRepo?}
+    PendingRH -->|Yes| ConsumeRH["pendingRehydrateRepo = null<br/>await rehydrateForRepo<br/>（失敗はログのみ）"]
+    ConsumeRH --> Pull
+    PendingRH -->|No| Pull[await pullFromGitHub false]
 
     Pull --> PullResult{Pull結果}
     PullResult -->|成功| NewData[新リポのデータ表示<br/>isFirstPriorityFetched=true<br/>isPullCompleted=true]
@@ -936,32 +941,32 @@ flowchart TD
     ErrorHandle --> CheckReset
     NoChange --> CheckReset
 
-    CheckReset -->|false| Reset[isFirstPriorityFetched = false<br/>resetForRepoSwitch<br/>archiveLeafStatsStore.reset]
-    CheckReset -->|true| ClearFlags
+    CheckReset -->|false| Reset["isFirstPriorityFetched = false<br/>!pendingRepoSync の場合のみ<br/>repoChangePending = false<br/>resetForRepoSwitch<br/>archiveLeafStatsStore.reset"]
+    CheckReset -->|true| End
 
-    Reset --> ClearFlags[githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false]
-    ClearFlags --> End[handleCloseSettings 完了]
+    Reset --> End
 ```
 
 #### handleCloseSettings() の条件分岐表
 
-| githubSettingsChanged | importOccurred | hasValidConfig | isPulling | isPushing | isArchiveLoading | 結果                                                      |
-| :-------------------: | :------------: | :------------: | :-------: | :-------: | :--------------: | --------------------------------------------------------- |
-|         true          |     false      |      true      |   false   |   false   |      false       | Pull実行（リポ名またはトークン変更後のデータ取得）        |
-|         true          |     false      |      true      | **true**  |   false   |      false       | スキップ（リセット済み、次回手動Pull時に取得）            |
-|         true          |     false      |      true      |   false   | **true**  |      false       | スキップ（同上）                                          |
-|         true          |     false      |      true      |   false   |   false   |     **true**     | スキップ（同上）                                          |
-|         true          |     false      |   **false**    |     -     |     -     |        -         | Pullせずリセット（設定が不完全 → 初回Pull前の状態に戻す） |
-|         false         |      true      |      true      |   false   |   false   |      false       | Pull実行（インポート後のデータ同期）                      |
-|         false         |      true      |      true      | **true**  |   false   |      false       | スキップ                                                  |
-|         true          |      true      |      true      |   false   |   false   |      false       | Pull実行（両方trueでも1回のみ）                           |
-|         false         |     false      |       -        |     -     |     -     |        -         | スキップ（テーマ等の変更のみ → Pullなし）                 |
+| githubSettingsChanged | importOccurred | hasValidConfig | isPulling | isPushing | isArchiveLoading | 結果                                                        |
+| :-------------------: | :------------: | :------------: | :-------: | :-------: | :--------------: | ----------------------------------------------------------- |
+|         true          |     false      |      true      |   false   |   false   |      false       | Pull実行（リポ名またはトークン変更後のデータ取得）          |
+|         true          |     false      |      true      | **true**  |   false   |      false       | 予約（pendingRepoSync=true → 進行中同期の完了後に自動Pull） |
+|         true          |     false      |      true      |   false   | **true**  |      false       | 予約（同上）                                                |
+|         true          |     false      |      true      |   false   |   false   |     **true**     | 予約（同上）                                                |
+|         true          |     false      |   **false**    |     -     |     -     |        -         | Pullせずリセット（設定が不完全 → 初回Pull前の状態に戻す）   |
+|         false         |      true      |      true      |   false   |   false   |      false       | Pull実行（インポート後のデータ同期）                        |
+|         false         |      true      |      true      | **true**  |   false   |      false       | 予約（pendingRepoSync=true → 進行中同期の完了後に自動Pull） |
+|         true          |      true      |      true      |   false   |   false   |      false       | Pull実行（両方trueでも1回のみ）                             |
+|         false         |     false      |       -        |     -     |     -     |        -         | スキップ（テーマ等の変更のみ → Pullなし）                   |
 
 **補足**:
 
-- `repoChanged`も`importOccurred`も`false`の場合（テーマ変更のみ等）、外側のif文で弾かれるためPullは実行されない。これにより不要なAPI呼び出しとトースト通知を回避する。
-- `hasValidConfig`は`!!(settings.value.token && settings.value.repoName)`で判定。`false`の場合は`isPullCompleted = false`を設定し、Pullを実行せずに後続の`isPullCompleted`チェックでリセット処理に入る。
-- Pull失敗時も`isPullCompleted = false`となるため、同様にリセット処理（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）が実行される。
+- `githubSettingsChanged`も`importOccurred`も`false`の場合（テーマ変更のみ等）、外側のif文で弾かれるためPullは実行されない。これにより不要なAPI呼び出しとトースト通知を回避する。
+- `hasValidConfig`は`!!(settings.value.token && settings.value.repoName)`で判定。`false`の場合はPullを実行せず、この分岐内で`isPullCompleted = false` / `pendingRepoSync = false` / `repoChangePending = false` / `pendingRehydrateRepo = null`を設定し、後続の`isPullCompleted`チェックでリセット処理に入る。
+- Pull失敗時も`isPullCompleted = false`となるため、同様にリセット処理（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）が実行される。ただし`repoChangePending = false`は`!pendingRepoSync`のとき（＝予約されていないとき）のみ行う。予約中（`pendingRepoSync = true`）はここで落とさず、予約経由のPull入口（`git.ts`の`pullFromGitHub`）が`isRepoSwitchPull`として消費する。
+- 表の`isPushing`列は`isPushing`と`isPushingBackground`を1列に畳んで表している。実コードでは`isPushing.value || isPushingBackground.value`として判定しており（#206: 背景Push中も実行中として扱う）、`isPushingBackground`が`true`の行も同じ「予約」結果になる。
 
 ---
 
