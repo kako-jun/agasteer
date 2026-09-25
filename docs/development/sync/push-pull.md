@@ -606,7 +606,7 @@ if (repoChanged || tokenChanged) {
 | ガード条件                                     | チェック箇所                                                                                                                                                                                                                                                                                                      | 影響する操作                   |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | `isPulling.value \|\| isPushing.value`         | `canSync()` in `sync-handlers.ts`                                                                                                                                                                                                                                                                                 | Pull, Push                     |
-| `isArchiveLoading`                             | 各関数の冒頭で個別チェック（`handleWorldChange()` / `restoreStateFromUrl()` は `performArchiveLoad()` で IndexedDB 読み出し前に同期的に取得。#297 S-b / #307）                                                                                                                                                    | Pull, Push, WS, 移動           |
+| `isArchiveLoading`                             | `handleWorldChange()`が個別チェック（冒頭のbusy判定・アーカイブロード直前の再判定）。`restoreStateFromUrl()`はチェックせず`!isArchiveLoaded`のみで判定。取得・解除はどちらの呼び出し元でも`performArchiveLoad()`がIndexedDB読み出し前に同期的に行う（#297 S-b / #307）                                            | Pull, Push, WS, 移動           |
 | rehydrate実行中（`waitForRehydrate()`）        | `pullFromGitHub()`/`pushToGitHub()`冒頭（`canSync`判定より前）、`moveNoteToWorld()`/`moveLeafToWorld()`冒頭（Pull/Push/AL判定より前）、`handleWorldChange()`のアーカイブロード直前（判定→待機→再判定）、`runPendingRepoSyncIfIdle()`/`handleCloseSettings()`冒頭（`shouldQueueRepoSync`判定より前、#297 should2） | Pull, Push, WS, 移動, 予約同期 |
 | `!isFirstPriorityFetched`                      | UI側: `isLoadingUI`によるガラス効果                                                                                                                                                                                                                                                                               | 編集, 作成, 削除, 移動         |
 | `!isPullCompleted`                             | フッタボタンの`disabled`属性                                                                                                                                                                                                                                                                                      | 作成, 削除                     |
@@ -696,13 +696,13 @@ sequenceDiagram
 
     opt ユーザーがアーカイブに切り替え
         User->>HWC: handleWorldChange('archive', 'left')
-        Note over HWC: isArchiveLoaded=false<br/>→ pullArchive() 実行
+        Note over HWC: isArchiveLoaded=false<br/>→ performArchiveLoad() 実行
         Note over HWC: まず waitForRehydrate() を await（#297 should5）<br/>rehydrate中のDB切替とアーカイブロードの<br/>旧/新DB取り違えを防止
-        HWC->>HWC: isArchiveLoading = true
+        HWC->>HWC: performArchiveLoad()冒頭で<br/>isArchiveLoading = true（同期。#297 S-b / #307）
         HWC->>HWC: pullArchive($settings)
         Note over HWC: 新リポのアーカイブデータを取得
         HWC->>HWC: isArchiveLoaded = true
-        HWC->>HWC: isArchiveLoading = false
+        HWC->>HWC: performArchiveLoad()のfinally句で<br/>isArchiveLoading = false
     end
 ```
 
@@ -1031,13 +1031,13 @@ flowchart TB
 
 #### 各ガード変数の書き込みタイミング
 
-| 変数                     | trueにするタイミング                                  | falseにするタイミング                                        |
-| ------------------------ | ----------------------------------------------------- | ------------------------------------------------------------ |
-| `isPulling`              | `pullFromGitHub()` 冒頭（canSyncチェック直後）        | `pullFromGitHub()` のfinally句                               |
-| `isPushing`              | `pushToGitHub()` 冒頭（canSyncチェック直後）          | `pushToGitHub()` のfinally句                                 |
-| `isArchiveLoading`       | `handleWorldChange()` でアーカイブPull開始時          | `handleWorldChange()` のfinally句                            |
-| `isFirstPriorityFetched` | `pullFromGitHub()` の`onPriorityComplete`コールバック | リポ切替時（`handleSettingsChange`）、Pull開始時             |
-| `isPullCompleted`        | `pullFromGitHub()` のPull成功後                       | リポ切替時（`handleSettingsChange`）、Pull開始時、Pull失敗時 |
+| 変数                     | trueにするタイミング                                                                                                  | falseにするタイミング                                        |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `isPulling`              | `pullFromGitHub()` 冒頭（canSyncチェック直後）                                                                        | `pullFromGitHub()` のfinally句                               |
+| `isPushing`              | `pushToGitHub()` 冒頭（canSyncチェック直後）                                                                          | `pushToGitHub()` のfinally句                                 |
+| `isArchiveLoading`       | `performArchiveLoad()` 冒頭（IndexedDB 読み出し前・同期。呼び出し元 `handleWorldChange()` / `restoreStateFromUrl()`） | `performArchiveLoad()` のfinally句                           |
+| `isFirstPriorityFetched` | `pullFromGitHub()` の`onPriorityComplete`コールバック                                                                 | リポ切替時（`handleSettingsChange`）、Pull開始時             |
+| `isPullCompleted`        | `pullFromGitHub()` のPull成功後                                                                                       | リポ切替時（`handleSettingsChange`）、Pull開始時、Pull失敗時 |
 
 #### canPull / canPush の算出式
 
