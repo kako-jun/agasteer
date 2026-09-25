@@ -271,6 +271,9 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
     // ワールド表示は判定より前に一度 archive へ切り替わるが（push-pull.md 注8）、
     // Pull が理由で未ロードのまま打ち切られたので、切替前（home）に戻される
     expect(stores.leftWorld.value).toBe('home')
+    // #297 N1: view は home のまま（media 等へ移っていない）なので、戻し処理でも
+    // goHome が呼ばれる。1回目はワールド切替直後の初回分、2回目が戻し処理分。
+    expect(mocks.goHome).toHaveBeenCalledTimes(2)
     // #297 N3: 黙って戻さず、案内トーストを1回出す
     expect(mocks.showPullToast).toHaveBeenCalledWith('toast.archiveOpenBlocked')
   })
