@@ -146,12 +146,16 @@ let nextRehydrateKey: string | null = null
  * すべて終わるまで解除しない。
  *
  * #297 must1: 各周回（1 repoKey ぶんの applyRehydrateForRepo）の例外はここで
- * 捕捉し、最後の例外だけを覚えてキュー消化を継続する（キュー済みキーが
- * あれば例外が起きても打ち切らない）。これにより「最後に要求されたリポは
- * 必ず適用される」不変条件を、例外発生時も含めて維持する。全周回が終わった
- * 後、例外が一度でも起きていればまとめて reject する（呼び出し元は既に
- * .catch/try-catch 済み。waitForRehydrate() 経由の待機側は reject を握り
- * つぶす。下記参照）。
+ * 捕捉し、キュー済みキーがあれば打ち切らずに継続する。これにより「最後に
+ * 要求されたリポは必ず適用される」不変条件を、例外発生時も含めて維持する。
+ *
+ * #297 question1: reject するかどうかは「最終周回（キューが空になった時点の
+ * 周回）が成功したか」だけで決める。周回ごとに `lastError` をリセットするため、
+ * 途中の周回が失敗しても後続の周回が成功すれば reject されない
+ * （呼び出し元にとって「結局、最後に要求したリポは正しく適用された」ため）。
+ * 中間周回の失敗はここで console.error に残すだけに留め、最終周回の失敗だけ
+ * まとめて reject する（呼び出し元は既に .catch/try-catch 済みで、そちらが
+ * ログする。waitForRehydrate() 経由の待機側は reject を握りつぶす。下記参照）。
  *
  * #297 nit9: 実行中と同じ repoKey が再要求された場合（例: A実行中→B→A）も
  * 特別扱いで dedupe しない。最終的に A が2回（実行中の分＋キュー経由の分）
@@ -177,15 +181,27 @@ export function rehydrateForRepo(repoKey: string): Promise<void> {
     let lastError: unknown = null
     try {
       for (;;) {
+        // question1: 周回ごとにリセットする。この周回が成功すれば、前の周回の
+        // 失敗は reject 対象から外れる（reject するかどうかは最終周回の結果のみで決まる）。
+        lastError = null
         try {
           await applyRehydrateForRepo(key)
         } catch (error) {
-          // must1: この周回の例外を捕捉して最後の例外として控え、
-          // キュー済みキーがあれば継続する（ログは残す）。
           lastError = error
-          console.error(`Failed to rehydrate repo "${key}":`, error)
         }
-        if (nextRehydrateKey === null) break
+        if (nextRehydrateKey === null) {
+          // 最終周回（キューが空）。失敗していれば下でまとめて reject するので、
+          // ここではログしない（呼び出し元の .catch/try-catch 側がログする。N1）。
+          break
+        }
+        if (lastError !== null) {
+          // 中間周回の失敗: 後続のキュー済みキーが最終的に適用されるため reject
+          // はしないが、失敗自体を握りつぶさずここでログしておく（N1）。
+          console.error(
+            `Failed to rehydrate repo "${key}" (superseded by queued key, continuing):`,
+            lastError
+          )
+        }
         key = nextRehydrateKey
         nextRehydrateKey = null
       }
@@ -214,7 +230,8 @@ export function rehydrateForRepo(repoKey: string): Promise<void> {
 async function waitForRehydrateLoop(): Promise<void> {
   while (rehydrateInFlight) {
     // must2: rehydrate 失敗の reject を呼び出し元（pullFromGitHub /
-    // pushToGitHub / handleWorldChange / moveNoteToWorld）へ伝播させない。
+    // pushToGitHub / handleWorldChange / moveNoteToWorld / moveLeafToWorld /
+    // runPendingRepoSyncIfIdle / handleCloseSettings）へ伝播させない。
     // 伝播すると、これらを try で囲まず await する呼び出し元
     // （例: handleCloseSettings の isClosingSettingsPull リセット）の
     // 事後処理が丸ごと飛ぶ。ここでは完了（成功/失敗問わず）だけを待つ。
@@ -225,8 +242,9 @@ async function waitForRehydrateLoop(): Promise<void> {
 /**
  * 実行中の rehydrateForRepo（キュー分も含む）が完全に終わるまで待つ（#297）。
  * 実行中でなければ即座に解決する。pullFromGitHub / pushToGitHub の開始前、
- * および handleWorldChange / moveNoteToWorld のアーカイブロード開始前に呼び、
- * rehydrate 途中で旧/新 DB を取り違えて同期・ロードしないようにする。
+ * handleWorldChange / moveNoteToWorld / moveLeafToWorld のアーカイブロード
+ * 開始前、および runPendingRepoSyncIfIdle / handleCloseSettings のアイドル
+ * 判定前に呼び、rehydrate 途中で旧/新 DB を取り違えて同期・ロードしないようにする。
  */
 export function waitForRehydrate(): Promise<void> {
   // #297 nit6: 実行中の Promise があるときだけ await するファストパス。
