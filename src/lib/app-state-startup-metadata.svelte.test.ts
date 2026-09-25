@@ -101,6 +101,9 @@ vi.mock('./stores', () => ({
   // 実装（stores.svelte.ts）の $effect.root 内 metadata 用 $effect は登録直後に
   // 一度発火し、その時点の metadata.value を setPersistedMetadata() に渡す。
   // ここではその初回発火だけを persistMetadataSpy 経由で模倣する（#295 M1）。
+  // 注: stores.svelte.ts 側の $effect 自体の挙動（isRehydrating ガード等）は
+  // このテストの範囲外。本物の初回発火は microtask 遅延だが、ここでは
+  // initStoreEffects() が呼ばれた時点の metadata.value で同期に模倣している。
   initStoreEffects: vi.fn(() => {
     persistMetadataSpy(JSON.parse(JSON.stringify(metadataStore.value)))
     return vi.fn()
@@ -246,8 +249,9 @@ describe('#295 M1: 起動時のmetadata初期化順序', () => {
     await vi.waitFor(() => {
       expect(initStoreEffects).toHaveBeenCalled()
     })
+    // 呼び出しは1回だけ・その引数が PERSISTED_METADATA であることを確認しているため、
+    // 空値（EMPTY_METADATA）で書き戻されていないことも論理的に含まれる。
     expect(persistMetadataSpy).toHaveBeenCalledTimes(1)
-    expect(persistMetadataSpy).not.toHaveBeenCalledWith(EMPTY_METADATA)
     expect(persistMetadataSpy).toHaveBeenCalledWith(PERSISTED_METADATA)
 
     teardown()
