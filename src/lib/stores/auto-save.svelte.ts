@@ -3,7 +3,10 @@
  * ユーザー操作を検知し、無操作が一定時間続いたら自動保存・自動Pushを実行
  */
 
-import { leaves, notes, archiveLeaves, archiveNotes, offlineLeafStore } from './stores.svelte'
+// #300: stores.svelte.ts 分割後は core-state.svelte.ts から直接読む（循環 import 回避。
+// stores.svelte.ts はこのファイルの initAutoPushProgress を re-export 経由で使うため、
+// stores.svelte.ts を import すると循環になる）
+import { leaves, notes, archiveLeaves, archiveNotes, offlineLeafStore } from './core-state.svelte'
 import {
   saveLeaves,
   saveNotes,
