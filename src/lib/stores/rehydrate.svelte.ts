@@ -232,8 +232,7 @@ async function waitForRehydrateLoop(): Promise<void> {
     // must2: rehydrate 失敗の reject を呼び出し元（pullFromGitHub /
     // pushToGitHub / handleWorldChange / moveNoteToWorld / moveLeafToWorld /
     // runPendingRepoSyncIfIdle / handleCloseSettings）へ伝播させない。
-    // 伝播すると、これらを try で囲まず await する呼び出し元
-    // （例: handleCloseSettings の isClosingSettingsPull リセット）の
+    // 伝播すると、これらを try で囲まず await する呼び出し元の
     // 事後処理が丸ごと飛ぶ。ここでは完了（成功/失敗問わず）だけを待つ。
     await rehydrateInFlight.catch(() => {})
   }

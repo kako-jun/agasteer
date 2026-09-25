@@ -126,18 +126,7 @@ import { createOfflineLeaf } from './utils'
 // ========================================
 // Non-reactive local state
 // ========================================
-let isClosingSettingsPull = false
 let githubSettingsChangedInSettings = false
-
-/**
- * #297 N3 テスト専用: isClosingSettingsPull はプロダクションコードのどこからも
- * 読まれない防御的フラグ（rehydrate.svelte.ts の waitForRehydrateLoop コメント参照）だが、
- * handleCloseSettings が例外時も try/finally で確実に false に戻すことをユニット
- * テストで縛るために公開する。
- */
-export function isClosingSettingsPullForTest(): boolean {
-  return isClosingSettingsPull
-}
 
 // ========================================
 // Drag & Drop (Note)
@@ -496,14 +485,7 @@ export async function handleCloseSettings() {
             console.error('Failed to rehydrate stores before pull:', error)
           }
         }
-        // #297 N3: 例外時も isClosingSettingsPull を確実に false へ戻す
-        // （素朴な代入だと pullFromGitHub が例外を投げた場合に true のまま残る）。
-        isClosingSettingsPull = true
-        try {
-          await pullFromGitHub(false)
-        } finally {
-          isClosingSettingsPull = false
-        }
+        await pullFromGitHub(false)
       }
     } else {
       appState.isPullCompleted = false
