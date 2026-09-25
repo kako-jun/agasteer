@@ -73,8 +73,8 @@ fetch が pending のまま戻らないと、本来 `finally` で `isPushing.val
 
 ## ファイル構成
 
-| ファイル                          | 内容                             |
-| --------------------------------- | -------------------------------- |
-| `src/lib/utils/offline.ts`        | 定数、ファクトリ関数、判定関数   |
-| `src/lib/stores/stores.svelte.ts` | offlineLeafStore                 |
-| `src/lib/data/storage.ts`         | saveOfflineLeaf, loadOfflineLeaf |
+| ファイル                              | 内容                                               |
+| ------------------------------------- | -------------------------------------------------- |
+| `src/lib/utils/offline.ts`            | 定数、ファクトリ関数、判定関数                     |
+| `src/lib/stores/core-state.svelte.ts` | offlineLeafStore（#300でstores.svelte.tsから分割） |
+| `src/lib/data/storage.ts`             | saveOfflineLeaf, loadOfflineLeaf                   |

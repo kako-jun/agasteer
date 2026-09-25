@@ -6,12 +6,12 @@
 
 ## 実装ファイル
 
-| ファイル                                      | 役割                                        |
-| --------------------------------------------- | ------------------------------------------- |
-| `src/lib/editor/dirty-lines.ts`               | 差分計算とCodeMirror拡張のファクトリ        |
-| `src/lib/stores/stores.svelte.ts`             | `getLastPushedContent()` 基準コンテンツ取得 |
-| `src/components/editor/MarkdownEditor.svelte` | 拡張機能の統合（常時有効）                  |
-| `src/App.css`                                 | テーマ別CSS変数とマーカースタイル           |
+| ファイル                                      | 役割                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/lib/editor/dirty-lines.ts`               | 差分計算とCodeMirror拡張のファクトリ                                          |
+| `src/lib/stores/dirty-tracking.ts`            | `getLastPushedContent()` 基準コンテンツ取得（#300でstores.svelte.tsから分割） |
+| `src/components/editor/MarkdownEditor.svelte` | 拡張機能の統合（常時有効）                                                    |
+| `src/App.css`                                 | テーマ別CSS変数とマーカースタイル                                             |
 
 ## 既存のダーティチェック機能との連携
 
@@ -19,11 +19,11 @@
 
 Agasteerには既にリーフ単位のダーティチェック機能がある：
 
-| ストア/関数        | 役割                                 | 場所                              |
-| ------------------ | ------------------------------------ | --------------------------------- |
-| `dirtyLeafIds`     | ダーティなリーフIDのSet              | `src/lib/stores/stores.svelte.ts` |
-| `lastPushedLeaves` | 最後にPushした時点のリーフ状態       | `src/lib/stores/stores.svelte.ts` |
-| `detectDirtyIds()` | スナップショット比較でダーティを検出 | `src/lib/stores/stores.svelte.ts` |
+| ストア/関数        | 役割                                 | 場所                                  |
+| ------------------ | ------------------------------------ | ------------------------------------- |
+| `dirtyLeafIds`     | ダーティなリーフIDのSet              | `src/lib/stores/core-state.svelte.ts` |
+| `lastPushedLeaves` | 最後にPushした時点のリーフ状態       | `src/lib/stores/dirty-tracking.ts`    |
+| `detectDirtyIds()` | スナップショット比較でダーティを検出 | `src/lib/stores/dirty-tracking.ts`    |
 
 ### 行単位マーカーとの関係
 

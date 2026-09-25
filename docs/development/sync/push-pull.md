@@ -525,7 +525,7 @@ Pull/Push/アーカイブロード中に設定画面を閉じた場合は、即�
 
 1. `appState.isPullCompleted = false` / `appState.isFirstPriorityFetched = false`（操作ロック、リポ名変更時のみ）
 2. `appState.repoChangePending = true`（リポ名変更時のみ。設定を閉じた後の「予約中」バッジに使う）
-3. `resetForRepoSwitch()`（stores.svelte.tsの一括リセット関数、リポ名変更時のみ）
+3. `resetForRepoSwitch()`（stores/repo-switch-reset.tsの一括リセット関数、リポ名変更時のみ。#300でstores.svelte.tsから分割）
 4. `updateSettings(next)`後、`archiveLeafStatsStore.reset()` → アイドルなら`rehydrateForRepo()`をfire-and-forget、ビジーなら`pendingRehydrateRepo`に退避（リポ名変更時のみ。図2参照）
 5. `githubSettingsChangedInSettings = true`（リポ名またはトークン変更時のPull判定用フラグ）
 
@@ -713,7 +713,7 @@ sequenceDiagram
 
 全リポ固有変数について、各操作でどう変化するかの完全な一覧。
 
-#### stores.svelte.ts 内の変数
+#### ストア状態変数一覧（#300でcore-state.svelte.ts / dirty-tracking.tsに分割）
 
 | 変数名                     | 型                         | 初期値                                                                                                                                                | Pull時の変化                                  | Push時の変化                                                                                           | リポ切替時のリセット値                                                                                                      | リセットしないと何が起きるか                                                                                                   |
 | -------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -971,7 +971,7 @@ flowchart TD
 
 ```mermaid
 flowchart TB
-    subgraph "ストア変数（stores.svelte.ts）"
+    subgraph "ストア変数（stores/core-state.svelte.ts）"
         isPulling["isPulling<br/>($state rune)"]
         isPushing["isPushing<br/>($state rune)"]
     end
@@ -1050,19 +1050,16 @@ let canPush = $derived(
 
 ### resetForRepoSwitch() のコード（参照用）
 
-正本は `src/lib/stores/stores.svelte.ts` の `resetForRepoSwitch()`。乖離時はソースを優先。
+正本は `src/lib/stores/repo-switch-reset.ts` の `resetForRepoSwitch()`。乖離時はソースを優先。
 
 ```typescript
-// src/lib/stores/stores.svelte.ts
+// src/lib/stores/repo-switch-reset.ts（#300でstores.svelte.tsから分割）
 export function resetForRepoSwitch(): void {
   // アーカイブデータをクリア
   resetArchive()
 
   // Pushスナップショットをクリア（旧リポのスナップショットで誤検出しないように）
-  lastPushedNotes = []
-  lastPushedLeaves = []
-  lastPushedArchiveNotes = []
-  lastPushedArchiveLeaves = []
+  resetPushedSnapshots()
 
   // ダーティフラグをクリア
   clearAllChanges()
@@ -1070,7 +1067,7 @@ export function resetForRepoSwitch(): void {
   // Git参照をクリア（旧リポのSHAで誤判定しないように）
   // lastKnownCommitSha は per-repo slot から rehydrateForRepo で復元するため、
   // ここでは触らない（null で上書きすると新リポ slot に null が書き込まれて
-  // 復元できなくなる — stores.svelte.ts の $effect が検知してしまう）。
+  // 復元できなくなる — persistence-effects.svelte.ts の $effect が検知してしまう）。
   // lastPulledPushCount も同様に per-repo slot から復元するため触らない。
   isStale.value = false
   lastPushTime.value = 0
