@@ -17,7 +17,7 @@
  * notifySyncActivityChanged() 呼び出し自体を検証できないため）。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 // #314 S2b: appState.isArchiveLoading の実 setter を確認するには app-state.svelte.ts を
 // 本物で import する必要があるが、この本物は '../main'（src/main.ts、PWA の
@@ -42,11 +42,6 @@ if (typeof (globalThis as { matchMedia?: unknown }).matchMedia !== 'function') {
 }
 
 describe('sync-signal.ts 単体（#314 S2a）', () => {
-  beforeEach(() => {
-    // モジュールの waiters Set はモジュールスコープに閉じているため、テスト間で
-    // 汚染しないよう毎回 resetModules する。
-  })
-
   it('waitForSyncActivityChange() は次の notifySyncActivityChanged() 呼び出しで解決する', async () => {
     const { notifySyncActivityChanged, waitForSyncActivityChange } = await import('./sync-signal')
 
