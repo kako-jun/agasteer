@@ -665,7 +665,9 @@ sequenceDiagram
 
     User->>Settings: 設定画面を閉じる（×ボタン）
     Settings->>HCS: onClose()
-    Note over HCS: githubSettingsChangedInSettings === true
+    Note over HCS: #297 N-b: 判定に使うフラグは関数冒頭で退避してから即クリアする。<br/>末尾でクリアすると、この呼び出しが待機中<br/>（waitForRehydrate/pullFromGitHub 等）に設定を再度開いて<br/>変更した分（githubSettingsChangedInSettings が再度 true になる）まで<br/>消してしまい、次回クローズでその変更が無視される
+    HCS->>HCS: githubSettingsChanged = githubSettingsChangedInSettings<br/>importOccurred = importOccurredInSettings<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false
+    Note over HCS: githubSettingsChanged === true（退避値で判定）
     Note over HCS: まず waitForRehydrate() を await（#297 should2）<br/>shouldQueueRepoSync 判定より前に置く。待たずに判定すると、<br/>判定時点はアイドルでも待機中に取られたロックを見落として<br/>直接 pullFromGitHub を呼んでしまい、その内部の待機後の<br/>canSync 判定で黙って return する（キューにも積まれず消える）
 
     alt Pull/Push/ArchiveLoad中でない
@@ -689,9 +691,6 @@ sequenceDiagram
         Note over HCS: 即時Pullせず pendingRepoSync=true で予約<br/>（repoChangePending は落とさず引き回す）<br/>resetForRepoSwitchで既にクリア済み
         Note over HCS: 進行中同期の finally 後に queue pull を1回実行<br/>→ pullFromGitHub 入口で isRepoSwitchPull=true<br/>→ scroll 残骸リセットも発火（#147）
     end
-
-    HCS->>HCS: githubSettingsChangedInSettings = false
-    HCS->>HCS: importOccurredInSettings = false
 
     Note over User: 新リポのホームが表示される
 
@@ -908,12 +907,15 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start[handleCloseSettings 開始] --> CheckFlags{githubSettingsChangedInSettings<br/>OR<br/>importOccurredInSettings?}
+    Start[handleCloseSettings 開始] --> ClearFlags["#297 N-b: 冒頭で退避してすぐクリア<br/>githubSettingsChanged = githubSettingsChangedInSettings<br/>importOccurred = importOccurredInSettings<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false"]
 
-    CheckFlags -->|両方false| SkipPull[Pull不要<br/>テーマ等の変更のみ]
-    SkipPull --> ClearFlags
+    ClearFlags --> CheckFlags{githubSettingsChanged<br/>OR<br/>importOccurred?<br/>（退避値で判定）}
 
-    CheckFlags -->|どちらかtrue| CheckValid{hasValidConfig?<br/>token && repoName}
+    CheckFlags -->|両方false: Pull不要<br/>テーマ等の変更のみ| End[handleCloseSettings 完了]
+
+    CheckFlags -->|どちらかtrue| WaitRehydrate[await waitForRehydrate<br/>#297 should2<br/>shouldQueueRepoSync 判定より前に置く]
+
+    WaitRehydrate --> CheckValid{hasValidConfig?<br/>token && repoName}
 
     CheckValid -->|No: 設定が不完全| SetNotCompleted[isPullCompleted = false]
     SetNotCompleted --> CheckReset
@@ -937,10 +939,9 @@ flowchart TD
     NoChange --> CheckReset
 
     CheckReset -->|false| Reset[isFirstPriorityFetched = false<br/>resetForRepoSwitch<br/>archiveLeafStatsStore.reset]
-    CheckReset -->|true| ClearFlags
+    CheckReset -->|true| End
 
-    Reset --> ClearFlags[githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false]
-    ClearFlags --> End[handleCloseSettings 完了]
+    Reset --> End
 ```
 
 #### handleCloseSettings() の条件分岐表
