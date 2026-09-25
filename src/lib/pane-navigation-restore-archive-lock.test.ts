@@ -459,6 +459,66 @@ describe('restoreStateFromUrl の異常系（#307 nit3: IndexedDB 読出し失�
   })
 })
 
+describe('restoreStateFromUrl の isRestoringFromUrl 生死管理（#314 M-1: try/finally + 世代ガード）', () => {
+  // 修正前は本体の先頭で true、末尾で無条件に false へ戻すだけだった。(a) 旧形式/
+  // 引数無し URL の早期 return 経路、(b) waitUntilArchiveReady 内（IndexedDB reject 等）
+  // で例外が飛ぶ経路のどちらも末尾に届かず、isRestoringFromUrl が true のまま残って
+  // いた。true のままだと updateUrlFromState の早期 return ガードに引っかかり続け、
+  // 以後 URL・履歴が一切更新されなくなる（App.svelte の $effect → updateUrlFromState）。
+  it('待機中に旧形式URLで2回目を呼ぶと、1回目が完了しても isRestoringFromUrl は2回目が確定させた false のまま', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+
+    let resolvePullArchive!: (v: unknown) => void
+    mocks.pullArchive.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePullArchive = resolve
+      })
+    )
+
+    const first = restoreStateFromUrl()
+    await vi.waitFor(() => {
+      expect(appState.isArchiveLoading).toBe(true)
+    })
+    expect(appState.isRestoringFromUrl).toBe(true)
+
+    // 1回目が待機中に、2回目（旧形式: left/right も note/leaf も無い URL）を呼ぶ。
+    // resolveLegacyUrlParams の早期 return 経路を通る。
+    window.history.pushState({}, '', '/')
+    const second = restoreStateFromUrl()
+    await second
+
+    // 2回目（最新世代）は即座に完了し、isRestoringFromUrl を false に戻す
+    expect(appState.isRestoringFromUrl).toBe(false)
+
+    // 1回目のアーカイブロードを完了させる
+    resolvePullArchive({
+      success: true,
+      notes: [{ id: 'n1' }],
+      leaves: [{ id: 'l1' }],
+      metadata: { pushCount: 1 },
+    })
+    await first
+
+    // 1回目（古い世代）の finally は、2回目が既に false にした isRestoringFromUrl を
+    // 上書きしない（世代ガードで無視される）。true に戻ってしまわないことを縛る。
+    expect(appState.isRestoringFromUrl).toBe(false)
+  })
+
+  it('loadArchiveNotes が reject して restoreStateFromUrl 自体が例外を投げても、isRestoringFromUrl は false に戻る', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+
+    const error = new Error('idb boom')
+    mocks.loadArchiveNotes.mockRejectedValueOnce(error)
+
+    expect(appState.isRestoringFromUrl).toBe(false)
+    await expect(restoreStateFromUrl()).rejects.toBe(error)
+
+    expect(appState.isRestoringFromUrl).toBe(false)
+  })
+})
+
 describe('restoreStateFromUrl の前段整合（#314: handleWorldChange と同じ前段に揃える）', () => {
   it('アーカイブロードが必要な URL では waitForRehydrate を待つ', async () => {
     mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })

@@ -747,66 +747,75 @@ function resolveLegacyUrlParams(params: URLSearchParams) {
  *
  * 待ち合わせ（rehydrate待ち・Pull/Push/背景Push/アーカイブロードのアイドル待ち・
  * アーカイブロード本体・世代管理・pane スナップショット比較）は
- * pane-navigation-url-restore.svelte.ts に集約されている（N3: このファイル自体は
+ * pane-navigation-url-restore.svelte.ts に集約されている（N3: この関数自体は
  * 80行以内に保つ）。archive を必要としない（または既にロード済みの）pane は
  * 待たずに即解決し、archive 待ちが要る pane だけ待機後に解決する（M4a: home pane が
  * Pull 全体を待つ退行を防ぐ）。
+ *
+ * #314 M-1: 本体は try/finally で包む。旧形式 URL の早期 return も、
+ * waitUntilArchiveReady が IndexedDB reject 等で例外を投げる経路も、必ず finally を
+ * 通る。finally では「今も最新の世代である呼び出し」だけが
+ * appState.isRestoringFromUrl を false に戻す（alreadyRestoring な呼び出しは
+ * 元々このフラグの生死を管理しない側なので触らない。古い世代の呼び出しが
+ * finally に来ても、既に後続の呼び出しが管理しているフラグを誤って倒さない）。
  */
 export async function restoreStateFromUrl(alreadyRestoring = false) {
   const gen = urlRestore.beginRestoreGeneration()
-  const params = new URLSearchParams(window.location.search)
-  let leftPath = params.get('left')
-  const rightPath = params.get('right')
-
-  // 互換性: 旧形式（?note=uuid&leaf=uuid）もサポート
-  if (!leftPath && !rightPath) {
-    resolveLegacyUrlParams(params)
-    return
-  }
-
   if (!alreadyRestoring) {
     appState.isRestoringFromUrl = true
   }
-  if (!leftPath) leftPath = '/'
+  try {
+    const params = new URLSearchParams(window.location.search)
+    let leftPath = params.get('left')
+    const rightPath = params.get('right')
 
-  const leftWorldInfo = extractWorldPrefix(leftPath)
-  // 単ペイン表示中は right パスを無視する（#314: 使われない pane のために
-  // アーカイブロードを待つ必要はない。最終的に「follow left」で上書きされる）。
-  const rp: string | null = rightPath && appState.isDualPane ? rightPath : null
-  const rightWorldInfo = rp ? extractWorldPrefix(rp) : { world: 'home' as const }
-
-  const hasArchiveConfig = !!(settings.value.token && settings.value.repoName)
-  const leftNeedsWait =
-    leftWorldInfo.world === 'archive' && !isArchiveLoaded.value && hasArchiveConfig
-  const rightNeedsWait =
-    !!rp && rightWorldInfo.world === 'archive' && !isArchiveLoaded.value && hasArchiveConfig
-
-  const leftSnapshot = urlRestore.snapshotPane('left')
-  const rightSnapshot = urlRestore.snapshotPane('right')
-  if (!leftNeedsWait) urlRestore.resolvePaneFromPath('left', leftPath, leftWorldInfo.world)
-  if (rp && !rightNeedsWait) urlRestore.resolvePaneFromPath('right', rp, rightWorldInfo.world)
-
-  if (leftNeedsWait || rightNeedsWait) {
-    await urlRestore.waitUntilArchiveReady(gen, 'during URL restore')
-    if (!urlRestore.isCurrentRestoreGeneration(gen)) return
-
-    if (leftNeedsWait && urlRestore.shouldApplyResolvedPane(gen, 'left', leftSnapshot)) {
-      urlRestore.resolvePaneFromPath('left', leftPath, leftWorldInfo.world)
+    // 互換性: 旧形式（?note=uuid&leaf=uuid）もサポート
+    if (!leftPath && !rightPath) {
+      resolveLegacyUrlParams(params)
+      return
     }
-    if (rp && rightNeedsWait && urlRestore.shouldApplyResolvedPane(gen, 'right', rightSnapshot)) {
-      urlRestore.resolvePaneFromPath('right', rp, rightWorldInfo.world)
+
+    if (!leftPath) leftPath = '/'
+
+    const leftWorldInfo = extractWorldPrefix(leftPath)
+    // 単ペイン表示中は right パスを無視する（#314: 使われない pane のために
+    // アーカイブロードを待つ必要はない。最終的に「follow left」で上書きされる）。
+    const rp: string | null = rightPath && appState.isDualPane ? rightPath : null
+    const rightWorldInfo = rp ? extractWorldPrefix(rp) : { world: 'home' as const }
+
+    const hasArchiveConfig = !!(settings.value.token && settings.value.repoName)
+    const leftNeedsWait =
+      leftWorldInfo.world === 'archive' && !isArchiveLoaded.value && hasArchiveConfig
+    const rightNeedsWait =
+      !!rp && rightWorldInfo.world === 'archive' && !isArchiveLoaded.value && hasArchiveConfig
+
+    const leftSnapshot = urlRestore.snapshotPane('left')
+    const rightSnapshot = urlRestore.snapshotPane('right')
+    if (!leftNeedsWait) urlRestore.resolvePaneFromPath('left', leftPath, leftWorldInfo.world)
+    if (rp && !rightNeedsWait) urlRestore.resolvePaneFromPath('right', rp, rightWorldInfo.world)
+
+    if (leftNeedsWait || rightNeedsWait) {
+      await urlRestore.waitUntilArchiveReady(gen, 'during URL restore')
+      if (!urlRestore.isCurrentRestoreGeneration(gen)) return
+
+      if (leftNeedsWait && urlRestore.shouldApplyResolvedPane(gen, 'left', leftSnapshot)) {
+        urlRestore.resolvePaneFromPath('left', leftPath, leftWorldInfo.world)
+      }
+      if (rp && rightNeedsWait && urlRestore.shouldApplyResolvedPane(gen, 'right', rightSnapshot)) {
+        urlRestore.resolvePaneFromPath('right', rp, rightWorldInfo.world)
+      }
     }
-  }
 
-  if (!rp) {
-    rightNote.value = leftNote.value
-    rightLeaf.value = leftLeaf.value
-    rightView.value = leftView.value
-    rightWorld.value = leftWorld.value
-  }
-
-  if (!alreadyRestoring) {
-    appState.isRestoringFromUrl = false
+    if (!rp) {
+      rightNote.value = leftNote.value
+      rightLeaf.value = leftLeaf.value
+      rightView.value = leftView.value
+      rightWorld.value = leftWorld.value
+    }
+  } finally {
+    if (!alreadyRestoring && urlRestore.isCurrentRestoreGeneration(gen)) {
+      appState.isRestoringFromUrl = false
+    }
   }
 }
 
