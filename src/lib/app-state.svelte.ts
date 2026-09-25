@@ -821,7 +821,7 @@ export function initApp(deps: InitAppDeps): () => void {
           wasDirty: getPersistedDirtyFlag(),
           notes: await loadNotes(),
           leaves: await loadLeaves(),
-          metadata: getPersistedMetadata(),
+          metadata: await getPersistedMetadata(),
           lastPulledPushCount: getPersistedLastPulledPushCount(),
         }
       }

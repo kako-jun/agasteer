@@ -85,7 +85,7 @@ export interface PerRepoState {
   isDirty: boolean
   lastKnownCommitSha?: string | null // 最後に同期したリモートHEAD commit SHA（stale検出用）
   pushInFlightAt?: number // Push API呼び出し中のタイムスタンプ（スリープによるレスポンス消失検出用）
-  metadata?: Metadata // 直近同期済みの home metadata（skip 起動時のバッジ復元用）
+  metadata?: Metadata // 旧形式のみ。起動時に IndexedDB へ移行する
   lastPulledPushCount?: number // 直近同期済みの pushCount（skip 起動時の統計復元用）
 }
 
@@ -97,6 +97,7 @@ const defaultPerRepoState: PerRepoState = {
  * LocalStorage全体の構造（#131以降）
  */
 interface StorageData {
+  storageVersion?: 2
   settings: Settings
   globalState: GlobalState
   byRepo: Record<string, PerRepoState>
@@ -148,6 +149,7 @@ function loadStorageData(): StorageData {
       }
       // 新形式を優先。旧形式は state を捨てる（#131 で後方互換なし）
       const merged: StorageData = {
+        storageVersion: parsed.storageVersion,
         settings: { ...defaultSettings, ...(parsed.settings ?? {}) } as Settings,
         globalState: { ...defaultGlobalState, ...(parsed.globalState ?? {}) },
         byRepo: parsed.byRepo ?? {},
@@ -191,6 +193,110 @@ function loadStorageData(): StorageData {
 function saveStorageData(data: StorageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   updateRepoNameCache(data.settings.repoName)
+}
+
+// 数万件分の metadata は localStorage の容量を超えるため、リポごとのキーで
+// IndexedDB に保存する。旧 localStorage データは保存完了後にのみ削除する。
+const METADATA_DB_NAME = 'agasteer/metadata'
+const METADATA_STORE = 'byRepo'
+let metadataDbPromise: Promise<IDBDatabase> | null = null
+const metadataWrites = new Map<string, Promise<void>>()
+
+function openMetadataDb(): Promise<IDBDatabase> {
+  if (metadataDbPromise) return metadataDbPromise
+  metadataDbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(METADATA_DB_NAME, 1)
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(METADATA_STORE)
+    }
+    request.onsuccess = () => {
+      const db = request.result
+      db.onversionchange = () => {
+        db.close()
+        metadataDbPromise = null
+      }
+      resolve(db)
+    }
+    request.onerror = () => reject(request.error)
+    request.onblocked = () => reject(new StorageError('db_blocked', 'Metadata database is blocked'))
+  }).catch((error) => {
+    metadataDbPromise = null
+    throw error
+  })
+  return metadataDbPromise
+}
+
+async function readMetadata(repoKey: string): Promise<Metadata | null> {
+  const db = await openMetadataDb()
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(METADATA_STORE, 'readonly')
+      .objectStore(METADATA_STORE)
+      .get(repoKey)
+    request.onsuccess = () => resolve((request.result as Metadata | undefined) ?? null)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function writeMetadata(repoKey: string, metadata: Metadata): Promise<void> {
+  // リポ切替や連続更新で古い書き込みが新しい内容を上書きしないよう直列化する。
+  const previous = metadataWrites.get(repoKey) ?? Promise.resolve()
+  const next = previous
+    .catch(() => {})
+    .then(async () => {
+      const db = await openMetadataDb()
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(METADATA_STORE, 'readwrite')
+        tx.objectStore(METADATA_STORE).put(JSON.parse(JSON.stringify(metadata)), repoKey)
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error ?? new Error('Metadata transaction aborted'))
+      })
+    })
+  metadataWrites.set(repoKey, next)
+  void next
+    .finally(() => {
+      if (metadataWrites.get(repoKey) === next) metadataWrites.delete(repoKey)
+    })
+    .catch(() => {})
+  return next
+}
+
+export async function flushPersistedMetadata(): Promise<void> {
+  await Promise.all(metadataWrites.values())
+}
+
+async function migrateMetadataFromLocalStorage(): Promise<void> {
+  const data = loadStorageData()
+  const legacy = Object.entries(data.byRepo).filter(([, state]) => state.metadata)
+  if (!legacy.length) {
+    if (data.storageVersion !== 2) {
+      data.storageVersion = 2
+      saveStorageData(data)
+    }
+    return
+  }
+  for (const [repoKey, state] of legacy) {
+    // 途中で失敗した場合は旧データをすべて保持し、次回再試行する。
+    // 既に IndexedDB に新しい値があればそれを優先する。
+    if (!(await readMetadata(repoKey))) {
+      await writeMetadata(repoKey, state.metadata!)
+      const copied = await readMetadata(repoKey)
+      if (JSON.stringify(copied) !== JSON.stringify(state.metadata)) {
+        throw new StorageError(
+          'db_operation',
+          `Metadata migration verification failed for ${repoKey}`
+        )
+      }
+    }
+  }
+  // 非同期処理中の他の localStorage 更新を消さないよう、保存直前に読み直す。
+  const latest = loadStorageData()
+  for (const [repoKey] of legacy) {
+    if (latest.byRepo[repoKey]) delete latest.byRepo[repoKey].metadata
+  }
+  latest.storageVersion = 2
+  saveStorageData(latest)
 }
 
 // IndexedDB 設定
@@ -261,8 +367,10 @@ async function runV131MigrationIfNeeded(): Promise<void> {
     }
   })
   if (deleted) {
-    data.v131Migrated = true
-    saveStorageData(data)
+    // 他の非同期移行が localStorage を更新している可能性がある。
+    const latest = loadStorageData()
+    latest.v131Migrated = true
+    saveStorageData(latest)
   }
 }
 
@@ -278,6 +386,12 @@ if (typeof indexedDB !== 'undefined' && typeof localStorage !== 'undefined') {
  * トークンが暗号化されている場合は復号する
  */
 export async function loadSettings(): Promise<Settings> {
+  try {
+    await migrateMetadataFromLocalStorage()
+  } catch (error) {
+    // コピーが完了しない限り旧データは消さない。リポ復元時にも旧値を読める。
+    console.error('Failed to migrate metadata to IndexedDB:', error)
+  }
   const data = loadStorageData()
   const settings = { ...defaultSettings, ...data.settings }
   settings.theme = normalizeTheme(settings.theme)
@@ -491,17 +605,25 @@ export function setPersistedCommitSha(sha: string | null): void {
 /**
  * home metadata を取得（現在リポ。起動時の復元用）
  */
-export function getPersistedMetadata(): Metadata | null {
+export async function getPersistedMetadata(): Promise<Metadata | null> {
   const key = currentRepoKey()
   if (!key) return null
-  return getPerRepoState(key).metadata ?? null
+  try {
+    await metadataWrites.get(key)
+    return (await readMetadata(key)) ?? getPerRepoState(key).metadata ?? null
+  } catch (error) {
+    console.error('Failed to read persisted metadata:', error)
+    return getPerRepoState(key).metadata ?? null
+  }
 }
 
 /**
  * home metadata を保存（現在リポ）
  */
-export function setPersistedMetadata(metadata: Metadata): void {
-  updateCurrentRepoState({ metadata })
+export function setPersistedMetadata(metadata: Metadata): Promise<void> {
+  const key = currentRepoKey()
+  if (!key) return Promise.resolve()
+  return writeMetadata(key, metadata)
 }
 
 /**
