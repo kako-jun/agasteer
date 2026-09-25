@@ -1753,44 +1753,19 @@ describe('pullFromGitHub / pushToGitHub は rehydrate 完了を待つ (#297)', (
   })
 })
 
-describe('rehydrate失敗時のreject握り契約 (#297 T8)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    stores.isPulling.value = false
-    stores.isPushing.value = false
-    stores.isPushingBackground.value = false
-    appState.isArchiveLoading = false
-  })
-
-  // 実装契約（rehydrate.svelte.ts の waitForRehydrateLoop）: waitForRehydrate() は
-  // rehydrate 失敗の reject を内部で catch し、常に resolve する
-  // （rehydrate-serialize.test.ts の must2 で直接検証済み）。
-  // git.test.ts では waitForRehydrate 自体をモックに差し替えているため、その
-  // 「reject を握る」実装ロジックそのものはここでは再現できない。代わりに、
-  // 握った後の resolve をモックで模して、pullFromGitHub/pushToGitHub 側が
-  // 戻り値を素通しして先に進む（自前の try/catch を必要としない）ことを確認する。
-  it('pullFromGitHub: waitForRehydrateがrehydrate失敗のrejectを握って解決すれば、throwせずcanSync判定へ進む', async () => {
-    mocks.waitForRehydrate.mockImplementationOnce(() =>
-      Promise.reject(new Error('rehydrate failed')).catch(() => undefined)
-    )
-    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
-
-    await expect(pullFromGitHub(false)).resolves.toBeUndefined()
-
-    expect(mocks.canSync).toHaveBeenCalledTimes(1)
-  })
-
-  it('pushToGitHub: waitForRehydrateがrehydrate失敗のrejectを握って解決すれば、throwせずcanSync判定へ進む', async () => {
-    mocks.waitForRehydrate.mockImplementationOnce(() =>
-      Promise.reject(new Error('rehydrate failed')).catch(() => undefined)
-    )
-    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
-
-    await expect(pushToGitHub()).resolves.toBeUndefined()
-
-    expect(mocks.canSync).toHaveBeenCalledTimes(1)
-  })
-})
+// #297 T8 は削除済み（2巡目レビュー S3）。waitForRehydrate をモックした状態で
+// 「reject を握って resolve する」ことをシミュレートしても、pullFromGitHub/
+// pushToGitHub 側から見れば「ただ resolve した Promise を await した」場合と
+// 区別がつかず、正常系（既定の mocks.waitForRehydrate = 即 resolve）の他テストと
+// 同じ経路しか踏めていなかった（無意味）。
+// 「reject を握って resolve する」という実装契約そのものは、waitForRehydrate の
+// 実体を使う rehydrate-serialize.test.ts の must2 で既に検証済み。git.test.ts
+// 側で実体の waitForRehydrate を使って区別可能なテストを組むには、
+// applyRehydrateForRepo が依存する ../data/storage・../data/metadata-storage・
+// ./auto-save.svelte・./stores/leaf-stats.svelte・../api/media/insert-phase を
+// 追加でモックし、real ../stores.svelte（929行の god file）まで読み込む必要が
+// あり、この観点（「呼び出し元が reject を意識しない」）のためだけに導入するには
+// 見合わないと判断し削除する。
 
 describe('rehydrate idle 時の pullFromGitHub/pushToGitHub 二重起動 (#297 T9)', () => {
   const defaultCanSyncImpl = () => ({ canPull: true, canPush: true })

@@ -219,4 +219,57 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
     expect(mocks.loadArchiveLeaves).toHaveBeenCalledTimes(1)
     expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
   })
+
+  // #297 must1 (T12): 判定→待機→再判定なしでロックを取得すると、待機中に
+  // Pull/AL がロックを取ってもそのままアーカイブロードへ進んでしまい、
+  // Pull とアーカイブロードが並走したり（排他表崩壊）、連続 Archive 操作で
+  // AL が二重起動したりする。待機後に再判定して打ち切ることを直接縛る。
+  it('waitForRehydrate 待機中に isPulling が true になった場合、待機後の再判定でアーカイブロードを開始しない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    // waitForRehydrate 待機中（まだ再判定前）に Pull がロックを取る
+    stores.isPulling.value = true
+
+    resolveRehydrate()
+    await changePromise
+
+    // 再判定でブロックされ、アーカイブロードは開始されない
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.loadArchiveLeaves).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    // ワールド表示自体は判定より前に即座に切り替わっている（push-pull.md 注8）
+    expect(stores.leftWorld.value).toBe('archive')
+  })
+
+  it('waitForRehydrate 待機中に appState.isArchiveLoading が true になった場合（別ペインのアーカイブロード等）、待機後の再判定でアーカイブロードを開始しない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    // 別ペインの handleWorldChange 等が先にアーカイブロードを開始した状態を再現
+    appState.isArchiveLoading = true
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.loadArchiveLeaves).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+  })
 })

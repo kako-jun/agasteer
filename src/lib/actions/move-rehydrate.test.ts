@@ -169,6 +169,34 @@ describe('moveNoteToWorld の rehydrate 待機 (#297 T12 / should5)', () => {
 
     expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
   })
+
+  // #297 must1 (T12): waitForRehydrate() を判定より前に移したことで、待機中に
+  // 別の Pull がロックを取った場合は待機後の判定でそのまま弾かれる（アーカイブ
+  // ロードと並走しない）ことを直接縛る。
+  it('waitForRehydrate 待機中に isPulling が true になった場合、待機後の判定でアーカイブロード（pullArchive）を開始しない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const movePromise = moveNoteToWorld(
+      { id: 'note-1', name: 'n', parentId: null, order: 0 } as never,
+      'archive',
+      'left'
+    )
+
+    await Promise.resolve()
+    await Promise.resolve()
+    // waitForRehydrate 待機中（まだ判定前）に Pull がロックを取る
+    stores.isPulling.value = true
+
+    resolveRehydrate()
+    await movePromise
+
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+  })
 })
 
 describe('moveLeafToWorld の rehydrate 待機 (#297 T12 / should5)', () => {
@@ -205,5 +233,30 @@ describe('moveLeafToWorld の rehydrate 待機 (#297 T12 / should5)', () => {
     )
 
     expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
+  })
+
+  // #297 must1 (T12): moveNoteToWorld と同じ理由（判定を待機の前に移した効果の直接縛り）
+  it('waitForRehydrate 待機中に isPulling が true になった場合、待機後の判定でアーカイブロード（pullArchive）を開始しない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const movePromise = moveLeafToWorld(
+      { id: 'leaf-1', noteId: 'note-1', content: 'c', order: 0 } as never,
+      'archive',
+      'left'
+    )
+
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.isPulling.value = true
+
+    resolveRehydrate()
+    await movePromise
+
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
   })
 })

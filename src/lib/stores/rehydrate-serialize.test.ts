@@ -249,8 +249,10 @@ describe('rehydrateForRepo の例外耐性 (#297 must1/must2)', () => {
     })
     expect(mocks.setCurrentRepo).toHaveBeenNthCalledWith(2, 'repoB')
 
-    // must1: キュー消化後、例外はまとめて reject される（呼び出し元は既に .catch 済み）
-    await expect(promiseA).rejects.toThrow('repoA metadata read failed')
+    // question1: reject するかどうかは最終周回（キュー消化後、最後に適用された
+    // repoB）の成否だけで決まる。repoA の失敗は中間周回として握りつぶされ、
+    // repoB が成功しているため promiseA は reject せず resolve する。
+    await expect(promiseA).resolves.toBeUndefined()
 
     // ゴースト適用の検知: 無関係な後続の rehydrateForRepo('repoD') が、
     // 残留した nextRehydrateKey のせいで余計な repoKey まで適用してしまわないこと
@@ -433,6 +435,15 @@ describe('rehydrateForRepo のガード状態遷移とデータ最終性 (#297 T
 
     // setRehydrating は true→false の1往復のみ。中間で false に戻っていない
     expect(mocks.setRehydrating.mock.calls.map(([v]) => v)).toEqual([true, false])
+
+    // N3: nit8 の中間 skip を直接検証する。setCurrentRepo は repoA・repoC の
+    // 2回呼ばれるが、repoA は setCurrentRepo 完了時点で nextRehydrateKey（repoC）
+    // が既にセットされているため nit8 の早期 return で打ち切られ、
+    // loadNotes/getPersistedMetadata まで到達しない。最終キー repoC 分の
+    // 1回だけが呼ばれる。
+    expect(mocks.setCurrentRepo).toHaveBeenCalledTimes(2)
+    expect(mocks.loadNotes).toHaveBeenCalledTimes(1)
+    expect(mocks.getPersistedMetadata).toHaveBeenCalledTimes(1)
   })
 })
 
