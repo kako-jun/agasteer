@@ -92,6 +92,9 @@ const mocks = vi.hoisted(() => ({
   createBackup: vi.fn(async () => ({ notes: [], leaves: [] })),
   restoreFromBackup: vi.fn(),
   clearAllData: vi.fn(),
+  // #297: 既定は「rehydrate 実行中でない」＝即解決。個別テストで
+  // mockReturnValueOnce により制御可能な Promise に差し替える。
+  waitForRehydrate: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('../stores', () => ({
@@ -109,6 +112,7 @@ vi.mock('../stores', () => ({
   flushAllEditors: mocks.flushAllEditors,
   getActiveEditorPane: mocks.getActiveEditorPane,
   tryRescueStalePush: mocks.tryRescueStalePush,
+  waitForRehydrate: mocks.waitForRehydrate,
 }))
 
 vi.mock('../api', () => ({
@@ -1691,5 +1695,60 @@ describe('pullFromGitHub リポ切替時のスクロールリセット (#147 綻
 
     expect(left.scrollTop).toBe(300)
     expect(right.scrollTop).toBe(150)
+  })
+})
+
+describe('pullFromGitHub / pushToGitHub は rehydrate 完了を待つ (#297)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isArchiveLoading = false
+  })
+
+  it('pullFromGitHub は rehydrate 完了まで canSync 判定・ロック取得を開始しない', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+    // canSync 判定に到達した時点で早期returnさせ、以降の本処理には踏み込ませない
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    const pullPromise = pullFromGitHub(false)
+    await flushTasks()
+
+    expect(mocks.canSync).not.toHaveBeenCalled()
+    expect(stores.isPulling.value).toBe(false)
+
+    resolveRehydrate()
+    await pullPromise
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('pushToGitHub は rehydrate 完了まで canSync 判定・ロック取得を開始しない', async () => {
+    let resolveRehydrate!: () => void
+    mocks.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    const pushPromise = pushToGitHub()
+    await flushTasks()
+
+    expect(mocks.canSync).not.toHaveBeenCalled()
+    expect(stores.isPushing.value).toBe(false)
+
+    resolveRehydrate()
+    await pushPromise
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+    expect(stores.isPushing.value).toBe(false)
   })
 })
