@@ -4,8 +4,8 @@
  */
 
 // #300: stores.svelte.ts 分割後は core-state.svelte.ts から直接読む（循環 import 回避。
-// stores.svelte.ts はこのファイルの initAutoPushProgress を re-export 経由で使うため、
-// stores.svelte.ts を import すると循環になる）
+// store-mutations.ts がこのファイルの initAutoPushProgress を直接 import して呼ぶため、
+// stores.svelte.ts（→ store-mutations.ts を re-export）を import すると循環になる）
 import { leaves, notes, archiveLeaves, archiveNotes, offlineLeafStore } from './core-state.svelte'
 import {
   saveLeaves,
@@ -74,7 +74,8 @@ interface ReadableValue<T> {
 }
 
 /**
- * 進捗追跡を初期化（stores.svelte.tsからの参照を遅延設定）
+ * 進捗追跡を初期化（store-mutations.tsからの呼び出しで遅延設定。循環 import 回避の詳細は
+ * このファイル冒頭のコメント参照）
  */
 export function initAutoPushProgress(isDirty: ReadableValue<boolean>): void {
   // isDirtyの変化を監視して進捗を管理

@@ -70,7 +70,7 @@ vi.mock('../api/media/insert-phase', () => ({
 }))
 
 // #297 T2/T3: setRehydrating だけスパイに差し替える。他の export（notes/leaves 等）は
-// 実物をそのまま通す（stores.svelte.ts 内の他ロジックへの影響を避けるため）。
+// 実物をそのまま通す（rehydrate.svelte.ts 内の他ロジックへの影響を避けるため）。
 vi.mock('./stores.svelte', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./stores.svelte')>()
   return {
@@ -94,7 +94,7 @@ function deferred<T = void>() {
 }
 
 describe('rehydrateForRepo の直列化 (#297)', () => {
-  // #297: rehydrateInFlight / nextRehydrateKey は stores.svelte.ts のモジュール
+  // #297: rehydrateInFlight / nextRehydrateKey は rehydrate.svelte.ts のモジュール
   // スコープ変数のため、テストが assertion 失敗で早期終了しても次のテストへ
   // 「止まったままの rehydrate」を持ち越さないよう、常にゲートを開けて
   // キューを空にしてから終える。

@@ -43,7 +43,7 @@ const PERSISTED_METADATA = {
 // モックの両方から同じインスタンスを参照するため、モジュールスコープに置く）。
 const metadataStore = vstore({ ...EMPTY_METADATA })
 
-// stores.svelte.ts 本体の initStoreEffects() は $effect.root 内の metadata 用
+// persistence-effects.svelte.ts の initStoreEffects() は $effect.root 内の metadata 用
 // $effect が登録直後に一度発火し、その時点の metadata.value で
 // setPersistedMetadata() を呼ぶ。このスパイはその発火を模倣し、事故本体
 // （空 metadata の書き戻し）を直接検知する。
@@ -98,10 +98,10 @@ vi.mock('./data', () => ({
 vi.mock('./stores', () => ({
   initActivityDetection: vi.fn(() => vi.fn()),
   setupBeforeUnloadSave: vi.fn(() => vi.fn()),
-  // 実装（stores.svelte.ts）の $effect.root 内 metadata 用 $effect は登録直後に
-  // 一度発火し、その時点の metadata.value を setPersistedMetadata() に渡す。
+  // 実装（persistence-effects.svelte.ts）の $effect.root 内 metadata 用 $effect は
+  // 登録直後に一度発火し、その時点の metadata.value を setPersistedMetadata() に渡す。
   // ここではその初回発火だけを persistMetadataSpy 経由で模倣する（#295 M1）。
-  // 注: stores.svelte.ts 側の $effect 自体の挙動（isRehydrating ガード等）は
+  // 注: persistence-effects.svelte.ts 側の $effect 自体の挙動（isRehydrating ガード等）は
   // このテストの範囲外。本物の初回発火は microtask 遅延だが、ここでは
   // initStoreEffects() が呼ばれた時点の metadata.value で同期に模倣している。
   initStoreEffects: vi.fn(() => {

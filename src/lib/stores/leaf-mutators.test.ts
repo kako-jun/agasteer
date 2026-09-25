@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 
 import type { Leaf, Note } from '../types'
 
-// stores.svelte.ts はトップレベルで storage モジュールを読み、その先で localStorage に
+// core-state.svelte.ts はトップレベルで storage モジュールを読み、その先で localStorage に
 // 触れるためスタブしてから動的 import する。
 const store = new Map<string, string>()
 ;(globalThis as any).localStorage = {

@@ -1,12 +1,15 @@
 /**
  * リポ切替時のストア再水和（rehydrate）処理（#297）
  *
- * stores.svelte.ts から分離（#297 nit11: 1モジュール ≈400行のハウスルール超過対応）。
- * このモジュールは stores.svelte.ts の一部（notes/leaves 等のストアと
- * setLastPushedSnapshot/clearAllChanges/setRehydrating）に依存する一方向の
- * import のみを持ち、stores.svelte.ts 側からこのモジュールへの import は存在しない
- * （循環 import 回避）。既存の import 元を壊さないよう '../stores' バレル
- * （index.ts）から re-export する。
+ * 元は stores.svelte.ts から分離（#297 nit11: 1モジュール ≈400行のハウスルール
+ * 超過対応）。その後 #300 で stores.svelte.ts 自体が god-file 解消のため分割され、
+ * 現在このモジュールが依存する notes/leaves 等のストアは core-state.svelte.ts に、
+ * setLastPushedSnapshot/clearAllChanges は dirty-tracking.ts に、setRehydrating は
+ * persistence-effects.svelte.ts にある。個別 import ではなく、既存の import 元
+ * （'./stores.svelte'）を壊さないよう分割後の互換バレル経由でまとめて読む一方向の
+ * import のみを持ち、逆方向（core-state.svelte.ts 等からこのモジュールへの import）
+ * は存在しない（循環 import 回避）。同じ理由で '../stores' バレル（index.ts）からも
+ * re-export する。
  */
 
 import {
