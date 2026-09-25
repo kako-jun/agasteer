@@ -812,8 +812,8 @@ export function initApp(deps: InitAppDeps): () => void {
     const isConfigured = loadedSettings.token && loadedSettings.repoName
     if (isConfigured) {
       // #158: IndexedDB / localStorage に保持したキャッシュをロードする。
-      // notes / leaves は IndexedDB、metadata / pushCount / dirty は per-repo
-      // localStorage slot から復元する。
+      // notes / leaves は IndexedDB、metadata も IndexedDB（#295: agasteer/metadata DB）、
+      // pushCount / dirty は per-repo localStorage slot から復元する。
       const loadPersistedStartupCache = async (): Promise<PersistedStartupCache> => {
         // 保留中の変更を先に IndexedDB へ保存
         await flushPendingSaves()
