@@ -43,27 +43,11 @@ import { pullArchive, translateGitHubMessage } from '../api'
 import { generateUniqueName } from '../utils'
 import { appState, appActions, getWorldForPane } from '../app-state.svelte'
 import { _ } from '../i18n'
-import { runPendingRepoSyncIfIdle } from '../sync/repo-sync-queue'
-
-async function runPendingRepoSyncAfterArchiveLoad(): Promise<void> {
-  const hasValidConfig = !!(settings.value.token && settings.value.repoName)
-  await runPendingRepoSyncIfIdle(
-    {
-      isPulling: isPulling.value,
-      // #206: 背景 Push 中も busy として扱う
-      isPushing: isPushing.value || isPushingBackground.value,
-      isArchiveLoading: appState.isArchiveLoading,
-    },
-    hasValidConfig,
-    appState.pendingRepoSync,
-    () => {
-      appState.pendingRepoSync = false
-    },
-    async () => {
-      await appActions.pullFromGitHub(false)
-    }
-  )
-}
+// #297 S-c: 以前はここに runPendingRepoSyncIfIdle の複製
+// （runPendingRepoSyncAfterArchiveLoad。waitForRehydrate も pendingRehydrateRepo の
+// rehydrate もしない簡略版）があったが、git-pull.ts の実装（正本）に一本化した
+// （git-push.ts / pane-navigation.svelte.ts と同じ import 形）。
+import { runPendingRepoSyncIfIdle } from './git-pull'
 
 /**
  * ノートをワールド間で移動する（Home ⇔ Archive）
@@ -139,7 +123,7 @@ export async function moveNoteToWorld(
         return
       } finally {
         appState.isArchiveLoading = false
-        await runPendingRepoSyncAfterArchiveLoad()
+        await runPendingRepoSyncIfIdle()
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）
@@ -435,7 +419,7 @@ export async function moveLeafToWorld(
         return
       } finally {
         appState.isArchiveLoading = false
-        await runPendingRepoSyncAfterArchiveLoad()
+        await runPendingRepoSyncIfIdle()
       }
     } else {
       // GitHub設定がない場合は到達しないはず（ガラス効果でブロックされる）

@@ -102,7 +102,10 @@ vi.mock('../i18n', () => ({
   _: { subscribe: (run: (t: (k: string) => string) => void) => (run((k) => k), () => {}) },
 }))
 
-vi.mock('../sync/repo-sync-queue', () => ({
+// #297 S-c: move.ts は runPendingRepoSyncIfIdle の複製
+// （runPendingRepoSyncAfterArchiveLoad）を廃止し、git-pull.ts の実装（正本）を
+// 直接 import するようになった。
+vi.mock('./git-pull', () => ({
   runPendingRepoSyncIfIdle: mocks.runPendingRepoSyncIfIdle,
 }))
 
