@@ -1,18 +1,22 @@
 /**
  * ストアの基礎状態（#300）
  *
- * ノート/リーフ/アーカイブ/ペイン/同期フラグ等、アプリ全体で共有する $state の
+ * ノート/リーフ/アーカイブ/同期フラグ等、アプリ全体で共有する $state の
  * 宣言そのものだけを置くモジュール。他の stores/ サブモジュール（dirty-tracking,
- * store-mutations, persistence-effects, repo-switch-reset）はここから読むだけの
- * 一方向 import に統一し、このファイル自身は他の stores/ サブモジュールを
+ * store-mutations, persistence-effects, repo-switch-reset, pane-state）はここから
+ * 読むだけの一方向 import に統一し、このファイル自身は他の stores/ サブモジュールを
  * import しない（循環 import 回避の基盤レイヤー）。
+ *
+ * 左右ペインの表示状態（leftNote/rightNote/leftLeaf/rightLeaf/leftView/rightView/
+ * leftInitialLine/rightInitialLine）は pane-state.svelte.ts に分離されている
+ * （PR #309 レビュー nit: このファイルが400行ハウスルールを超過したため）。
  *
  * #295/#297 分離済みの metadata 永続化・rehydrate 処理、#300 で分離した
  * dirty-tracking / store-mutations / persistence-effects / repo-switch-reset は
  * このファイルの $state を getter/setter 経由で参照する。
  */
 
-import type { Settings, Note, Leaf, Metadata, View, WorldType } from '../types'
+import type { Settings, Note, Leaf, Metadata, WorldType } from '../types'
 import type { Pane } from '../navigation'
 // 循環参照回避: data/index.tsではなく、直接storage/metadata-storageからインポート
 import {
@@ -239,87 +243,9 @@ export const lastStaleCheckTime = {
   },
 }
 
-// ペイン状態ストア
-let _leftNote = $state<Note | null>(null)
-export const leftNote = {
-  get value() {
-    return _leftNote
-  },
-  set value(v: Note | null) {
-    _leftNote = v
-  },
-}
-
-let _rightNote = $state<Note | null>(null)
-export const rightNote = {
-  get value() {
-    return _rightNote
-  },
-  set value(v: Note | null) {
-    _rightNote = v
-  },
-}
-
-let _leftLeaf = $state<Leaf | null>(null)
-export const leftLeaf = {
-  get value() {
-    return _leftLeaf
-  },
-  set value(v: Leaf | null) {
-    _leftLeaf = v
-  },
-}
-
-let _rightLeaf = $state<Leaf | null>(null)
-export const rightLeaf = {
-  get value() {
-    return _rightLeaf
-  },
-  set value(v: Leaf | null) {
-    _rightLeaf = v
-  },
-}
-
-let _leftView = $state<View>('home')
-export const leftView = {
-  get value() {
-    return _leftView
-  },
-  set value(v: View) {
-    _leftView = v
-  },
-}
-
-let _rightView = $state<View>('home')
-export const rightView = {
-  get value() {
-    return _rightView
-  },
-  set value(v: View) {
-    _rightView = v
-  },
-}
-
-// 検索結果クリック時に直接ジャンプする行番号（0 = ジャンプなし）
-let _leftInitialLine = $state<number>(0)
-export const leftInitialLine = {
-  get value() {
-    return _leftInitialLine
-  },
-  set value(v: number) {
-    _leftInitialLine = v
-  },
-}
-
-let _rightInitialLine = $state<number>(0)
-export const rightInitialLine = {
-  get value() {
-    return _rightInitialLine
-  },
-  set value(v: number) {
-    _rightInitialLine = v
-  },
-}
+// ペイン状態ストア（leftNote/rightNote/leftLeaf/rightLeaf/leftView/rightView/
+// leftInitialLine/rightInitialLine）は pane-state.svelte.ts へ分離済み
+// （PR #309 レビュー nit: 400行ハウスルール対応）
 
 // 同期状態ストア
 let _isPulling = $state<boolean>(false)

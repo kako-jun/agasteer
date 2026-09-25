@@ -3,8 +3,8 @@
  *
  * stores.svelte.ts から分離。ノート/リーフ/アーカイブの更新と、左右ペインに
  * 表示中のリーフ/ノートへの in-place field mutation をまとめる。
- * core-state.svelte.ts / dirty-tracking.ts / auto-save.svelte.ts への一方向
- * import のみを持つ（循環 import 回避）。
+ * core-state.svelte.ts / pane-state.svelte.ts / dirty-tracking.ts /
+ * auto-save.svelte.ts への一方向 import のみを持つ（循環 import 回避）。
  *
  * 注意: applyLeafFieldUpdate 等はオブジェクト全体の再代入ではなく、公開 getter
  * （leftLeaf.value 等）で得た $state プロキシの参照に対して Object.assign する。
@@ -15,18 +15,8 @@
 
 import type { Settings, Note, Leaf } from '../types'
 import { saveSettings } from '../data/storage'
-import {
-  settings,
-  notes,
-  leaves,
-  archiveNotes,
-  archiveLeaves,
-  leftNote,
-  rightNote,
-  leftLeaf,
-  rightLeaf,
-  isDirty,
-} from './core-state.svelte'
+import { settings, notes, leaves, archiveNotes, archiveLeaves, isDirty } from './core-state.svelte'
+import { leftNote, rightNote, leftLeaf, rightLeaf } from './pane-state.svelte'
 import { updateHomeDirtyIds, updateArchiveDirtyIds } from './dirty-tracking'
 import {
   scheduleLeavesSave,

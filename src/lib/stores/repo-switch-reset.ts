@@ -1,8 +1,8 @@
 /**
  * リポジトリ切替時の状態リセット（#300）
  *
- * stores.svelte.ts から分離。core-state.svelte.ts / dirty-tracking.ts への一方向
- * import のみを持つ（循環 import 回避）。
+ * stores.svelte.ts から分離。core-state.svelte.ts / pane-state.svelte.ts /
+ * dirty-tracking.ts への一方向 import のみを持つ（循環 import 回避）。
  */
 
 import { clearArchiveData } from '../data/storage'
@@ -16,13 +16,8 @@ import {
   lastStaleCheckTime,
   leftWorld,
   rightWorld,
-  leftNote,
-  rightNote,
-  leftLeaf,
-  rightLeaf,
-  leftView,
-  rightView,
 } from './core-state.svelte'
+import { leftNote, rightNote, leftLeaf, rightLeaf, leftView, rightView } from './pane-state.svelte'
 import { clearAllChanges, resetPushedSnapshots } from './dirty-tracking'
 
 /**
