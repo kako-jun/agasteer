@@ -367,8 +367,10 @@ describe('Push トーストの同一文言連続表示 (#308)', () => {
   })
 
   it('同一文言の sticky（先行 showPushToast(X) 後に showStickyPushToast(X)）が旧タイマーで消えない', () => {
-    // 回帰核心: sticky 側も文言が同じだと旧タイマーが「自分のトースト」と誤認し、
-    // 自動消滅しないはずの sticky を2秒後に消してしまっていた（#308）。
+    // 安全網: sticky 側も文言が同じだと、旧タイマーが「自分のトースト」と誤認すれば
+    // 自動消滅しないはずの sticky を（仮に起きれば）2秒後に消してしまう。本番で同一
+    // 文言の汎用トースト後に sticky が出る経路は現状ないが、showStickyPushToast が
+    // 世代を更新して守っていることを検証する（#308）。
     showPushToast('toast.pushInProgress')
     showStickyPushToast('toast.pushInProgress')
 

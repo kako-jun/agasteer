@@ -42,7 +42,8 @@ export const PUSH_COUNTDOWN_MIN_HOLD_MS = 400
 
 /**
  * Push トースト状態への書き込み世代（displayPushToast / showStickyPushToast /
- * clearPushToast が pushToastState.value を書き換えるたびにインクリメント）。
+ * clearPushToast が表示を差し替えるたびにインクリメント。自動消滅タイマー自身
+ * が消す書き込みでは進めない）。
  *
  * displayPushToast の自動消滅タイマーは、自分が書き込んだ時点の世代を保持し、
  * 発火時に最新世代と一致するときだけ状態を触る（後勝ち）。メッセージ文字列の
