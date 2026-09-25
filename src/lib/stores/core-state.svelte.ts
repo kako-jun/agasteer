@@ -3,13 +3,16 @@
  *
  * ノート/リーフ/アーカイブ/同期フラグ等、アプリ全体で共有する $state の
  * 宣言そのものだけを置くモジュール。他の stores/ サブモジュール（dirty-tracking,
- * store-mutations, persistence-effects, repo-switch-reset, pane-state）はここから
+ * store-mutations, persistence-effects, repo-switch-reset）はここから
  * 読むだけの一方向 import に統一し、このファイル自身は他の stores/ サブモジュールを
  * import しない（循環 import 回避の基盤レイヤー）。
  *
  * 左右ペインの表示状態（leftNote/rightNote/leftLeaf/rightLeaf/leftView/rightView/
  * leftInitialLine/rightInitialLine）は pane-state.svelte.ts に分離されている
  * （PR #309 レビュー nit: このファイルが400行ハウスルールを超過したため）。
+ * pane-state.svelte.ts はこのファイルと同様に他の stores/ サブモジュールを
+ * import しない独立した基盤レイヤーであり、dirty-tracking 等と異なりこのファイルを
+ * import しない（このファイルの $state を参照しない）。
  *
  * #295/#297 分離済みの metadata 永続化・rehydrate 処理、#300 で分離した
  * dirty-tracking / store-mutations / persistence-effects / repo-switch-reset は

@@ -442,7 +442,7 @@ agasteer/
 
 **状態管理:**
 
-- `stores/core-state.svelte.ts` ほか: Svelte 5 rune ベースの状態管理（notes, leaves, settings, isDirty等）。#300 で `stores.svelte.ts`（約930行）を core-state/dirty-tracking/store-mutations/persistence-effects/repo-switch-reset に分割。`stores.svelte.ts` は互換 re-export バレルとして存置（stores/index.ts 経由でない直接importを壊さないため）
+- `stores/core-state.svelte.ts` ほか: Svelte 5 rune ベースの状態管理（notes, leaves, settings, isDirty等）。#300 で `stores.svelte.ts`（約930行）を core-state/pane-state/dirty-tracking/store-mutations/persistence-effects/repo-switch-reset に分割。`stores.svelte.ts` は互換 re-export バレルとして存置（stores/index.ts 経由でない直接importを壊さないため）
 - `stores/editor-registry.ts`: pane→composition flush関数のレジストリ（#186、push直前の強制flush用）
 - `app-state.svelte.ts`: 共有リアクティブ状態（Svelte 5 runes、ワールドヘルパー、onMount初期化）
 
@@ -627,7 +627,7 @@ App.svelteでleftView/rightViewに応じてHomeView, NoteView, EditorView, Previ
 
 **注**: Pull/Push トーストの状態（旧 `toast`）は lib/stores/ ではなく `lib/ui/push-toast.svelte.ts` の `pushToastState` で管理する。
 
-**$derived() ベースの派生状態:**
+**getter ベースの派生状態（core-state.svelte.ts）:**
 
 - rootNotes（ルート直下ノート、order順ソート）
 - githubConfigured（token/repoName 設定済みかどうか）
