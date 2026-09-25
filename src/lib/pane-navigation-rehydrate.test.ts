@@ -79,6 +79,10 @@ const mocks = vi.hoisted(() => ({
   // 再判定で読めることの検証に使う）。
   getWorldForPane: vi.fn(),
   runPendingRepoSyncIfIdle: vi.fn(async () => {}),
+  // #297 N2/N3/Q1: 戻し処理（Pull/Push理由の再判定）のgoHome呼び出し有無・
+  // showPullToastでの案内を検証するために公開する。
+  goHome: vi.fn(),
+  showPullToast: vi.fn(),
 }))
 
 vi.mock('./stores', () => ({
@@ -96,21 +100,21 @@ vi.mock('./app-state.svelte', () => ({
   derivedState: { currentOfflineLeaf: null },
   getNotesForPane: vi.fn(() => []),
   getLeavesForPane: vi.fn(() => []),
-  // #297 N-a/S-a: handleWorldChange の再判定・resumeArchiveLoadIfPending が使う。
+  // #297 N-a: handleWorldChange の再判定が使う。
   // 既定は両ペインとも 'home'（個別テストで上書き）。
   getWorldForPane: mocks.getWorldForPane,
 }))
 
 vi.mock('./ui', () => ({
   showPushToast: vi.fn(),
-  showPullToast: vi.fn(),
+  showPullToast: mocks.showPullToast,
   confirmAsync: vi.fn(),
   getBreadcrumbs: vi.fn(() => []),
   handlePaneScroll: vi.fn(),
 }))
 
 vi.mock('./navigation', () => ({
-  goHome: vi.fn(),
+  goHome: mocks.goHome,
   selectNote: vi.fn(),
   switchPane: vi.fn(),
   togglePreview: vi.fn(),
@@ -267,6 +271,110 @@ describe('handleWorldChange の rehydrate 待機 (#297 T12 / should5)', () => {
     // ワールド表示は判定より前に一度 archive へ切り替わるが（push-pull.md 注8）、
     // Pull が理由で未ロードのまま打ち切られたので、切替前（home）に戻される
     expect(stores.leftWorld.value).toBe('home')
+    // #297 N3: 黙って戻さず、案内トーストを1回出す
+    expect(mocks.showPullToast).toHaveBeenCalledWith('toast.archiveOpenBlocked')
+  })
+
+  // #297 N2: 戻し処理は右ペインでも同様に動く（左ペイン専用のロジックでないことを縛る）
+  it('waitForRehydrate 待機中に isPulling が true になった場合、right pane でも rightWorld だけが元に戻る', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+    // 左ペインは既に archive 表示（この操作の対象外）にしておき、触られないことを縛る
+    stores.leftWorld.value = 'archive'
+
+    const changePromise = handleWorldChange('archive', 'right')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.isPulling.value = true
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(stores.rightWorld.value).toBe('home')
+    // 対象外の左ペインには触らない
+    expect(stores.leftWorld.value).toBe('archive')
+  })
+
+  // #297 N2: Pull だけでなく isPushing が理由でも同じ戻し処理が発火する
+  it('waitForRehydrate 待機中に isPushing が true になった場合、待機後の再判定でアーカイブロードを開始せず、ペインのワールドが元に戻る', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.isPushing.value = true
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(stores.leftWorld.value).toBe('home')
+  })
+
+  // #297 N2: 背景 Push（isPushingBackground）が理由でも同じ戻し処理が発火する
+  it('waitForRehydrate 待機中に isPushingBackground が true になった場合、待機後の再判定でアーカイブロードを開始せず、ペインのワールドが元に戻る', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    stores.isPushingBackground.value = true
+
+    resolveRehydrate()
+    await changePromise
+
+    expect(mocks.loadArchiveNotes).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(stores.leftWorld.value).toBe('home')
+  })
+
+  // #297 Q1: 待機中にペインが archive の外（メディア画面遷移等）へ既に移動していた場合、
+  // 戻し処理の goHome で上書きしない
+  it('waitForRehydrate 待機中にペインが media 表示へ遷移していた場合、Pull 理由の戻し処理で goHome によって上書きされない', async () => {
+    let resolveRehydrate!: () => void
+    stores.waitForRehydrate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveRehydrate = resolve
+      })
+    )
+
+    const changePromise = handleWorldChange('archive', 'left')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    // 待機中にユーザーがメディアライブラリへ遷移した（archive の外へ出る操作）
+    stores.leftView.value = 'media'
+    stores.isPulling.value = true
+
+    resolveRehydrate()
+    await changePromise
+
+    // ワールド値は戻すが、view は home ではないため goHome を呼ばない
+    expect(stores.leftWorld.value).toBe('home')
+    expect(stores.leftView.value).toBe('media')
+    // goHome はワールド切替直後の初回分だけで、戻し処理からは呼ばれない
+    expect(mocks.goHome).toHaveBeenCalledTimes(1)
+    expect(mocks.goHome).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'left')
   })
 
   it('waitForRehydrate 待機中に appState.isArchiveLoading が true になった場合（別ペインのアーカイブロード等）、待機後の再判定でアーカイブロードを開始せず、ワールド表示も戻さない', async () => {
