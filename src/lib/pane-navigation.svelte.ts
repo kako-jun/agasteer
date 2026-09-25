@@ -54,6 +54,7 @@ import {
   getLeavesForWorld as _getLeavesForWorld,
   setArchiveBaseline,
   scheduleOfflineSave,
+  waitForRehydrate,
 } from './stores'
 import {
   appActions,
@@ -393,6 +394,12 @@ export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
 
   if (world === 'archive' && !isArchiveLoaded.value && !appState.isArchiveLoading) {
     if (settings.value.token && settings.value.repoName) {
+      // #297 should5: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+      // 先に完了を待つ。待たずに進むと、IndexedDB の切替（setCurrentRepo）が
+      // 途中の状態で loadArchiveCacheFromDB/pullArchive が走り、旧/新どちらの
+      // DB を読むか取り違える窓ができる。
+      await waitForRehydrate()
+
       // まずIndexedDBキャッシュから読み出し
       const { hasCachedData } = await loadArchiveCacheFromDB()
 

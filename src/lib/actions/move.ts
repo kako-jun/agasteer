@@ -29,6 +29,7 @@ import {
   archiveLeafStatsStore,
   setArchiveBaseline,
   applyLeafFieldUpdate,
+  waitForRehydrate,
 } from '../stores'
 import {
   saveNotes,
@@ -87,6 +88,12 @@ export async function moveNoteToWorld(
   if (targetWorld === 'archive' && !isArchiveLoaded.value) {
     const $settings = settings.value
     if ($settings.token && $settings.repoName) {
+      // #297 should5: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+      // 先に完了を待つ。待たずに進むと、IndexedDB の切替（setCurrentRepo）が
+      // 途中の状態で pullArchive の保存処理（saveArchiveNotes/saveArchiveLeaves）が
+      // 走り、旧/新どちらの DB に書くか取り違える窓ができる。
+      await waitForRehydrate()
+
       appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
@@ -376,6 +383,12 @@ export async function moveLeafToWorld(
   if (targetWorld === 'archive' && !isArchiveLoaded.value) {
     const $settings = settings.value
     if ($settings.token && $settings.repoName) {
+      // #297 should5: rehydrateForRepo（リポ切替の直列化キュー含む）が実行中なら
+      // 先に完了を待つ。待たずに進むと、IndexedDB の切替（setCurrentRepo）が
+      // 途中の状態で pullArchive の保存処理（saveArchiveNotes/saveArchiveLeaves）が
+      // 走り、旧/新どちらの DB に書くか取り違える窓ができる。
+      await waitForRehydrate()
+
       appState.isArchiveLoading = true
       archiveLeafStatsStore.reset()
       try {
