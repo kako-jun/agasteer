@@ -283,7 +283,7 @@ vi.mock('svelte', () => ({ tick: vi.fn(async () => {}) }))
 vi.mock('svelte/store', () => ({ get: vi.fn(() => (k: string) => k) }))
 
 const { pullFromGitHub } = await import('./git-pull')
-const { restoreStateFromUrl } = await import('../pane-navigation.svelte')
+const { restoreStateFromUrl, updateUrlFromState } = await import('../pane-navigation.svelte')
 // git-pull.ts の onPriorityComplete/onCancel は appActions.restoreStateFromUrl 経由で
 // 呼ぶ。本物の restoreStateFromUrl（pane-navigation.svelte.ts）に配線する。
 appActionsMock.restoreStateFromUrl = restoreStateFromUrl
@@ -432,6 +432,86 @@ describe('#314 M1/S3: pullFromGitHub × restoreStateFromUrl のデッドロッ�
     }
 
     await expect(pullFromGitHub(true, onCancel)).resolves.toBeUndefined()
+
+    expect(syncFlags.isPulling.value).toBe(false)
+    expect(mocks.executePull).not.toHaveBeenCalled()
+    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
+    expect(appState.isArchiveLoading).toBe(false)
+  })
+
+  // #314 S1: cancel/push-first 分岐は onCancel/pushToGitHub を待つ前に isPulling を
+  // 早期解放する。その解放後、別の Pull がこのロックを取ることがある。早期解放した
+  // 側の末尾 finally が無条件に isPulling=false へ戻すと、その間に他の Pull が
+  // 取ったロックを誤って消してしまう（lockReleased ガードが無いとここが壊れる）。
+  it('cancel分岐で早期解放した後に別のPullがロックを取っても、onCancel完了後のfinallyがそのロックを誤って消さない', async () => {
+    // Pull A: dirty → cancel（isPulling を先に解放してから onCancel を呼ぶ）
+    stores.isDirty.value = true
+    mocks.executeStaleCheck.mockResolvedValueOnce({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+    mocks.choiceAsync.mockResolvedValueOnce('cancel')
+
+    let resolveOnCancel!: () => void
+    const onCancel = () =>
+      new Promise<void>((resolve) => {
+        resolveOnCancel = resolve
+      })
+
+    const pullA = pullFromGitHub(false, onCancel)
+
+    // isPulling=true→false の遷移はすべて mock で即解決する Promise 越しのため
+    // マイクロタスクだけで完結し、実タイマー間隔でポーリングする vi.waitFor では
+    // 一瞬の true を取りこぼしうる（false→true→false の間に一度もポーリングが
+    // 挟まらない可能性がある）。onCancel は cancel 分岐が isPulling を解放した
+    // 直後・同期的に呼ばれるため、resolveOnCancel が代入されたことを待てば
+    // 「ロックは既に解放済み」を確実に確認できる（true の取りこぼしを気にしなくてよい）。
+    await vi.waitFor(() => {
+      expect(typeof resolveOnCancel).toBe('function')
+    })
+    expect(syncFlags.isPulling.value).toBe(false)
+
+    // A の onCancel がまだ pending の間に、別の Pull B が来てロックを取る
+    // （B は executeStaleCheck を永久に pending にして、ロックを持ったまま止める）。
+    stores.isDirty.value = false
+    mocks.executeStaleCheck.mockReturnValueOnce(new Promise(() => {}))
+    const pullB = pullFromGitHub(false)
+
+    await vi.waitFor(() => {
+      expect(syncFlags.isPulling.value).toBe(true)
+    })
+
+    // A の onCancel を完了させる。lockReleased ガードがあれば、A の finally は
+    // isPulling に触らない（触ると B が持っているロックが消えてしまう）。
+    resolveOnCancel()
+    await pullA
+
+    // B はまだ実行中（executeStaleCheck が pending のまま）なので、ロックは
+    // true のまま保たれているはず。
+    expect(syncFlags.isPulling.value).toBe(true)
+
+    void pullB
+  })
+
+  // #314 S5: 起動時（isInitialStartup=true）の分岐だけでなく、通常時（Pull(overwrite)/
+  // Push first/Cancel の3択）の Cancel 分岐でも同じ理由（先に isPulling を解放してから
+  // onCancel を呼ぶ）でデッドロックしないことを固定する。
+  it('onCancel（通常時キャンセル分岐、await する経路）: isPulling を解放してから呼ぶため、onCancel が本物の restoreStateFromUrl を await してもデッドロックしない', async () => {
+    stores.isDirty.value = true
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+    mocks.choiceAsync.mockResolvedValue('cancel')
+    setArchiveUrl()
+
+    const onCancel = async () => {
+      await restoreStateFromUrl(true)
+    }
+
+    await expect(pullFromGitHub(false, onCancel)).resolves.toBeUndefined()
 
     expect(syncFlags.isPulling.value).toBe(false)
     expect(mocks.executePull).not.toHaveBeenCalled()

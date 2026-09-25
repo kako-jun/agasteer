@@ -113,6 +113,12 @@ export async function pullFromGitHub(
 
   // 即座にロック取得（この後の非同期処理中にPushが開始されるのを防止）
   isPulling.value = true
+  // #314 S1: キャンセル/push-first 分岐は onCancel/pushToGitHub を待つ前に
+  // isPulling を早期解放する（M1: デッドロック回避）。その解放後、別の Pull が
+  // このロックを取ることがあるため、末尾の finally は「自分がまだロックを
+  // 持っている場合だけ」解放する。無条件に false へ戻すと、その間に他の Pull が
+  // 取ったロックを消してしまう窓ができる。
+  let lockReleased = false
   // #147 綻び2: この Pull がリポ切替起因かを、直後にフラグが落ちる前に控える。
   // repoChangePending は handleSettingsChange の repo 切替検知でのみ true になり、
   // 通常 pull（F5・同期・deep-link 復元・起動時）では false のため、この控えは
@@ -176,6 +182,7 @@ export async function pullFromGitHub(
           // デッドロックする。Push-first 分岐（下）と同様に、待たれる側を先に
           // 解放してから待つ側を呼ぶ。
           isPulling.value = false
+          lockReleased = true
           await onCancel?.()
           return
         }
@@ -191,6 +198,7 @@ export async function pullFromGitHub(
         if (choice === 'push') {
           // Push first: isPullingロックを解放してPush→Pull
           isPulling.value = false
+          lockReleased = true
           await appActions.pushToGitHub()
           // Push後に再度Pull（再帰呼び出し）
           return pullFromGitHub(false, onCancel)
@@ -198,6 +206,7 @@ export async function pullFromGitHub(
           // #314 M1: 同上の理由（この分岐も Pull しないと確定しているため、待たれる
           // 側の isPulling を先に解放してから onCancel を呼ぶ）。
           isPulling.value = false
+          lockReleased = true
           await onCancel?.()
           return
         }
@@ -440,7 +449,12 @@ export async function pullFromGitHub(
     appState.isLoadingUI = false
     pullProgressStore.reset()
   } finally {
-    isPulling.value = false
+    // #314 S1: 上の cancel/push-first 分岐で既に早期解放済み（lockReleased）なら、
+    // ここでは触らない。無条件に false へ戻すと、早期解放後に別の Pull が取った
+    // ロックをここで消してしまう（このロックを持っていないのに解放する）窓がある。
+    if (!lockReleased) {
+      isPulling.value = false
+    }
     await runPendingRepoSyncIfIdle()
   }
 }
