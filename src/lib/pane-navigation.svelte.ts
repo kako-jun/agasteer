@@ -336,8 +336,6 @@ export function handleDisabledPushClick(reason: string, pushDisabledReason: stri
 // ========================================
 // World switching / Archive / Restore
 // ========================================
-// #301: アーカイブロード本体（loadArchiveCacheFromDB / performArchiveLoad）は
-// archive-load.svelte.ts へ抽出済み。
 
 export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
   const currentPaneWorld = pane === 'left' ? leftWorld.value : rightWorld.value
