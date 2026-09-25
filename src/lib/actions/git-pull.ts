@@ -311,7 +311,7 @@ export async function pullFromGitHub(
         // 例外を投げる経路（M-1: 例えば IndexedDB reject）では未処理の Promise
         // rejection になる。ここで明示的に catch してログに落とす。
         void appActions
-          .restoreStateFromUrl(false)
+          .restoreStateFromUrl()
           .catch((e) => console.error('restoreStateFromUrl failed:', e))
       },
     }
@@ -424,7 +424,7 @@ export async function pullFromGitHub(
           appActions.rebuildLeafStats(backup.leaves, backup.notes)
           // #314 S-6: 同上（await しないため、例外経路は明示的に catch する）。
           void appActions
-            .restoreStateFromUrl(false)
+            .restoreStateFromUrl()
             .catch((e) => console.error('restoreStateFromUrl failed:', e))
           appState.isFirstPriorityFetched = true
         } catch (restoreError) {

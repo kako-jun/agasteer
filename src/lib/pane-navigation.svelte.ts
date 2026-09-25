@@ -755,15 +755,12 @@ function resolveLegacyUrlParams(params: URLSearchParams) {
  * #314 M-1: 本体は try/finally で包む。旧形式 URL の早期 return も、
  * waitUntilArchiveReady が IndexedDB reject 等で例外を投げる経路も、必ず finally を
  * 通る。finally では「今も最新の世代である呼び出し」だけが
- * appState.isRestoringFromUrl を false に戻す（alreadyRestoring な呼び出しは
- * 元々このフラグの生死を管理しない側なので触らない。古い世代の呼び出しが
- * finally に来ても、既に後続の呼び出しが管理しているフラグを誤って倒さない）。
+ * appState.isRestoringFromUrl を false に戻す（古い世代の呼び出しが finally に
+ * 来ても、既に後続の呼び出しが管理しているフラグを誤って倒さない）。
  */
-export async function restoreStateFromUrl(alreadyRestoring = false) {
+export async function restoreStateFromUrl() {
   const gen = urlRestore.beginRestoreGeneration()
-  if (!alreadyRestoring) {
-    appState.isRestoringFromUrl = true
-  }
+  appState.isRestoringFromUrl = true
   try {
     const params = new URLSearchParams(window.location.search)
     let leftPath = params.get('left')
@@ -813,7 +810,7 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
       rightWorld.value = leftWorld.value
     }
   } finally {
-    if (!alreadyRestoring && urlRestore.isCurrentRestoreGeneration(gen)) {
+    if (urlRestore.isCurrentRestoreGeneration(gen)) {
       appState.isRestoringFromUrl = false
     }
   }

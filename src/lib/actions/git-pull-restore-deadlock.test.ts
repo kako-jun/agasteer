@@ -192,7 +192,7 @@ const appActionsMock = vi.hoisted(
       rebuildLeafStats: vi.fn(),
       getEditorView: vi.fn(() => ({ focusEditor: vi.fn() })),
     }) as unknown as {
-      restoreStateFromUrl: (alreadyRestoring?: boolean) => Promise<void>
+      restoreStateFromUrl: () => Promise<void>
       pushToGitHub: () => Promise<void>
       resetLeafStats: () => void
       rebuildLeafStats: () => void
@@ -349,7 +349,7 @@ describe('#314 M1/S3: pullFromGitHub × restoreStateFromUrl のデッドロッ�
     mocks.executePull.mockImplementation(async (_settings: unknown, options: any) => {
       options.onStructure([], { version: 1, notes: {}, leaves: {}, pushCount: 0 }, [])
       // 実物と同じく onPriorityComplete は await されない。この呼び出しの中で
-      // appActions.restoreStateFromUrl(true) が発火する（onPriorityComplete 実装）。
+      // appActions.restoreStateFromUrl() が発火する（onPriorityComplete 実装）。
       options.onPriorityComplete()
       return new Promise((resolve) => {
         resolveExecutePull = resolve
@@ -371,7 +371,7 @@ describe('#314 M1/S3: pullFromGitHub × restoreStateFromUrl のデッドロッ�
     expect(syncFlags.isPulling.value).toBe(true)
     expect(appState.isArchiveLoading).toBe(false)
     expect(mocks.pullArchive).not.toHaveBeenCalled()
-    // #314 Q1: onPriorityComplete は appActions.restoreStateFromUrl(false) を
+    // #314 Q1: onPriorityComplete は appActions.restoreStateFromUrl() を
     // 発火させた直後にこの関数へ戻る（restoreStateFromUrl 自身は archive 待機で
     // まだ pending）。以前は isInitialStartup 分岐だけ、この直後に
     // isRestoringFromUrl を手動で false へ戻していた。ここではまだ true のままで
@@ -425,10 +425,10 @@ describe('#314 M1/S3: pullFromGitHub × restoreStateFromUrl のデッドロッ�
     mocks.choiceAsync.mockResolvedValue('cancel')
     setArchiveUrl()
 
-    // applyPersistedStartupCache 相当: onCancel は本物の restoreStateFromUrl(true) を
+    // applyPersistedStartupCache 相当: onCancel は本物の restoreStateFromUrl() を
     // await する（これが M1 のデッドロック経路そのもの）。
     const onCancel = async () => {
-      await restoreStateFromUrl(true)
+      await restoreStateFromUrl()
     }
 
     await expect(pullFromGitHub(true, onCancel)).resolves.toBeUndefined()
@@ -508,7 +508,7 @@ describe('#314 M1/S3: pullFromGitHub × restoreStateFromUrl のデッドロッ�
     setArchiveUrl()
 
     const onCancel = async () => {
-      await restoreStateFromUrl(true)
+      await restoreStateFromUrl()
     }
 
     await expect(pullFromGitHub(false, onCancel)).resolves.toBeUndefined()
