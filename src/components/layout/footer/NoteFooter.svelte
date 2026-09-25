@@ -1,7 +1,7 @@
 <script lang="ts">
   import { _ } from '../../../lib/i18n'
   import type { WorldType } from '../../../lib/types'
-  import { leaves, isPushingBackground } from '../../../lib/stores/stores.svelte'
+  import { leaves, isPushingBackground } from '../../../lib/stores'
   import { isTourShown, dismissTour } from '../../../lib/tour'
   import Footer from '../Footer.svelte'
   import IconButton from '../../buttons/IconButton.svelte'
