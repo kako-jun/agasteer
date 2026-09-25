@@ -331,6 +331,99 @@ describe('汎用 showPushToast とペーシングの分離 (#238)', () => {
   })
 })
 
+describe('Push トーストの同一文言連続表示 (#308)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    clearPushToast()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('同一文言の showPushToast を1500ms間隔で2回: 1回目の予定消滅時刻(2000ms)を過ぎても残り、2回目の表示から2000msで消える（境界1999/2000/2001）', () => {
+    // 回帰核心: メッセージ文字列比較だと2回目も同じ文言のため「自分のトースト」と
+    // 誤認し、1回目のタイマーが2回目を早く消してしまっていた（#308）。
+    showPushToast('toast.deleted', 'success')
+    vi.advanceTimersByTime(1500)
+    showPushToast('toast.deleted', 'success')
+
+    // 1回目の予定消滅時刻(累計2000ms)を過ぎても2回目の表示が生きている
+    vi.advanceTimersByTime(500)
+    expect(pushToastState.value.message).toBe('toast.deleted')
+
+    // 2回目の表示から1999msではまだ消えない
+    vi.advanceTimersByTime(1499)
+    expect(pushToastState.value.message).toBe('toast.deleted')
+
+    // 2回目の表示から2000msちょうどで消える
+    vi.advanceTimersByTime(1)
+    expect(pushToastState.value.message).toBe('')
+    expect(pushToastState.value.variant).toBe('')
+
+    // 2001ms経過後も消えたまま（旧タイマーが後から再度触ってこない）
+    vi.advanceTimersByTime(1)
+    expect(pushToastState.value.message).toBe('')
+  })
+
+  it('同一文言の sticky（先行 showPushToast(X) 後に showStickyPushToast(X)）が旧タイマーで消えない', () => {
+    // 回帰核心: sticky 側も文言が同じだと旧タイマーが「自分のトースト」と誤認し、
+    // 自動消滅しないはずの sticky を2秒後に消してしまっていた（#308）。
+    showPushToast('toast.pushInProgress')
+    showStickyPushToast('toast.pushInProgress')
+
+    vi.advanceTimersByTime(2000)
+    expect(pushToastState.value.message).toBe('toast.pushInProgress')
+
+    // sticky は自動消滅しないので、さらに時間が経っても消えない
+    vi.advanceTimersByTime(2000)
+    expect(pushToastState.value.message).toBe('toast.pushInProgress')
+  })
+
+  it('clearPushToast 後に旧タイマーが発火しても pending 完了トーストを再表示しない', () => {
+    showStickyPushToast('toast.pushInProgress')
+    setPushToastCountdown(2) // 即時表示・保持開始
+    setPushToastCountdown(1) // キュー: [1]
+    showPushCompletionToast('github.pushSuccess', 'success') // 遅延（pending）
+
+    // 汎用トーストが割り込み、2秒後の自動消滅タイマーを張る
+    showPushToast('toast.deleted', 'success')
+
+    // そのタイマーが発火する前に clearPushToast（pending も含め全リセットされる）
+    clearPushToast()
+    expect(pushToastState.value.message).toBe('')
+
+    // 旧タイマーの発火時刻を過ぎても pending は蘇らない
+    vi.advanceTimersByTime(2000)
+    expect(pushToastState.value.message).toBe('')
+    expect(pushToastCountdown.value).toBeNull()
+  })
+
+  it('遅延完了トースト（pending）が同一文言の汎用トーストと重なっても最終的に表示される保証が壊れていない', () => {
+    // 回帰核心: 同一文言の汎用トーストを2連続で割り込ませると、1回目のタイマーが
+    // 「自分のトースト」と誤認し、pending を本来より1500ms早く表示してしまって
+    // いた（2回目の表示を巻き添えで消していた、#308）。
+    showStickyPushToast('toast.pushInProgress')
+    setPushToastCountdown(2) // 即時表示・保持開始
+    setPushToastCountdown(1) // キュー: [1]
+    showPushCompletionToast('github.pushSuccess', 'success') // 遅延（pending）
+
+    // 同一文言の汎用トーストが1500ms間隔で2回割り込む
+    showPushToast('toast.deleted', 'success')
+    vi.advanceTimersByTime(1500)
+    showPushToast('toast.deleted', 'success')
+
+    // 1回目の予定消滅時刻(累計2000ms)を過ぎても pending はまだ表示されない
+    vi.advanceTimersByTime(500)
+    expect(pushToastState.value.message).toBe('toast.deleted')
+
+    // 2回目の表示から2000ms(累計3500ms)で pending が表示される
+    vi.advanceTimersByTime(1500)
+    expect(pushToastState.value.message).toBe('github.pushSuccess')
+    expect(pushToastState.value.variant).toBe('success')
+  })
+})
+
 describe('Pull トーストの連続表示タイマー (#302)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
