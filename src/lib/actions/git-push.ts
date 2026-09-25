@@ -104,7 +104,6 @@ export interface PushToGitHubOptions {
  */
 export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void> {
   const $_ = get(_)
-  const paneToRefocus = getActiveEditorPane() ?? focusedPane.value
 
   // #297: rehydrateForRepo 実行中（リポ切替直列化キュー含む）なら先に完了を待つ。
   // 待たずに進むと、rehydrate が新リポの repoName/DB へ切り替える前後の中途半端な
@@ -112,6 +111,11 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
   // Push してしまいかねない。canSync 直後にロックを取る不変条件があるため、
   // この待機は canSync 判定より前に置く。
   await waitForRehydrate()
+
+  // #297 nit10: paneToRefocus は waitForRehydrate() の後で取得する。rehydrate 中に
+  // リポ切替でペイン（leftNote/rightNote 等）がリセットされるため、待機前に取得すると
+  // 旧リポのフォーカス先を捕まえてしまい、Push 完了後の再フォーカスが的外れになる。
+  const paneToRefocus = getActiveEditorPane() ?? focusedPane.value
 
   // 交通整理: Push不可なら何もしない（アーカイブロード中も禁止）
   if (

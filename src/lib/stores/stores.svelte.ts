@@ -983,6 +983,18 @@ async function applyRehydrateForRepo(repoKey: string): Promise<void> {
     return
   }
 
+  // #297 nit8: この時点で既に次の切替要求（nextRehydrateKey）が来ていれば、
+  // repoKey はもう最終適用対象ではないと確定している（次の周回で最終キーに
+  // 対してこの続きが行われる）。settings.repoName は切替操作の時点で既に
+  // 最終リポを指しているため、これより先の getPersistedCommitSha() /
+  // getPersistedMetadata() は「repoKey の」ではなく「settings.repoName（＝
+  // 最終リポ）の」スロットを読んでしまい、この中間 repoKey の notes/leaves と
+  // 食い違う SHA/metadata が一瞬 store に混線する。無駄な IndexedDB 読み出しも
+  // 合わせて避けるため、ここで打ち切る（最終適用時に全状態が揃うので安全）。
+  if (nextRehydrateKey !== null) {
+    return
+  }
+
   // 新リポのキャッシュをロード（アーカイブは isArchiveLoaded=false のまま、
   // アーカイブ画面を開いたときに別途ロードされる既存フローを維持）
   try {
@@ -1029,10 +1041,23 @@ let nextRehydrateKey: string | null = null
  * 終わった時点で `nextRehydrateKey` が残っていれば、それを次の対象として
  * 続けて適用する（中間の要求は上書きされて破棄済み）。すべての呼び出し元の
  * Promise は、キューが空になり最後に適用された repoKey の rehydrate が
- * 完了した時点でまとめて resolve する。
+ * 完了した時点でまとめて resolve/reject する。
  *
  * `isRehydrating` ガードはこの一連の処理（キューが空になるまで）が
  * すべて終わるまで解除しない。
+ *
+ * #297 must1: 各周回（1 repoKey ぶんの applyRehydrateForRepo）の例外はここで
+ * 捕捉し、最後の例外だけを覚えてキュー消化を継続する（キュー済みキーが
+ * あれば例外が起きても打ち切らない）。これにより「最後に要求されたリポは
+ * 必ず適用される」不変条件を、例外発生時も含めて維持する。全周回が終わった
+ * 後、例外が一度でも起きていればまとめて reject する（呼び出し元は既に
+ * .catch/try-catch 済み。waitForRehydrate() 経由の待機側は reject を握り
+ * つぶす。下記参照）。
+ *
+ * #297 nit9: 実行中と同じ repoKey が再要求された場合（例: A実行中→B→A）も
+ * 特別扱いで dedupe しない。最終的に A が2回（実行中の分＋キュー経由の分）
+ * 適用され得るが、2回目は1回目と同じ内容の再適用になるだけで無害。
+ * キュー消費ロジックを単純に保つことを優先する。
  */
 export function rehydrateForRepo(repoKey: string): Promise<void> {
   if (rehydrateInFlight) {
@@ -1043,11 +1068,24 @@ export function rehydrateForRepo(repoKey: string): Promise<void> {
   rehydrateInFlight = (async () => {
     // rehydrate 実行中は、ストアへの一時的な代入（null リセット等）が
     // localStorage の新リポ slot に書き戻されないようガードする。
+    // #297 question12: この setRehydrating(true) は
+    // applyRehydrateForRepo 内の waitForPendingMediaInserts() より前に置く。
+    // 待機中（=まだガードが立っていない間）に着地した media insert の
+    // effect が isRehydrating ガードなしで走ると、確定直後の書き込みが
+    // 新リポの localStorage/IndexedDB slot に漏れてしまうため。
     setRehydrating(true)
+    let key = repoKey
+    let lastError: unknown = null
     try {
-      let key = repoKey
       for (;;) {
-        await applyRehydrateForRepo(key)
+        try {
+          await applyRehydrateForRepo(key)
+        } catch (error) {
+          // must1: この周回の例外を捕捉して最後の例外として控え、
+          // キュー済みキーがあれば継続する（ログは残す）。
+          lastError = error
+          console.error(`Failed to rehydrate repo "${key}":`, error)
+        }
         if (nextRehydrateKey === null) break
         key = nextRehydrateKey
         nextRehydrateKey = null
@@ -1056,10 +1094,33 @@ export function rehydrateForRepo(repoKey: string): Promise<void> {
       // ガードを解除。以降の変更は通常通り per-repo slot に永続化される。
       setRehydrating(false)
       rehydrateInFlight = null
+      // must1: キュー済みキーを確実に消す（このループでは既に null のはずだが、
+      // 想定外の経路で残ることを防ぐ最終防衛）。
+      nextRehydrateKey = null
+    }
+    if (lastError !== null) {
+      throw lastError
     }
   })()
 
   return rehydrateInFlight
+}
+
+/**
+ * 実行中の rehydrateInFlight を、reject を握りつぶしながら完了まで待つ。
+ * #297 nit7: 1回待って終わりにせず、完了直後に新たに rehydrateForRepo() が
+ * 呼ばれて rehydrateInFlight が再セットされていたらそれも続けて待つ
+ * （idle に戻るまで追従する）。
+ */
+async function waitForRehydrateLoop(): Promise<void> {
+  while (rehydrateInFlight) {
+    // must2: rehydrate 失敗の reject を呼び出し元（pullFromGitHub /
+    // pushToGitHub / handleWorldChange / moveNoteToWorld）へ伝播させない。
+    // 伝播すると、これらを try で囲まず await する呼び出し元
+    // （例: handleCloseSettings の isClosingSettingsPull リセット）の
+    // 事後処理が丸ごと飛ぶ。ここでは完了（成功/失敗問わず）だけを待つ。
+    await rehydrateInFlight.catch(() => {})
+  }
 }
 
 /**
@@ -1068,5 +1129,10 @@ export function rehydrateForRepo(repoKey: string): Promise<void> {
  * 呼び、rehydrate 途中で旧/新 DB を取り違えて同期しないようにする。
  */
 export function waitForRehydrate(): Promise<void> {
-  return rehydrateInFlight ?? Promise.resolve()
+  // #297 nit6: 実行中の Promise があるときだけ await するファストパス。
+  // idle 時に async 関数を経由させず解決済み Promise を直接返すことで、
+  // 呼び出し元（push-first 経路等、ロック取得直前に await する箇所）で
+  // 余計な microtask を挟まない。
+  if (!rehydrateInFlight) return Promise.resolve()
+  return waitForRehydrateLoop()
 }

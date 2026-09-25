@@ -172,3 +172,91 @@ describe('rehydrateForRepo の直列化 (#297)', () => {
     await expect(waitForRehydrate()).resolves.toBeUndefined()
   })
 })
+
+describe('rehydrateForRepo の例外耐性 (#297 must1/must2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.setCurrentRepo.mockImplementation(async () => {})
+    mocks.loadNotes.mockResolvedValue([])
+    mocks.loadLeaves.mockResolvedValue([])
+    mocks.getPersistedCommitSha.mockReturnValue(null)
+    mocks.getPersistedLastPulledPushCount.mockReturnValue(0)
+    mocks.getPersistedMetadata.mockResolvedValue(null)
+  })
+
+  afterEach(async () => {
+    // 直前のテストが assertion 失敗で終わっていても、次のテストへ
+    // 「止まったままの rehydrate」を持ち越さない。
+    await waitForRehydrate().catch(() => {})
+  })
+
+  it('must1: 未保護awaitが例外を投げても、キュー済みの最後のキーは必ず適用される（幽霊適用の防止）', async () => {
+    // applyRehydrateForRepo の未保護 await（getPersistedMetadata）を、
+    // repoA の1周目だけ外部から reject 制御できるゲートにする。
+    let rejectRepoAMetadata!: (error: unknown) => void
+    const repoAMetadataGate = new Promise<null>((_resolve, reject) => {
+      rejectRepoAMetadata = reject
+    })
+    let metadataCallCount = 0
+    mocks.getPersistedMetadata.mockImplementation(async () => {
+      metadataCallCount += 1
+      if (metadataCallCount === 1) {
+        return repoAMetadataGate
+      }
+      return null
+    })
+
+    const promiseA = rehydrateForRepo('repoA')
+    // 呼び出し元（例: handleSettingsChange の fire-and-forget rehydrate）は
+    // 自前で .catch する契約。本テストの主眼はキュー処理なので同様に握る。
+    promiseA.catch(() => {})
+
+    // repoA が setCurrentRepo を終え、getPersistedMetadata で止まるまで待つ
+    // （この時点では nextRehydrateKey===null のため nit8 skip は発生せず、
+    // repoA は「完全に適用しようとした」状態になる）
+    await vi.waitFor(() => {
+      expect(metadataCallCount).toBe(1)
+    })
+    expect(mocks.setCurrentRepo).toHaveBeenCalledTimes(1)
+    expect(mocks.setCurrentRepo).toHaveBeenNthCalledWith(1, 'repoA')
+
+    // repoA が止まっている間に repoB への切替要求が来る
+    rehydrateForRepo('repoB')
+
+    // repoA の getPersistedMetadata を失敗させる
+    rejectRepoAMetadata(new Error('repoA metadata read failed'))
+
+    // must1: 例外が起きてもキュー済みの repoB が破棄されず、続けて適用される
+    await vi.waitFor(() => {
+      expect(mocks.setCurrentRepo).toHaveBeenCalledTimes(2)
+    })
+    expect(mocks.setCurrentRepo).toHaveBeenNthCalledWith(2, 'repoB')
+
+    // must1: キュー消化後、例外はまとめて reject される（呼び出し元は既に .catch 済み）
+    await expect(promiseA).rejects.toThrow('repoA metadata read failed')
+
+    // ゴースト適用の検知: 無関係な後続の rehydrateForRepo('repoD') が、
+    // 残留した nextRehydrateKey のせいで余計な repoKey まで適用してしまわないこと
+    const promiseD = rehydrateForRepo('repoD')
+    await promiseD
+    expect(mocks.setCurrentRepo).toHaveBeenCalledTimes(3)
+    expect(mocks.setCurrentRepo).toHaveBeenNthCalledWith(3, 'repoD')
+  })
+
+  it('must2: waitForRehydrate() はrehydrate失敗のrejectを外へ伝播させず、完了だけを待つ', async () => {
+    mocks.getPersistedMetadata.mockRejectedValueOnce(new Error('boom'))
+
+    const promiseA = rehydrateForRepo('repoA')
+    // rehydrateForRepo 自体の Promise は reject する契約（呼び出し元の責務で処理）。
+    // ここでは unhandled rejection を避けるためだけに握る。
+    promiseA.catch(() => {})
+
+    // pullFromGitHub/pushToGitHub/handleWorldChange/moveNoteToWorld の実装と同じ
+    // 呼び方（await waitForRehydrate()）が例外で落ちないことを縛る。
+    await expect(waitForRehydrate()).resolves.toBeUndefined()
+
+    // rehydrateForRepo 自体は reject する（waitForRehydrate が握るのは
+    // 「待機側」だけで、rehydrateForRepo の戻り値の契約は変えない）
+    await expect(promiseA).rejects.toThrow('boom')
+  })
+})
