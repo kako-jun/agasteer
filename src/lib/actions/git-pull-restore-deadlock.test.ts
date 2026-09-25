@@ -519,3 +519,79 @@ describe('#314 M1/S3: pullFromGitHub × restoreStateFromUrl のデッドロッ�
     expect(appState.isArchiveLoading).toBe(false)
   })
 })
+
+describe('#314 S4: Pull完了後・アーカイブロード完了前の updateUrlFromState 抑制（Q1固定）', () => {
+  it('onPriorityComplete からの restoreStateFromUrl がまだアーカイブ待機中の間に本物の updateUrlFromState を呼んでも、pushState は呼ばれない', async () => {
+    setArchiveUrl()
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'local-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+
+    let resolveExecutePull!: (v: unknown) => void
+    mocks.executePull.mockImplementation(async (_settings: unknown, options: any) => {
+      options.onStructure([], { version: 1, notes: {}, leaves: {}, pushCount: 0 }, [])
+      options.onPriorityComplete()
+      return new Promise((resolve) => {
+        resolveExecutePull = resolve
+      })
+    })
+
+    // アーカイブロード（pullArchive）を pending のままにして、Pull 完了後も
+    // restoreStateFromUrl の待機が続いている状態を作る。
+    let resolvePullArchive!: (v: unknown) => void
+    mocks.pullArchive.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePullArchive = resolve
+      })
+    )
+
+    const pushStateSpy = vi.spyOn(window.history, 'pushState')
+
+    const pullPromise = pullFromGitHub(true, undefined, undefined)
+
+    await vi.waitFor(() => {
+      expect(mocks.executePull).toHaveBeenCalled()
+    })
+
+    // Pull 自体を完了させる（isPulling が false になる。isFirstPriorityFetched は
+    // onPriorityComplete で既に true）。restoreStateFromUrl はまだ archive 待機中。
+    resolveExecutePull({
+      success: true,
+      notes: [],
+      leaves: [],
+      metadata: { version: 1, notes: {}, leaves: {}, pushCount: 0 },
+      message: 'ok',
+      variant: 'success',
+    })
+    await pullPromise
+
+    await vi.waitFor(() => {
+      expect(appState.isArchiveLoading).toBe(true)
+    })
+    expect(syncFlags.isPulling.value).toBe(false)
+    expect(appState.isFirstPriorityFetched).toBe(true)
+    // Q1 が正しく効いていれば、Pull 完了後もまだ isRestoringFromUrl は true のまま
+    expect(appState.isRestoringFromUrl).toBe(true)
+
+    // setArchiveUrl() 由来の pushState 呼び出しは無視し、ここからの呼び出しだけを見る
+    pushStateSpy.mockClear()
+
+    updateUrlFromState()
+
+    // isRestoringFromUrl が true の間は早期 return するため、pushState は呼ばれない
+    expect(pushStateSpy).not.toHaveBeenCalled()
+
+    // 後片付け: アーカイブロードを完了させて restoreStateFromUrl を終わらせる
+    resolvePullArchive({
+      success: true,
+      notes: [],
+      leaves: [],
+      metadata: { pushCount: 1 },
+    })
+    await vi.waitFor(() => {
+      expect(appState.isRestoringFromUrl).toBe(false)
+    })
+  })
+})
