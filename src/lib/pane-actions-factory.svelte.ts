@@ -127,7 +127,6 @@ import { createOfflineLeaf } from './utils'
 // Non-reactive local state
 // ========================================
 let isClosingSettingsPull = false
-let repoChangedInSettings = false
 let githubSettingsChangedInSettings = false
 
 /**
@@ -399,7 +398,6 @@ export function handleSettingsChange(payload: Partial<typeof settings.value>) {
   const tokenChanged = payload.token !== undefined && payload.token !== settings.value.token
   const next = { ...settings.value, ...payload }
   if (repoChanged) {
-    repoChangedInSettings = true
     appState.isPullCompleted = false
     appState.isFirstPriorityFetched = false
     appState.repoChangePending = true
@@ -456,9 +454,6 @@ export async function handleCloseSettings() {
   // 設定を再度開いてリポ/トークンを変更した分（githubSettingsChangedInSettings が
   // 再度 true になる）まで、この呼び出しの末尾クリアで消してしまい、次回クローズで
   // その変更が無視される。冒頭で退避・クリアし、以降は退避値だけを参照する。
-  // repoChangedInSettings はこの関数内では参照しない（値自体は他所で使われないが、
-  // 同種のフラグとして同じタイミングでクリアする）。
-  repoChangedInSettings = false
   const githubSettingsChanged = githubSettingsChangedInSettings
   const importOccurred = appState.importOccurredInSettings
   githubSettingsChangedInSettings = false
