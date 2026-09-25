@@ -465,7 +465,15 @@ describe('restoreStateFromUrl の isRestoringFromUrl 生死管理（#314 M-1: tr
   // で例外が飛ぶ経路のどちらも末尾に届かず、isRestoringFromUrl が true のまま残って
   // いた。true のままだと updateUrlFromState の早期 return ガードに引っかかり続け、
   // 以後 URL・履歴が一切更新されなくなる（App.svelte の $effect → updateUrlFromState）。
-  it('待機中に旧形式URLで2回目を呼ぶと、1回目が完了しても isRestoringFromUrl は2回目が確定させた false のまま', async () => {
+  // #314 PR#315 レビュー M-1: 旧版のこのテストは「2回目（最新世代）が先に完了し、
+  // その後1回目（古い世代）が完了する」順番しか検証していなかった。finally は
+  // 常に無条件で false を代入するだけ（true を書き戻す分岐は無い）なので、この順番
+  // では世代ガードの有無にかかわらず最終値は常に false になり、:505 の
+  // toBe(false) はガードを `if (true)` に置き換えても通ってしまう（レビュアーが
+  // 実機確認済み）。ガードが実際に効くのは逆の順番（S-A の窓）: 新しい世代がまだ
+  // 確定させていないうちに、古い世代の完了処理が isRestoringFromUrl を先に
+  // 触ってしまうケースだけなので、そちらを検証する。
+  it('待機中に2回目（archive URL）を呼び、1回目（古い世代）が先に完了しても isRestoringFromUrl は true のまま。2回目（新しい世代）が完了して初めて false になる', async () => {
     mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
     setUrl('left=%2Farchive%2Fx')
 
@@ -476,22 +484,25 @@ describe('restoreStateFromUrl の isRestoringFromUrl 生死管理（#314 M-1: tr
       })
     )
 
+    // 1回目（世代1）を pullArchive 待ちで止める
     const first = restoreStateFromUrl()
     await vi.waitFor(() => {
       expect(appState.isArchiveLoading).toBe(true)
     })
     expect(appState.isRestoringFromUrl).toBe(true)
 
-    // 1回目が待機中に、2回目（旧形式: left/right も note/leaf も無い URL）を呼ぶ。
-    // resolveLegacyUrlParams の早期 return 経路を通る。
-    window.history.pushState({}, '', '/')
+    // isPulling=true の間に2回目（世代2、同じ archive URL）を呼ぶ。isSyncBusy() が
+    // isPulling を見る限り waitForSyncIdle のループを抜けられないので、
+    // まだ pullArchive を呼ばない待機状態で止まる。
+    syncFlags.isPulling.value = true
     const second = restoreStateFromUrl()
-    await second
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
 
-    // 2回目（最新世代）は即座に完了し、isRestoringFromUrl を false に戻す
-    expect(appState.isRestoringFromUrl).toBe(false)
-
-    // 1回目のアーカイブロードを完了させる
+    // 1回目（世代1）の pullArchive を完了させる。isArchiveLoading の解除通知で
+    // 2回目の待機者は一度起こされるが、isPulling がまだ true なので待機に戻る。
     resolvePullArchive({
       success: true,
       notes: [{ id: 'n1' }],
@@ -500,8 +511,14 @@ describe('restoreStateFromUrl の isRestoringFromUrl 生死管理（#314 M-1: tr
     })
     await first
 
-    // 1回目（古い世代）の finally は、2回目が既に false にした isRestoringFromUrl を
-    // 上書きしない（世代ガードで無視される）。true に戻ってしまわないことを縛る。
+    // 世代2がまだ自分の結果を確定させていないので、古い世代1の完了で
+    // isRestoringFromUrl が false に戻ってはいけない（世代ガードの本体）
+    expect(appState.isRestoringFromUrl).toBe(true)
+
+    // isPulling を解放して2回目（世代2）を完了させる
+    syncFlags.isPulling.value = false
+    await second
+
     expect(appState.isRestoringFromUrl).toBe(false)
   })
 
