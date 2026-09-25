@@ -335,12 +335,14 @@ describe('restoreStateFromUrl のロック窓（#307: IndexedDB 読込中も isA
 
     const restorePromise = restoreStateFromUrl()
 
-    // performArchiveLoad はロック取得（同期）の後で初めて await に入るため、
-    // restoreStateFromUrl → performArchiveLoad → loadArchiveIntoStores →
-    // loadArchiveCacheFromDB → Promise.all(loadArchiveNotes(), loadArchiveLeaves())
-    // の呼び出し連鎖は途中に await を挟まず、呼び出し直後（同期）に既に
-    // ロック済みになっている。マイクロタスクを流す必要はない。
-    expect(appState.isArchiveLoading).toBe(true)
+    // #314: restoreStateFromUrl は performArchiveLoad の前に waitForRehydrate() /
+    // waitForSyncIdle() を await するようになったため、ロック取得（performArchiveLoad
+    // 内で同期）に到達するまでに数マイクロタスクかかる。isPulling/isPushing/
+    // isPushingBackground はすべて false（beforeEach）なので waitForSyncIdle() の
+    // while ループは即座に抜けるが、待ち合わせ自体が最低1マイクロタスクを要する。
+    await vi.waitFor(() => {
+      expect(appState.isArchiveLoading).toBe(true)
+    })
     expect(mocks.pullArchive).not.toHaveBeenCalled()
 
     resolveLoadNotes([])
@@ -385,5 +387,108 @@ describe('restoreStateFromUrl の異常系（#307 nit3: IndexedDB 読出し失�
     expect(appState.isArchiveLoading).toBe(false)
     expect(mocks.runPendingRepoSyncIfIdle).toHaveBeenCalledTimes(1)
     expect(mocks.pullArchive).not.toHaveBeenCalled()
+  })
+})
+
+describe('restoreStateFromUrl の前段整合（#314: handleWorldChange と同じ前段に揃える）', () => {
+  it('アーカイブロードが必要な URL では waitForRehydrate を待つ', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+
+    await restoreStateFromUrl()
+
+    expect(stores.waitForRehydrate).toHaveBeenCalled()
+  })
+
+  it('アーカイブ不要な URL では waitForRehydrate を呼ばない', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'home' })
+    setUrl('left=%2Fhome%2Fx')
+
+    await restoreStateFromUrl()
+
+    expect(stores.waitForRehydrate).not.toHaveBeenCalled()
+  })
+})
+
+describe('restoreStateFromUrl の Pull/Push 待ち合わせ（#314: スキップではなく待ってから解決する）', () => {
+  // handleWorldChange は Pull/Push/背景Push中ならワールド表示を戻して諦めるが、
+  // restoreStateFromUrl は URL を必ず解決する必要があるため、busy の間はアーカイブ
+  // ロードを開始せず待ち、busy が解消してから続行することを縛る（#314）。
+
+  it('isPulling が true の間はアーカイブロードを開始せず、false に戻ってから開始する', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+    stores.isPulling.value = true
+
+    const restorePromise = restoreStateFromUrl()
+
+    // ポーリング間隔（50ms）を跨いでも isPulling が true のままなら開始しない
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+    expect(appState.isArchiveLoading).toBe(false)
+
+    stores.isPulling.value = false
+    await restorePromise
+
+    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
+    expect(appState.isArchiveLoading).toBe(false)
+  })
+
+  it('isPushingBackground が true の間もアーカイブロードを開始せず待つ', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+    stores.isPushingBackground.value = true
+
+    const restorePromise = restoreStateFromUrl()
+
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    expect(mocks.pullArchive).not.toHaveBeenCalled()
+
+    stores.isPushingBackground.value = false
+    await restorePromise
+
+    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('performArchiveLoad の二重ロード防止（#314）', () => {
+  // handleWorldChange のロード進行中に popstate でアーカイブ URL に戻ると、
+  // 従来は restoreStateFromUrl 側が独自に performArchiveLoad を呼び、pullArchive が
+  // 2本走っていた（先に終わった方の finally が isArchiveLoading=false にしてしまい、
+  // もう片方の pullArchive 実行中にロックが外れる）。performArchiveLoad 自体の再入
+  // デデュープにより、2回目の呼び出しは新しいロードを始めず進行中の Promise を
+  // 待つだけになることを、restoreStateFromUrl を2回連続で呼ぶ形で縛る。
+  it('restoreStateFromUrl を2回同時に呼んでも pullArchive は1回しか走らない', async () => {
+    mocks.extractWorldPrefix.mockReturnValue({ world: 'archive' })
+    setUrl('left=%2Farchive%2Fx')
+
+    let resolvePullArchive!: (v: unknown) => void
+    mocks.pullArchive.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePullArchive = resolve
+      })
+    )
+
+    const first = restoreStateFromUrl()
+
+    // 1回目がロックを取るまで待ってから、popstate 相当の2回目を重ねて呼ぶ
+    // （isArchiveLoaded はまだ false のまま = ガード条件は2回目も通過する）
+    await vi.waitFor(() => {
+      expect(appState.isArchiveLoading).toBe(true)
+    })
+    const second = restoreStateFromUrl()
+
+    resolvePullArchive({
+      success: true,
+      notes: [{ id: 'n1' }],
+      leaves: [{ id: 'l1' }],
+      metadata: { pushCount: 1 },
+    })
+
+    await Promise.all([first, second])
+
+    expect(mocks.pullArchive).toHaveBeenCalledTimes(1)
+    expect(appState.isArchiveLoading).toBe(false)
+    expect(stores.isArchiveLoaded.value).toBe(true)
   })
 })

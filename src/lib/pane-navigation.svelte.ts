@@ -703,6 +703,30 @@ export function updateUrlFromState() {
   appState.atGuardEntry = false
 }
 
+/**
+ * Pull/Push（背景 Push 含む）がすべてアイドルになるまで待つ（#314）。
+ *
+ * isPulling/isPushing/isPushingBackground は core-state.svelte.ts の $state の
+ * getter/setter で、Svelte ストアのような subscribe を持たない。waitForRehydrate()
+ * と違い Pull/Push 側にはまだ in-flight Promise の仕組みが無く、新設するには
+ * git-pull.ts / git-push.ts の複数のロック解放地点すべてに配線する必要がある
+ * 大掛かりな変更になる。sync/resume-retry.ts の sleep 注入と同じ考え方で、
+ * 状態を変更しない単純なポーリングに留める（`sleep` はテストから注入できる）。
+ */
+const SYNC_IDLE_POLL_INTERVAL_MS = 50
+
+function isSyncBusy(): boolean {
+  return isPulling.value || isPushing.value || isPushingBackground.value
+}
+
+export async function waitForSyncIdle(
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+): Promise<void> {
+  while (isSyncBusy()) {
+    await sleep(SYNC_IDLE_POLL_INTERVAL_MS)
+  }
+}
+
 export async function restoreStateFromUrl(alreadyRestoring = false) {
   const params = new URLSearchParams(window.location.search)
   let leftPath = params.get('left')
@@ -757,7 +781,27 @@ export async function restoreStateFromUrl(alreadyRestoring = false) {
     // #307: ロード本体・ロック（appState.isArchiveLoading）は performArchiveLoad に統合
     // 済み（#297 S-b と同じロック窓が handleWorldChange 側だけ塞がれていたのを解消）。
     // このガード（!isArchiveLoaded && token && repoName）は呼び出し側に残す。
-    await performArchiveLoad('during URL restore')
+    //
+    // #314: handleWorldChange と同じ前段に揃える。まず rehydrate の完了を待つ
+    // （リポ切替の DB 切替途中でアーカイブを読み書きし、旧/新 DB を取り違えるのを防ぐ）。
+    await waitForRehydrate()
+
+    // #314: Pull/Push（背景含む）中は AL と並走させない。onPriorityComplete
+    // （git-pull.ts）から isPulling=true のまま await されずに呼ばれる経路があり、
+    // 待たずに進むと performArchiveLoad が Pull の途中に割り込んでしまう
+    // （push-pull.md の排他表「Pull 中の AL はブロック」と食い違う）。
+    // handleWorldChange は busy ならワールド表示を home に戻して諦めるが、
+    // restoreStateFromUrl は URL を必ず解決する必要があるためスキップはせず、
+    // 同期完了を待ってから続行する（onPriorityComplete 側は await せず呼ぶだけなので、
+    // ここで待ってもその Pull 自体をブロックしない。Pull は自身の finally で
+    // isPulling を落として完了する。#314 で deadlock しないことを確認済み）。
+    await waitForSyncIdle()
+
+    // 待機中に別経路（handleWorldChange 等）で既にロード済み、または設定が
+    // 無効化された場合は改めてロードしない（handleWorldChange の再判定と同じ考え方）。
+    if (!isArchiveLoaded.value && settings.value.token && settings.value.repoName) {
+      await performArchiveLoad('during URL restore')
+    }
   }
 
   const leftNotesData = _getNotesForWorld(leftWorldInfo.world, notes.value, archiveNotes.value)

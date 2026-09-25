@@ -10,6 +10,9 @@
  * アーカイブロード）も performArchiveLoad 経由に統合。呼び出し元ごとに異なる
  * catch ログ文言は logContext 引数で保つ（#297 S-b のロック窓修正を両呼び出し元に
  * 適用するのが目的で、ログ文言の統一自体は目的ではないため）。
+ * #314: performArchiveLoad 自体を再入安全にした。2つの呼び出し元（handleWorldChange /
+ * restoreStateFromUrl）が同時に呼んでも pullArchive が2本走らないよう、進行中の
+ * ロードの Promise をデデュープする（archiveLoadInFlight）。
  */
 
 import { get } from 'svelte/store'
@@ -126,6 +129,18 @@ async function loadArchiveIntoStores(logContext?: ArchiveLoadLogContext): Promis
 }
 
 /**
+ * 進行中のアーカイブロードの Promise（#314）。null なら実行中でない。
+ *
+ * handleWorldChange 経由の呼び出しが進行中に、popstate 等で restoreStateFromUrl
+ * からも performArchiveLoad が呼ばれると、従来は pullArchive が2本走り、先に
+ * 終わった方の finally が appState.isArchiveLoading=false にしてしまい、もう片方の
+ * pullArchive 実行中にロックが外れる窓ができていた（#314 二重ロード）。
+ * この Promise を使って再入をデデュープし、進行中のロードがあれば新しいロードを
+ * 始めずその完了を待って同じ Promise を返す。
+ */
+let archiveLoadInFlight: Promise<void> | null = null
+
+/**
  * アーカイブロードのロック取得〜解除〜保留同期の再開までを一括で行う。
  * #297 S-b: 再判定通過直後・IndexedDB読込前（await の前）に同期でロックを取る
  * （loadArchiveCacheFromDB は isArchiveLoading を参照しないため、ここで先に
@@ -134,13 +149,31 @@ async function loadArchiveIntoStores(logContext?: ArchiveLoadLogContext): Promis
  * #307: 呼び出し元は handleWorldChange（引数なし）と restoreStateFromUrl
  * （logContext: 'during URL restore'）の2箇所。ガード（!isArchiveLoaded &&
  * token && repoName 等）は各呼び出し元に残す。
+ * #314: 再入時（archiveLoadInFlight が非 null）は新しいロードを開始せず、進行中の
+ * Promise をそのまま返す。後から来た呼び出しの logContext は使わない（既に
+ * 実行中のロードのログ文言のまま。ログ文言の出し分けは catch 時の診断目的のみで
+ * 挙動には影響しないため、rehydrateForRepo のような「最後の要求のキーを追従して
+ * 適用する」キューは不要と判断した）。
  */
-export async function performArchiveLoad(logContext?: ArchiveLoadLogContext): Promise<void> {
-  appState.isArchiveLoading = true
-  try {
-    await loadArchiveIntoStores(logContext)
-  } finally {
-    appState.isArchiveLoading = false
-    await runPendingRepoSyncIfIdle()
+export function performArchiveLoad(logContext?: ArchiveLoadLogContext): Promise<void> {
+  if (archiveLoadInFlight) {
+    return archiveLoadInFlight
   }
+
+  // 呼び出し直後（このまま同期的に）isArchiveLoading=true まで到達する必要が
+  // あるため、async IIFE を即座に呼び出す（後続の待ち合わせは IIFE 内部の await
+  // 以降に閉じ込める）。
+  archiveLoadInFlight = (async () => {
+    appState.isArchiveLoading = true
+    try {
+      await loadArchiveIntoStores(logContext)
+    } finally {
+      appState.isArchiveLoading = false
+      await runPendingRepoSyncIfIdle()
+    }
+  })().finally(() => {
+    archiveLoadInFlight = null
+  })
+
+  return archiveLoadInFlight
 }
