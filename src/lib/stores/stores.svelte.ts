@@ -5,7 +5,7 @@
 
 import type { Settings, Note, Leaf, Metadata, View, WorldType } from '../types'
 import type { Pane } from '../navigation'
-// 循環参照回避: data/index.tsではなく、直接storageからインポート
+// 循環参照回避: data/index.tsではなく、直接storage/metadata-storageからインポート
 import {
   defaultSettings,
   saveSettings,
@@ -13,17 +13,20 @@ import {
   getPersistedDirtyFlag as getPersistedDirtyFlagFromStorage,
   getPersistedCommitSha,
   getPersistedLastPulledPushCount,
-  getPersistedMetadata,
-  flushPersistedMetadata,
   setPersistedCommitSha,
   setPersistedLastPulledPushCount,
-  setPersistedMetadata,
   clearArchiveData,
   setCurrentRepo,
   closeCurrentRepoDb,
   loadLeaves,
   loadNotes,
 } from '../data/storage'
+// #295 S4: metadata 永続化はstorage.tsから分離済み
+import {
+  getPersistedMetadata,
+  flushPersistedMetadata,
+  setPersistedMetadata,
+} from '../data/metadata-storage'
 import {
   scheduleLeavesSave,
   scheduleNotesSave,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IDBFactory } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import type { Metadata } from '../types'
 
 const backing = new Map<string, string>()
@@ -53,26 +53,28 @@ describe('large metadata migration', () => {
 
     vi.resetModules()
     const storage = await import('./storage')
+    const metadataStorage = await import('./metadata-storage')
     await storage.loadSettings()
     const compact = JSON.parse(backing.get('agasteer')!)
     expect(compact.storageVersion).toBe(2)
     expect(compact.byRepo['owner/repo']).toEqual({ isDirty: true })
     expect(compact.byRepo['owner/other']).toEqual({ isDirty: false })
-    expect(await storage.getPersistedMetadata()).toEqual(original)
+    expect(await metadataStorage.getPersistedMetadata()).toEqual(original)
     expect(storage.getPersistedDirtyFlag()).toBe(true)
 
     storage.setPersistedDirtyFlag(false)
     expect(storage.getPersistedDirtyFlag()).toBe(false)
     const replacement: Metadata = { ...original, pushCount: 6 }
-    await storage.setPersistedMetadata(replacement)
-    await storage.flushPersistedMetadata()
+    await metadataStorage.setPersistedMetadata(replacement)
+    await metadataStorage.flushPersistedMetadata()
 
     vi.resetModules()
     const reloaded = await import('./storage')
+    const reloadedMetadataStorage = await import('./metadata-storage')
     await reloaded.loadSettings()
-    expect(await reloaded.getPersistedMetadata()).toEqual(replacement)
+    expect(await reloadedMetadataStorage.getPersistedMetadata()).toEqual(replacement)
     reloaded.syncRepoNameCache('owner/other')
-    expect((await reloaded.getPersistedMetadata())?.pushCount).toBe(9)
+    expect((await reloadedMetadataStorage.getPersistedMetadata())?.pushCount).toBe(9)
   })
 
   it('keeps legacy metadata when IndexedDB migration cannot open', async () => {
@@ -85,9 +87,10 @@ describe('large metadata migration', () => {
     })
     vi.resetModules()
     const storage = await import('./storage')
+    const metadataStorage = await import('./metadata-storage')
     await storage.loadSettings()
     expect(JSON.parse(backing.get('agasteer')!).byRepo['owner/repo'].metadata).toEqual(original)
-    expect(await storage.getPersistedMetadata()).toEqual(original)
+    expect(await metadataStorage.getPersistedMetadata()).toEqual(original)
   })
 
   it('retries safely if shrinking localStorage fails after the IndexedDB copy', async () => {
@@ -102,13 +105,58 @@ describe('large metadata migration', () => {
 
     vi.resetModules()
     const storage = await import('./storage')
+    const metadataStorage = await import('./metadata-storage')
     await storage.loadSettings()
     expect(JSON.parse(backing.get('agasteer')!).byRepo['owner/repo'].metadata).toEqual(original)
-    expect(await storage.getPersistedMetadata()).toEqual(original)
+    expect(await metadataStorage.getPersistedMetadata()).toEqual(original)
 
     failCompactWrite = false
     await storage.loadSettings()
     expect(JSON.parse(backing.get('agasteer')!).byRepo['owner/repo'].metadata).toBeUndefined()
-    expect(await storage.getPersistedMetadata()).toEqual(original)
+    expect(await metadataStorage.getPersistedMetadata()).toEqual(original)
+  })
+})
+
+describe('#295 S1: getPersistedMetadata resilience to a rejected pending write', () => {
+  it('still returns the last committed value while a newer write is pending and later rejects', async () => {
+    // 移行不要な状態を用意する（legacy byRepo[].metadata なし）。
+    backing.set(
+      'agasteer',
+      JSON.stringify({
+        storageVersion: 2,
+        settings: { token: '', repoName: 'owner/repo' },
+        globalState: { tourShown: true },
+        byRepo: { 'owner/repo': { isDirty: false } },
+      })
+    )
+
+    vi.resetModules()
+    const storage = await import('./storage')
+    const metadataStorage = await import('./metadata-storage')
+    await storage.loadSettings()
+
+    const committed: Metadata = { version: 1, notes: {}, leaves: {}, pushCount: 3 }
+    await metadataStorage.setPersistedMetadata(committed)
+    expect(await metadataStorage.getPersistedMetadata()).toEqual(committed)
+
+    // 次の書き込みだけ失敗させる（put() が同期的に throw する = トランザクションが
+    // reject する状況を再現）。
+    const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(() => {
+      throw new Error('simulated put failure')
+    })
+    const failing: Metadata = { ...committed, pushCount: 99 }
+    const pendingWrite = metadataStorage.setPersistedMetadata(failing)
+
+    // #295 S1修正前: ここで metadataWrites.get(key) の reject がそのまま伝播し、
+    // catch節のlegacyフォールバック（移行済みなのでundefined）→ null になっていた。
+    // 修正後は pending write の reject を握りつぶしてから readMetadata するため、
+    // IndexedDB に既にコミット済みの値を正しく返す。
+    await expect(metadataStorage.getPersistedMetadata()).resolves.toEqual(committed)
+
+    await expect(pendingWrite).rejects.toThrow('simulated put failure')
+    putSpy.mockRestore()
+
+    // 失敗した書き込みはコミットされていないので、最終状態も committed のまま。
+    expect(await metadataStorage.getPersistedMetadata()).toEqual(committed)
   })
 })
