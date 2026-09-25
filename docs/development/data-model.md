@@ -132,7 +132,6 @@ Agasteerは、Svelte 5の`$state()`と`$derived()` runeを使用して状態を�
 
 | 変数名                            | 型      | 説明                                                                                                    |
 | --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| `repoChangedInSettings`           | boolean | 設定画面内でリポジトリ名が変更されたかのフラグ。`githubSettingsChangedInSettings`の算出に使用する       |
 | `githubSettingsChangedInSettings` | boolean | リポジトリ名またはトークンが変更されたかの統合フラグ。`handleCloseSettings()`でPull要否の判定に使用する |
 | `importOccurredInSettings`        | boolean | 設定画面内でインポートが行われたかのフラグ。`handleCloseSettings()`でPull要否の判定に使用する           |
 

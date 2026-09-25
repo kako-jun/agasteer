@@ -519,28 +519,27 @@ Pull/Push/アーカイブロード中に設定画面を閉じた場合は、即�
 
 `handleSettingsChange()`内で`repoName`または`token`の変更を検知すると、以下を実行する：
 
-- **リポジトリ名の変更時**: `repoChangedInSettings = true`を設定し、`resetForRepoSwitch()`で全リポ固有状態を一括リセットする
+- **リポジトリ名の変更時**: `appState.repoChangePending = true`を設定し、`resetForRepoSwitch()`で全リポ固有状態を一括リセットする
 - **トークンの変更時**: `githubSettingsChangedInSettings = true`を設定する（リセットは不要。同じリポに対して新トークンで再接続するため）
 - **いずれの変更でも**: `githubSettingsChangedInSettings = true`が設定され、設定画面を閉じる時にPullが実行される
 
-1. `repoChangedInSettings = true`（リポ名変更時のみ）
-2. `githubSettingsChangedInSettings = true`（リポ名またはトークン変更時のPull判定用フラグ）
-3. `isPullCompleted = false` / `isFirstPriorityFetched = false`（操作ロック、リポ名変更時のみ）
-4. `resetForRepoSwitch()`（stores.svelte.tsの一括リセット関数、リポ名変更時のみ）
+1. `appState.isPullCompleted = false` / `appState.isFirstPriorityFetched = false`（操作ロック、リポ名変更時のみ）
+2. `appState.repoChangePending = true`（リポ名変更時のみ。設定を閉じた後の「予約中」バッジに使う）
+3. `resetForRepoSwitch()`（stores.svelte.tsの一括リセット関数、リポ名変更時のみ）
+4. `githubSettingsChangedInSettings = true`（リポ名またはトークン変更時のPull判定用フラグ）
 
 ```typescript
-// pane-actions-factory.svelte.ts handleSettingsChange() 内
+// pane-actions-factory.svelte.ts handleSettingsChange() 内（要旨）
 const repoChanged = payload.repoName !== undefined && payload.repoName !== settings.value.repoName
 const tokenChanged = payload.token !== undefined && payload.token !== settings.value.token
-const next = { ...settings.value, ...payload }
-updateSettings(next)
 if (repoChanged) {
-  repoChangedInSettings = true
-  githubSettingsChangedInSettings = true
-  isPullCompleted = false
-  isFirstPriorityFetched = false
+  appState.isPullCompleted = false
+  appState.isFirstPriorityFetched = false
+  appState.repoChangePending = true
   resetForRepoSwitch()
-} else if (tokenChanged) {
+}
+updateSettings({ ...settings.value, ...payload })
+if (repoChanged || tokenChanged) {
   githubSettingsChangedInSettings = true
 }
 ```
@@ -629,7 +628,6 @@ sequenceDiagram
 
     Note over HSC: repoChanged =<br/>payload.repoName !== $settings.repoName<br/>→ true
     HSC->>HSC: updateSettings(next)<br/>LocalStorageに即座に保存
-    HSC->>HSC: repoChangedInSettings = true
     HSC->>HSC: githubSettingsChangedInSettings = true
     HSC->>HSC: isPullCompleted = false
     HSC->>HSC: isFirstPriorityFetched = false
@@ -651,9 +649,8 @@ sequenceDiagram
     Note over HCS: まず waitForRehydrate() を await（#297 should2）<br/>shouldQueueRepoSync 判定より前に置く。待たずに判定すると、<br/>判定時点はアイドルでも待機中に取られたロックを見落として<br/>直接 pullFromGitHub を呼んでしまい、その内部の待機後の<br/>canSync 判定で黙って return する（キューにも積まれず消える）
 
     alt Pull/Push/ArchiveLoad中でない
-        HCS->>HCS: isClosingSettingsPull = true
         HCS->>PFG: pullFromGitHub(false)
-        Note over PFG: まず waitForRehydrate() を await（#297）<br/>rehydrateForRepo()が実行中ならここで完了を待つ<br/>（handleSettingsChange発火のfire-and-forget rehydrateも含む）<br/>rehydrateが失敗してもwaitForRehydrate()はrejectを握りつぶし、<br/>完了だけを待つ（must2: 例外がHCSのisClosingSettingsPullリセットを飛ばさない）
+        Note over PFG: まず waitForRehydrate() を await（#297）<br/>rehydrateForRepo()が実行中ならここで完了を待つ<br/>（handleSettingsChange発火のfire-and-forget rehydrateも含む）<br/>rehydrateが失敗してもwaitForRehydrate()はrejectを握りつぶし、<br/>完了だけを待つ（must2: 例外がHCSの事後処理を飛ばさない）
         Note over PFG: canSync OK, isArchiveLoading=false<br/>→ 処理開始
         PFG->>PFG: isPulling = true
         Note over PFG: isRepoSwitchPull = repoChangePending<br/>（切替起因の印を控えてから repoChangePending=false）
@@ -667,13 +664,11 @@ sequenceDiagram
         PFG->>PFG: setLastPushedSnapshot()
         PFG->>PFG: lastKnownCommitSha=commitSha
         PFG->>PFG: isPulling = false
-        HCS->>HCS: isClosingSettingsPull = false
     else Pull/Push/ArchiveLoad中
         Note over HCS: 即時Pullせず pendingRepoSync=true で予約<br/>（repoChangePending は落とさず引き回す）<br/>resetForRepoSwitchで既にクリア済み
         Note over HCS: 進行中同期の finally 後に queue pull を1回実行<br/>→ pullFromGitHub 入口で isRepoSwitchPull=true<br/>→ scroll 残骸リセットも発火（#147）
     end
 
-    HCS->>HCS: repoChangedInSettings = false
     HCS->>HCS: githubSettingsChangedInSettings = false
     HCS->>HCS: importOccurredInSettings = false
 
@@ -727,10 +722,8 @@ sequenceDiagram
 | --------------------------------- | --------- | ------- | -------------------------------------- | ------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `isFirstPriorityFetched`          | `boolean` | `false` | `false`→`true`（onPriorityComplete時） | 変化なし     | `false`                                              | ガラス効果が解除されたまま残り空データで操作してしまう                              |
 | `isPullCompleted`                 | `boolean` | `false` | `false`→`true`（全リーフ取得完了時）   | 変化なし     | `false`                                              | フッタの作成/削除ボタンが有効なまま残り空データで操作してしまう                     |
-| `repoChangedInSettings`           | `boolean` | `false` | 変化なし                               | 変化なし     | `true`                                               | `false`のままだと`handleCloseSettings()`でリポ切替時のリセットが正しく追跡されない  |
 | `githubSettingsChangedInSettings` | `boolean` | `false` | 変化なし                               | 変化なし     | `true`（リポ名またはトークン変更時）                 | `false`のままだと`handleCloseSettings()`でPullが実行されない                        |
 | `importOccurredInSettings`        | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし（リポ切替とは独立）                         | インポート後にPullが走らない（リポ切替とは無関係）                                  |
-| `isClosingSettingsPull`           | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし                                             | 設定画面閉じ時のPull中表示の管理用（リポ切替と直接の関係なし）                      |
 | `isArchiveLoading`                | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし（resetForRepoSwitchでは直接リセットしない） | 進行中のアーカイブPullが完了しても`isArchiveLoaded=false`なので再Pull必要。実害なし |
 
 ---
@@ -775,7 +768,7 @@ sequenceDiagram
 | 15a | トークンだけ変更して閉じる             | Pullが走る（新トークンで再取得）  | `githubSettingsChangedInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                                                                                                          |   B    |
 | 16  | テーマだけ変更して閉じる               | Pullされない                      | `githubSettingsChangedInSettings=false` かつ `importOccurredInSettings=false` → `handleCloseSettings()`でスキップ                                                                                                                                                                              |   B    |
 | 17  | インポート後にリポ切替なしで閉じる     | インポートデータの同期Pullが走る  | `importOccurredInSettings=true` → `handleCloseSettings()` → `pullFromGitHub()`                                                                                                                                                                                                                 |   B    |
-| 18  | リポ切替＋インポート両方実行して閉じる | Pullは1回だけ実行される           | `repoChangedInSettings \|\| importOccurredInSettings` → 1回の`pullFromGitHub()`                                                                                                                                                                                                                |   B    |
+| 18  | リポ切替＋インポート両方実行して閉じる | Pullは1回だけ実行される           | 冒頭で退避した`githubSettingsChanged \|\| importOccurred` → 1回の`pullFromGitHub()`                                                                                                                                                                                                            |   B    |
 | 19  | URL状態が旧リポのID参照                | ホームに収束（URLがクリア済み）   | リポ切替時に `handleSettingsChange()` が `history.replaceState` で URL query を空にする → `restoreStateFromUrl()` は空URLを読み home へ収束（旧パスと同名のノート/リーフで ID が一致する誤着地も併せて回避）                                                                                   |   B    |
 | 20  | IndexedDB自動保存が旧データで上書き    | 新リポデータが保持される          | `pullFromGitHub()` → `clearAllData()` → 新データ保存                                                                                                                                                                                                                                           |   B    |
 
@@ -909,8 +902,7 @@ flowchart TD
     CheckSync -->|Yes: いずれか実行中| SkipSafe[新Pullをスキップ<br/>resetForRepoSwitchで<br/>既にデータクリア済み]
     SkipSafe --> CheckReset
 
-    CheckSync -->|No: 全て空き| SetClosing[isClosingSettingsPull = true]
-    SetClosing --> Pull[await pullFromGitHub false]
+    CheckSync -->|No: 全て空き| Pull[await pullFromGitHub false]
 
     Pull --> PullResult{Pull結果}
     PullResult -->|成功| NewData[新リポのデータ表示<br/>isFirstPriorityFetched=true<br/>isPullCompleted=true]
@@ -919,16 +911,14 @@ flowchart TD
     PullResult -->|stale=up_to_date<br/>かつisPullCompleted=false| Continue[初回Pull扱い→続行]
     Continue --> NewData
 
-    NewData --> ResetClosing[isClosingSettingsPull = false]
-    ErrorHandle --> ResetClosing
-    NoChange --> ResetClosing
-
-    ResetClosing --> CheckReset{isPullCompleted?}
+    NewData --> CheckReset{isPullCompleted?}
+    ErrorHandle --> CheckReset
+    NoChange --> CheckReset
 
     CheckReset -->|false| Reset[isFirstPriorityFetched = false<br/>resetForRepoSwitch<br/>archiveLeafStatsStore.reset]
     CheckReset -->|true| ClearFlags
 
-    Reset --> ClearFlags[repoChangedInSettings = false<br/>githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false]
+    Reset --> ClearFlags[githubSettingsChangedInSettings = false<br/>importOccurredInSettings = false]
     ClearFlags --> End[handleCloseSettings 完了]
 ```
 
