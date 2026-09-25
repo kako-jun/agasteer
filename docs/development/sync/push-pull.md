@@ -619,6 +619,7 @@ sequenceDiagram
     participant Settings as GitHubSettings.svelte
     participant HSC as handleSettingsChange()
     participant RFRS as resetForRepoSwitch()
+    participant RH as rehydrateForRepo()
     participant HCS as handleCloseSettings()
     participant PFG as pullFromGitHub()
     participant HWC as handleWorldChange()
@@ -633,15 +634,25 @@ sequenceDiagram
 
     HSC->>RFRS: resetForRepoSwitch()
     Note over RFRS: 1. resetArchive()<br/>  archiveNotes=[], archiveLeaves=[]<br/>  archiveMetadata=初期値<br/>  isArchiveLoaded=false
-    Note over RFRS: 2. archiveLeafStatsStore.reset()
-    Note over RFRS: 3. lastPushedNotes=[]<br/>  lastPushedLeaves=[]<br/>  lastPushedArchiveNotes=[]<br/>  lastPushedArchiveLeaves=[]
-    Note over RFRS: 4. clearAllChanges()<br/>  isStructureDirty=false<br/>  dirtyNoteIds=∅, dirtyLeafIds=∅
-    Note over RFRS: 5. lastKnownCommitSha は新リポのスロットから<br/>  localStorage 経由で復元（#131）<br/>  lastPulledPushCount=0<br/>  isStale=false<br/>  lastPushTime=0<br/>  lastStaleCheckTime=0
-    Note over RFRS: 6. leftWorld='home'<br/>  rightWorld='home'
+    Note over RFRS: 2. lastPushedNotes=[]<br/>  lastPushedLeaves=[]<br/>  lastPushedArchiveNotes=[]<br/>  lastPushedArchiveLeaves=[]
+    Note over RFRS: 3. clearAllChanges()<br/>  isStructureDirty=false<br/>  dirtyNoteIds=∅, dirtyLeafIds=∅
+    Note over RFRS: 4. isStale=false<br/>  lastPushTime=0<br/>  lastStaleCheckTime=0<br/>  （lastKnownCommitSha・lastPulledPushCountは<br/>  ここでは触らない。復元は下記 rehydrateForRepo 側）
+    Note over RFRS: 5. leftWorld='home'<br/>  rightWorld='home'
 
     HSC->>HSC: window.history.replaceState(state, '', pathname)<br/>URL query をクリア（旧パスと同名のノート/リーフが<br/>新リポにあると pull 後の restoreStateFromUrl が<br/>誤着地するのを防ぐ）<br/>history.state は保持
 
     HSC->>HSC: updateSettings(next)<br/>LocalStorageに即座に保存
+
+    HSC->>HSC: archiveLeafStatsStore.reset()
+
+    alt Pull/Push/ArchiveLoad中でない
+        HSC->>HSC: pendingRehydrateRepo = null
+        HSC->>RH: rehydrateForRepo(payload.repoName)<br/>fire-and-forget（await せず、失敗は catch でログのみ）
+        Note over RH: setCurrentRepo()でIndexedDB切替<br/>新リポのnotes/leavesをロード<br/>lastKnownCommitSha・metadata・<br/>lastPulledPushCountを新リポの<br/>スロットから復元（#297）
+    else Pull/Push/ArchiveLoad中
+        HSC->>HSC: pendingRehydrateRepo = payload.repoName<br/>（rehydrateはHCS/PFG起点で後で実行、#297 S-c）
+    end
+
     HSC->>HSC: githubSettingsChangedInSettings = true
 
     User->>Settings: 設定画面を閉じる（×ボタン）
@@ -1035,7 +1046,6 @@ let canPush = $derived(
 export function resetForRepoSwitch(): void {
   // アーカイブデータをクリア
   resetArchive()
-  archiveLeafStatsStore.reset()
 
   // Pushスナップショットをクリア（旧リポのスナップショットで誤検出しないように）
   lastPushedNotes = []
@@ -1047,8 +1057,10 @@ export function resetForRepoSwitch(): void {
   clearAllChanges()
 
   // Git参照をクリア（旧リポのSHAで誤判定しないように）
-  lastKnownCommitSha.value = null
-  lastPulledPushCount.value = 0
+  // lastKnownCommitSha は per-repo slot から rehydrateForRepo で復元するため、
+  // ここでは触らない（null で上書きすると新リポ slot に null が書き込まれて
+  // 復元できなくなる — stores.svelte.ts の $effect が検知してしまう）。
+  // lastPulledPushCount も同様に per-repo slot から復元するため触らない。
   isStale.value = false
   lastPushTime.value = 0
   lastStaleCheckTime.value = 0
@@ -1056,8 +1068,23 @@ export function resetForRepoSwitch(): void {
   // ワールドをホームに戻す（旧リポのアーカイブ表示を防止）
   leftWorld.value = 'home'
   rightWorld.value = 'home'
+
+  // 旧リポのノート/リーフを開いたまま残さない
+  // pullFromGitHub 側でも pane クリアしているが、以下の経路ではそこに到達しない:
+  // 1. 設定確定〜pullFromGitHub 開始までの非同期ギャップ
+  // 2. 同期中 repo 切替による予約pull 待機中（#134）
+  // 3. token/repoName 未設定で pull が走らない無効経路
+  // view も 'home' に戻すことで、null leaf を edit しようとする reactive effect を防止
+  leftNote.value = null
+  rightNote.value = null
+  leftLeaf.value = null
+  rightLeaf.value = null
+  leftView.value = 'home'
+  rightView.value = 'home'
 }
 ```
+
+`archiveLeafStatsStore.reset()` はこの関数には含まれない。呼び出し元の`handleSettingsChange()`が`resetForRepoSwitch()`とは別に、`updateSettings(next)`の後で呼ぶ（図2参照）。同様に`lastKnownCommitSha` / `lastPulledPushCount`もこの関数では触らず、`rehydrateForRepo()`側でper-repoスロットから復元する。
 
 ---
 
