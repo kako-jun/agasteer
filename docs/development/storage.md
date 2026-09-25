@@ -155,6 +155,7 @@ IndexedDBは**リポジトリ単位のDB**、**共有DB**、**metadata DB**の3�
 - **オブジェクトストア**: `byRepo`（キーは `owner/repo`、値は GitHub の home metadata と同形の `Metadata`）
 - **用途**: 起動時の同期済み metadata 復元。変更時はリポごとの書き込みを直列化する
 - **移行**: 旧 localStorage の metadata を保存・読み戻しできた後で旧フィールドを除く。GitHub 上の `metadata.json` の形式は変更しない
+- **アクセサの分離**: DB 定義・読み書き（`openMetadataDb`/`readMetadata`/`writeMetadata`/`flushPersistedMetadata`/`getPersistedMetadata`/`setPersistedMetadata`）と旧 localStorage からの移行（`migrateMetadataFromLocalStorage`）は `src/lib/data/metadata-storage.ts` に分離（storage.ts は per-repo/共有DBの定義のみ、#295）。循環 import を避けるため、storage.ts → metadata-storage.ts の呼び出しは `loadSettings()` 内の1箇所だけ動的 import で行う
 
 #### リポ単位DB（per-repo DB）
 

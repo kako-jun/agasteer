@@ -223,7 +223,8 @@ agasteer/
 │   │   │   ├── sync-handlers.ts         # GitHub同期メッセージのi18n変換ヘルパー
 │   │   │   └── index.ts                 # API関連エクスポート
 │   │   ├── data/
-│   │   │   ├── storage.ts               # IndexedDB/LocalStorage汎用ヘルパー（1286行）
+│   │   │   ├── storage.ts               # IndexedDB/LocalStorage汎用ヘルパー（1301行）
+│   │   │   ├── metadata-storage.ts      # metadata DB専用の永続化層（#295。旧localStorageからの移行含む）
 │   │   │   ├── importers.ts             # 他アプリ（Simplenote/Google Keep/Cosense）からのインポート（1216行）
 │   │   │   ├── notes.ts                 # ノートのCRUD操作（純粋ビジネスロジック）
 │   │   │   ├── leaves.ts                # リーフのCRUD操作（純粋ビジネスロジック）
@@ -477,7 +478,8 @@ CodeMirrorの拡張ロジックをDOM非依存の形に分離し、node環境の
 
 **データ永続化（data/）:**
 
-- `data/storage.ts`: IndexedDB/LocalStorageへの読み書き（汎用ヘルパー関数、1286行）。#131 でリポジトリ単位に名前空間化（per-repo DB + 共有DB + localStorage の `{ settings, globalState, byRepo }` 構造）
+- `data/storage.ts`: IndexedDB/LocalStorageへの読み書き（汎用ヘルパー関数、1301行）。#131 でリポジトリ単位に名前空間化（per-repo DB + 共有DB + localStorage の `{ settings, globalState, byRepo }` 構造）
+- `data/metadata-storage.ts`: metadata DB（`agasteer/metadata`）専用の永続化層。DB開閉・読み書き（`getPersistedMetadata`/`setPersistedMetadata`/`flushPersistedMetadata`）と旧 localStorage からの移行（`migrateMetadataFromLocalStorage`）（#295。`data/storage.ts` が god-file 監視対象のため分離。循環 import 回避のため `storage.ts` はこのファイルを静的 import せず、`loadSettings()` 内で動的 import する）
 - `data/notes.ts` / `data/leaves.ts`: ノート/リーフのCRUD操作（純粋ビジネスロジック本体）。`actions/crud.ts` から呼ばれる
 - `data/importers.ts`: 他アプリ（Simplenote、Google Keep、Cosense）からのインポート処理（1216行）
 - `data/media-storage.ts`: per-repo DB の `mediaPending`/`mediaCache` store アクセサ（#242。ArrayBuffer を含むため toPlain を通さない。`data/storage.ts` が god-file 監視対象のため分離）
@@ -648,6 +650,10 @@ pane-navigation.svelte.tsでは上記純粋関数のラッパーを定義し、�
 - saveCustomBackground, loadCustomBackground, deleteCustomBackground
 
 ノート/リーフ以外のper-repo IndexedDBアクセサ（メディア同期用の`mediaPending`/`mediaCache`）は `data/media-storage.ts` に分離されている（詳細は上記「データ永続化」節）。
+
+**metadata DB（`agasteer/metadata`）:**
+
+- getPersistedMetadata, setPersistedMetadata, flushPersistedMetadata（`data/metadata-storage.ts` に分離、#295）
 
 ---
 
