@@ -89,12 +89,19 @@ export const modalState = {
   },
 }
 
+/** Pullトーストの自動消滅タイマー（#302: 前のタイマーが後から出たメッセージを消さないよう保持） */
+let pullToastTimer: ReturnType<typeof setTimeout> | null = null
+
 /**
  * Pullトーストを表示
  */
 export function showPullToast(message: string, variant: 'success' | 'error' | '' = '') {
+  if (pullToastTimer !== null) {
+    clearTimeout(pullToastTimer)
+  }
   pullToastState.value = { message, variant }
-  setTimeout(() => {
+  pullToastTimer = setTimeout(() => {
+    pullToastTimer = null
     pullToastState.value = { message: '', variant: '' }
   }, 2000)
 }

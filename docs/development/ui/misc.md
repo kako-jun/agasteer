@@ -103,7 +103,7 @@ Repository入力欄の右にGitHubリポジトリを直接開けるリンクボ�
 
 ### トーストの種類と寿命
 
-- **通常トースト**: 表示から2秒で自動消滅。`showPushToast`（push スロット）はタイマーが「自分が出したトーストがまだ表示中か」を確認してから消すので、後から別のトーストに差し替わっていれば何もしない（**後勝ち**）。`showPullToast`（pull スロット）は guard を持たず2秒後に無条件で消す。
+- **通常トースト**: 表示から2秒で自動消滅。`showPushToast`（push スロット）はタイマーが「自分が出したトーストがまだ表示中か」を確認してから消すので、後から別のトーストに差し替わっていれば何もしない（**後勝ち**）。`showPullToast`（pull スロット）は#302で前のタイマーを`clearTimeout`してから新タイマーを張る方式に修正済み。連続表示時、前のトーストのタイマーが後から出たメッセージを早期に消すことはない。
 - **sticky トースト**（`showStickyPushToast`、#224）: 自動消滅しない。バックグラウンド Push 中（`isPushingBackground`）に `toast.pushInProgress`「Push中です。アプリの切り替えや終了はしないでください」を出し続け、送信完了前にアプリを切り替え／終了しないよう促す。完了トーストや他操作のトースト、`clearPushToast()` で差し替わる。
 - **FF 風カウントダウン**（#238）: sticky トーストの2行目に「残りステージ数」（5→1）を本文と同じサイズでセンタリング表示する（脈動アニメ countdown-pulse 付き）。ステージ対応は `sync/push-stages.ts`、状態は `pushToastCountdown`（`ui/ui.svelte.ts`）。`setPushToastCountdown()` は**単調減少ガード**付きで、リトライ・救済経路で内部的にステージが巻き戻っても表示の数字は増えない。リセット（null 化）は `showStickyPushToast()`（新しい Push の開始）/ `showPushToast()` / `showPushCompletionToast()` / `clearPushToast()` のみ。orphan Push（タイムアウト後も裏で走る旧 `executePush`）の遅延コールバックは `actions/git.ts` の世代カウンタで弾く。
 - **カウントダウンのペーシング**（#238 実機フィードバック）: 各数字は最低 `PUSH_COUNTDOWN_MIN_HOLD_MS`（400ms）表示し、次の値はキューに積んで順に出す（実ステージ所要の偏りで終盤の数字が駆け抜けるのを防ぐ）。遅延対象は Push 完了専用入口 `showPushCompletionToast()` の success だけ（最後の数字の保持完了まで、最悪 +2秒弱）。error は遅延せず即時表示・キュー破棄。汎用 `showPushToast()`（crud / move / share 等）は常に即時表示で、割り込み時はキューだけ破棄し、遅延中の完了トーストは汎用トーストの2秒消滅時に必ず表示される（新しい Push の開始・clearPushToast・完了 error で上書きされた場合を除く）。
