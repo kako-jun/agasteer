@@ -89,7 +89,7 @@ export const modalState = {
   },
 }
 
-/** Pullトーストの自動消滅タイマー（#302: 前のタイマーが後から出たメッセージを消さないよう保持） */
+/** Pullトーストの自動消滅タイマー。前回分を解除して後勝ちにするため保持する（#302） */
 let pullToastTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
