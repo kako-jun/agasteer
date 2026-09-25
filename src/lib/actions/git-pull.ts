@@ -167,6 +167,15 @@ export async function pullFromGitHub(
           disablePush: true,
         })
         if (choice !== 'pull') {
+          // #314 M1: この分岐は Pull を行わないと確定している。onCancel（起動時
+          // キャンセル）は applyPersistedStartupCache 経由で restoreStateFromUrl を
+          // await するが、そちらのアーカイブ待機（waitForSyncIdle）は isPulling が
+          // false になるのを待つ。ここで isPulling を落とさずに `await onCancel?.()`
+          // すると、この finally（関数末尾）が isPulling を落とすのは onCancel の
+          // 完了後、onCancel は isPulling が落ちるのを待つ、という相互待機になり
+          // デッドロックする。Push-first 分岐（下）と同様に、待たれる側を先に
+          // 解放してから待つ側を呼ぶ。
+          isPulling.value = false
           await onCancel?.()
           return
         }
@@ -186,6 +195,9 @@ export async function pullFromGitHub(
           // Push後に再度Pull（再帰呼び出し）
           return pullFromGitHub(false, onCancel)
         } else if (choice === 'cancel' || choice === null) {
+          // #314 M1: 同上の理由（この分岐も Pull しないと確定しているため、待たれる
+          // 側の isPulling を先に解放してから onCancel を呼ぶ）。
+          isPulling.value = false
           await onCancel?.()
           return
         }
@@ -275,13 +287,18 @@ export async function pullFromGitHub(
         appState.isFirstPriorityFetched = true
         appState.isLoadingUI = false
 
-        if (isInitialStartup) {
-          appState.isRestoringFromUrl = true
-          appActions.restoreStateFromUrl(true)
-          appState.isRestoringFromUrl = false
-        } else {
-          appActions.restoreStateFromUrl(false)
-        }
+        // #314 Q1: 以前は isInitialStartup のときだけ isRestoringFromUrl を
+        // true→false に手動トグルしていたが、この呼び出しは未 await（下記参照）。
+        // restoreStateFromUrl がアーカイブ待機（M4a）に入ると、その続きが実行される
+        // 前に false へ戻してしまい、待機後の pane 解決が isRestoringFromUrl による
+        // updateUrlFromState の抑制をすり抜けて history.pushState を1つ余分に積む
+        // 窓があった。restoreStateFromUrl 自身が世代カウンタ（M4b）でフラグの生死を
+        // 最後（待機を含む）まで管理するため、isInitialStartup を特別扱いする理由は
+        // ない（非初回パスと同じ形に揃える）。
+        // onPriorityComplete は型上 `() => void` で、executePull はこの戻り値を
+        // await しない。restoreStateFromUrl 内の待機（isPulling 等が false になる
+        // のを待つ）は、この Pull 自身の isPulling=false（finally）をブロックしない。
+        appActions.restoreStateFromUrl(false)
       },
     }
 
