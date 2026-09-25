@@ -29,6 +29,7 @@ import {
   leafStatsStore,
   pullProgressStore,
   rehydrateForRepo,
+  waitForRehydrate,
   flushAllEditors,
 } from '../stores'
 import { clearAllData, createBackup, restoreFromBackup, saveNotes, saveLeaves } from '../data'
@@ -90,6 +91,11 @@ export async function pullFromGitHub(
   precomputedStale?: StaleCheckResult
 ): Promise<void> {
   const $_ = get(_)
+
+  // #297: rehydrateForRepo 実行中（リポ切替直列化キュー含む）なら先に完了を待つ。
+  // 待たずに進むと、rehydrate が新リポの DB/store 切替を終える前に Pull が
+  // 走り出し、旧リポ DB に新リポの Pull 結果を書き込んでしまう。
+  await waitForRehydrate()
 
   // 交通整理: Pull/Push中またはアーカイブロード中は不可
   if (
