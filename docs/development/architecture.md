@@ -299,6 +299,7 @@ agasteer/
 │   │   │   ├── stats.ts                 # リーフ統計の計算
 │   │   │   └── index.ts                 # ユーティリティ関連エクスポート
 │   │   ├── app-state.svelte.ts          # 共有リアクティブ状態（Svelte 5 runes、onMount初期化含む）
+│   │   ├── archive-load.svelte.ts       # アーカイブロード本体（IndexedDBキャッシュ読み出し+pullArchive、pane-navigationから抽出）
 │   │   ├── keyboard-nav.svelte.ts       # キーボードナビゲーション（グローバルキーハンドラ）
 │   │   ├── ocr.ts                       # OCR（tesseract.js動的ロード）
 │   │   ├── pane-actions-factory.svelte.ts # PaneActions生成ファクトリ（D&D/移動モーダル/設定/シェア等）
@@ -535,6 +536,7 @@ CodeMirrorの拡張ロジックをDOM非依存の形に分離し、node環境の
 
 - `keyboard-nav.svelte.ts`: キーボードによるグリッドナビゲーション（App.svelteから抽出）
 - `pane-navigation.svelte.ts`: ペイン間のナビゲーション・ワールド切替・アーカイブ/リストア操作（App.svelteから抽出）
+- `archive-load.svelte.ts`: アーカイブ本体のロード（IndexedDBキャッシュ読み出し + `pullArchive`）とロック管理（`loadArchiveCacheFromDB()`, `performArchiveLoad()`。pane-navigation.svelte.tsから抽出、#301）
 - `pane-actions-factory.svelte.ts`: `paneActions` オブジェクト生成・D&D・移動モーダル・設定変更・シェア・CRUDラッパー・HMR/PWAハンドラ（App.svelteから抽出）
 - `startup-cache.ts`: 起動時キャッシュ（`PersistedStartupCache`）の型定義
 - `tour.ts`: 初回ガイド（吹き出し表示）の状態管理

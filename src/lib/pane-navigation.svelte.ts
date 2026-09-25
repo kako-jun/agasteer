@@ -73,13 +73,7 @@ import {
   createOfflineLeaf,
   isOfflineLeaf,
 } from './utils'
-import {
-  saveOfflineLeaf,
-  saveArchiveNotes,
-  saveArchiveLeaves,
-  loadArchiveNotes,
-  loadArchiveLeaves,
-} from './data'
+import { saveOfflineLeaf, saveArchiveNotes, saveArchiveLeaves } from './data'
 import { pullArchive, translateGitHubMessage } from './api'
 import {
   showPushToast,
@@ -94,6 +88,12 @@ import {
   moveNoteToWorld as moveNoteToWorldAction,
   moveLeafToWorld as moveLeafToWorldAction,
 } from './actions/move'
+// #301: アーカイブロード（IndexedDBキャッシュ読み出し + pullArchive）は
+// archive-load.svelte.ts へ抽出済み。handleWorldChange はロード本体を
+// performArchiveLoad() 経由で呼ぶ。restoreStateFromUrl は独自のロード処理を
+// 持つため loadArchiveCacheFromDB のみを使う（#297 時点からの既存構成、
+// この Issue では二重実装の統合はしない）。
+import { loadArchiveCacheFromDB, performArchiveLoad } from './archive-load.svelte'
 
 // ========================================
 // Navigation State helpers
@@ -334,106 +334,8 @@ export function handleDisabledPushClick(reason: string, pushDisabledReason: stri
 }
 
 // ========================================
-// Archive cache helper
-// ========================================
-
-/**
- * IndexedDBからアーカイブキャッシュを読み込み、ストアにセットする。
- * @returns キャッシュが存在したかどうか
- */
-async function loadArchiveCacheFromDB(): Promise<{ hasCachedData: boolean }> {
-  const [cachedNotes, cachedLeaves] = await Promise.all([loadArchiveNotes(), loadArchiveLeaves()])
-  const hasCachedData = cachedNotes.length > 0 || cachedLeaves.length > 0
-  if (hasCachedData) {
-    archiveNotes.value = cachedNotes
-    archiveLeaves.value = cachedLeaves
-    isArchiveLoaded.value = true
-    setArchiveBaseline(cachedNotes, cachedLeaves)
-    // キャッシュからstatsを再構築（pullArchive完了前でも統計を表示可能にする）
-    archiveLeafStatsStore.rebuild(cachedLeaves, cachedNotes)
-  }
-  return { hasCachedData }
-}
-
-// ========================================
 // World switching / Archive / Restore
 // ========================================
-
-/**
- * アーカイブ本体をロードする（IndexedDBキャッシュ読み出し + pullArchive）。
- * #297 S-b: handleWorldChange から呼ばれる。ロック（appState.isArchiveLoading）の
- * 取得・解除・runPendingRepoSyncIfIdle の呼び出しは呼び出し側（performArchiveLoad）の
- * 責務にし、ここでは実際のロード処理だけを行う（二重実装しない）。
- */
-async function loadArchiveIntoStores(): Promise<void> {
-  // まずIndexedDBキャッシュから読み出し
-  const { hasCachedData } = await loadArchiveCacheFromDB()
-  if (!hasCachedData) {
-    archiveLeafStatsStore.reset()
-  }
-  // blob SHAキャッシュ用: dirtyでなければキャッシュ済みリーフからSHA→Leafのマップを構築
-  const cachedLeafMap = isDirty.value
-    ? new Map<string, Leaf>()
-    : buildBlobShaCache(archiveLeaves.value)
-  try {
-    const result = await pullArchive(settings.value, {
-      onLeafFetched: (leaf) => archiveLeafStatsStore.addLeaf(leaf.id, leaf.content),
-      cachedLeaves: cachedLeafMap.size > 0 ? cachedLeafMap : undefined,
-    })
-    if (result.success) {
-      archiveNotes.value = result.notes
-      archiveLeaves.value = result.leaves
-      archiveMetadata.value = result.metadata
-      isArchiveLoaded.value = true
-      setArchiveBaseline(result.notes, result.leaves)
-      saveArchiveNotes(result.notes).catch((err) =>
-        console.error('Failed to persist archive notes:', err)
-      )
-      saveArchiveLeaves(result.leaves).catch((err) =>
-        console.error('Failed to persist archive leaves:', err)
-      )
-    } else {
-      const t = get(_)
-      // キャッシュがなければエラー表示
-      if (!hasCachedData) {
-        showPullToast(
-          translateGitHubMessage(
-            result.message,
-            t,
-            result.rateLimitInfo,
-            undefined,
-            result.errorCode,
-            result.httpStatus
-          ),
-          'error'
-        )
-      }
-    }
-  } catch (e) {
-    console.error('Archive pull failed:', e)
-    if (!hasCachedData) {
-      const t = get(_)
-      showPullToast(t('toast.pullFailed'), 'error')
-    }
-  }
-}
-
-/**
- * アーカイブロードのロック取得〜解除〜保留同期の再開までを一括で行う。
- * #297 S-b: 再判定通過直後・IndexedDB読込前（await の前）に同期でロックを取る
- * （loadArchiveCacheFromDB は isArchiveLoading を参照しないため、ここで先に
- * 取っても安全。取らないと IndexedDB 読込中に AL ロックが無い窓ができ、
- * その間に Pull が割り込める）。
- */
-async function performArchiveLoad(): Promise<void> {
-  appState.isArchiveLoading = true
-  try {
-    await loadArchiveIntoStores()
-  } finally {
-    appState.isArchiveLoading = false
-    await runPendingRepoSyncIfIdle()
-  }
-}
 
 export async function handleWorldChange(world: WorldType, pane: Pane = 'left') {
   const currentPaneWorld = pane === 'left' ? leftWorld.value : rightWorld.value
