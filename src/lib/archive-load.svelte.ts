@@ -31,6 +31,13 @@ import { showPullToast } from './ui'
 import { runPendingRepoSyncIfIdle } from './actions/git-pull'
 import { _ } from './i18n'
 
+/**
+ * catch のログ文言を出し分けるための呼び出し元識別子（#307 nit4）。
+ * 自由文字列だと呼び出し元ごとに文言が揺れうるため、リテラルunionで既知の値に縛る。
+ * handleWorldChange は未指定（デフォルトの「Archive pull failed:」）のまま呼ぶ契約。
+ */
+export type ArchiveLoadLogContext = 'during URL restore'
+
 // ========================================
 // Archive cache helper
 // ========================================
@@ -65,7 +72,7 @@ export async function loadArchiveCacheFromDB(): Promise<{ hasCachedData: boolean
  * #307: restoreStateFromUrl からも呼ばれるようになった。呼び出し元を区別する
  * ための catch ログ文言だけ logContext で差し替え可能にする。
  */
-async function loadArchiveIntoStores(logContext?: string): Promise<void> {
+async function loadArchiveIntoStores(logContext?: ArchiveLoadLogContext): Promise<void> {
   // まずIndexedDBキャッシュから読み出し
   const { hasCachedData } = await loadArchiveCacheFromDB()
   if (!hasCachedData) {
@@ -128,7 +135,7 @@ async function loadArchiveIntoStores(logContext?: string): Promise<void> {
  * （logContext: 'during URL restore'）の2箇所。ガード（!isArchiveLoaded &&
  * token && repoName 等）は各呼び出し元に残す。
  */
-export async function performArchiveLoad(logContext?: string): Promise<void> {
+export async function performArchiveLoad(logContext?: ArchiveLoadLogContext): Promise<void> {
   appState.isArchiveLoading = true
   try {
     await loadArchiveIntoStores(logContext)
