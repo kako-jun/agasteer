@@ -5,6 +5,11 @@
  * 読み出し + pullArchive）とそのロック管理を集約するモジュール（#301）。
  * #297 でこれらの処理を関数として抽出していたため、独立モジュールへ切り出しやすい
  * 状態になっていた。
+ *
+ * #307: handleWorldChange に加え、restoreStateFromUrl（URL からの状態復元時の
+ * アーカイブロード）も performArchiveLoad 経由に統合。呼び出し元ごとに異なる
+ * catch ログ文言は logContext 引数で保つ（#297 S-b のロック窓修正を両呼び出し元に
+ * 適用するのが目的で、ログ文言の統一自体は目的ではないため）。
  */
 
 import { get } from 'svelte/store'
@@ -57,8 +62,10 @@ export async function loadArchiveCacheFromDB(): Promise<{ hasCachedData: boolean
  * #297 S-b: handleWorldChange から呼ばれる。ロック（appState.isArchiveLoading）の
  * 取得・解除・runPendingRepoSyncIfIdle の呼び出しは呼び出し側（performArchiveLoad）の
  * 責務にし、ここでは実際のロード処理だけを行う（二重実装しない）。
+ * #307: restoreStateFromUrl からも呼ばれるようになった。呼び出し元を区別する
+ * ための catch ログ文言だけ logContext で差し替え可能にする。
  */
-async function loadArchiveIntoStores(): Promise<void> {
+async function loadArchiveIntoStores(logContext?: string): Promise<void> {
   // まずIndexedDBキャッシュから読み出し
   const { hasCachedData } = await loadArchiveCacheFromDB()
   if (!hasCachedData) {
@@ -103,7 +110,7 @@ async function loadArchiveIntoStores(): Promise<void> {
       }
     }
   } catch (e) {
-    console.error('Archive pull failed:', e)
+    console.error(logContext ? `Archive pull failed ${logContext}:` : 'Archive pull failed:', e)
     if (!hasCachedData) {
       const t = get(_)
       showPullToast(t('toast.pullFailed'), 'error')
@@ -117,11 +124,14 @@ async function loadArchiveIntoStores(): Promise<void> {
  * （loadArchiveCacheFromDB は isArchiveLoading を参照しないため、ここで先に
  * 取っても安全。取らないと IndexedDB 読込中に AL ロックが無い窓ができ、
  * その間に Pull が割り込める）。
+ * #307: 呼び出し元は handleWorldChange（引数なし）と restoreStateFromUrl
+ * （logContext: 'during URL restore'）の2箇所。ガード（!isArchiveLoaded &&
+ * token && repoName 等）は各呼び出し元に残す。
  */
-export async function performArchiveLoad(): Promise<void> {
+export async function performArchiveLoad(logContext?: string): Promise<void> {
   appState.isArchiveLoading = true
   try {
-    await loadArchiveIntoStores()
+    await loadArchiveIntoStores(logContext)
   } finally {
     appState.isArchiveLoading = false
     await runPendingRepoSyncIfIdle()
