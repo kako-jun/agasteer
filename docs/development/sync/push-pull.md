@@ -526,7 +526,8 @@ Pull/Push/アーカイブロード中に設定画面を閉じた場合は、即�
 1. `appState.isPullCompleted = false` / `appState.isFirstPriorityFetched = false`（操作ロック、リポ名変更時のみ）
 2. `appState.repoChangePending = true`（リポ名変更時のみ。設定を閉じた後の「予約中」バッジに使う）
 3. `resetForRepoSwitch()`（stores.svelte.tsの一括リセット関数、リポ名変更時のみ）
-4. `githubSettingsChangedInSettings = true`（リポ名またはトークン変更時のPull判定用フラグ）
+4. `updateSettings(next)`後、`archiveLeafStatsStore.reset()` → アイドルなら`rehydrateForRepo()`をfire-and-forget、ビジーなら`pendingRehydrateRepo`に退避（リポ名変更時のみ。図2参照）
+5. `githubSettingsChangedInSettings = true`（リポ名またはトークン変更時のPull判定用フラグ）
 
 ```typescript
 // pane-actions-factory.svelte.ts handleSettingsChange() 内（要旨）
@@ -638,6 +639,7 @@ sequenceDiagram
     Note over RFRS: 3. clearAllChanges()<br/>  isStructureDirty=false<br/>  dirtyNoteIds=∅, dirtyLeafIds=∅
     Note over RFRS: 4. isStale=false<br/>  lastPushTime=0<br/>  lastStaleCheckTime=0<br/>  （lastKnownCommitSha・lastPulledPushCountは<br/>  ここでは触らない。復元は下記 rehydrateForRepo 側）
     Note over RFRS: 5. leftWorld='home'<br/>  rightWorld='home'
+    Note over RFRS: 6. leftNote/rightNote=null<br/>  leftLeaf/rightLeaf=null<br/>  leftView/rightView='home'
 
     HSC->>HSC: window.history.replaceState(state, '', pathname)<br/>URL query をクリア（旧パスと同名のノート/リーフが<br/>新リポにあると pull 後の restoreStateFromUrl が<br/>誤着地するのを防ぐ）<br/>history.state は保持
 
@@ -645,12 +647,14 @@ sequenceDiagram
 
     HSC->>HSC: archiveLeafStatsStore.reset()
 
-    alt Pull/Push/ArchiveLoad中でない
-        HSC->>HSC: pendingRehydrateRepo = null
-        HSC->>RH: rehydrateForRepo(payload.repoName)<br/>fire-and-forget（await せず、失敗は catch でログのみ）
-        Note over RH: setCurrentRepo()でIndexedDB切替<br/>新リポのnotes/leavesをロード<br/>lastKnownCommitSha・metadata・<br/>lastPulledPushCountを新リポの<br/>スロットから復元（#297）
-    else Pull/Push/ArchiveLoad中
-        HSC->>HSC: pendingRehydrateRepo = payload.repoName<br/>（rehydrateはHCS/PFG起点で後で実行、#297 S-c）
+    opt payload.repoName が設定されている（repoChanged=trueでも空文字なら不成立）
+        alt isPulling/isPushing/isPushingBackground/isArchiveLoadingがすべてfalse
+            HSC->>HSC: pendingRehydrateRepo = null
+            HSC->>RH: rehydrateForRepo(payload.repoName)<br/>fire-and-forget（await せず、失敗は catch でログのみ）
+            Note over RH: setCurrentRepo()でIndexedDB切替<br/>新リポのnotes/leavesをロード<br/>lastKnownCommitSha・metadata・<br/>lastPulledPushCountを新リポの<br/>スロットから復元（#131/#297）
+        else Pull/Push(背景含む)/ArchiveLoadのいずれかがtrue
+            HSC->>HSC: pendingRehydrateRepo = payload.repoName<br/>（消化するのは HCS のアイドル分岐と<br/>runPendingRepoSyncIfIdle（git-pull.ts、予約pull直前）だけ。<br/>PFG自体は消化しない、#297 S-c）
+        end
     end
 
     HSC->>HSC: githubSettingsChangedInSettings = true
@@ -661,6 +665,7 @@ sequenceDiagram
     Note over HCS: まず waitForRehydrate() を await（#297 should2）<br/>shouldQueueRepoSync 判定より前に置く。待たずに判定すると、<br/>判定時点はアイドルでも待機中に取られたロックを見落として<br/>直接 pullFromGitHub を呼んでしまい、その内部の待機後の<br/>canSync 判定で黙って return する（キューにも積まれず消える）
 
     alt Pull/Push/ArchiveLoad中でない
+        Note over HCS: pendingRehydrateRepo が残っていれば<br/>先に await rehydrateForRepo(pendingRehydrateRepo)<br/>（handleCloseSettings 479-487行付近。#297 S-c）
         HCS->>PFG: pullFromGitHub(false)
         Note over PFG: まず waitForRehydrate() を await（#297）<br/>rehydrateForRepo()が実行中ならここで完了を待つ<br/>（handleSettingsChange発火のfire-and-forget rehydrateも含む）<br/>rehydrateが失敗してもwaitForRehydrate()はrejectを握りつぶし、<br/>完了だけを待つ（must2: 例外がHCSの事後処理を飛ばさない）
         Note over PFG: canSync OK, isArchiveLoading=false<br/>→ 処理開始
@@ -721,7 +726,7 @@ sequenceDiagram
 | `dirtyLeafIds`             | `$state<Set<string>>`      | `new Set()`                                                                                                                                           | 同上                                          | 同上                                                                                                   | `new Set()`                                                                                                                 | 同上（リーフ側）                                                                                                               |
 | `isStructureDirty`         | `$state<boolean>`          | `false`                                                                                                                                               | 同上                                          | `clearAllChanges()`で`false`                                                                           | `false`                                                                                                                     | 旧リポの構造変更フラグが残り不要なdirty判定が発生                                                                              |
 | `lastKnownCommitSha`       | `$state<string\|null>`     | LocalStorageの現リポスロットから復元（なければ`null`）                                                                                                | `result.commitSha`をセット                    | `result.commitSha`をセット                                                                             | 新リポのスロットから再読込（#131、未初出なら`null`）                                                                        | 旧リポのSHAと新リポのHEADが比較され、必ず「stale」と誤判定                                                                     |
-| `lastPulledPushCount`      | `$state<number>`           | `0`                                                                                                                                                   | `result.metadata.pushCount`をセット           | `fetchRemotePushCount()`で更新                                                                         | `0`                                                                                                                         | 旧リポのPush回数が統計画面に表示される                                                                                         |
+| `lastPulledPushCount`      | `$state<number>`           | `0`                                                                                                                                                   | `result.metadata.pushCount`をセット           | `fetchRemotePushCount()`で更新                                                                         | `rehydrateForRepo()`で新リポのスロットから再読込（未初出なら`0`）                                                           | 旧リポのPush回数が統計画面に表示される                                                                                         |
 | `isStale`                  | `$state<boolean>`          | `false`                                                                                                                                               | `false`にセット                               | `false`にセット                                                                                        | `false`                                                                                                                     | Pullボタンに赤丸（staleバッジ）が残る                                                                                          |
 | `lastPushTime`             | `$state<number>`           | `0`                                                                                                                                                   | 変化なし                                      | `Date.now()`をセット                                                                                   | `0`                                                                                                                         | 旧リポの最終Push時刻が残り自動Push間隔の計算が狂う                                                                             |
 | `lastStaleCheckTime`       | `$state<number>`           | `0`                                                                                                                                                   | 変化なし                                      | 変化なし                                                                                               | `0`                                                                                                                         | 0にすることで`canPerformCheck()`がfalse→新Pull完了までstaleチェック抑制                                                        |
@@ -1040,6 +1045,8 @@ let canPush = $derived(
 ---
 
 ### resetForRepoSwitch() のコード（参照用）
+
+正本は `src/lib/stores/stores.svelte.ts` の `resetForRepoSwitch()`。乖離時はソースを優先。
 
 ```typescript
 // src/lib/stores/stores.svelte.ts
