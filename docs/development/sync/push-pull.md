@@ -496,7 +496,7 @@ Pull失敗時のバックアップ復元は**初回Pull（`isInitialStartup = tr
 
 さらに、**トークンまたはリポジトリ名が空の場合**（`hasValidConfig = false`）は**Pullを実行せず、初回Pull前の状態に戻す**（`isPullCompleted = false` → `isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。これにより、設定が不完全な状態でデータ操作が行われることを防ぐ。
 
-Pull/Push/アーカイブロード中に設定画面を閉じた場合は、即時Pullではなく**予約Pull**に切り替える。`pendingRepoSync = true` を立て、進行中の同期処理が完了した直後に、最新の `settings.repoName` / `settings.token` に対して `pullFromGitHub(false)` を1回だけ自動実行する。
+Pull/Push（背景Push含む）/アーカイブロード中に設定画面を閉じた場合は、即時Pullではなく**予約Pull**に切り替える。`pendingRepoSync = true` を立て、進行中の同期処理が完了した直後に、最新の `settings.repoName` / `settings.token` に対して `pullFromGitHub(false)` を1回だけ自動実行する。
 
 **Pullが失敗した場合**も同様に、`isPullCompleted = false`となるため初回Pull前の状態にリセットされる（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）。
 
@@ -957,15 +957,15 @@ flowchart TD
 |         true          |     false      |      true      |   false   |   false   |     **true**     | 予約（同上）                                                |
 |         true          |     false      |   **false**    |     -     |     -     |        -         | Pullせずリセット（設定が不完全 → 初回Pull前の状態に戻す）   |
 |         false         |      true      |      true      |   false   |   false   |      false       | Pull実行（インポート後のデータ同期）                        |
-|         false         |      true      |      true      | **true**  |   false   |      false       | 予約（同上）                                                |
+|         false         |      true      |      true      | **true**  |   false   |      false       | 予約（pendingRepoSync=true → 進行中同期の完了後に自動Pull） |
 |         true          |      true      |      true      |   false   |   false   |      false       | Pull実行（両方trueでも1回のみ）                             |
 |         false         |     false      |       -        |     -     |     -     |        -         | スキップ（テーマ等の変更のみ → Pullなし）                   |
 
 **補足**:
 
 - `githubSettingsChanged`も`importOccurred`も`false`の場合（テーマ変更のみ等）、外側のif文で弾かれるためPullは実行されない。これにより不要なAPI呼び出しとトースト通知を回避する。
-- `hasValidConfig`は`!!(settings.value.token && settings.value.repoName)`で判定。`false`の場合は`isPullCompleted = false`を設定し、Pullを実行せずに後続の`isPullCompleted`チェックでリセット処理に入る。
-- Pull失敗時も`isPullCompleted = false`となるため、同様にリセット処理（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）が実行される。
+- `hasValidConfig`は`!!(settings.value.token && settings.value.repoName)`で判定。`false`の場合はPullを実行せず、この分岐内で`isPullCompleted = false` / `pendingRepoSync = false` / `repoChangePending = false` / `pendingRehydrateRepo = null`を設定し、後続の`isPullCompleted`チェックでリセット処理に入る。
+- Pull失敗時も`isPullCompleted = false`となるため、同様にリセット処理（`isFirstPriorityFetched = false` + `resetForRepoSwitch()` + `archiveLeafStatsStore.reset()`）が実行される。ただし`repoChangePending = false`は`!pendingRepoSync`のとき（＝予約されていないとき）のみ行う。予約中（`pendingRepoSync = true`）はここで落とさず、予約経由のPull入口（`git.ts`の`pullFromGitHub`）が`isRepoSwitchPull`として消費する。
 - 表の`isPushing`列は`isPushing`と`isPushingBackground`を1列に畳んで表している。実コードでは`isPushing.value || isPushingBackground.value`として判定しており（#206: 背景Push中も実行中として扱う）、`isPushingBackground`が`true`の行も同じ「予約」結果になる。
 
 ---
