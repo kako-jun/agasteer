@@ -1752,3 +1752,115 @@ describe('pullFromGitHub / pushToGitHub は rehydrate 完了を待つ (#297)', (
     expect(stores.isPushing.value).toBe(false)
   })
 })
+
+describe('rehydrate失敗時のreject握り契約 (#297 T8)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    appState.isArchiveLoading = false
+  })
+
+  // 実装契約（rehydrate.svelte.ts の waitForRehydrateLoop）: waitForRehydrate() は
+  // rehydrate 失敗の reject を内部で catch し、常に resolve する
+  // （rehydrate-serialize.test.ts の must2 で直接検証済み）。
+  // git.test.ts では waitForRehydrate 自体をモックに差し替えているため、その
+  // 「reject を握る」実装ロジックそのものはここでは再現できない。代わりに、
+  // 握った後の resolve をモックで模して、pullFromGitHub/pushToGitHub 側が
+  // 戻り値を素通しして先に進む（自前の try/catch を必要としない）ことを確認する。
+  it('pullFromGitHub: waitForRehydrateがrehydrate失敗のrejectを握って解決すれば、throwせずcanSync判定へ進む', async () => {
+    mocks.waitForRehydrate.mockImplementationOnce(() =>
+      Promise.reject(new Error('rehydrate failed')).catch(() => undefined)
+    )
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    await expect(pullFromGitHub(false)).resolves.toBeUndefined()
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('pushToGitHub: waitForRehydrateがrehydrate失敗のrejectを握って解決すれば、throwせずcanSync判定へ進む', async () => {
+    mocks.waitForRehydrate.mockImplementationOnce(() =>
+      Promise.reject(new Error('rehydrate failed')).catch(() => undefined)
+    )
+    mocks.canSync.mockReturnValueOnce({ canPull: false, canPush: false })
+
+    await expect(pushToGitHub()).resolves.toBeUndefined()
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('rehydrate idle 時の pullFromGitHub/pushToGitHub 二重起動 (#297 T9)', () => {
+  const defaultCanSyncImpl = () => ({ canPull: true, canPush: true })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.lastKnownCommitSha.value = 'local-sha'
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    appState.isPullCompleted = true
+    mocks.getActiveEditorPane.mockReturnValue(null)
+    mocks.waitForRehydrate.mockImplementation(() => Promise.resolve())
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'network_error' })
+    // #297 T9: 既定の canSync モックは常時許可の静的値のため、この describe では
+    // 実ロック状態（isPulling/isPushing/isPushingBackground）に応じた判定に差し替える。
+    // 1本目が同期的にロックを確定してから2本目のcanSyncが評価される順序を検証したい。
+    // #297 T9: mocks.canSync は `vi.fn(() => ({...}))`（0引数）で宣言されているため、
+    // mockImplementation の型はその0引数シグネチャに縛られる。実引数は optional にして
+    // 型エラーを避けつつ、実際の呼び出し（常に3引数）では通常どおり値を受け取る。
+    mocks.canSync.mockImplementation(
+      (isPulling?: boolean, isPushing?: boolean, isPushingBackground?: boolean) => ({
+        canPull: !isPulling && !isPushing && !isPushingBackground,
+        canPush: !isPulling && !isPushing && !isPushingBackground,
+      })
+    )
+  })
+
+  afterEach(() => {
+    // 他のdescribeブロックへ差し替えた実装を持ち越さない
+    mocks.canSync.mockImplementation(defaultCanSyncImpl)
+  })
+
+  it('pullFromGitHubを同時に2回呼ぶと1本目がisPullingロックを確定し、2本目はcanSyncで弾かれる', async () => {
+    const p1 = pullFromGitHub(false)
+    const p2 = pullFromGitHub(false)
+
+    await Promise.all([p1, p2])
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(2)
+    expect(mocks.canSync).toHaveBeenNthCalledWith(1, false, false, false)
+    // 2本目の呼び出し時点では1本目が既にisPulling=trueを確定済み
+    expect(mocks.canSync).toHaveBeenNthCalledWith(2, true, false, false)
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('pushToGitHubを同時に2回呼ぶと1本目がisPushingロックを確定し、2本目はcanSyncで弾かれる', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: true,
+      message: 'github.pushSuccess',
+      variant: 'success',
+      commitSha: 'remote-sha',
+    })
+
+    const p1 = pushToGitHub()
+    const p2 = pushToGitHub()
+
+    await Promise.all([p1, p2])
+
+    expect(mocks.canSync).toHaveBeenCalledTimes(2)
+    expect(mocks.canSync).toHaveBeenNthCalledWith(1, false, false, false)
+    // 2本目の呼び出し時点では1本目が既にisPushing=trueを確定済み
+    expect(mocks.canSync).toHaveBeenNthCalledWith(2, false, true, false)
+    expect(mocks.executePush).toHaveBeenCalledTimes(1)
+    expect(stores.isPushing.value).toBe(false)
+    expect(stores.isPushingBackground.value).toBe(false)
+  })
+})
