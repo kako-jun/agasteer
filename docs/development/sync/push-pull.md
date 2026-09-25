@@ -468,14 +468,14 @@ Pull失敗時のバックアップ復元は**初回Pull（`isInitialStartup = tr
 
 **ブロックされる操作:**
 
-| 操作                                    | ブロック条件                                     |
-| --------------------------------------- | ------------------------------------------------ |
-| ワールド切り替え（`handleWorldChange`） | `isPulling \|\| isPushing \|\| isArchiveLoading` |
-| Pull実行（`pullFromGitHub`）            | `canSync`失敗 \|\| `isArchiveLoading`            |
-| Push実行（`pushToGitHub`）              | `canSync`失敗 \|\| `isArchiveLoading`            |
-| ノート移動（`moveNoteToWorld`）         | `isPulling \|\| isPushing \|\| isArchiveLoading` |
-| リーフ移動（`moveLeafToWorld`）         | `isPulling \|\| isPushing \|\| isArchiveLoading` |
-| 自動Push/自動Pull                       | `isPulling \|\| isPushing \|\| isArchiveLoading` |
+| 操作                                    | ブロック条件                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ワールド切り替え（`handleWorldChange`） | `isPulling \|\| isPushing \|\| isPushingBackground \|\| isArchiveLoading`                             |
+| Pull実行（`pullFromGitHub`）            | `isPulling \|\| isPushing \|\| isPushingBackground \|\| isArchiveLoading`（前3項は`canSync()`が判定） |
+| Push実行（`pushToGitHub`）              | `isPulling \|\| isPushing \|\| isPushingBackground \|\| isArchiveLoading`（前3項は`canSync()`が判定） |
+| ノート移動（`moveNoteToWorld`）         | `isPulling \|\| isPushing \|\| isPushingBackground \|\| isArchiveLoading`                             |
+| リーフ移動（`moveLeafToWorld`）         | `isPulling \|\| isPushing \|\| isPushingBackground \|\| isArchiveLoading`                             |
+| 自動Push/自動Pull                       | `isPulling \|\| isPushing \|\| isPushingBackground \|\| isArchiveLoading`                             |
 
 **UIの制御:**
 
@@ -603,14 +603,14 @@ if (repoChanged || tokenChanged) {
 
 **ブロック機構の実装箇所:**
 
-| ガード条件                                     | チェック箇所                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 影響する操作                   |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `isPulling.value \|\| isPushing.value`         | `canSync()` in `sync-handlers.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Pull, Push                     |
-| `isArchiveLoading`                             | `pullFromGitHub()`/`pushToGitHub()`/`moveNoteToWorld()`/`moveLeafToWorld()`が冒頭で個別チェックし、`handleWorldChange()`は冒頭のbusy判定とアーカイブロード直前の再判定の2箇所でチェックする。`restoreStateFromUrl()`はチェックせず`!isArchiveLoaded`のみで判定。取得・解除は、`handleWorldChange()`/`restoreStateFromUrl()`経由なら`performArchiveLoad()`がIndexedDB読み出し前に同期的に行い、`moveNoteToWorld()`/`moveLeafToWorld()`はアーカイブ事前Pull時に自前で取得し各関数自身のfinally句で解除する（#297 S-b / #307） | Pull, Push, WS, 移動           |
-| rehydrate実行中（`waitForRehydrate()`）        | `pullFromGitHub()`/`pushToGitHub()`冒頭（`canSync`判定より前）、`moveNoteToWorld()`/`moveLeafToWorld()`冒頭（Pull/Push/AL判定より前）、`handleWorldChange()`のアーカイブロード直前（判定→待機→再判定）、`runPendingRepoSyncIfIdle()`/`handleCloseSettings()`冒頭（`shouldQueueRepoSync`判定より前、#297 should2）                                                                                                                                                                                                           | Pull, Push, WS, 移動, 予約同期 |
-| `!isFirstPriorityFetched`                      | UI側: `isLoadingUI`によるガラス効果                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 編集, 作成, 削除, 移動         |
-| `!isPullCompleted`                             | フッタボタンの`disabled`属性                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 作成, 削除                     |
-| Pull/Push を理由にした再判定拒否（#297 4巡目） | `handleWorldChange()`内（`pane-navigation.svelte.ts`）。ワールド表示を切替前（home）へ直接戻し、view が `home` のままなら`goHome()`、その後`refreshBreadcrumbs()`。`showPullToast()`で開けなかったことを案内する（自動再開はしない）                                                                                                                                                                                                                                                                                        | ワールド表示の残留防止         |
+| ガード条件                                     | チェック箇所                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 影響する操作                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `isPulling.value \|\| isPushing.value`         | `canSync()` in `sync-handlers.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Pull, Push                     |
+| `isArchiveLoading`                             | `pullFromGitHub()`/`pushToGitHub()`/`moveNoteToWorld()`/`moveLeafToWorld()`が冒頭で個別チェックし、`handleWorldChange()`は冒頭のbusy判定とアーカイブロード直前の再判定の2箇所でチェックする。`restoreStateFromUrl()`はチェックせず`!isArchiveLoaded`のみで判定。取得・解除は、`handleWorldChange()`/`restoreStateFromUrl()`経由なら`performArchiveLoad()`がIndexedDB読み出し前に同期的に行い、`moveNoteToWorld()`/`moveLeafToWorld()`はアーカイブ事前Pull時に自前で取得し各関数自身のfinally句で解除する（#297 S-b / #307）。このほか自動Push・自動Pull・stale checkリトライ（visibility復帰/online復帰）・`handleSettingsChange()`・`shouldQueueRepoSync()`（`handleCloseSettings()`等）も参照する（詳細は「アーカイブロード中の操作制限」節等） | Pull, Push, WS, 移動           |
+| rehydrate実行中（`waitForRehydrate()`）        | `pullFromGitHub()`/`pushToGitHub()`冒頭（`canSync`判定より前）、`moveNoteToWorld()`/`moveLeafToWorld()`冒頭（Pull/Push/AL判定より前）、`handleWorldChange()`のアーカイブロード直前（判定→待機→再判定）、`runPendingRepoSyncIfIdle()`/`handleCloseSettings()`冒頭（`shouldQueueRepoSync`判定より前、#297 should2）                                                                                                                                                                                                                                                                                                                                                                                                                                 | Pull, Push, WS, 移動, 予約同期 |
+| `!isFirstPriorityFetched`                      | UI側: `isLoadingUI`によるガラス効果                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 編集, 作成, 削除, 移動         |
+| `!isPullCompleted`                             | フッタボタンの`disabled`属性                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 作成, 削除                     |
+| Pull/Push を理由にした再判定拒否（#297 4巡目） | `handleWorldChange()`内（`pane-navigation.svelte.ts`）。ワールド表示を切替前（home）へ直接戻し、view が `home` のままなら`goHome()`、その後`refreshBreadcrumbs()`。`showPullToast()`で開けなかったことを案内する（自動再開はしない）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | ワールド表示の残留防止         |
 
 ---
 
@@ -696,11 +696,12 @@ sequenceDiagram
 
     opt ユーザーがアーカイブに切り替え
         User->>HWC: handleWorldChange('archive', 'left')
+        Note over HWC: 冒頭判定: isPulling/isPushing/isPushingBackground/<br/>isArchiveLoadingがすべてfalseなら続行<br/>（ワールド表示はここで即切替）。<br/>!isArchiveLoaded && !isArchiveLoading && token && repoNameなら<br/>アーカイブロード分岐へ進む
         Note over HWC: まず waitForRehydrate() を await（#297 should5）<br/>rehydrate中のDB切替とアーカイブロードの<br/>旧/新DB取り違えを防止
-        Note over HWC: 再判定: ペインがまだ archive 表示か・設定の有効性・<br/>isPulling/isPushing/isPushingBackground/<br/>isArchiveLoading/isArchiveLoadedを判定（#297 N-a）
+        Note over HWC: 再判定（冒頭判定と同じ観点をwaitForRehydrate後にもう一度）:<br/>ペインがまだ archive 表示か・設定の有効性・<br/>isPulling/isPushing/isPushingBackground/<br/>isArchiveLoading/isArchiveLoadedを判定（#297 N-a）
         Note over HWC: isArchiveLoaded=false<br/>→ performArchiveLoad() 実行
         HWC->>HWC: performArchiveLoad()冒頭で<br/>isArchiveLoading = true（同期。#297 S-b / #307）
-        HWC->>HWC: loadArchiveIntoStores()内で<br/>pullArchive($settings)
+        HWC->>HWC: loadArchiveIntoStores()内で<br/>pullArchive(settings.value)
         Note over HWC: 新リポのアーカイブデータを取得
         HWC->>HWC: isArchiveLoaded = true
         HWC->>HWC: performArchiveLoad()のfinally句で<br/>isArchiveLoading = false
@@ -737,15 +738,17 @@ sequenceDiagram
 | `leftWorld` / `rightWorld` | `$state<WorldType>`        | `'home'`                                                                                                                                              | 変化なし                                      | 変化なし                                                                                               | `'home'`                                                                                                                    | `'archive'`のまま残るとクリア済みアーカイブストアを参照し空画面になる                                                          |
 | `archiveLeafStatsStore`    | カスタムStore              | `reset()済み`                                                                                                                                         | 変化なし                                      | 変化なし                                                                                               | `.reset()`                                                                                                                  | 旧リポのリーフ統計（文字数等）がアーカイブ画面に表示される                                                                     |
 
-#### pane-actions-factory.svelte.ts 内の変数
+#### ガード変数一覧（app-state.svelte.ts の `$state` / pane-actions-factory.svelte.ts のローカル変数）
 
-| 変数名                            | 型        | 初期値  | Pull時の変化                           | Push時の変化 | リポ切替時のリセット値                               | リセットしないと何が起きるか                                                        |
-| --------------------------------- | --------- | ------- | -------------------------------------- | ------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `isFirstPriorityFetched`          | `boolean` | `false` | `false`→`true`（onPriorityComplete時） | 変化なし     | `false`                                              | ガラス効果が解除されたまま残り空データで操作してしまう                              |
-| `isPullCompleted`                 | `boolean` | `false` | `false`→`true`（全リーフ取得完了時）   | 変化なし     | `false`                                              | フッタの作成/削除ボタンが有効なまま残り空データで操作してしまう                     |
-| `githubSettingsChangedInSettings` | `boolean` | `false` | 変化なし                               | 変化なし     | `true`（リポ名またはトークン変更時）                 | `false`のままだと`handleCloseSettings()`でPullが実行されない                        |
-| `importOccurredInSettings`        | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし（リポ切替とは独立）                         | インポート後にPullが走らない（リポ切替とは無関係）                                  |
-| `isArchiveLoading`                | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし（resetForRepoSwitchでは直接リセットしない） | 進行中のアーカイブPullが完了しても`isArchiveLoaded=false`なので再Pull必要。実害なし |
+`isFirstPriorityFetched` / `isPullCompleted` / `isArchiveLoading` / `importOccurredInSettings` の実体は `app-state.svelte.ts` の `$state`（`appState.xxx` の getter/setter 経由でアクセス）。`githubSettingsChangedInSettings` のみ `pane-actions-factory.svelte.ts` 内のローカル `let`。
+
+| 変数名                                                                     | 型        | 初期値  | Pull時の変化                           | Push時の変化 | リポ切替時のリセット値                               | リセットしないと何が起きるか                                                        |
+| -------------------------------------------------------------------------- | --------- | ------- | -------------------------------------- | ------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `appState.isFirstPriorityFetched`                                          | `boolean` | `false` | `false`→`true`（onPriorityComplete時） | 変化なし     | `false`                                              | ガラス効果が解除されたまま残り空データで操作してしまう                              |
+| `appState.isPullCompleted`                                                 | `boolean` | `false` | `false`→`true`（全リーフ取得完了時）   | 変化なし     | `false`                                              | フッタの作成/削除ボタンが有効なまま残り空データで操作してしまう                     |
+| `githubSettingsChangedInSettings`（pane-actions-factory.svelte.ts, `let`） | `boolean` | `false` | 変化なし                               | 変化なし     | `true`（リポ名またはトークン変更時）                 | `false`のままだと`handleCloseSettings()`でPullが実行されない                        |
+| `appState.importOccurredInSettings`                                        | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし（リポ切替とは独立）                         | インポート後にPullが走らない（リポ切替とは無関係）                                  |
+| `appState.isArchiveLoading`                                                | `boolean` | `false` | 変化なし                               | 変化なし     | 変化なし（resetForRepoSwitchでは直接リセットしない） | 進行中のアーカイブPullが完了しても`isArchiveLoaded=false`なので再Pull必要。実害なし |
 
 ---
 
@@ -973,24 +976,25 @@ flowchart TD
 
 ### 図7: ガード変数の依存グラフ
 
-`isPulling`, `isPushing`, `isArchiveLoading`, `isPullCompleted`, `isFirstPriorityFetched`, `canPull`, `canPush` の依存関係を示す。どの変数がどの変数に影響するかの全体図。
+`isPulling`, `isPushing`, `isPushingBackground`, `isArchiveLoading`, `isPullCompleted`, `isFirstPriorityFetched`, `canPull`, `canPush` の依存関係を示す。どの変数がどの変数に影響するかの全体図。
 
 ```mermaid
 flowchart TB
     subgraph "ストア変数（stores/core-state.svelte.ts）"
         isPulling["isPulling<br/>($state rune)"]
         isPushing["isPushing<br/>($state rune)"]
+        isPushingBackground["isPushingBackground<br/>($state rune)"]
     end
 
-    subgraph "pane-actions-factory.svelte.ts ローカル変数"
-        isArchiveLoading["isArchiveLoading<br/>(let)"]
-        isFirstPriorityFetched["isFirstPriorityFetched<br/>(let)"]
-        isPullCompleted["isPullCompleted<br/>(let)"]
+    subgraph "app-state.svelte.ts の $state（appState getter/setter経由）"
+        isArchiveLoading["appState.isArchiveLoading<br/>($state)"]
+        isFirstPriorityFetched["appState.isFirstPriorityFetched<br/>($state)"]
+        isPullCompleted["appState.isPullCompleted<br/>($state)"]
     end
 
-    subgraph "リアクティブ派生値（$derived）"
-        canPull["canPull<br/>= !isPulling && !isPushing<br/>&& !isArchiveLoading"]
-        canPush["canPush<br/>= !isPulling && !isPushing<br/>&& !isArchiveLoading<br/>&& isFirstPriorityFetched"]
+    subgraph "リアクティブ派生値（$derived、app-state.svelte.ts）"
+        canPull["appState.canPull<br/>= !isPulling && !isPushing<br/>&& !isPushingBackground<br/>&& !isArchiveLoading"]
+        canPush["appState.canPush<br/>= !isPulling && !isPushing<br/>&& !isPushingBackground<br/>&& !isArchiveLoading<br/>&& isFirstPriorityFetched"]
     end
 
     subgraph "UI制御"
@@ -1002,7 +1006,7 @@ flowchart TB
     end
 
     subgraph "関数レベルのガード"
-        canSyncFn["canSync()<br/>isPulling || isPushing<br/>→ canPull=false, canPush=false"]
+        canSyncFn["canSync()<br/>isPulling || isPushing<br/>|| isPushingBackground<br/>→ canPull=false, canPush=false"]
         archiveGuard["isArchiveLoading<br/>個別チェック"]
     end
 
@@ -1012,6 +1016,9 @@ flowchart TB
     isPushing -->|入力| canPull
     isPushing -->|入力| canPush
     isPushing -->|入力| canSyncFn
+    isPushingBackground -->|入力| canPull
+    isPushingBackground -->|入力| canPush
+    isPushingBackground -->|入力| canSyncFn
     isArchiveLoading -->|入力| canPull
     isArchiveLoading -->|入力| canPush
     isArchiveLoading -->|入力| archiveGuard
@@ -1028,6 +1035,7 @@ flowchart TB
 
     isPulling -->|ガード| worldSW
     isPushing -->|ガード| worldSW
+    isPushingBackground -->|ガード| worldSW
 ```
 
 #### 各ガード変数の書き込みタイミング
@@ -1043,10 +1051,16 @@ flowchart TB
 #### canPull / canPush の算出式
 
 ```typescript
-// pane-actions-factory.svelte.ts（リアクティブ宣言）
-let canPull = $derived(!isPulling.value && !isPushing.value && !isArchiveLoading)
-let canPush = $derived(
-  !isPulling.value && !isPushing.value && !isArchiveLoading && isFirstPriorityFetched
+// app-state.svelte.ts（$derived。appState.canPull / appState.canPush として公開）
+let _canPull = $derived(
+  !isPulling.value && !isPushing.value && !isPushingBackground.value && !_isArchiveLoading
+)
+let _canPush = $derived(
+  !isPulling.value &&
+    !isPushing.value &&
+    !isPushingBackground.value &&
+    !_isArchiveLoading &&
+    _isFirstPriorityFetched
 )
 ```
 
