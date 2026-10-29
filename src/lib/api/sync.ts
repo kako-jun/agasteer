@@ -26,6 +26,8 @@ export interface PushResult {
   metadataOnlyChanged?: boolean
   /** Push成功時のcommit SHA（stale検出用） */
   commitSha?: string
+  /** Push開始時に読んだ親コミット SHA（診断ログ用、#317） */
+  parentSha?: string
 }
 
 /**
@@ -137,6 +139,7 @@ export async function executePush(options: ExecutePushOptions): Promise<PushResu
     changedArchiveLeafCount: result.changedArchiveLeafCount,
     metadataOnlyChanged: result.metadataOnlyChanged,
     commitSha: result.commitSha,
+    parentSha: result.parentSha,
   }
 }
 

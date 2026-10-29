@@ -190,6 +190,27 @@
     "data": {
       "title": "Data"
     },
+    "bugReport": {
+      "title": "Bug report",
+      "description": "To help investigate problems, sync-related events (push success, conflict detection, timeouts, etc.) are recorded only inside this device. Nothing is sent anywhere.",
+      "recordedTitle": "What is recorded",
+      "recorded": "Event types, timestamps, commit SHAs, and numeric values such as counts.",
+      "notRecordedTitle": "What is not recorded",
+      "notRecorded": "Note contents, titles, paths, your GitHub token, repository name, and user name.",
+      "howToTitle": "How to use",
+      "howTo": "When something goes wrong, press Copy below and paste it where you report the problem (e.g. a GitHub issue). You can read the full text below before copying.",
+      "limit": "Up to 300 entries / 200 KB. Oldest entries are dropped first.",
+      "summary": "{count} entries ({from} to {to})",
+      "summaryEmpty": "Nothing recorded yet.",
+      "appVersion": "App version",
+      "device": "Device",
+      "previewTitle": "Text that will be copied",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Could not copy. Select the text above and copy it manually.",
+      "clear": "Clear log",
+      "cleared": "Log cleared"
+    },
     "importExport": {
       "titleExport": "Export",
       "titleImport": "Import",
@@ -318,6 +339,7 @@
     "unsavedChangesOnStartup": "Your previous edits were not saved to GitHub.\nPulling will lose them. Pull anyway?\n\nSelect 'Cancel' to keep local changes.",
     "unsavedChangesChoice": "You have unsaved changes.\nPulling will overwrite them.",
     "pushHangRecovery": "Push response was lost; state is uncertain.\nChoose to fetch remote or overwrite with local.",
+    "conflictBugReportHint": "See Settings > Bug report for details.",
     "pushFirst": "Push to overwrite remote",
     "pullOverwrite": "Pull to overwrite local",
     "pullFirst": "Pull to fetch remote",

@@ -49,6 +49,9 @@ import { _ } from '../i18n'
 // Promise.race による上限制御 + pushInFlightAt 経由の救済機構（applyStaleResult）に委ねる。
 import { PUSH_TIMEOUT_MS } from '../sync/constants'
 import { observeOrphanPush } from './git-orphan'
+// #317: バグレポート用診断ログ（記録専用。既存の制御フローには影響しない）
+import { recordDiag } from '../diagnostics/record'
+import { recordStaleExtras } from '../diagnostics/stale-extras'
 // push→pull は一方向の静的 import（push↔pull の循環を避けるため pull→push は
 // appActions.pushToGitHub 経由の間接呼びで維持する）。
 import { pullFromGitHub, runPendingRepoSyncIfIdle } from './git-pull'
@@ -177,6 +180,13 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     }
 
     if (staleResult.status === 'stale') {
+      // #317: stale 判定の値を全桁で記録。追加 API 呼び出し（HEAD 再取得・親コミット）は
+      // stale 時のみ・記録専用・待たない
+      recordDiag('stale-detected', {
+        remoteSha: staleResult.remoteCommitSha,
+        localSha: staleResult.localCommitSha,
+      })
+      void recordStaleExtras(settings.value, staleResult.remoteCommitSha)
       // #235: まず push-in-flight 救済を試す。タイムアウトで応答を見送った Push
       // （orphan）が実は成功していた場合、この stale は誤検出（リモート HEAD は
       // 自分が送ったコミット）なので、ダイアログを出さずに Push を続行する。
@@ -244,6 +254,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     // 直接観測するので救済マーカーの喪失にはならない。
     pushInFlightStamp = Date.now()
     setPushInFlightAt(pushInFlightStamp)
+    recordDiag('inflight-set', { stamp: pushInFlightStamp })
 
     // ★ #206: ここで preflight phase を終了し UI ロックを解除する。
     // background phase は finally の外で実行する（編集再開のため）。
@@ -334,6 +345,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         // 裏で生き続けるため、放置するとタイムアウトのエラートーストの下に
         // 遅延カウントダウンが描かれてしまう
         pushProgressGeneration++
+        recordDiag('push-timeout', { stamp: pushInFlightStamp, timeoutMs: PUSH_TIMEOUT_MS })
         // #235: orphan の遅延結果（成功 → SHA 追従＋トースト / 失敗 → フラグ解除）を観測
         observeOrphanPush(pushPromise, pushInFlightStamp)
         return
@@ -345,6 +357,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
       // （guarded clear のみ）ため、この時点のスロットは自分の値か undefined。
       // 無条件クリアで他者の救済マーカーを壊すことはない。
       setPushInFlightAt(undefined)
+      recordDiag('inflight-clear', { stamp: pushInFlightStamp, reason: 'http-error' })
       // #224: throw で抜ける経路では完了トーストが出ないため sticky を明示的に消す
       clearPushToast()
       throw e
@@ -369,9 +382,16 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     // #235: タイムアウト経路は上で return 済みなので、ここに来た時点で
     // スロットは自分の値か undefined（rethrow 経路のコメント参照）。
     setPushInFlightAt(undefined)
+    recordDiag('inflight-clear', { stamp: pushInFlightStamp, reason: 'response' })
 
     // Push成功時の後処理
     if (result.variant === 'success') {
+      recordDiag('push-success', {
+        commitSha: result.commitSha ?? null,
+        parentSha: result.parentSha ?? null,
+        stamp: pushInFlightStamp,
+        noChanges: result.message === 'github.noChanges',
+      })
       // commit SHAはリモートHEADの外的事実なので、noChangesでも常に更新する。
       // noChangesで更新しないと、lastKnownCommitShaがドリフトして次回のstaleチェックで
       // 誤検出（pull/push選択ダイアログの誤表示）につながる。

@@ -140,6 +140,8 @@ describe('pushAllWithTreeAPI: golden path (existing repo, changed leaf)', () => 
       'POST https://api.github.com/repos/owner/repo/git/trees',
       'POST https://api.github.com/repos/owner/repo/git/commits',
       'PATCH https://api.github.com/repos/owner/repo/git/refs/heads/main',
+      // #317: 診断ログ用の ref 読み直し（記録専用）
+      'GET https://api.github.com/repos/owner/repo/git/ref/heads/main',
     ])
   })
 

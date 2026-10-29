@@ -223,7 +223,10 @@ const FONTS_STORE = 'fonts'
 const BACKGROUNDS_STORE = 'backgrounds'
 
 const SHARED_DB_NAME = 'agasteer/shared'
-const SHARED_DB_VERSION = 1
+// v2: diagLog store 追加（#317）
+const SHARED_DB_VERSION = 2
+// バグレポート用診断ログ（#317）。アクセサは diagnostics/log-store.ts に分離し、ここでは store 定義のみ持つ
+export const DIAG_LOG_STORE = 'diagLog'
 
 export const defaultSettings: Settings = {
   token: '',
@@ -855,6 +858,9 @@ async function openSharedDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
         db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
       }
+      if (!db.objectStoreNames.contains(DIAG_LOG_STORE)) {
+        db.createObjectStore(DIAG_LOG_STORE, { keyPath: 'id', autoIncrement: true })
+      }
     }
     request.onsuccess = () => {
       sharedDb = request.result
@@ -875,6 +881,9 @@ async function openSharedDB(): Promise<IDBDatabase> {
   })
   return sharedDbPromise
 }
+
+/** 共有DBハンドル（diagnostics/log-store.ts 用の公開口） */
+export const getSharedDb = openSharedDB
 
 function getAllFromStore<T>(db: IDBDatabase, storeName: string): Promise<T[]> {
   return new Promise((resolve, reject) => {
