@@ -192,7 +192,7 @@ vi.mock('svelte', () => ({
   tick: vi.fn(async () => {}),
 }))
 
-const { pushToGitHub } = await import('../actions/git')
+const { pushToGitHub, pullFromGitHub } = await import('../actions/git')
 
 const SECRET_TOKEN = 'ghp_SECRET'
 const SECRET_REPO = 'secret/repo'
@@ -304,6 +304,7 @@ async function assertSafe(expectKinds: string[]) {
       else if (t === 'int') expect(Number.isInteger(v)).toBe(true)
       else if (t === 'bool') expect(typeof v).toBe('boolean')
       else if (t === 'iso') expect(typeof v === 'string' && ISO.test(v as string)).toBe(true)
+      else if (t === 'errcode') expect(typeof v === 'string' && /^E-\d{4}$/.test(v)).toBe(true)
       else expect(t).toContain(v)
     }
   }
@@ -526,6 +527,74 @@ describe('診断ログの安全性（統合）', () => {
     mocks.executePush.mockRejectedValue(new Error(`HTTP 500 ${SECRET_TOKEN} ${SECRET_REPO}`))
     await expect(pushToGitHub()).rejects.toThrow()
     await assertSafe(['inflight-clear'])
+  })
+
+  it('Push 失敗（応答に秘匿文字列入りメッセージ・不正な errorCode）: push-start / push-failure に秘匿値は残らない', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: false,
+      message: `fail ${SECRET_TITLE} ${SECRET_PATH}`,
+      variant: 'error',
+      errorCode: `E-12 ${SECRET_TOKEN}`,
+      httpStatus: 500,
+    })
+    await pushToGitHub()
+    const entries = await assertSafe(['push-start', 'push-failure'])
+    const f = entries.find((e) => e.kind === 'push-failure')!
+    expect(f.data.httpStatus).toBe(500)
+    expect('errorCode' in f.data).toBe(false)
+  })
+
+  it('Pull 成功・失敗: pull-start / pull-result に秘匿値は残らず、E-xxxx と件数だけが残る', async () => {
+    stores.isDirty.value = false
+    appState.isPullCompleted = false
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: H('c'),
+      remoteCommitSha: H('d'),
+    })
+    mocks.executePull.mockResolvedValueOnce({
+      success: true,
+      message: `ok ${SECRET_TITLE}`,
+      variant: 'success',
+      notes: stores.notes.value,
+      leaves: stores.leaves.value,
+      metadata: { pushCount: 1 },
+      commitSha: H('a'),
+    })
+    await pullFromGitHub(false)
+    mocks.executePull.mockResolvedValueOnce({
+      success: false,
+      message: `fail ${SECRET_PATH}`,
+      variant: 'error',
+      notes: [],
+      leaves: [],
+      metadata: { pushCount: 0 },
+      errorCode: 'E-2003',
+      httpStatus: 404,
+    })
+    await pullFromGitHub(false)
+    const entries = await assertSafe(['pull-start', 'pull-result'])
+    const rs = entries.filter((e) => e.kind === 'pull-result')
+    expect(rs[0].data).toMatchObject({ success: true, noteCount: 1, leafCount: 1 })
+    expect(rs[1].data).toMatchObject({ success: false, errorCode: 'E-2003', httpStatus: 404 })
+  })
+
+  it('衝突ダイアログの選択（pull / push / cancel）が記録され、秘匿値は残らない', async () => {
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: H('c'),
+      remoteCommitSha: H('d'),
+    })
+    mocks.executePush.mockResolvedValue(SUCCESS)
+    mocks.choiceAsync.mockResolvedValue('push')
+    await pushToGitHub()
+    mocks.choiceAsync.mockResolvedValue('cancel')
+    await pushToGitHub()
+    const entries = await assertSafe(['conflict-choice'])
+    expect(entries.filter((e) => e.kind === 'conflict-choice').map((e) => e.data.choice)).toEqual([
+      'push',
+      'cancel',
+    ])
   })
 
   it('rehydrate: リポ切替で lastKnownCommitSha の差し替えが記録されても秘匿値は保存されない', async () => {

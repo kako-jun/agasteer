@@ -191,7 +191,7 @@ vi.mock('svelte', () => ({
   tick: vi.fn(async () => {}),
 }))
 
-const { pushToGitHub } = await import('./git')
+const { pushToGitHub, pullFromGitHub } = await import('./git')
 
 const SUCCESS = {
   success: true,
@@ -339,7 +339,7 @@ describe('Push 成否の記録 (#317)', () => {
     mocks.executePush.mockResolvedValue(SUCCESS)
     await pushToGitHub()
     const kinds = diag.recordDiag.mock.calls.map((c) => c[0])
-    expect(kinds).toEqual(['inflight-set', 'inflight-clear', 'push-success'])
+    expect(kinds).toEqual(['push-start', 'inflight-set', 'inflight-clear', 'push-success'])
     expect(diagCalls('inflight-clear')[0][1].reason).toBe('response')
   })
 
@@ -398,5 +398,176 @@ describe('Push 成否の記録 (#317)', () => {
     await p
     expect(diagCalls('push-timeout')).toHaveLength(1)
     expect(stores.isPushingBackground.value).toBe(false)
+  })
+})
+
+describe('Push の開始・失敗 (#317)', () => {
+  it('push-start: dirty・件数・auto を整数/bool で記録する（タイトル等は含めない）', async () => {
+    mocks.executePush.mockResolvedValue(SUCCESS)
+    stores.isDirty.value = true
+    await pushToGitHub()
+    expect(diagCalls('push-start')).toEqual([
+      ['push-start', { dirty: true, auto: false, noteCount: 1, leafCount: 1 }],
+    ])
+    expect(diag.recordDiag.mock.calls[0][0]).toBe('push-start')
+  })
+
+  it('push-start: abortIfStaleCheckFailed 付き（無人発火）は auto=true', async () => {
+    mocks.executePush.mockResolvedValue(SUCCESS)
+    await pushToGitHub({ abortIfStaleCheckFailed: true })
+    expect(diagCalls('push-start')[0][1].auto).toBe(true)
+  })
+
+  it('ロック不可で早期 return したときは push-start を記録しない', async () => {
+    mocks.canSync.mockReturnValueOnce({ canPull: true, canPush: false })
+    await pushToGitHub()
+    expect(diagCalls('push-start')).toHaveLength(0)
+  })
+
+  it('variant=error: errorCode / httpStatus / rateLimited を stage=result-error で記録する', async () => {
+    mocks.executePush.mockResolvedValue({
+      success: false,
+      message: 'github.error with SECRET text',
+      variant: 'error',
+      errorCode: 'E-1234',
+      httpStatus: 403,
+      rateLimitInfo: { isRateLimited: true },
+    })
+    await pushToGitHub()
+    expect(diagCalls('push-failure')).toEqual([
+      [
+        'push-failure',
+        {
+          stamp: expect.any(Number),
+          stage: 'result-error',
+          errorCode: 'E-1234',
+          httpStatus: 403,
+          rateLimited: true,
+        },
+      ],
+    ])
+    expect(JSON.stringify(diag.recordDiag.mock.calls)).not.toContain('SECRET')
+  })
+
+  it('成功時は push-failure を記録しない', async () => {
+    mocks.executePush.mockResolvedValue(SUCCESS)
+    await pushToGitHub()
+    expect(diagCalls('push-failure')).toHaveLength(0)
+  })
+
+  it('executePush が reject: stage=rejected のみ（メッセージは記録せず）・例外は従来どおり再送出', async () => {
+    mocks.executePush.mockRejectedValue(new Error('HTTP 500 ghp_SECRET'))
+    await expect(pushToGitHub()).rejects.toThrow('HTTP 500')
+    expect(diagCalls('push-failure')).toEqual([
+      ['push-failure', { stamp: expect.any(Number), stage: 'rejected' }],
+    ])
+  })
+})
+
+describe('Pull の開始・結果 (#317)', () => {
+  const PULL_OK = {
+    success: true,
+    message: 'github.pullSuccess',
+    variant: 'success',
+    notes: [{ id: 'n1' }, { id: 'n2' }],
+    leaves: [{ id: 'l1', order: 0, content: 'c' }],
+    metadata: { pushCount: 3 },
+    commitSha: 'a'.repeat(40),
+  }
+
+  beforeEach(() => {
+    stores.isDirty.value = false
+    mocks.getPersistedDirtyFlag.mockReturnValue(false)
+    appState.isPullCompleted = false
+    mocks.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'c'.repeat(40),
+      remoteCommitSha: 'd'.repeat(40),
+    })
+  })
+
+  it('成功: pull-start → pull-result(success, 件数, staleStatus) の順', async () => {
+    mocks.executePull.mockResolvedValue(PULL_OK)
+    await pullFromGitHub(false)
+    const kinds = diag.recordDiag.mock.calls.map((c) => c[0])
+    expect(kinds).toEqual(['pull-start', 'pull-result'])
+    expect(diagCalls('pull-start')[0][1]).toEqual({
+      initialStartup: false,
+      dirty: false,
+      repoSwitch: false,
+      staleStatus: 'stale',
+    })
+    expect(diagCalls('pull-result')[0][1]).toEqual({
+      success: true,
+      incomplete: false,
+      rateLimited: false,
+      noteCount: 2,
+      leafCount: 1,
+      staleStatus: 'stale',
+    })
+  })
+
+  it('失敗: errorCode / httpStatus / rateLimited を記録し、メッセージ全文は記録しない', async () => {
+    mocks.executePull.mockResolvedValue({
+      success: false,
+      message: 'github.error SECRET_TITLE',
+      variant: 'error',
+      notes: [],
+      leaves: [],
+      metadata: { pushCount: 0 },
+      errorCode: 'E-2001',
+      httpStatus: 404,
+    })
+    await pullFromGitHub(false)
+    expect(diagCalls('pull-result')[0][1]).toMatchObject({
+      success: false,
+      errorCode: 'E-2001',
+      httpStatus: 404,
+      rateLimited: false,
+    })
+    expect(JSON.stringify(diag.recordDiag.mock.calls)).not.toContain('SECRET')
+  })
+
+  it('pullIncomplete は incomplete=true', async () => {
+    mocks.executePull.mockResolvedValue({
+      success: false,
+      message: 'github.pullIncomplete',
+      variant: 'error',
+      notes: [],
+      leaves: [],
+      metadata: { pushCount: 0 },
+    })
+    await pullFromGitHub(false)
+    expect(diagCalls('pull-result')[0][1].incomplete).toBe(true)
+  })
+
+  it('実 Pull が走らない（up_to_date かつ Pull 完了済み）ときは記録しない', async () => {
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    appState.isPullCompleted = true
+    await pullFromGitHub(false)
+    expect(diag.recordDiag).not.toHaveBeenCalled()
+    expect(mocks.executePull).not.toHaveBeenCalled()
+  })
+
+  it('dirty で cancel: conflict-choice のみで pull-start は記録しない（実 conflict-dialog 経由）', async () => {
+    stores.isDirty.value = true
+    mocks.choiceAsync.mockResolvedValue('cancel')
+    await pullFromGitHub(false)
+    expect(mocks.executePull).not.toHaveBeenCalled()
+    expect(diagCalls('pull-start')).toHaveLength(0)
+    expect(diagCalls('conflict-choice')).toEqual([
+      ['conflict-choice', { dialogKind: 'pull-dirty', choice: 'cancel' }],
+    ])
+  })
+
+  it('dirty で pull 選択: conflict-choice(pull) の後 pull-start(dirty=true)', async () => {
+    stores.isDirty.value = true
+    mocks.choiceAsync.mockResolvedValue('pull')
+    mocks.executePull.mockResolvedValue(PULL_OK)
+    await pullFromGitHub(false)
+    const kinds = diag.recordDiag.mock.calls.map((c) => c[0])
+    expect(kinds).toEqual(['conflict-dialog', 'conflict-choice', 'pull-start', 'pull-result'])
+    expect(diagCalls('conflict-choice')[0][1]).toEqual({ dialogKind: 'pull-dirty', choice: 'pull' })
+    expect(diagCalls('pull-start')[0][1].dirty).toBe(true)
   })
 })

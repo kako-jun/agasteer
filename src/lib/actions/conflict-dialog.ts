@@ -194,5 +194,11 @@ export async function showConflictDialog(
   })
   const buttons = buttonsFor(kind, disablePush, $_)
 
-  return (await choiceAsync(body, buttons)) as ConflictDialogChoice
+  const choice = (await choiceAsync(body, buttons)) as ConflictDialogChoice
+  // #317: 選択を記録（null＝モーダル外クリック等は cancel 扱いと同じ）。戻り値は変えない
+  recordDiag('conflict-choice', {
+    dialogKind: kind,
+    choice: choice === 'pull' || choice === 'push' ? choice : 'cancel',
+  })
+  return choice
 }

@@ -11,6 +11,7 @@ import {
   settings,
   notes,
   leaves,
+  isDirty,
   metadata,
   isPulling,
   isPushing,
@@ -133,6 +134,13 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
   // しまう競合窓ができる（過去に flushPendingSaves をロック前に置いていた
   // ことで発生したリグレッションと同じクラスのバグ）。
   isPushing.value = true
+  // #317: Push の開始（件数は整数のみ。タイトル・パス等は記録しない）
+  recordDiag('push-start', {
+    dirty: isDirty.value,
+    auto: options?.abortIfStaleCheckFailed === true,
+    noteCount: notes.value.length,
+    leafCount: leaves.value.length,
+  })
 
   // ====================================================================
   // Phase 1: preflight — UI ロックを保持したまま IME flush / stale check
@@ -358,6 +366,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
       // 無条件クリアで他者の救済マーカーを壊すことはない。
       setPushInFlightAt(undefined)
       recordDiag('inflight-clear', { stamp: pushInFlightStamp, reason: 'http-error' })
+      recordDiag('push-failure', { stamp: pushInFlightStamp, stage: 'rejected' })
       // #224: throw で抜ける経路では完了トーストが出ないため sticky を明示的に消す
       clearPushToast()
       throw e
@@ -383,6 +392,17 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     // スロットは自分の値か undefined（rethrow 経路のコメント参照）。
     setPushInFlightAt(undefined)
     recordDiag('inflight-clear', { stamp: pushInFlightStamp, reason: 'response' })
+
+    // #317: 応答は返ったが失敗（エラーコード・HTTP ステータス・レート制限の有無のみ記録）
+    if (result.variant !== 'success') {
+      recordDiag('push-failure', {
+        stamp: pushInFlightStamp,
+        stage: 'result-error',
+        errorCode: result.errorCode,
+        httpStatus: result.httpStatus,
+        rateLimited: result.rateLimitInfo?.isRateLimited === true,
+      })
+    }
 
     // Push成功時の後処理
     if (result.variant === 'success') {

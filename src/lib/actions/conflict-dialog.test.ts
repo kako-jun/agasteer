@@ -256,10 +256,44 @@ describe('showConflictDialog', () => {
     for (const kind of ['stale-push', 'pull-dirty', 'startup-dirty', 'push-hang'] as const) {
       diag.recordDiag.mockClear()
       await showConflictDialog({ kind: kind as any, localPushCount: 1, settings })
-      expect(diag.recordDiag).toHaveBeenCalledTimes(1)
-      expect(diag.recordDiag.mock.calls[0][0]).toBe('conflict-dialog')
-      expect(diag.recordDiag.mock.calls[0][1].dialogKind).toBe(kind)
+      const dialogCalls = diag.recordDiag.mock.calls.filter((c) => c[0] === 'conflict-dialog')
+      expect(dialogCalls).toHaveLength(1)
+      expect(dialogCalls[0][1].dialogKind).toBe(kind)
     }
+  })
+
+  it('#317: 選択（pull / push / cancel）が conflict-choice として表示の後に記録され、戻り値は不変', async () => {
+    for (const choice of ['pull', 'push', 'cancel'] as const) {
+      diag.recordDiag.mockClear()
+      mocks.choiceAsync.mockResolvedValue(choice)
+      const r = await showConflictDialog({ kind: 'stale-push', localPushCount: 1, settings })
+      expect(r).toBe(choice)
+      expect(diag.recordDiag.mock.calls.map((c) => c[0])).toEqual([
+        'conflict-dialog',
+        'conflict-choice',
+      ])
+      expect(diag.recordDiag).toHaveBeenLastCalledWith('conflict-choice', {
+        dialogKind: 'stale-push',
+        choice,
+      })
+    }
+  })
+
+  it('#317: null（モーダル外クリック）は cancel として記録し、戻り値は null のまま', async () => {
+    mocks.choiceAsync.mockResolvedValue(null)
+    const r = await showConflictDialog({ kind: 'pull-dirty', localPushCount: 1, settings })
+    expect(r).toBeNull()
+    expect(diag.recordDiag).toHaveBeenLastCalledWith('conflict-choice', {
+      dialogKind: 'pull-dirty',
+      choice: 'cancel',
+    })
+  })
+
+  it('#317: 選択前（ダイアログ表示中）は conflict-choice を記録しない', async () => {
+    mocks.choiceAsync.mockImplementation(() => new Promise(() => {}))
+    void showConflictDialog({ kind: 'stale-push', localPushCount: 1, settings })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(diag.recordDiag.mock.calls.map((c) => c[0])).toEqual(['conflict-dialog'])
   })
 
   it('#317: stale のとき localSha / remoteSha は staleResult の全桁 SHA', async () => {

@@ -18,6 +18,7 @@ function validValue(t: FieldType): string | number | boolean | null {
   if (t === 'int') return 42
   if (t === 'bool') return true
   if (t === 'iso') return '2026-01-02T03:04:05Z'
+  if (t === 'errcode') return 'E-1234'
   return t[0]
 }
 
@@ -307,5 +308,39 @@ describe('buildEntry: 悪意ある値の総当たり', () => {
       expect(json).not.toContain('ghp_')
       expect(json).not.toContain('SECRET')
     }
+  })
+})
+
+describe('buildEntry: errcode 欄は E-数字4桁のみ（#317）', () => {
+  it.each(['E-0001', 'E-1234', 'E-5101'])('%s は保存される', (v) => {
+    expect(buildEntry('push-failure', { errorCode: v }, 1)!.data).toEqual({ errorCode: v })
+  })
+  it.each([
+    'E-123',
+    'E-12345',
+    'e-1234',
+    'E-1234 ',
+    ' E-1234',
+    'E-1234\n',
+    'E-1234 ghp_SECRET',
+    'E-１２３４',
+    'ghp_SECRET',
+    'Error: boom',
+    '',
+  ])('%j は捨てられる', (v) => {
+    expect(buildEntry('push-failure', { errorCode: v }, 1)!.data).toEqual({})
+    expect(buildEntry('pull-result', { errorCode: v }, 1)!.data).toEqual({})
+  })
+  it.each([1234, null, undefined, {}, ['E-1234'], true])('文字列以外 %j は捨てられる', (v) => {
+    expect(buildEntry('push-failure', { errorCode: v }, 1)!.data).toEqual({})
+  })
+})
+
+describe('buildEntry: 新種別の enum 欄は候補外を捨てる（#317）', () => {
+  it('push-failure.stage / pull-result.staleStatus / conflict-choice.choice', () => {
+    expect(buildEntry('push-failure', { stage: 'SECRET' }, 1)!.data).toEqual({})
+    expect(buildEntry('pull-result', { staleStatus: 'SECRET' }, 1)!.data).toEqual({})
+    expect(buildEntry('pull-start', { staleStatus: 'SECRET' }, 1)!.data).toEqual({})
+    expect(buildEntry('conflict-choice', { choice: null, dialogKind: 'x' }, 1)!.data).toEqual({})
   })
 })

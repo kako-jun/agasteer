@@ -8,10 +8,11 @@
  *   - int:  有限の整数
  *   - bool: 真偽値
  *   - iso:  ISO 8601 風の日時文字列
+ *   - errcode: アプリのエラーコード（`E-` + 数字4桁。厳格な形式のみ。メッセージ全文は不可）
  *   - 文字列配列: その中のどれかと完全一致する値だけ
  */
 
-export type FieldType = 'sha' | 'int' | 'bool' | 'iso' | readonly string[]
+export type FieldType = 'sha' | 'int' | 'bool' | 'iso' | 'errcode' | readonly string[]
 
 type FieldValue<T extends FieldType> = T extends 'sha'
   ? string | null
@@ -19,7 +20,7 @@ type FieldValue<T extends FieldType> = T extends 'sha'
     ? number
     : T extends 'bool'
       ? boolean
-      : T extends 'iso'
+      : T extends 'iso' | 'errcode'
         ? string
         : T extends readonly (infer U)[]
           ? U
@@ -66,6 +67,47 @@ export const DIAG_SCHEMA = {
     commitSha: 'sha',
     elapsedMs: 'int',
   },
+  /** Push の開始（ロック取得直後。件数は整数のみ。auto = 無人発火の自動 Push） */
+  'push-start': {
+    dirty: 'bool',
+    auto: 'bool',
+    noteCount: 'int',
+    leafCount: 'int',
+  },
+  /**
+   * Push の失敗。stage: result-error = 応答は返ったが失敗（errorCode / httpStatus / rateLimited を併記）、
+   * rejected = executePush が reject した（原因の文字列は記録しない）
+   */
+  'push-failure': {
+    stamp: 'int',
+    stage: ['result-error', 'rejected'],
+    errorCode: 'errcode',
+    httpStatus: 'int',
+    rateLimited: 'bool',
+  },
+  /** Pull の開始（実際に取得を始める直前。staleStatus は事前の stale 判定の状態） */
+  'pull-start': {
+    initialStartup: 'bool',
+    dirty: 'bool',
+    repoSwitch: 'bool',
+    staleStatus: ['up_to_date', 'stale', 'check_failed'],
+  },
+  /** Pull の結果（成功／失敗、エラーコード、HTTP ステータス、取得件数） */
+  'pull-result': {
+    success: 'bool',
+    incomplete: 'bool',
+    errorCode: 'errcode',
+    httpStatus: 'int',
+    rateLimited: 'bool',
+    noteCount: 'int',
+    leafCount: 'int',
+    staleStatus: ['up_to_date', 'stale', 'check_failed'],
+  },
+  /** 衝突ダイアログでの選択（null＝モーダル外クリック等は cancel 扱い） */
+  'conflict-choice': {
+    dialogKind: ['stale-push', 'pull-dirty', 'startup-dirty', 'push-hang'],
+    choice: ['pull', 'push', 'cancel'],
+  },
   /** rehydrate での lastKnownCommitSha 差し替え */
   'rehydrate-sha': { oldSha: 'sha', newSha: 'sha' },
   /** 衝突ダイアログの表示 */
@@ -96,6 +138,7 @@ export interface DiagEntry {
 }
 
 const SHA_RE = /^[0-9a-f]{7,64}$/i
+const ERRCODE_RE = /^E-\d{4}$/
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T[\d:.]+(Z|[+-]\d{2}:?\d{2})?$/
 
 function sanitizeValue(
@@ -114,6 +157,9 @@ function sanitizeValue(
   if (type === 'bool') return typeof v === 'boolean' ? { ok: true, value: v } : { ok: false }
   if (type === 'iso') {
     return typeof v === 'string' && ISO_RE.test(v) ? { ok: true, value: v } : { ok: false }
+  }
+  if (type === 'errcode') {
+    return typeof v === 'string' && ERRCODE_RE.test(v) ? { ok: true, value: v } : { ok: false }
   }
   return typeof v === 'string' && type.includes(v) ? { ok: true, value: v } : { ok: false }
 }
