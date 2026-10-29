@@ -137,7 +137,16 @@ describe('BugReportSection 表示', () => {
   it('削除した説明ブロック（記録するもの・しないもの・使い方・上限）は出ない', async () => {
     store.entries = [entry(1)]
     await render()
-    for (const k of ['recorded', 'notRecorded', 'howTo', 'limit', 'Title']) {
+    for (const k of [
+      'recordedTitle',
+      'recorded',
+      'notRecordedTitle',
+      'notRecorded',
+      'howToTitle',
+      'howTo',
+      'limit',
+      'previewTitle',
+    ]) {
       expect(target.textContent).not.toContain(`settings.bugReport.${k}`)
     }
   })
