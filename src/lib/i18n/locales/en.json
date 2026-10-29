@@ -195,8 +195,6 @@
       "description": "Sync events are recorded only inside this device (nothing is sent). If something goes wrong, press Copy and paste it where you report the problem.",
       "summary": "{count} entries ({from} to {to})",
       "summaryEmpty": "Nothing recorded yet.",
-      "appVersion": "App version",
-      "device": "Device",
       "previewSummary": "Review full text",
       "copy": "Copy",
       "copied": "Copied",

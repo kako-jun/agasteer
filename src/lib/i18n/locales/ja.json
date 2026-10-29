@@ -199,8 +199,6 @@
       "description": "同期の出来事をこの端末の中にだけ記録しています（送信はされません）。不具合が起きたら「コピー」して報告先に貼り付けてください。",
       "summary": "{count} 件（{from} から {to}）",
       "summaryEmpty": "まだ記録はありません。",
-      "appVersion": "アプリのバージョン",
-      "device": "端末",
       "previewSummary": "全文を確認",
       "copy": "コピー",
       "copied": "コピーしました",

@@ -69,9 +69,6 @@
       })}
     {/if}
   </p>
-  <p class="meta">
-    {$_('settings.bugReport.appVersion')}: {appVersion} / {$_('settings.bugReport.device')}: {device}
-  </p>
 
   {#if summary.count > 0}
     <details class="preview-details">

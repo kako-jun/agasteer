@@ -125,12 +125,10 @@ describe('BugReportSection 表示', () => {
     expect(target.querySelector('details')).toBeNull()
   })
 
-  it('0 件でも見出し・説明・バージョン・端末・ボタンは出る', async () => {
+  it('0 件でも見出し・説明・ボタンは出る', async () => {
     await render()
     expect(target.textContent).toContain('settings.bugReport.title')
     expect(target.textContent).toContain('settings.bugReport.description')
-    expect(target.textContent).toContain('settings.bugReport.appVersion')
-    expect(target.textContent).toContain('settings.bugReport.device')
     expect(copyBtn()).toBeTruthy()
   })
 
@@ -166,6 +164,24 @@ describe('BugReportSection 表示', () => {
     expect(textarea().value).toContain('inflight-set stamp=1')
     expect(textarea().value).toContain('inflight-set stamp=3')
     expect(clearBtn().disabled).toBe(false)
+  })
+
+  it('画面にバージョン・端末の行は出ないが、コピーされる全文のヘッダには入っている', async () => {
+    store.entries = [entry(1)]
+    await render()
+    for (const text of [
+      'settings.bugReport.appVersion',
+      'settings.bugReport.device',
+      'アプリのバージョン',
+      '端末:',
+      'App version',
+      'Device:',
+    ]) {
+      expect(target.textContent).not.toContain(text)
+    }
+    const lines = textarea().value.split('\n')
+    expect(lines.some((l) => l.startsWith('app: '))).toBe(true)
+    expect(lines.some((l) => l.startsWith('device: '))).toBe(true)
   })
 
   it('読み込み失敗（read が空配列を返す）でもクラッシュせず 0 件表示', async () => {
