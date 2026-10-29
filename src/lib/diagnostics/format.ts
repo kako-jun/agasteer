@@ -79,7 +79,7 @@ export function summarizeUserAgent(ua: string): string {
   return `${browser} / ${os}`
 }
 
-/** コピー・プレビュー用の全文 */
+/** コピー用の全文 */
 export function formatReport(
   entries: readonly DiagEntry[],
   meta: { appVersion: string; device: string }

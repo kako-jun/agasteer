@@ -73,9 +73,10 @@ Push 直後の再 Push で pushCount が同じなのに衝突ダイアログが�
 設定画面の「バグレポート」（`components/settings/BugReportSection.svelte`、`SettingsView.svelte` に配置）。
 
 - 見出しと、1〜2文の説明（同期まわりの出来事をこの端末の中にだけ記録している・不具合が起きたら「コピー」して貼る）
-- 要約 1 行: 件数と最古〜最新の日時（0 件のときは `summaryEmpty`）。アプリのバージョンと端末は画面には出さない（コピーされる全文のヘッダにだけ入る）
-- コピーされる全文のプレビュー: `<details>`（初期は閉、summary は `previewSummary`「全文を確認」）の中の読み取り専用 textarea。コピーされる全文と同じ `report`（`$derived`）を表示する。0 件のときは空の textarea も details も出さない
-- 「コピー」: 成功で「コピーしました」。クリップボードが使えない場合は `copyFailed` を表示（「全文を確認」を開いて手動コピーを案内）
+- 要約 1 行: 件数と最古〜最新の日時（`summary`）。N 件のときだけ出し、0 件のときは要約行そのものを出さない（「まだ記録はありません」は出さない）。アプリのバージョンと端末は画面には出さない（コピーされる全文のヘッダにだけ入る）
+- 記録の内容（全文）は画面に表示しない。確認したい場合は「コピー」して貼り付ければ読める（kako-jun の判断）。コピーされる文字列は `formatReport` の出力（`report`、`$derived`）
+- 「コピー」「ログを消す」のボタンは 0 件でも表示する（「ログを消す」は 0 件のとき disabled）
+- 「コピー」: 成功で「コピーしました」。クリップボードが使えない場合は `copyFailed`（「コピーできませんでした。」）を表示
 - 「ログを消す」: `clearDiagEntries()` が成功したときだけ「ログを消しました」。失敗時は `clearFailed`（「ログを消せませんでした。」）を表示する。どちらの場合も一覧を読み直して表示を実態に合わせる
 - 状態メッセージ（`role="status"`）は 3 秒で消える
 
@@ -83,7 +84,7 @@ Push 直後の再 Push で pushCount が同じなのに衝突ダイアログが�
 
 衝突ダイアログ本文の末尾に1行の案内（`modal.conflictBugReportHint`: 「詳しくは 設定 > バグレポート をご覧ください。」）を付ける。ボタンは増やさない。エラートーストからの導線は現状ない。
 
-i18n キーは `settings.bugReport.*`（title, description, summary, summaryEmpty, previewSummary, copy, copied, copyFailed, clear, cleared, clearFailed）と `modal.conflictBugReportHint`。ja / en 両方。
+i18n キーは `settings.bugReport.*`（title, description, summary, copy, copied, copyFailed, clear, cleared, clearFailed）と `modal.conflictBugReportHint`。ja / en 両方。
 
 ## 記録を足す手順
 

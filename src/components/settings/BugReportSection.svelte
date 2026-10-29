@@ -60,28 +60,12 @@
   <h3>{$_('settings.bugReport.title')}</h3>
   <p class="description">{$_('settings.bugReport.description')}</p>
 
-  <p class="meta">
-    {#if summary.count === 0}
-      {$_('settings.bugReport.summaryEmpty')}
-    {:else}
+  {#if summary.count > 0}
+    <p class="meta">
       {$_('settings.bugReport.summary', {
         values: { count: summary.count, from: fmt(summary.from), to: fmt(summary.to) },
       })}
-    {/if}
-  </p>
-
-  {#if summary.count > 0}
-    <details class="preview-details">
-      <summary>{$_('settings.bugReport.previewSummary')}</summary>
-      <textarea
-        id="bug-report-preview"
-        class="preview"
-        readonly
-        rows="10"
-        aria-label={$_('settings.bugReport.previewSummary')}
-        value={report}
-      ></textarea>
-    </details>
+    </p>
   {/if}
 
   <div class="actions">
@@ -120,34 +104,6 @@
     margin: 0.2rem 0;
     color: var(--text-muted);
     font-size: 0.85rem;
-  }
-
-  .preview-details {
-    margin-top: 0.5rem;
-  }
-
-  .preview-details summary {
-    cursor: pointer;
-    color: var(--text);
-    font-size: 0.9rem;
-  }
-
-  .preview-details .preview {
-    margin-top: 0.4rem;
-  }
-
-  .preview {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0.6rem;
-    background: var(--surface-1);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-family: monospace;
-    font-size: 0.75rem;
-    line-height: 1.4;
-    resize: vertical;
   }
 
   .actions {
