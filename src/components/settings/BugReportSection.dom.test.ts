@@ -86,7 +86,7 @@ const clearBtn = () =>
     b.textContent!.includes('settings.bugReport.clear')
   )!
 const status = () => q('.status').textContent!.trim()
-const textarea = () => q<HTMLTextAreaElement>('textarea')
+const textarea = () => q<HTMLTextAreaElement>('details textarea')
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -119,17 +119,48 @@ describe('BugReportSection 表示', () => {
     expect(clearBtn().disabled).toBe(true)
   })
 
-  it('0 件でも textarea は readonly でヘッダ付きの全文（entries: 0）を持つ', async () => {
+  it('0 件: 空の textarea も details も出さない', async () => {
     await render()
-    expect(textarea().readOnly).toBe(true)
-    expect(textarea().value).toContain('entries: 0')
+    expect(target.querySelector('textarea')).toBeNull()
+    expect(target.querySelector('details')).toBeNull()
   })
 
-  it('N 件: サマリに件数が出て、readonly の textarea に整形全文が入り、Clear が有効', async () => {
+  it('0 件でも見出し・説明・バージョン・端末・ボタンは出る', async () => {
+    await render()
+    expect(target.textContent).toContain('settings.bugReport.title')
+    expect(target.textContent).toContain('settings.bugReport.description')
+    expect(target.textContent).toContain('settings.bugReport.appVersion')
+    expect(target.textContent).toContain('settings.bugReport.device')
+    expect(copyBtn()).toBeTruthy()
+  })
+
+  it('削除した説明ブロック（記録するもの・しないもの・使い方・上限）は出ない', async () => {
+    store.entries = [entry(1)]
+    await render()
+    for (const k of [
+      'recordedTitle',
+      'recorded',
+      'notRecordedTitle',
+      'notRecorded',
+      'howToTitle',
+      'howTo',
+      'limit',
+      'previewTitle',
+    ]) {
+      expect(target.textContent).not.toContain(`settings.bugReport.${k}`)
+    }
+  })
+
+  it('N 件: サマリに件数が出て、初期で閉じた details 内の readonly textarea に整形全文が入り、Clear が有効', async () => {
     store.entries = [entry(1), entry(2), entry(3)]
     await render()
     expect(target.textContent).toContain('settings.bugReport.summary{count=3')
     expect(target.textContent).not.toContain('settings.bugReport.summaryEmpty')
+    const details = q<HTMLDetailsElement>('details')
+    expect(details.open).toBe(false)
+    expect(details.querySelector('summary')!.textContent).toContain(
+      'settings.bugReport.previewSummary'
+    )
     expect(textarea().readOnly).toBe(true)
     expect(textarea().value).toContain('entries: 3')
     expect(textarea().value).toContain('inflight-set stamp=1')
@@ -243,7 +274,7 @@ describe('BugReportSection Clear', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(diagnostics.clearDiagEntries).toHaveBeenCalledTimes(1)
     expect(target.textContent).toContain('settings.bugReport.summaryEmpty')
-    expect(textarea().value).toContain('entries: 0')
+    expect(target.querySelector('textarea')).toBeNull()
     expect(status()).toBe('settings.bugReport.cleared')
     expect(clearBtn().disabled).toBe(true)
   })
