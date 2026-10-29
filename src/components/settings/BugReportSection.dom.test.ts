@@ -185,16 +185,11 @@ describe('BugReportSection 表示', () => {
   it('画面にバージョン・端末の行は出ないが、コピーされる全文のヘッダには入っている', async () => {
     store.entries = [entry(1)]
     await render()
-    for (const text of [
-      'settings.bugReport.appVersion',
-      'settings.bugReport.device',
-      'アプリのバージョン',
-      '端末:',
-      'App version',
-      'Device:',
-    ]) {
-      expect(target.textContent).not.toContain(text)
-    }
+    // i18n モックはキー文字列を返すので、実文言リテラルでの否定は空振りになる（実ロケールは bug-report-locales.test.ts が担保）
+    expect(target.textContent).not.toContain('settings.bugReport.appVersion')
+    expect(target.textContent).not.toContain('settings.bugReport.device')
+    expect(target.textContent).not.toMatch(/(^|\s)(app|device):/)
+    expect(target.textContent).not.toContain(__BUILD_DATE__)
     const lines = (await copied()).split('\n')
     expect(lines.some((l) => l.startsWith('app: '))).toBe(true)
     expect(lines.some((l) => l.startsWith('device: '))).toBe(true)
@@ -227,8 +222,8 @@ describe('BugReportSection Copy', () => {
     const text = await copied()
     expect(text).toBe(
       diagnostics.formatReport(store.entries, {
-        appVersion: text.split('\n')[1].slice(5),
-        device: text.split('\n')[2].slice(8),
+        appVersion: __BUILD_DATE__,
+        device: diagnostics.summarizeUserAgent(navigator.userAgent),
       })
     )
     expect(text).toContain('app: ')
