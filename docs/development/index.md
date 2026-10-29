@@ -8,14 +8,15 @@
 
 ### 基本設計
 
-| ファイル                             | 内容                                              |
-| ------------------------------------ | ------------------------------------------------- |
-| [architecture.md](./architecture.md) | アーキテクチャ概要、技術スタック、レイヤー構造    |
-| [adr/](./adr/)                       | 主要な不可逆設計判断のADR（遡及記録）             |
-| [data-model.md](./data-model.md)     | TypeScript型定義、状態管理、CRUD操作パターン      |
-| [storage.md](./storage.md)           | LocalStorage、IndexedDB、GitHub連携、テーマ       |
-| [features.md](./features.md)         | エディタ（CodeMirror）、Vimモード、ナビゲーション |
-| [content-sync.md](./content-sync.md) | リーフタイトルと#見出しの双方向同期               |
+| ファイル                             | 内容                                                 |
+| ------------------------------------ | ---------------------------------------------------- |
+| [architecture.md](./architecture.md) | アーキテクチャ概要、技術スタック、レイヤー構造       |
+| [adr/](./adr/)                       | 主要な不可逆設計判断のADR（遡及記録）                |
+| [data-model.md](./data-model.md)     | TypeScript型定義、状態管理、CRUD操作パターン         |
+| [storage.md](./storage.md)           | LocalStorage、IndexedDB、GitHub連携、テーマ          |
+| [features.md](./features.md)         | エディタ（CodeMirror）、Vimモード、ナビゲーション    |
+| [content-sync.md](./content-sync.md) | リーフタイトルと#見出しの双方向同期                  |
+| [bug-report.md](./bug-report.md)     | バグレポート用診断ログ（同期の出来事の記録とコピー） |
 
 ### UI機能 ([ui/](./ui/))
 
