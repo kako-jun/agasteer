@@ -26,7 +26,7 @@ const allKeys = [...bugReportKeys, 'modal.conflictBugReportHint']
 
 describe('バグレポートの i18n キー', () => {
   it('settings.bugReport.* が en に存在する（検出元）', () => {
-    expect(bugReportKeys.length).toBeGreaterThanOrEqual(19)
+    expect(bugReportKeys.length).toBeGreaterThanOrEqual(13)
   })
 
   it('ja の settings.bugReport.* は en と同じキー集合', () => {
@@ -61,13 +61,22 @@ describe('バグレポートの i18n キー', () => {
     }
   })
 
-  it('en の文言が上限（300 件 / 200 KB）の実装定数と食い違わない', async () => {
-    const { MAX_ENTRIES, MAX_TOTAL_BYTES } = await import('../diagnostics/format')
-    const limitEn = get(en, 'settings.bugReport.limit') as string
-    const limitJa = get(ja, 'settings.bugReport.limit') as string
-    expect(limitEn).toContain(String(MAX_ENTRIES))
-    expect(limitEn).toContain(`${MAX_TOTAL_BYTES / 1024} KB`)
-    expect(limitJa).toContain(String(MAX_ENTRIES))
-    expect(limitJa).toContain(`${MAX_TOTAL_BYTES / 1024}`)
+  it('画面から外した説明キーが残っていない', () => {
+    for (const loc of [ja, en]) {
+      const keys = Object.keys((loc as any).settings.bugReport)
+      for (const k of [
+        'recordedTitle',
+        'recorded',
+        'notRecordedTitle',
+        'notRecorded',
+        'howToTitle',
+        'howTo',
+        'limit',
+        'previewTitle',
+      ]) {
+        expect(keys).not.toContain(k)
+      }
+      expect(keys).toContain('previewSummary')
+    }
   })
 })

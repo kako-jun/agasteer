@@ -60,16 +60,6 @@
   <h3>{$_('settings.bugReport.title')}</h3>
   <p class="description">{$_('settings.bugReport.description')}</p>
 
-  <dl class="notes">
-    <dt>{$_('settings.bugReport.recordedTitle')}</dt>
-    <dd>{$_('settings.bugReport.recorded')}</dd>
-    <dt>{$_('settings.bugReport.notRecordedTitle')}</dt>
-    <dd>{$_('settings.bugReport.notRecorded')}</dd>
-    <dt>{$_('settings.bugReport.howToTitle')}</dt>
-    <dd>{$_('settings.bugReport.howTo')}</dd>
-  </dl>
-  <p class="meta">{$_('settings.bugReport.limit')}</p>
-
   <p class="meta">
     {#if summary.count === 0}
       {$_('settings.bugReport.summaryEmpty')}
@@ -79,13 +69,23 @@
       })}
     {/if}
   </p>
-  <p class="meta">{$_('settings.bugReport.appVersion')}: {appVersion}</p>
-  <p class="meta">{$_('settings.bugReport.device')}: {device}</p>
+  <p class="meta">
+    {$_('settings.bugReport.appVersion')}: {appVersion} / {$_('settings.bugReport.device')}: {device}
+  </p>
 
-  <label class="preview-label" for="bug-report-preview">
-    {$_('settings.bugReport.previewTitle')}
-  </label>
-  <textarea id="bug-report-preview" class="preview" readonly rows="10" value={report}></textarea>
+  {#if summary.count > 0}
+    <details class="preview-details">
+      <summary>{$_('settings.bugReport.previewSummary')}</summary>
+      <textarea
+        id="bug-report-preview"
+        class="preview"
+        readonly
+        rows="10"
+        aria-label={$_('settings.bugReport.previewSummary')}
+        value={report}
+      ></textarea>
+    </details>
+  {/if}
 
   <div class="actions">
     <button class="primary" type="button" onclick={copyReport}>
@@ -116,23 +116,7 @@
   .description {
     color: var(--text-muted);
     font-size: 0.9rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .notes {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.9rem;
-  }
-
-  .notes dt {
-    color: var(--text);
-    font-weight: 600;
-    margin-top: 0.5rem;
-  }
-
-  .notes dd {
-    margin: 0.15rem 0 0 0;
-    color: var(--text-muted);
+    margin-bottom: 0.5rem;
   }
 
   .meta {
@@ -141,12 +125,18 @@
     font-size: 0.85rem;
   }
 
-  .preview-label {
-    display: block;
-    margin-top: 0.75rem;
-    margin-bottom: 0.3rem;
+  .preview-details {
+    margin-top: 0.5rem;
+  }
+
+  .preview-details summary {
+    cursor: pointer;
     color: var(--text);
     font-size: 0.9rem;
+  }
+
+  .preview-details .preview {
+    margin-top: 0.4rem;
   }
 
   .preview {
