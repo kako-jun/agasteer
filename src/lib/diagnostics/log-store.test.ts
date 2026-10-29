@@ -122,6 +122,42 @@ describe('clear', () => {
     expect(r).toEqual([true, true, true])
     expect(await s.readDiagEntries()).toEqual([])
   })
+  it('clear は tx の complete を待ってから resolve する（resolve 時点で commit 済み）', async () => {
+    const s = await load()
+    await s.appendDiagEntry(mk(1))
+    let completed = false
+    const origTx = IDBDatabase.prototype.transaction
+    IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...args: any[]) {
+      const tx = (origTx as any).apply(this, args) as IDBTransaction
+      tx.addEventListener('complete', () => {
+        completed = true
+      })
+      return tx
+    } as typeof IDBDatabase.prototype.transaction
+    try {
+      expect(await s.clearDiagEntries()).toBe(true)
+      expect(completed).toBe(true)
+    } finally {
+      IDBDatabase.prototype.transaction = origTx
+    }
+  })
+  it('clear 中に tx が abort されても投げず false を返す', async () => {
+    const s = await load()
+    await s.appendDiagEntry(mk(1))
+    const orig = IDBObjectStore.prototype.clear
+    IDBObjectStore.prototype.clear = function (this: IDBObjectStore) {
+      const req = orig.call(this)
+      this.transaction.abort()
+      return req
+    }
+    try {
+      expect(await s.clearDiagEntries()).toBe(false)
+      expect(warnSpy).toHaveBeenCalled()
+    } finally {
+      IDBObjectStore.prototype.clear = orig
+    }
+    expect((await s.readDiagEntries()).length).toBe(1)
+  })
   it('clear 後も追加できる', async () => {
     const s = await load()
     await s.appendDiagEntry(mk(1))
@@ -226,25 +262,6 @@ describe('トランザクション完了を待つ', () => {
     const all = await s.readDiagEntries()
     expect(all).toHaveLength(300)
     expect(all[all.length - 1].data.stamp).toBe(300)
-  })
-
-  it('tx の complete を待ってから resolve する（resolve 時点で commit 済み）', async () => {
-    const s = await load()
-    let completed = false
-    const origTx = IDBDatabase.prototype.transaction
-    IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...args: any[]) {
-      const tx = (origTx as any).apply(this, args) as IDBTransaction
-      tx.addEventListener('complete', () => {
-        completed = true
-      })
-      return tx
-    } as typeof IDBDatabase.prototype.transaction
-    try {
-      await s.appendDiagEntry(mk(1))
-      expect(completed).toBe(true)
-    } finally {
-      IDBDatabase.prototype.transaction = origTx
-    }
   })
 
   it('resolve した時点で書き込みは永続化済み', async () => {

@@ -58,12 +58,20 @@ export async function appendDiagEntry(entry: DiagEntry): Promise<void> {
   }
 }
 
-/** 全消去。失敗時は false */
+/** 全消去。tx の complete まで待つ。失敗・abort 時は false（投げない） */
 export async function clearDiagEntries(): Promise<boolean> {
   try {
     const db = await getSharedDb()
-    const store = db.transaction(DIAG_LOG_STORE, 'readwrite').objectStore(DIAG_LOG_STORE)
+    const tx = db.transaction(DIAG_LOG_STORE, 'readwrite')
+    const store = tx.objectStore(DIAG_LOG_STORE)
+    // appendDiagEntry と同様、リスナーは最初の await より前に張る
+    const done = new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve()
+      tx.onabort = () => reject(tx.error ?? new Error('diagLog transaction aborted'))
+    })
+    done.catch(() => {})
     await requestToPromise(store.clear())
+    await done
     return true
   } catch (e) {
     console.warn('diagnostics: clear failed', e)

@@ -4,11 +4,15 @@
  * 2 列目の `キー`( の並びをキー名として抽出する。
  */
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { DIAG_SCHEMA } from './schema'
 
-const md = readFileSync(resolve(process.cwd(), 'docs/development/bug-report.md'), 'utf8')
+const md = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/development/bug-report.md'),
+  'utf8'
+)
 
 const rows = new Map<string, string[]>()
 for (const line of md.split('\n')) {

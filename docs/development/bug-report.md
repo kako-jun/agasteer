@@ -41,8 +41,8 @@ Push 直後の再 Push で pushCount が同じなのに衝突ダイアログが�
 
 `push-start` / `pull-start` は終了記録（`push-success` / `push-failure` / `pull-result`）と必ず対になるわけではない。「開始だけの記録＝ハング」と読まないこと。`conflict-choice` と併読して経路を判別する。
 
-- Push: auto push の stale 判定不能による中断（`abortIfStaleCheckFailed`）、衝突ダイアログでのキャンセル（`conflict-choice` が `cancel`）、preflight の例外
-- Pull: `executePull` が throw して `pull-result` が残らない場合、衝突ダイアログでのキャンセル
+- Push: auto push の stale 判定不能による中断（`abortIfStaleCheckFailed`）、衝突ダイアログでのキャンセル（`conflict-choice` が `cancel`）、preflight の例外。stale-push ダイアログで「Pull first」を選んだ場合も、1 本目の `push-start` に終了記録は付かない（`pull-start` / `pull-result` を挟み、再帰した 2 本目の `push-start` に置き換わる）
+- Pull: `executePull`（その前の `createBackup` / `clearAllData` を含む）が throw して `pull-result` が残らない場合。なお dirty 確認ダイアログでキャンセルした場合は `pull-start` 自体が記録されない。pull-dirty の「Push first」では 1 回目の呼び出しに `pull-start` が出ず、Push 後に再帰した呼び出しで出る
 
 `E-xxxx` の記録範囲: Push は `push-failure`（`executePush` が返す `errorCode`）、Pull は `pull-result`（`executePull` が返す `errorCode`）に含める。それ以外の経路（タイムアウトトーストの `E-5101` など）のトースト表示そのものは網羅しない（`push-timeout` が別途残る）。Pull が走らない場合（リモート変更なしで完了済み）や、dirty の確認でキャンセルした場合は `pull-start` / `pull-result` を記録しない（後者は `conflict-choice` が残る）。上表が記録の全て。
 
