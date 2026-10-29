@@ -209,7 +209,8 @@
       "copied": "Copied",
       "copyFailed": "Could not copy. Select the text above and copy it manually.",
       "clear": "Clear log",
-      "cleared": "Log cleared"
+      "cleared": "Log cleared",
+      "clearFailed": "Could not clear the log."
     },
     "importExport": {
       "titleExport": "Export",

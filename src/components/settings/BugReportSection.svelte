@@ -15,7 +15,7 @@
   const device = summarizeUserAgent(typeof navigator !== 'undefined' ? navigator.userAgent : '')
 
   let entries = $state<DiagEntry[]>([])
-  let status = $state<'' | 'copied' | 'copyFailed' | 'cleared'>('')
+  let status = $state<'' | 'copied' | 'copyFailed' | 'cleared' | 'clearFailed'>('')
   let statusTimer: ReturnType<typeof setTimeout> | undefined
 
   const summary = $derived(summarize(entries))
@@ -45,9 +45,9 @@
   }
 
   async function clearLog() {
-    await clearDiagEntries()
+    const ok = await clearDiagEntries()
     await reload()
-    flash('cleared')
+    flash(ok ? 'cleared' : 'clearFailed')
   }
 
   onMount(() => {
@@ -99,6 +99,7 @@
     {#if status === 'copied'}{$_('settings.bugReport.copied')}{/if}
     {#if status === 'copyFailed'}{$_('settings.bugReport.copyFailed')}{/if}
     {#if status === 'cleared'}{$_('settings.bugReport.cleared')}{/if}
+    {#if status === 'clearFailed'}{$_('settings.bugReport.clearFailed')}{/if}
   </p>
 </div>
 

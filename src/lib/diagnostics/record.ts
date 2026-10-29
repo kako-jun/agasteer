@@ -11,7 +11,9 @@ import { appendDiagEntry } from './log-store'
 export function recordDiag<K extends DiagKind>(kind: K, data: DiagData<K>): void {
   try {
     const entry = buildEntry(kind, data as Record<string, unknown>, Date.now())
-    if (entry) void appendDiagEntry(entry)
+    if (entry) {
+      appendDiagEntry(entry).catch((e) => console.warn('diagnostics: append failed', e))
+    }
   } catch (e) {
     console.warn('diagnostics: record failed', e)
   }

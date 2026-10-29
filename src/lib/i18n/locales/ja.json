@@ -213,7 +213,8 @@
       "copied": "コピーしました",
       "copyFailed": "コピーできませんでした。上の全文を選択して手動でコピーしてください。",
       "clear": "ログを消す",
-      "cleared": "ログを消しました"
+      "cleared": "ログを消しました",
+      "clearFailed": "ログを消せませんでした。"
     },
     "importExport": {
       "titleExport": "エクスポート",
