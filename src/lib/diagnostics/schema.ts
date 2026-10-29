@@ -55,7 +55,7 @@ export const DIAG_SCHEMA = {
   /** pushInFlightAt の解除 */
   'inflight-clear': {
     stamp: 'int',
-    reason: ['response', 'http-error', 'orphan-settled', 'orphan-rejected'],
+    reason: ['response', 'http-error', 'orphan-settled'],
   },
   /** Push 応答タイムアウト（UI をあきらめた） */
   'push-timeout': { stamp: 'int', timeoutMs: 'int' },

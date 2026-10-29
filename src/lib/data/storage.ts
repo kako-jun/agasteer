@@ -863,12 +863,20 @@ async function openSharedDB(): Promise<IDBDatabase> {
       }
     }
     request.onsuccess = () => {
-      sharedDb = request.result
+      const db = request.result
+      sharedDb = db
       sharedDbPromise = null
-      sharedDb.onclose = () => {
-        sharedDb = null
+      // 今後のバージョン bump で、この接続が別タブの open を塞がないよう自ら閉じる。
+      // 明示的な close() は onclose を発火しないため、参照も自分でクリアする
+      db.onversionchange = () => {
+        console.warn('Shared IndexedDB version change requested by another connection; closing')
+        db.close()
+        if (sharedDb === db) sharedDb = null
       }
-      resolve(request.result)
+      db.onclose = () => {
+        if (sharedDb === db) sharedDb = null
+      }
+      resolve(db)
     }
     request.onerror = () => {
       sharedDbPromise = null

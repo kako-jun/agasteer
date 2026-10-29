@@ -129,3 +129,27 @@ describe('共有 DB v1→v2', () => {
     expect(after.version).toBe(2)
   })
 })
+
+describe('共有 DB の versionchange', () => {
+  it('上位バージョンの open が来ると接続を閉じ、次回の getSharedDb は新しい接続になる', async () => {
+    const factory = new IDBFactory()
+    vi.stubGlobal('indexedDB', factory)
+    vi.resetModules()
+    const s = await import('./storage')
+    const db1 = await s.getSharedDb()
+    const closeSpy = vi.spyOn(db1, 'close')
+    // 別タブ（将来のバージョン）が v3 で open → db1 に versionchange が飛ぶ
+    const open = factory.open(SHARED, 3)
+    await req(open).then((d) => d.close())
+    expect(closeSpy).toHaveBeenCalled()
+    // 閉じた接続は使い回されない（v3 に上がった DB に対し v2 で open すると VersionError になるため
+    // ここでは新しい接続を試みる動作＝参照がクリアされていること）を確認する
+    let reopened: unknown = null
+    try {
+      reopened = await s.getSharedDb()
+    } catch {
+      reopened = 'rejected-by-new-open'
+    }
+    expect(reopened).not.toBe(db1)
+  })
+})

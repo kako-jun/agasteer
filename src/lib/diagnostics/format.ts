@@ -5,7 +5,7 @@ import type { DiagEntry } from './schema'
 
 /** 保持件数の上限 */
 export const MAX_ENTRIES = 300
-/** 合計サイズの上限（JSON 化した文字数の概算。単位はバイト扱い） */
+/** 合計サイズの上限（JSON 化した文字数の概算。厳密なバイト数ではない） */
 export const MAX_TOTAL_BYTES = 200 * 1024
 
 function entrySize(e: DiagEntry): number {
@@ -49,6 +49,8 @@ export function summarize(entries: readonly DiagEntry[]): DiagSummary {
 
 /** UA 文字列を「ブラウザ / OS」程度に要約する（端末固有の細部は落とす） */
 export function summarizeUserAgent(ua: string): string {
+  // 'Unknown OS' / 'Unknown browser' は i18n 対象外: 開発者が読む診断値で、
+  // 端末固有情報を含まない固定語彙のため
   let os = 'Unknown OS'
   if (/Android/i.test(ua)) os = 'Android'
   else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS'

@@ -2,7 +2,7 @@
  * 診断ログの永続化層（#317）のテスト（fake-indexeddb）
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { IDBFactory } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import type { DiagEntry } from './schema'
 
 const storageBacking = new Map<string, string>()
@@ -199,5 +199,35 @@ describe('DB から読んだ値は再検証されない（現状の挙動を固�
     } as DiagEntry)
     const all = await s.readDiagEntries()
     expect(all[0].data.evil).toBe('ghp_SECRET')
+  })
+})
+
+describe('トランザクション完了を待つ', () => {
+  it('delete が失敗して tx が abort されても投げず、console.warn のみ（add も巻き戻る）', async () => {
+    const s = await load()
+    for (let i = 1; i <= 300; i++) await s.appendDiagEntry(mk(i))
+    warnSpy.mockClear()
+    // 301 件目で trim の delete が走る。delete を例外にして tx を abort させる
+    const orig = IDBObjectStore.prototype.delete
+    IDBObjectStore.prototype.delete = function (this: IDBObjectStore, ...args: [IDBValidKey]) {
+      this.transaction.abort()
+      return orig.apply(this, args)
+    }
+    try {
+      await expect(s.appendDiagEntry(mk(301))).resolves.toBeUndefined()
+    } finally {
+      IDBObjectStore.prototype.delete = orig
+    }
+    expect(warnSpy).toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
+    const all = await s.readDiagEntries()
+    expect(all).toHaveLength(300)
+    expect(all[all.length - 1].data.stamp).toBe(300)
+  })
+
+  it('resolve した時点で書き込みは永続化済み', async () => {
+    const s = await load()
+    await s.appendDiagEntry(mk(1))
+    expect((await s.readDiagEntries()).map((e) => e.data.stamp)).toEqual([1])
   })
 })

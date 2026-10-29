@@ -22,7 +22,7 @@ Push 直後の再 Push で pushCount が同じなのに衝突ダイアログが�
 | `stale-remote-commit` | `headSha`(sha) `parentSha`(sha) `commitDate`(iso)                                                                                    | stale 時のリモート HEAD コミットの親と日時                                                  | 誰がいつ積んだ HEAD か。自分の直前 Push の親子関係か                    |
 | `ref-verify`          | `pushedSha`(sha) `refSha`(sha) `match`(bool) `httpStatus`(int)                                                                       | ref を PATCH した直後に読み直し、PATCH した SHA と照合（`api/github.ts` → `ref-verify.ts`） | PATCH 直後の GET が古い値を返すか（読み取りの遅れ）                     |
 | `inflight-set`        | `stamp`(int)                                                                                                                         | `pushInFlightAt` の設定                                                                     | 救済マーカーの寿命                                                      |
-| `inflight-clear`      | `stamp`(int) `reason`(`response`/`http-error`/`orphan-settled`/`orphan-rejected`)                                                    | `pushInFlightAt` の解除                                                                     | 設定と解除の対応、解除理由                                              |
+| `inflight-clear`      | `stamp`(int) `reason`(`response`/`http-error`/`orphan-settled`)                                                    | `pushInFlightAt` の解除                                                                     | 設定と解除の対応、解除理由                                              |
 | `push-timeout`        | `stamp`(int) `timeoutMs`(int)                                                                                                        | Push 応答タイムアウトで UI をあきらめた                                                     | タイムアウトが絡むか                                                    |
 | `orphan-settled`      | `stamp`(int) `outcome`(`follow`/`verify-align`/`verify-skip`/`failure`/`rejected`/`repo-switched`) `commitSha`(sha) `elapsedMs`(int) | タイムアウト後の orphan Push が settle した（`git-orphan.ts`）                              | orphan が成功して SHA 追従したか                                        |
 | `rehydrate-sha`       | `oldSha`(sha) `newSha`(sha)                                                                                                          | rehydrate での `lastKnownCommitSha` の差し替え（`rehydrate.svelte.ts`）                     | リポ切替などで local SHA が変わったか                                   |
@@ -50,6 +50,8 @@ Pull の開始・結果、Push の失敗、エラーコード（`E-xxxx`）、�
 
 - 上限: 300 件・合計 200KB（JSON 化した文字数の概算）。`trimEntries`（`format.ts`）が新しい側を優先して残し、古い順に切り捨てる
 - 追加のたびに、同じトランザクション内で上限超過分を削除する
+- `appendDiagEntry` はトランザクションの complete / abort まで待つ。abort（削除失敗など）時は直前の追加も巻き戻り、`console.warn` のみで reject しない
+- 共有 DB は `onversionchange` で自ら接続を閉じる（今後のバージョン bump で他タブを塞がない）。ただし、この対応を持たない旧版を開いたままのタブには効かないため、v1→v2 のアップグレードは「旧版タブを閉じるまで反映されない場合がある」（その間は fonts / backgrounds / 診断ログの共有 DB 読み込みが失敗しうる）
 - 書き込み・読み込み・消去の失敗は `console.warn` のみで握りつぶし、同期処理を妨げない（読み込み失敗は空配列、消去失敗は false を返す）。`record.ts` も `appendDiagEntry` の reject を `console.warn` に落とし、unhandled rejection を出さない
 
 ## 画面
