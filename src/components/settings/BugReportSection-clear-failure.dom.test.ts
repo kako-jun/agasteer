@@ -86,7 +86,6 @@ const clearBtn = () =>
     b.textContent!.includes('settings.bugReport.clear')
   )!
 const status = () => q('.status').textContent!.trim()
-const textarea = () => q<HTMLTextAreaElement>('textarea')
 
 beforeEach(() => {
   vi.useFakeTimers()

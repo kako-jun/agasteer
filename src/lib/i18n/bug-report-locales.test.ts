@@ -26,7 +26,7 @@ const allKeys = [...bugReportKeys, 'modal.conflictBugReportHint']
 
 describe('バグレポートの i18n キー', () => {
   it('settings.bugReport.* が en に存在する（検出元）', () => {
-    expect(bugReportKeys.length).toBeGreaterThanOrEqual(13)
+    expect(bugReportKeys.length).toBeGreaterThanOrEqual(9)
   })
 
   it('ja の settings.bugReport.* は en と同じキー集合', () => {
@@ -73,10 +73,13 @@ describe('バグレポートの i18n キー', () => {
         'howTo',
         'limit',
         'previewTitle',
+        'appVersion',
+        'device',
+        'summaryEmpty',
+        'previewSummary',
       ]) {
         expect(keys).not.toContain(k)
       }
-      expect(keys).toContain('previewSummary')
     }
   })
 })

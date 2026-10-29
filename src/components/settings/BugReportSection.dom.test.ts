@@ -86,7 +86,6 @@ const clearBtn = () =>
     b.textContent!.includes('settings.bugReport.clear')
   )!
 const status = () => q('.status').textContent!.trim()
-const textarea = () => q<HTMLTextAreaElement>('details textarea')
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -112,25 +111,37 @@ function stubClipboard(writeText: (t: string) => Promise<void>) {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 }
 
+/** コピーボタンを押し、clipboard.writeText に渡された文字列を返す（画面には内容を出さないため） */
+async function copied(): Promise<string> {
+  const write = vi.fn(async (_t: string) => {})
+  stubClipboard(write)
+  copyBtn().click()
+  await vi.advanceTimersByTimeAsync(0)
+  await tick()
+  expect(write).toHaveBeenCalledTimes(1)
+  return write.mock.calls[0][0]
+}
+
 describe('BugReportSection 表示', () => {
-  it('0 件: summaryEmpty が出て、Clear は disabled', async () => {
+  it('0 件: 要約行も「まだ記録はありません」も出ず、Clear は disabled', async () => {
     await render()
-    expect(target.textContent).toContain('settings.bugReport.summaryEmpty')
+    expect(target.textContent).not.toContain('settings.bugReport.summary')
+    expect(target.textContent).not.toContain('summaryEmpty')
+    expect(target.textContent).not.toContain('まだ記録はありません')
+    expect(target.querySelector('.meta')).toBeNull()
     expect(clearBtn().disabled).toBe(true)
   })
 
-  it('0 件: 空の textarea も details も出さない', async () => {
+  it('0 件: textarea も details も出さない', async () => {
     await render()
     expect(target.querySelector('textarea')).toBeNull()
     expect(target.querySelector('details')).toBeNull()
   })
 
-  it('0 件でも見出し・説明・バージョン・端末・ボタンは出る', async () => {
+  it('0 件でも見出し・説明・ボタンは出る', async () => {
     await render()
     expect(target.textContent).toContain('settings.bugReport.title')
     expect(target.textContent).toContain('settings.bugReport.description')
-    expect(target.textContent).toContain('settings.bugReport.appVersion')
-    expect(target.textContent).toContain('settings.bugReport.device')
     expect(copyBtn()).toBeTruthy()
   })
 
@@ -151,52 +162,72 @@ describe('BugReportSection 表示', () => {
     }
   })
 
-  it('N 件: サマリに件数が出て、初期で閉じた details 内の readonly textarea に整形全文が入り、Clear が有効', async () => {
+  it('N 件: サマリに件数が出て、details も textarea も無く、Clear が有効', async () => {
     store.entries = [entry(1), entry(2), entry(3)]
     await render()
     expect(target.textContent).toContain('settings.bugReport.summary{count=3')
-    expect(target.textContent).not.toContain('settings.bugReport.summaryEmpty')
-    const details = q<HTMLDetailsElement>('details')
-    expect(details.open).toBe(false)
-    expect(details.querySelector('summary')!.textContent).toContain(
-      'settings.bugReport.previewSummary'
-    )
-    expect(textarea().readOnly).toBe(true)
-    expect(textarea().value).toContain('entries: 3')
-    expect(textarea().value).toContain('inflight-set stamp=1')
-    expect(textarea().value).toContain('inflight-set stamp=3')
+    expect(target.querySelector('.meta')).not.toBeNull()
+    expect(target.querySelector('details')).toBeNull()
+    expect(target.querySelector('textarea')).toBeNull()
+    expect(target.textContent).not.toContain('previewSummary')
     expect(clearBtn().disabled).toBe(false)
+  })
+
+  it('N 件: コピーされる内容に件数と記録が入っている', async () => {
+    store.entries = [entry(1), entry(2), entry(3)]
+    await render()
+    const text = await copied()
+    expect(text).toContain('entries: 3')
+    expect(text).toContain('inflight-set stamp=1')
+    expect(text).toContain('inflight-set stamp=3')
+  })
+
+  it('画面にバージョン・端末の行は出ないが、コピーされる全文のヘッダには入っている', async () => {
+    store.entries = [entry(1)]
+    await render()
+    // i18n モックはキー文字列を返すので、実文言リテラルでの否定は空振りになる（実ロケールは bug-report-locales.test.ts が担保）
+    expect(target.textContent).not.toContain('settings.bugReport.appVersion')
+    expect(target.textContent).not.toContain('settings.bugReport.device')
+    expect(target.textContent).not.toMatch(/(^|\s)(app|device):/)
+    expect(target.textContent).not.toContain(__BUILD_DATE__)
+    const lines = (await copied()).split('\n')
+    expect(lines.some((l) => l.startsWith('app: '))).toBe(true)
+    expect(lines.some((l) => l.startsWith('device: '))).toBe(true)
   })
 
   it('読み込み失敗（read が空配列を返す）でもクラッシュせず 0 件表示', async () => {
     store.readImpl = async () => []
     await render()
-    expect(target.textContent).toContain('settings.bugReport.summaryEmpty')
+    expect(target.textContent).not.toContain('settings.bugReport.summary')
+    expect(target.querySelector('.meta')).toBeNull()
   })
 
-  it('settings に token 等があっても textarea 全文に含まれない（コンポーネントは settings を読まない）', async () => {
+  it('settings に token 等があっても コピー内容にも画面にも含まれない（コンポーネントは settings を読まない）', async () => {
     ;(globalThis as any).localStorage?.setItem?.(
       'agasteer',
       JSON.stringify({ settings: { token: 'ghp_SECRET', repoName: 'secret/repo' } })
     )
     store.entries = [entry(1)]
     await render()
-    const all = textarea().value + target.textContent
+    const all = (await copied()) + target.textContent
     expect(all).not.toContain('ghp_SECRET')
     expect(all).not.toContain('secret/repo')
   })
 })
 
 describe('BugReportSection Copy', () => {
-  it('Copy は clipboard.writeText を textarea と同じ全文で呼び、copied 表示を出す', async () => {
+  it('Copy は clipboard.writeText を formatReport と同じ文字列で呼び、copied 表示を出す', async () => {
     store.entries = [entry(1), entry(2)]
-    const write = vi.fn(async () => {})
-    stubClipboard(write)
     await render()
-    copyBtn().click()
-    await vi.advanceTimersByTimeAsync(0)
-    await tick()
-    expect(write).toHaveBeenCalledExactlyOnceWith(textarea().value)
+    const text = await copied()
+    expect(text).toBe(
+      diagnostics.formatReport(store.entries, {
+        appVersion: __BUILD_DATE__,
+        device: diagnostics.summarizeUserAgent(navigator.userAgent),
+      })
+    )
+    expect(text).toContain('app: ')
+    expect(text).toContain('device: ')
     expect(status()).toBe('settings.bugReport.copied')
   })
 
@@ -273,7 +304,8 @@ describe('BugReportSection Clear', () => {
     await tick()
     await vi.advanceTimersByTimeAsync(0)
     expect(diagnostics.clearDiagEntries).toHaveBeenCalledTimes(1)
-    expect(target.textContent).toContain('settings.bugReport.summaryEmpty')
+    expect(target.textContent).not.toContain('settings.bugReport.summary')
+    expect(target.querySelector('.meta')).toBeNull()
     expect(target.querySelector('textarea')).toBeNull()
     expect(status()).toBe('settings.bugReport.cleared')
     expect(clearBtn().disabled).toBe(true)
@@ -287,6 +319,7 @@ describe('BugReportSection Clear', () => {
     await vi.advanceTimersByTimeAsync(0)
     await tick()
     await vi.advanceTimersByTimeAsync(0)
-    expect(target.textContent).toContain('settings.bugReport.summaryEmpty')
+    expect(target.textContent).not.toContain('settings.bugReport.summary')
+    expect(target.querySelector('.meta')).toBeNull()
   })
 })
