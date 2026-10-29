@@ -665,10 +665,11 @@ pane-navigation.svelte.tsでは上記純粋関数のラッパーを定義し、�
 - saveArchiveNotes, loadArchiveNotes / saveArchiveLeaves, loadArchiveLeaves（アーカイブワールド）
 - createBackup, restoreFromBackup（Pull失敗時の部分キャッシュ保護）
 
-**IndexedDB（共有DB: fonts / backgrounds）:**
+**IndexedDB（共有DB: fonts / backgrounds / diagLog）:**
 
 - saveCustomFont, loadCustomFont, deleteCustomFont
 - saveCustomBackground, loadCustomBackground, deleteCustomBackground
+- `diagLog` store の定義のみ（DBバージョン2、#317）。読み書きは `diagnostics/log-store.ts`（[bug-report.md](./bug-report.md)）
 
 ノート/リーフ以外のper-repo IndexedDBアクセサ（メディア同期用の`mediaPending`/`mediaCache`）は `data/media-storage.ts` に分離されている（詳細は上記「データ永続化」節）。
 

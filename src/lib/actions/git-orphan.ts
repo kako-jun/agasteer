@@ -11,6 +11,8 @@ import { showPushCompletionToast } from '../ui'
 import type { PushResult } from '../api'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
+// #317: バグレポート用診断ログ（記録専用）
+import { recordDiag } from '../diagnostics/record'
 
 /**
  * #235: タイムアウトで UI をあきらめた後の orphan Push を観測する。
@@ -55,6 +57,8 @@ export function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStam
   // リポ一致ガード用: タイムアウト時点のリポ識別子を控える
   // （storage.ts の currentRepoKey() と同じ settings.repoName 基準）
   const repoNameAtTimeout = settings.value.repoName
+  const startedAt = Date.now()
+  const elapsedMs = () => Date.now() - startedAt
   const isRepoSwitched = () => settings.value.repoName !== repoNameAtTimeout
   const warnRepoSwitched = () =>
     console.warn(
@@ -63,12 +67,18 @@ export function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStam
   const clearOwnInFlightFlag = () => {
     if (getPushInFlightAt() === inFlightStamp) {
       setPushInFlightAt(undefined)
+      recordDiag('inflight-clear', { stamp: inFlightStamp, reason: 'orphan-settled' })
     }
   }
   pushPromise.then(
     async (lateResult) => {
       if (isRepoSwitched()) {
         warnRepoSwitched()
+        recordDiag('orphan-settled', {
+          stamp: inFlightStamp,
+          outcome: 'repo-switched',
+          elapsedMs: elapsedMs(),
+        })
         return
       }
       if (lateResult.success && lateResult.commitSha) {
@@ -80,6 +90,12 @@ export function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStam
           )
           lastKnownCommitSha.value = lateResult.commitSha
           isStale.value = false
+          recordDiag('orphan-settled', {
+            stamp: inFlightStamp,
+            outcome: 'follow',
+            commitSha: lateResult.commitSha,
+            elapsedMs: elapsedMs(),
+          })
           if (isPushing.value || isPushingBackground.value) {
             // 別 Push が進行中: その sticky トースト（toast.pushInProgress）を
             // 成功トーストで消してしまわないよう、通知はログに留める（SHA 反映は実施済み）
@@ -111,6 +127,19 @@ export function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStam
                 `Orphan push verification: remote HEAD matches orphan commit; aligning lastKnownCommitSha to ${check.remoteCommitSha}`
               )
               lastKnownCommitSha.value = check.remoteCommitSha
+              recordDiag('orphan-settled', {
+                stamp: inFlightStamp,
+                outcome: 'verify-align',
+                commitSha: lateResult.commitSha,
+                elapsedMs: elapsedMs(),
+              })
+            } else {
+              recordDiag('orphan-settled', {
+                stamp: inFlightStamp,
+                outcome: 'verify-skip',
+                commitSha: lateResult.commitSha,
+                elapsedMs: elapsedMs(),
+              })
             }
           } catch (checkError) {
             // 検証失敗は握りつぶし、次回の定期 stale check に委ねる
@@ -121,14 +150,29 @@ export function observeOrphanPush(pushPromise: Promise<PushResult>, inFlightStam
         // 遅延失敗（エラー結果で resolve）: フラグを残すと次の stale check が
         // 「Push 成功」と誤認して SHA を追従（救済）してしまうためクリアする
         console.warn('Orphan push settled with failure after timeout:', lateResult.message)
+        recordDiag('orphan-settled', {
+          stamp: inFlightStamp,
+          outcome: 'failure',
+          elapsedMs: elapsedMs(),
+        })
       }
       clearOwnInFlightFlag()
     },
     (e) => {
       if (isRepoSwitched()) {
         warnRepoSwitched()
+        recordDiag('orphan-settled', {
+          stamp: inFlightStamp,
+          outcome: 'repo-switched',
+          elapsedMs: elapsedMs(),
+        })
         return
       }
+      recordDiag('orphan-settled', {
+        stamp: inFlightStamp,
+        outcome: 'rejected',
+        elapsedMs: elapsedMs(),
+      })
       // 遅延 reject: unhandledrejection の解消も兼ねる
       console.warn('Orphan push rejected after timeout:', e)
       clearOwnInFlightFlag()

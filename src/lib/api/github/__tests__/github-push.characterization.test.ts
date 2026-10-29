@@ -140,6 +140,8 @@ describe('pushAllWithTreeAPI: golden path (existing repo, changed leaf)', () => 
       'POST https://api.github.com/repos/owner/repo/git/trees',
       'POST https://api.github.com/repos/owner/repo/git/commits',
       'PATCH https://api.github.com/repos/owner/repo/git/refs/heads/main',
+      // #317: 診断ログ用の ref 読み直し（記録専用）
+      'GET https://api.github.com/repos/owner/repo/git/ref/heads/main',
     ])
   })
 
@@ -666,5 +668,129 @@ describe('pushAllWithTreeAPI: onProgress countdown (#238)', () => {
 
     expect(res.success).toBe(true)
     expect(res.message).toBe('github.pushOk')
+  })
+})
+
+// ============================================
+// #317: 診断ログ用の parentSha と ref 読み直し（記録専用・戻り値を変えない）
+// ============================================
+describe('pushAllWithTreeAPI: 診断ログ連携 (#317)', () => {
+  const REF_URL = '/git/ref/heads/main'
+  const refGets = () => mock.callsMatching('GET', REF_URL)
+
+  it('成功時の戻り値に parentSha（Push 開始時に読んだ HEAD）が付き、既存フィールドは不変', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({ newCommitSha: 'commit-XYZ' })
+    mock.on('GET', REF_URL, { json: { object: { sha: 'commit-XYZ' } } })
+
+    const res = await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(res).toEqual({
+      success: true,
+      message: 'github.pushOk',
+      changedLeafCount: 1,
+      changedArchiveLeafCount: 0,
+      metadataOnlyChanged: false,
+      commitSha: 'commit-XYZ',
+      parentSha: 'head-commit-sha',
+    })
+  })
+
+  it('ref 読み直しの GET が reject（キュー無し）しても戻り値は不変で success', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({ newCommitSha: 'commit-XYZ' })
+    // 読み直し用の応答は仕込まない → fetch が throw する
+
+    const res = await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(res.success).toBe(true)
+    expect(res.commitSha).toBe('commit-XYZ')
+    expect(res.parentSha).toBe('head-commit-sha')
+    expect(refGets()).toHaveLength(2)
+  })
+
+  it.each([404, 403, 429, 500])('ref 読み直しが HTTP %i でも戻り値は不変', async (status) => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({ newCommitSha: 'commit-XYZ' })
+    mock.on('GET', REF_URL, { status, json: { message: 'x' } })
+
+    const res = await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(res.success).toBe(true)
+    expect(res.message).toBe('github.pushOk')
+    expect(res.commitSha).toBe('commit-XYZ')
+  })
+
+  it('ref 読み直しの応答が返らなくても戻り値は遅れない（await していない）', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({ newCommitSha: 'commit-XYZ' })
+    // 永久に resolve しない gate
+    mock.on('GET', REF_URL, {
+      json: { object: { sha: 'commit-XYZ' } },
+      gate: new Promise(() => {}),
+    })
+
+    const res = await Promise.race([
+      pushAllWithTreeAPI([leaf], notes, makeSettings()),
+      new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 1000)),
+    ])
+
+    expect(res).not.toBe('timeout')
+    expect((res as any).success).toBe(true)
+  })
+
+  it('読み直しは PATCH の後に cache: no-store の GET で 1 回だけ走る', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    stageWriteSequence({ newCommitSha: 'commit-XYZ' })
+    mock.on('GET', REF_URL, { json: { object: { sha: 'commit-XYZ' } } })
+
+    await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(refGets()).toHaveLength(2) // Push 開始時 + 読み直し
+    expect(refGets()[1].cache).toBe('no-store')
+    const patchIdx = mock.calls.findIndex((c) => c.method === 'PATCH')
+    const verifyIdx = mock.calls.lastIndexOf(refGets()[1])
+    expect(verifyIdx).toBeGreaterThan(patchIdx)
+  })
+
+  it('noChanges 経路では ref 読み直しが走らず、parentSha は現在の HEAD', async () => {
+    const leafPath = '.agasteer/notes/MyNote/MyLeaf.md'
+    const leafSha = await calculateGitBlobSha('fresh content')
+    const existingMeta = {
+      version: 1,
+      pushCount: 5,
+      notes: { MyNote: { id: 'note-1', order: 0 } },
+      leaves: { 'MyNote/MyLeaf.md': { id: 'leaf-1', updatedAt: 1000, order: 0 } },
+    }
+    stageExistingRepo({
+      treeEntries: [
+        { path: leafPath, sha: leafSha },
+        { path: '.agasteer/notes/metadata.json', sha: 'meta-blob-sha' },
+      ],
+    })
+    mock.on('GET', '/git/blobs/meta-blob-sha', {
+      json: { content: b64(JSON.stringify(existingMeta)) },
+    })
+
+    const res = await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(res.message).toBe('github.noChanges')
+    expect(res.commitSha).toBe('head-commit-sha')
+    expect(res.parentSha).toBe('head-commit-sha')
+    expect(refGets()).toHaveLength(1)
+  })
+
+  it('失敗（PATCH ref 失敗）では parentSha を付けず、読み直しも走らない', async () => {
+    stageExistingRepo({ treeEntries: [] })
+    mock
+      .on('POST', '/git/trees', { json: { sha: 't' } })
+      .on('POST', '/git/commits', { json: { sha: 'c' } })
+      .on('PATCH', '/git/refs/heads/main', { status: 422, json: { message: 'x' } })
+
+    const res = await pushAllWithTreeAPI([leaf], notes, makeSettings())
+
+    expect(res.success).toBe(false)
+    expect(res.parentSha).toBeUndefined()
+    expect(refGets()).toHaveLength(1)
   })
 })

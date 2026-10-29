@@ -4,6 +4,9 @@ import type { Settings, StaleCheckResult } from '../types'
 // stores: lastKnownCommitSha だけ参照される
 const lastKnownCommitSha = { value: null as string | null }
 
+// #317: 診断ログ記録の観測用
+const diag = { recordDiag: vi.fn() }
+
 const mocks = {
   fetchRemotePushCount: vi.fn(),
   choiceAsync: vi.fn(),
@@ -20,6 +23,8 @@ vi.mock('../api', () => ({
 vi.mock('../ui', () => ({
   choiceAsync: mocks.choiceAsync,
 }))
+
+vi.mock('../diagnostics/record', () => ({ recordDiag: diag.recordDiag }))
 
 vi.mock('../ui/icons', () => ({
   PULL_ICON: 'PULL_ICON',
@@ -51,6 +56,7 @@ const settings = {} as Settings
 describe('showConflictDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    diag.recordDiag.mockReset()
     lastKnownCommitSha.value = null
     mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 7 })
     mocks.choiceAsync.mockResolvedValue('cancel')
@@ -226,5 +232,111 @@ describe('showConflictDialog', () => {
     })
 
     expect(result).toBe('pull')
+  })
+
+  // ---- #317: バグレポート案内と診断ログ記録 ----
+
+  it('#317: 4 kind すべてで本文の末尾に modal.conflictBugReportHint が付き、既存の本文も保たれる', async () => {
+    const bodies: Record<string, string> = {
+      'stale-push': 'modal.staleEdit',
+      'pull-dirty': 'modal.unsavedChangesChoice',
+      'startup-dirty': 'modal.unsavedChangesOnStartup',
+      'push-hang': 'modal.pushHangRecovery',
+    }
+    for (const [kind, key] of Object.entries(bodies)) {
+      mocks.choiceAsync.mockClear()
+      await showConflictDialog({ kind: kind as any, localPushCount: 1, settings })
+      const [body] = mocks.choiceAsync.mock.calls[0]
+      expect(body).toContain(key)
+      expect(body.endsWith('\n\nmodal.conflictBugReportHint')).toBe(true)
+    }
+  })
+
+  it('#317: 4 kind すべてで conflict-dialog が dialogKind 付きで 1 回ずつ記録される', async () => {
+    for (const kind of ['stale-push', 'pull-dirty', 'startup-dirty', 'push-hang'] as const) {
+      diag.recordDiag.mockClear()
+      await showConflictDialog({ kind: kind as any, localPushCount: 1, settings })
+      const dialogCalls = diag.recordDiag.mock.calls.filter((c) => c[0] === 'conflict-dialog')
+      expect(dialogCalls).toHaveLength(1)
+      expect(dialogCalls[0][1].dialogKind).toBe(kind)
+    }
+  })
+
+  it('#317: 選択（pull / push / cancel）が conflict-choice として表示の後に記録され、戻り値は不変', async () => {
+    for (const choice of ['pull', 'push', 'cancel'] as const) {
+      diag.recordDiag.mockClear()
+      mocks.choiceAsync.mockResolvedValue(choice)
+      const r = await showConflictDialog({ kind: 'stale-push', localPushCount: 1, settings })
+      expect(r).toBe(choice)
+      expect(diag.recordDiag.mock.calls.map((c) => c[0])).toEqual([
+        'conflict-dialog',
+        'conflict-choice',
+      ])
+      expect(diag.recordDiag).toHaveBeenLastCalledWith('conflict-choice', {
+        dialogKind: 'stale-push',
+        choice,
+      })
+    }
+  })
+
+  it('#317: null（モーダル外クリック）は cancel として記録し、戻り値は null のまま', async () => {
+    mocks.choiceAsync.mockResolvedValue(null)
+    const r = await showConflictDialog({ kind: 'pull-dirty', localPushCount: 1, settings })
+    expect(r).toBeNull()
+    expect(diag.recordDiag).toHaveBeenLastCalledWith('conflict-choice', {
+      dialogKind: 'pull-dirty',
+      choice: 'cancel',
+    })
+  })
+
+  it('#317: 選択前（ダイアログ表示中）は conflict-choice を記録しない', async () => {
+    mocks.choiceAsync.mockImplementation(() => new Promise(() => {}))
+    void showConflictDialog({ kind: 'stale-push', localPushCount: 1, settings })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(diag.recordDiag.mock.calls.map((c) => c[0])).toEqual(['conflict-dialog'])
+  })
+
+  it('#317: stale のとき localSha / remoteSha は staleResult の全桁 SHA', async () => {
+    await showConflictDialog({
+      kind: 'stale-push',
+      staleResult: { status: 'stale', localCommitSha: 'aaaaaaaabb', remoteCommitSha: 'ccccccccdd' },
+      localPushCount: 1,
+      settings,
+    })
+    expect(diag.recordDiag).toHaveBeenCalledWith('conflict-dialog', {
+      dialogKind: 'stale-push',
+      localSha: 'aaaaaaaabb',
+      remoteSha: 'ccccccccdd',
+    })
+  })
+
+  it('#317: 非 stale のとき localSha は lastKnownCommitSha・remoteSha は null', async () => {
+    lastKnownCommitSha.value = 'eeeeeeeeff'
+    await showConflictDialog({ kind: 'pull-dirty', localPushCount: 1, settings })
+    expect(diag.recordDiag).toHaveBeenCalledWith('conflict-dialog', {
+      dialogKind: 'pull-dirty',
+      localSha: 'eeeeeeeeff',
+      remoteSha: null,
+    })
+  })
+
+  it('#317: staleResult が up_to_date のときも remoteSha は null（誤った値を記録しない）', async () => {
+    lastKnownCommitSha.value = null
+    await showConflictDialog({
+      kind: 'pull-dirty',
+      staleResult: { status: 'up_to_date' } as StaleCheckResult,
+      localPushCount: 1,
+      settings,
+    })
+    expect(diag.recordDiag).toHaveBeenCalledWith('conflict-dialog', {
+      dialogKind: 'pull-dirty',
+      localSha: null,
+      remoteSha: null,
+    })
+  })
+
+  it('#317: ボタン構成は案内追加で増えない（stale-push は 3 択のまま）', async () => {
+    await showConflictDialog({ kind: 'stale-push', localPushCount: 1, settings })
+    expect(mocks.choiceAsync.mock.calls[0][1]).toHaveLength(3)
   })
 })

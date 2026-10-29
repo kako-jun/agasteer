@@ -1,0 +1,95 @@
+# バグレポート用診断ログ
+
+> Issue #317。同期まわりの不具合を、利用者が直後に開発者へ渡せるようにする仕組み。
+
+## 目的
+
+Push 直後の再 Push で pushCount が同じなのに衝突ダイアログが出る件（#316）のように、間欠的で再現しない不具合は、スマホでは `console.log` を見られず、リロードでも消えるため調べる手段がない。そこで同期の出来事を端末内に記録し、利用者が画面で内容を確認して「コピー」し、Issue などに貼り付けて渡せるようにした。サーバー送信はしない。常時オン。
+
+#316 の原因調査に使う。各種別が判別する候補は後述。
+
+## 記録の対象
+
+実装は `src/lib/diagnostics/`。記録の入口は `recordDiag(kind, data)`（`record.ts`）。同期呼び出し・戻り値なし・例外を投げない。IndexedDB への書き込みは裏で進み、呼び出し側は待たない。
+
+許可リストは `src/lib/diagnostics/schema.ts` の `DIAG_SCHEMA`。値の型は `sha`（16進7〜64桁または null）／`int`（有限の整数）／`bool`／`iso`（ISO 8601 風の日時文字列）／`errcode`（`E-` + 数字4桁のみ）／固定候補の文字列（候補と完全一致する値だけ）。
+
+| 種別                  | キー                                                                                                                                                | 記録する場面                                                                                                                             | #316 で判別するもの                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `push-success`        | `commitSha`(sha) `parentSha`(sha) `stamp`(int) `noChanges`(bool)                                                                                    | Push 成功（`git-push.ts`）。`parentSha` は Push 開始時に読んだ親                                                                         | 新コミットとその親の連なり。次回 stale 時の remote/local との突き合わせ                               |
+| `stale-detected`      | `remoteSha`(sha) `localSha`(sha)                                                                                                                    | preflight が stale と判定した値（`git-push.ts`）                                                                                         | 判定に使われた SHA の全桁                                                                             |
+| `stale-recheck`       | `status`(`success`/`failed`) `headSha`(sha) `sameAsRemote`(bool)                                                                                    | stale 直後にリモート HEAD をもう一度読んだ結果                                                                                           | 一過性のずれ（読み直すと一致する）か、本当に別コミットか                                              |
+| `stale-remote-commit` | `headSha`(sha) `parentSha`(sha) `commitDate`(iso)                                                                                                   | stale 時のリモート HEAD コミットの親と日時                                                                                               | 誰がいつ積んだ HEAD か。自分の直前 Push の親子関係か                                                  |
+| `ref-verify`          | `pushedSha`(sha) `refSha`(sha) `match`(bool) `httpStatus`(int)                                                                                      | ref を PATCH した直後に読み直し、PATCH した SHA と照合（`api/github.ts` → `ref-verify.ts`）                                              | PATCH 直後の GET が古い値を返すか（読み取りの遅れ）                                                   |
+| `inflight-set`        | `stamp`(int)                                                                                                                                        | `pushInFlightAt` の設定                                                                                                                  | 救済マーカーの寿命                                                                                    |
+| `inflight-clear`      | `stamp`(int) `reason`(`response`/`http-error`/`orphan-settled`)                                                                                     | `pushInFlightAt` の解除                                                                                                                  | 設定と解除の対応、解除理由（`http-error` は HTTP エラー以外のネットワーク例外など reject 全般を含む） |
+| `push-timeout`        | `stamp`(int) `timeoutMs`(int)                                                                                                                       | Push 応答タイムアウトで UI をあきらめた                                                                                                  | タイムアウトが絡むか                                                                                  |
+| `orphan-settled`      | `stamp`(int) `outcome`(`follow`/`verify-align`/`verify-skip`/`failure`/`rejected`/`repo-switched`) `commitSha`(sha) `elapsedMs`(int)                | タイムアウト後の orphan Push が settle した（`git-orphan.ts`）                                                                           | orphan が成功して SHA 追従したか                                                                      |
+| `push-start`          | `dirty`(bool) `auto`(bool) `noteCount`(int) `leafCount`(int)                                                                                        | Push のロック取得直後（`git-push.ts`）。`auto` は無人発火の自動 Push。終了記録と対にならない正常経路あり（下記）                         | 直前の編集状態（dirty）と規模。開始したのに `push-success` が無い Push の特定                         |
+| `push-failure`        | `stamp`(int) `stage`(`result-error`/`rejected`) `errorCode`(errcode) `httpStatus`(int) `rateLimited`(bool)                                          | 応答が失敗（`result-error`）または `executePush` が reject（`rejected`、原因文字列は記録しない）（`git-push.ts`）                        | 失敗の段階、`E-xxxx`、HTTP ステータス、レート制限                                                     |
+| `pull-start`          | `initialStartup`(bool) `dirty`(bool) `repoSwitch`(bool) `staleStatus`(`up_to_date`/`stale`/`check_failed`)                                          | dirty 確認を通過して実際に取得を始める直前（`git-pull.ts`）。Pull が走らない場合は記録しない。終了記録と対にならない正常経路あり（下記） | Pull の契機（起動時・リポ切替）と、事前の stale 判定                                                  |
+| `pull-result`         | `success`(bool) `incomplete`(bool) `errorCode`(errcode) `httpStatus`(int) `rateLimited`(bool) `noteCount`(int) `leafCount`(int) `staleStatus`(同上) | `executePull` の結果（`git-pull.ts`）                                                                                                    | Pull の成否、`E-xxxx`、取得件数、stale 判定との関係                                                   |
+| `conflict-choice`     | `dialogKind`(`conflict-dialog` と同じ) `choice`(`pull`/`push`/`cancel`)                                                                             | 衝突ダイアログでの選択（`conflict-dialog.ts`、`choiceAsync` の結果直後。外側クリック等の null は `cancel`）                              | どの選択で #316 の挙動に至ったか                                                                      |
+| `rehydrate-sha`       | `oldSha`(sha) `newSha`(sha)                                                                                                                         | rehydrate での `lastKnownCommitSha` の差し替え（`rehydrate.svelte.ts`）                                                                  | リポ切替などで local SHA が変わったか                                                                 |
+| `conflict-dialog`     | `dialogKind`(`stale-push`/`pull-dirty`/`startup-dirty`/`push-hang`) `localSha`(sha) `remoteSha`(sha)                                                | 衝突ダイアログの表示（`conflict-dialog.ts`）                                                                                             | ダイアログ表示時点の SHA。直前の `push-success` との比較                                              |
+
+`stale-recheck` / `stale-remote-commit`（`stale-extras.ts`）は stale 時だけ追加の API 呼び出しを行う記録専用の観測で、判定には使わない。失敗は握りつぶす。`ref-verify` も記録専用で、不一致でも Push の成否に影響しない。
+
+`errcode` 型は `E-` + 数字4桁（`^E-\d{4}$`）だけを受け付け、メッセージ全文・エラーオブジェクト・URL・パスは記録しない。
+
+### 開始記録だけが残る正常経路
+
+`push-start` / `pull-start` は終了記録（`push-success` / `push-failure` / `pull-result`）と必ず対になるわけではない。「開始だけの記録＝ハング」と読まないこと。`conflict-choice` と併読して経路を判別する。
+
+- Push: auto push の stale 判定不能による中断（`abortIfStaleCheckFailed`）、衝突ダイアログでのキャンセル（`conflict-choice` が `cancel`）、preflight の例外。stale-push ダイアログで「Pull first」を選んだ場合も、1 本目の `push-start` に終了記録は付かない（`pull-start` / `pull-result` を挟み、再帰した 2 本目の `push-start` に置き換わる）
+- Pull: `executePull`（その前の `createBackup` / `clearAllData` を含む）が throw して `pull-result` が残らない場合。なお dirty 確認ダイアログでキャンセルした場合は `pull-start` 自体が記録されない。pull-dirty の「Push first」では 1 回目の呼び出しに `pull-start` が出ず、Push 後に再帰した呼び出しで出る
+
+`E-xxxx` の記録範囲: Push は `push-failure`（`executePush` が返す `errorCode`）、Pull は `pull-result`（`executePull` が返す `errorCode`）に含める。それ以外の経路（タイムアウトトーストの `E-5101` など）のトースト表示そのものは網羅しない（`push-timeout` が別途残る）。Pull が走らない場合（リモート変更なしで完了済み）や、dirty の確認でキャンセルした場合は `pull-start` / `pull-result` を記録しない（後者は `conflict-choice` が残る）。上表が記録の全て。
+
+## 1件の形式
+
+保存される1件は `{ id, at, kind, data }`（`DiagEntry`）。`id` は IndexedDB の自動採番、`at` は epoch ms、`data` は許可リストを通過した値だけ。コピーされる全文では1件が1行になる: `ISO時刻 種別 key=value ...`（null は `null`）。全文の先頭にはアプリのバージョン・端末（UA をブラウザ/OS に要約）・件数が付く（`format.ts`）。
+
+## 記録しないもの
+
+ノート・リーフの本文、タイトル、パス、認証トークン、リポ名、ユーザー名。
+
+許可リスト方式で守っている。`buildEntry`（`schema.ts`）は、未知の種別を保存せず、定義外のキーと型・値が合わないキーを黙って捨てる。型レベルでも `DiagData<K>` は許可キーだけで、自由文字列は固定候補の enum 以外受け付けない（sha・iso は正規表現で縛る）。そのため呼び出し側が間違えても、本文・タイトル・トークンなどは保存できない。
+
+`console.*` は自動で取り込まない。既存の `console.*`（約200か所）にはノートのタイトル等が混ざりうり、「記録しないもの」を保証できなくなるため。明示的に `recordDiag` を呼んだ出来事だけを記録する。
+
+## 保存先
+
+共有 IndexedDB `agasteer/shared`（DB バージョン 2）の `diagLog` store（keyPath `id`、autoIncrement）。v1 → v2 は store 追加のみ。store 定義は `data/storage.ts`、読み書きは `diagnostics/log-store.ts`。リポ切替では消さない。
+
+- 上限: 300 件・合計 200KB（JSON 化した文字数の概算）。`trimEntries`（`format.ts`）が新しい側を優先して残し、古い順に切り捨てる
+- 追加のたびに、同じトランザクション内で上限超過分を削除する
+- `appendDiagEntry` はトランザクションの complete / abort まで待つ。abort（削除失敗など）時は直前の追加も巻き戻り、`console.warn` のみで reject しない
+- 共有 DB は `onversionchange` で自ら接続を閉じる（今後のバージョン bump で他タブを塞がない）。ただし、この対応を持たない旧版を開いたままのタブには効かないため、v1→v2 のアップグレードは「旧版タブを閉じるまで反映されない場合がある」（その間は fonts / backgrounds / 診断ログの共有 DB 読み込みが失敗しうる）
+- 書き込み・読み込み・消去の失敗は `console.warn` のみで握りつぶし、同期処理を妨げない（読み込み失敗は空配列、消去失敗は false を返す）。`record.ts` も `appendDiagEntry` の reject を `console.warn` に落とし、unhandled rejection を出さない
+
+## 画面
+
+設定画面の「バグレポート」（`components/settings/BugReportSection.svelte`、`SettingsView.svelte` に配置）。
+
+- 記録するもの／しないもの／使い方の説明、上限の説明
+- ログの要約（件数と最古〜最新の日時）、アプリのバージョン、端末
+- コピーされる全文のプレビュー（読み取り専用）
+- 「コピー」: 成功で「コピーしました」。クリップボードが使えない場合は `copyFailed` を表示（全文を選んで手動コピーを案内）
+- 「ログを消す」: `clearDiagEntries()` が成功したときだけ「ログを消しました」。失敗時は `clearFailed`（「ログを消せませんでした。」）を表示する。どちらの場合も一覧を読み直して表示を実態に合わせる
+- 状態メッセージは 3 秒で消える
+
+衝突ダイアログ本文の末尾に1行の案内（`modal.conflictBugReportHint`: 「詳しくは 設定 > バグレポート をご覧ください。」）を付ける。ボタンは増やさない。エラートーストからの導線は現状ない。
+
+i18n キーは `settings.bugReport.*`（title, description, recordedTitle, recorded, notRecordedTitle, notRecorded, howToTitle, howTo, limit, summary, summaryEmpty, appVersion, device, previewTitle, copy, copied, copyFailed, clear, cleared, clearFailed）と `modal.conflictBugReportHint`。ja / en 両方。
+
+## 記録を足す手順
+
+1. `schema.ts` の `DIAG_SCHEMA` に種別と許可キー（型）を足す
+2. 記録したい場所で `recordDiag('種別', { ... })` を1行呼ぶ（待たない・戻り値を使わない・挙動を変えない）
+3. 本ドキュメントの種別表を更新する
+
+## 関連
+
+- [sync/stale-detection.md](./sync/stale-detection.md): stale 検出と衝突ダイアログ
+- [storage.md](./storage.md): 共有 DB

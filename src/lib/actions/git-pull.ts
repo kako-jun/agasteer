@@ -41,6 +41,7 @@ import * as nav from '../navigation'
 import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { _ } from '../i18n'
+import { recordDiag } from '../diagnostics/record'
 import { runPendingRepoSyncIfIdle as runPendingRepoSyncIfIdleShared } from '../sync/repo-sync-queue'
 
 export async function runPendingRepoSyncIfIdle(): Promise<void> {
@@ -237,6 +238,14 @@ export async function pullFromGitHub(
     appState.isFirstPriorityFetched = false
     appState.isPullCompleted = false
 
+    // #317: Pull の開始（dirty 警告を通過して実際に取得を始める地点）
+    recordDiag('pull-start', {
+      initialStartup: isInitialStartup,
+      dirty: isDirty.value,
+      repoSwitch: isRepoSwitchPull,
+      staleStatus: staleResult.status,
+    })
+
     // Pull開始を通知
     showPullToast($_('toast.pullStart'))
 
@@ -317,6 +326,17 @@ export async function pullFromGitHub(
     }
 
     const result = await executePull(settings.value, options)
+    // #317: Pull の結果（件数・エラーコード・HTTP ステータスのみ）
+    recordDiag('pull-result', {
+      success: result.success,
+      incomplete: result.message === 'github.pullIncomplete',
+      errorCode: result.errorCode,
+      httpStatus: result.httpStatus,
+      rateLimited: result.rateLimitInfo?.isRateLimited === true,
+      noteCount: result.notes?.length ?? 0,
+      leafCount: result.leaves?.length ?? 0,
+      staleStatus: staleResult.status,
+    })
 
     if (result.success) {
       appState.isPullCompleted = true

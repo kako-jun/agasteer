@@ -66,6 +66,8 @@ pull → push first → さらに stale-push のように再帰 hop でダイア
 認証済みなら 5000 req/h の枠に対して衝突確認頻度では実害なし。
 rate-limit やネットワークエラー時は `?` 表示にフォールバックする。
 
+**診断ログ（#317）**: stale 検出時は、判定の SHA（`stale-detected`）、直後のリモート HEAD 再取得（`stale-recheck`）、リモート HEAD コミットの親と日時（`stale-remote-commit`）を記録専用で診断ログに残す（判定には使わない）。衝突ダイアログの表示も `conflict-dialog` として記録し、本文末尾に「設定 > バグレポート」への案内を1行付ける。詳細は [../bug-report.md](../bug-report.md)。
+
 ### Push成功後のcommit SHA更新
 
 Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`lastKnownCommitSha`を更新。これにより、連続Pushでstale警告が出ることを防ぎます。

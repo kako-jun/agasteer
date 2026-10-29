@@ -14,6 +14,7 @@
   import MediaOptimizeToggle from '../settings/MediaOptimizeToggle.svelte'
   import ExportSection from '../settings/ExportSection.svelte'
   import ImportSection from '../settings/ImportSection.svelte'
+  import BugReportSection from '../settings/BugReportSection.svelte'
   import AboutSection from '../settings/AboutSection.svelte'
   import VersionDisplay from '../settings/VersionDisplay.svelte'
   import VisitorCounter from '../settings/VisitorCounter.svelte'
@@ -85,6 +86,13 @@
             {importing}
             supportedLabel={$_('settings.importExport.supported')}
           />
+        </div>
+      </div>
+      <hr />
+
+      <div class="form-row">
+        <div class="form-field">
+          <BugReportSection />
         </div>
       </div>
     </div>

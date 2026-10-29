@@ -28,6 +28,7 @@ import {
 } from './github/paths'
 import { parseRateLimitResponse, type RateLimitInfo } from './github/rate-limit'
 import { calculateGitBlobSha } from './github/sha'
+import { recordRefVerification } from '../diagnostics/ref-verify'
 import { encodeContent, decodeBase64ToString } from './github/encoding'
 import { fetchGitHubContents, runWithConcurrency, validateGitHubSettings } from './github/http'
 import { normalizeMetadata, normalizePulledMetadata, detectChanges } from './github/metadata'
@@ -75,6 +76,8 @@ export interface SaveResult {
   metadataOnlyChanged?: boolean
   /** Push成功時のcommit SHA（stale検出用） */
   commitSha?: string
+  /** Push開始時に読んだ親コミット SHA（診断ログ用、#317） */
+  parentSha?: string
 }
 
 export interface TestResult {
@@ -600,6 +603,7 @@ export async function pushAllWithTreeAPI(
         success: true,
         message: 'github.noChanges',
         commitSha: currentCommitSha ?? undefined,
+        parentSha: currentCommitSha ?? undefined,
       }
     }
 
@@ -742,6 +746,9 @@ export async function pushAllWithTreeAPI(
       }
     }
 
+    // #317: 診断ログ用に ref を読み直して PATCH した SHA と照合（記録専用・await しない）
+    void recordRefVerification(settings.repoName, settings.token, branch, newCommitSha)
+
     return {
       success: true,
       message: 'github.pushOk',
@@ -749,6 +756,7 @@ export async function pushAllWithTreeAPI(
       changedArchiveLeafCount: changedArchiveLeafPaths.length,
       metadataOnlyChanged: !leafChanged && (metadataChanged || archiveMetadataChanged),
       commitSha: newCommitSha,
+      parentSha: currentCommitSha ?? undefined,
     }
   } catch (error) {
     console.error('GitHub Tree API error:', error)

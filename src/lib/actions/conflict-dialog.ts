@@ -5,6 +5,8 @@ import { choiceAsync, type ChoiceOption } from '../ui'
 import { PULL_ICON, PUSH_ICON } from '../ui/icons'
 import { lastKnownCommitSha } from '../stores'
 import { _ } from '../i18n'
+// #317: バグレポート用診断ログ（記録専用）
+import { recordDiag } from '../diagnostics/record'
 
 /**
  * 衝突ダイアログの種別
@@ -183,8 +185,20 @@ export async function showConflictDialog(
   const $_ = get(_)
 
   const diagnostic = await buildDiagnostic(staleResult, settings, localPushCount, $_)
-  const body = $_(bodyKey(kind)) + diagnostic
+  const body = $_(bodyKey(kind)) + diagnostic + '\n\n' + $_('modal.conflictBugReportHint')
+  recordDiag('conflict-dialog', {
+    dialogKind: kind,
+    localSha:
+      staleResult?.status === 'stale' ? staleResult.localCommitSha : lastKnownCommitSha.value,
+    remoteSha: staleResult?.status === 'stale' ? staleResult.remoteCommitSha : null,
+  })
   const buttons = buttonsFor(kind, disablePush, $_)
 
-  return (await choiceAsync(body, buttons)) as ConflictDialogChoice
+  const choice = (await choiceAsync(body, buttons)) as ConflictDialogChoice
+  // #317: 選択を記録（null＝モーダル外クリック等は cancel 扱いと同じ）。戻り値は変えない
+  recordDiag('conflict-choice', {
+    dialogKind: kind,
+    choice: choice === 'pull' || choice === 'push' ? choice : 'cancel',
+  })
+  return choice
 }

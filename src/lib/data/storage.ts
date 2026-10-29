@@ -223,7 +223,10 @@ const FONTS_STORE = 'fonts'
 const BACKGROUNDS_STORE = 'backgrounds'
 
 const SHARED_DB_NAME = 'agasteer/shared'
-const SHARED_DB_VERSION = 1
+// v2: diagLog store 追加（#317）
+const SHARED_DB_VERSION = 2
+// バグレポート用診断ログ（#317）。アクセサは diagnostics/log-store.ts に分離し、ここでは store 定義のみ持つ
+export const DIAG_LOG_STORE = 'diagLog'
 
 export const defaultSettings: Settings = {
   token: '',
@@ -843,6 +846,10 @@ async function openPerRepoDB(repoKey: string, retryCount = 0): Promise<IDBDataba
  * 共有DBを開く（fonts, backgrounds 用）
  */
 async function openSharedDB(): Promise<IDBDatabase> {
+  // 呼び出し側（putItemShared / getItemShared / deleteItemShared / log-store）は、取得直後に
+  // await を挟まず transaction() を開く。onversionchange（別タスク）による close() は
+  // マイクロタスクの間に割り込めないため、閉じた接続を掴む実害は無い。
+  // 接続を await をまたいで保持する呼び出し側を足す場合は、毎回この関数を呼ぶこと
   if (sharedDb) return sharedDb
   if (sharedDbPromise) return sharedDbPromise
   sharedDbPromise = new Promise((resolve, reject) => {
@@ -855,14 +862,25 @@ async function openSharedDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(BACKGROUNDS_STORE)) {
         db.createObjectStore(BACKGROUNDS_STORE, { keyPath: 'name' })
       }
+      if (!db.objectStoreNames.contains(DIAG_LOG_STORE)) {
+        db.createObjectStore(DIAG_LOG_STORE, { keyPath: 'id', autoIncrement: true })
+      }
     }
     request.onsuccess = () => {
-      sharedDb = request.result
+      const db = request.result
+      sharedDb = db
       sharedDbPromise = null
-      sharedDb.onclose = () => {
-        sharedDb = null
+      // 今後のバージョン bump で、この接続が別タブの open を塞がないよう自ら閉じる。
+      // 明示的な close() は onclose を発火しないため、参照も自分でクリアする
+      db.onversionchange = () => {
+        console.warn('Shared IndexedDB version change requested by another connection; closing')
+        db.close()
+        if (sharedDb === db) sharedDb = null
       }
-      resolve(request.result)
+      db.onclose = () => {
+        if (sharedDb === db) sharedDb = null
+      }
+      resolve(db)
     }
     request.onerror = () => {
       sharedDbPromise = null
@@ -875,6 +893,9 @@ async function openSharedDB(): Promise<IDBDatabase> {
   })
   return sharedDbPromise
 }
+
+/** 共有DBハンドル（diagnostics/log-store.ts 用の公開口） */
+export const getSharedDb = openSharedDB
 
 function getAllFromStore<T>(db: IDBDatabase, storeName: string): Promise<T[]> {
   return new Promise((resolve, reject) => {

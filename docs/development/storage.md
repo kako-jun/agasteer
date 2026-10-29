@@ -176,10 +176,12 @@ IndexedDBは**リポジトリ単位のDB**、**共有DB**、**metadata DB**の3�
 #### 共有DB（shared DB）
 
 - **名前**: `agasteer/shared`
-- **用途**: リポに依存しないユーザーアセットを保存する
+- **用途**: リポに依存しないユーザーアセットと、バグレポート用診断ログを保存する
+- **DBバージョン**: 2（#317 で `diagLog` を追加。v1→v2 は store 追加のみの後方互換移行）
 - **オブジェクトストア**:
   - `fonts`: カスタムフォントデータ
   - `backgrounds`: カスタム背景画像データ
+  - `diagLog`: バグレポート用診断ログ（#317。keyPath `id` の自動採番、300件・200KBまで古い順に切り捨て）。store 定義のみ `storage.ts`、アクセサは `src/lib/diagnostics/log-store.ts`。詳細は [bug-report.md](./bug-report.md)
 
 #### 設計意図（#131）
 

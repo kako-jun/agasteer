@@ -17,6 +17,7 @@
   - [データモデル](./docs/development/data-model.md) - 型定義、状態管理
   - [ストレージ](./docs/development/storage.md) - LocalStorage、IndexedDB
   - [基本機能](./docs/development/features.md) - エディタ、Vim、ナビゲーション
+  - [バグレポート](./docs/development/bug-report.md) - 診断ログの記録と設定画面
   - [拡張計画](./docs/development/future-plans.md) - 今後の実装予定、既知の課題
 
 ---

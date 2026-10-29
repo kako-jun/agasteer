@@ -12,6 +12,7 @@
  * re-export する。
  */
 
+import { recordDiag } from '../diagnostics/record'
 import {
   notes,
   leaves,
@@ -116,7 +117,10 @@ async function applyRehydrateForRepo(repoKey: string): Promise<void> {
   // lastKnownCommitSha を新リポの localStorage スロットから復元
   // （この代入は $effect を発火させるが、isRehydrating ガードで
   // setPersistedCommitSha への書き込みはスキップされる）
+  const oldCommitSha = lastKnownCommitSha.value
   lastKnownCommitSha.value = getPersistedCommitSha()
+  // #317: 診断ログ（記録専用）
+  recordDiag('rehydrate-sha', { oldSha: oldCommitSha, newSha: lastKnownCommitSha.value })
   metadata.value = (await getPersistedMetadata()) ?? {
     version: 1,
     notes: {},
