@@ -2,7 +2,7 @@
  * 診断ログの永続化層（#317）のテスト（fake-indexeddb）
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore, IDBDatabase } from 'fake-indexeddb'
 import type { DiagEntry } from './schema'
 
 const storageBacking = new Map<string, string>()
@@ -203,26 +203,48 @@ describe('DB から読んだ値は再検証されない（現状の挙動を固�
 })
 
 describe('トランザクション完了を待つ', () => {
-  it('delete が失敗して tx が abort されても投げず、console.warn のみ（add も巻き戻る）', async () => {
+  it('delete の後に tx が非同期に abort されても投げず、console.warn のみ（add も巻き戻る）。abort を待つ', async () => {
     const s = await load()
     for (let i = 1; i <= 300; i++) await s.appendDiagEntry(mk(i))
     warnSpy.mockClear()
-    // 301 件目で trim の delete が走る。delete を例外にして tx を abort させる
+    // 301 件目で trim の delete が走る。delete 自体は成功させ、その直後に abort する
+    // （例外を経由させず、abort イベントの到達を待たないと warn が出ない形）
     const orig = IDBObjectStore.prototype.delete
     IDBObjectStore.prototype.delete = function (this: IDBObjectStore, ...args: [IDBValidKey]) {
+      const r = orig.apply(this, args)
       this.transaction.abort()
-      return orig.apply(this, args)
+      return r
     }
     try {
       await expect(s.appendDiagEntry(mk(301))).resolves.toBeUndefined()
+      // resolve 直後に warn が出ている = abort イベントまで待った
+      expect(warnSpy).toHaveBeenCalled()
     } finally {
       IDBObjectStore.prototype.delete = orig
     }
-    expect(warnSpy).toHaveBeenCalled()
     expect(errorSpy).not.toHaveBeenCalled()
     const all = await s.readDiagEntries()
     expect(all).toHaveLength(300)
     expect(all[all.length - 1].data.stamp).toBe(300)
+  })
+
+  it('tx の complete を待ってから resolve する（resolve 時点で commit 済み）', async () => {
+    const s = await load()
+    let completed = false
+    const origTx = IDBDatabase.prototype.transaction
+    IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...args: any[]) {
+      const tx = (origTx as any).apply(this, args) as IDBTransaction
+      tx.addEventListener('complete', () => {
+        completed = true
+      })
+      return tx
+    } as typeof IDBDatabase.prototype.transaction
+    try {
+      await s.appendDiagEntry(mk(1))
+      expect(completed).toBe(true)
+    } finally {
+      IDBDatabase.prototype.transaction = origTx
+    }
   })
 
   it('resolve した時点で書き込みは永続化済み', async () => {

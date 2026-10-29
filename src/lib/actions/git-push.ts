@@ -394,7 +394,7 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
     recordDiag('inflight-clear', { stamp: pushInFlightStamp, reason: 'response' })
 
     // #317: 応答は返ったが失敗（エラーコード・HTTP ステータス・レート制限の有無のみ記録）
-    if (result.variant !== 'success') {
+    if (result.variant === 'error') {
       recordDiag('push-failure', {
         stamp: pushInFlightStamp,
         stage: 'result-error',
