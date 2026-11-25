@@ -89,8 +89,9 @@ since the last sync (the common base), before showing the dialog.
   both renamed or moved the same item differently, or two items with the same name would end up in the same place),
   nothing is merged automatically. The usual 3-way choice stays, and the dialog lists the affected leaf, the kind of conflict,
   the lines, and both sides' content so you can decide
-- **If the comparison is not possible** (the last synced content cannot be fetched, the network failed,
-  or there are files added outside the app), the reason is shown and only the usual choices remain
+- If one side rewrote a leaf very heavily and the other side also edited it, it is treated as a conflict for safety, even when the edits are far apart
+- **If the comparison is not possible** (the last synced content cannot be fetched, the network failed or took too long,
+  there are files added outside the app, or the loaded archive is newer than the last sync), the reason is shown and only the usual choices remain
 - If another device pushed, or your local content changed, after the comparison, nothing is merged and the comparison runs again.
   Cancelling or a failed comparison never drops your local changes
 - Merging is not offered in the startup unsaved-change check or in the dialog after a Push stopped responding

@@ -515,4 +515,26 @@ describe('#321: 3方向比較の結果の表示', () => {
     expect(detail).toContain('modal.mergeMoreConflicts({"count":5})')
     expect(detail).not.toContain('N/L7')
   })
+
+  it('location 競合でルート（空文字）は「ルート」のラベルで表示する', () => {
+    const t = (key: string, opts?: { values?: Record<string, unknown> }) =>
+      opts?.values ? `${key}(${JSON.stringify(opts.values)})` : key
+    const detail = formatConflictDetail(
+      [
+        {
+          world: 'home',
+          kind: 'attribute',
+          target: 'note',
+          path: 'Sub',
+          field: 'location',
+          localValue: '',
+          remoteValue: 'Work',
+        },
+      ],
+      t
+    )
+    expect(detail).toContain(
+      'modal.mergeKind.location({"local":"modal.mergeRoot","remote":"Work"})'
+    )
+  })
 })

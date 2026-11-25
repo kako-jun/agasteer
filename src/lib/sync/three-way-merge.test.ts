@@ -5,6 +5,7 @@ import {
   mergeLines,
   mergeText,
   mergeWorld,
+  sameWorldContent,
   type WorldSnapshot,
 } from './three-way-merge'
 
@@ -329,5 +330,69 @@ describe('matchLines / mergeLines の性質（固定シードの乱数）', () =
       expect(mergeLines(base, base, other).merged).toEqual(other)
       expect(mergeLines(base, other, other).merged).toEqual(other)
     }
+  })
+})
+
+describe('mergeWorld: Push の実パスでの同名衝突 (M1)', () => {
+  const base: WorldSnapshot = { notes: [note('n1', 'Work')], leaves: [] }
+  const clone = (w: WorldSnapshot): WorldSnapshot => JSON.parse(JSON.stringify(w))
+  const bothAdd = (localTitle: string, remoteTitle: string) => {
+    const local = clone(base)
+    local.leaves.push(leaf('x', 'n1', localTitle, 'L'))
+    const remote = clone(base)
+    remote.leaves.push(leaf('y', 'n1', remoteTitle, 'R'))
+    return mergeWorld(base, local, remote)
+  }
+
+  it('「TODO: x」と「TODO- x」は Push で同じファイル名になるので競合', () => {
+    const result = bothAdd('TODO: x', 'TODO- x')
+    expect(result.merged).toBeNull()
+    expect(result.conflicts).toEqual([
+      { kind: 'pathCollision', target: 'leaf', path: 'Work/TODO- x' },
+    ])
+  })
+
+  it('80文字を超えて先頭80文字が同じ名前は競合', () => {
+    const head = 'a'.repeat(80)
+    expect(bothAdd(`${head}-local`, `${head}-remote`).conflicts[0]).toMatchObject({
+      kind: 'pathCollision',
+    })
+  })
+
+  it('空白の数だけが違う名前は競合', () => {
+    expect(bothAdd('a  b', 'a b').conflicts[0]).toMatchObject({ kind: 'pathCollision' })
+  })
+
+  it('サニタイズ後も違う名前なら両方残す', () => {
+    const result = bothAdd('TODO x', 'TODO y')
+    expect(result.conflicts).toEqual([])
+    expect(result.merged!.leaves).toHaveLength(2)
+  })
+})
+
+describe('mergeWorld: 件数・sameWorldContent', () => {
+  it('並び順だけの変更も件数に数える（0件表示にしない）', () => {
+    const base: WorldSnapshot = { notes: [note('n1', 'Work')], leaves: [leaf('a', 'n1', 'A', 'x')] }
+    const local: WorldSnapshot = JSON.parse(JSON.stringify(base))
+    local.leaves[0].order = 3
+    const result = mergeWorld(base, local, base)
+    expect(result.localChangeCount).toBe(1)
+    expect(result.remoteChangeCount).toBe(0)
+  })
+
+  it('sameWorldContent は並び・updatedAt・blobSha の違いを無視し、内容の違いを検出する', () => {
+    const a: WorldSnapshot = {
+      notes: [note('n1', 'Work'), note('n2', 'Home')],
+      leaves: [leaf('a', 'n1', 'A', 'x'), leaf('b', 'n2', 'B', 'y')],
+    }
+    const b: WorldSnapshot = {
+      notes: [a.notes[1], a.notes[0]],
+      leaves: [{ ...a.leaves[1], updatedAt: 99, blobSha: 's' }, a.leaves[0]],
+    }
+    expect(sameWorldContent(a, b)).toBe(true)
+    expect(sameWorldContent(a, { ...b, leaves: [a.leaves[0]] })).toBe(false)
+    expect(
+      sameWorldContent(a, { ...b, leaves: [{ ...a.leaves[0], content: 'z' }, a.leaves[1]] })
+    ).toBe(false)
   })
 })

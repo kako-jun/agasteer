@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   fetchCommitSnapshot: vi.fn(),
   fetchRemoteHeadSha: vi.fn(),
   setLastPushedSnapshot: vi.fn(),
+  getArchiveBaseline: vi.fn((): { notes: Note[]; leaves: Leaf[] } => ({ notes: [], leaves: [] })),
   refreshDirtyState: vi.fn(),
   syncLeafEditors: vi.fn(),
   archiveRebuild: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('../stores', () => ({
   ...stores,
   archiveLeafStatsStore: { rebuild: mocks.archiveRebuild },
   setLastPushedSnapshot: mocks.setLastPushedSnapshot,
+  getArchiveBaseline: mocks.getArchiveBaseline,
   refreshDirtyState: mocks.refreshDirtyState,
   syncLeafEditors: mocks.syncLeafEditors,
 }))
@@ -114,6 +116,9 @@ beforeEach(() => {
   appState.isFirstPriorityFetched = true
   appState.loadingLeafIds = new Set()
   stores.isArchiveLoaded.value = false
+  stores.archiveNotes.value = []
+  stores.archiveLeaves.value = []
+  mocks.getArchiveBaseline.mockReturnValue({ notes: [], leaves: [] })
   stores.lastKnownCommitSha.value = 'base-sha'
   stores.isStale.value = true
   stores.leftNote.value = null
@@ -326,9 +331,52 @@ describe('applyConflictMerge', () => {
     mocks.fetchRemoteHeadSha.mockResolvedValue({ status: 'network_error' })
     const before = JSON.stringify(stores.leaves.value)
 
-    expect(await applyConflictMerge(plan, settings)).toEqual({ status: 'failed' })
+    expect(await applyConflictMerge(plan, settings)).toEqual({ status: 'failed', reason: 'remote' })
     expect(JSON.stringify(stores.leaves.value)).toBe(before)
     expect(stores.lastKnownCommitSha.value).toBe('base-sha')
+  })
+
+  it('S4: 反映前のリモート確認が返らなくても時間上限で failed(remote) になる（ロックを残さない）', async () => {
+    const { plan } = await mergeablePlan()
+    vi.useFakeTimers()
+    try {
+      mocks.fetchRemoteHeadSha.mockReturnValue(new Promise(() => {}))
+      const pending = applyConflictMerge(plan, settings)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(await pending).toEqual({ status: 'failed', reason: 'remote' })
+      expect(stores.lastKnownCommitSha.value).toBe('base-sha')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('S2: IndexedDB への保存を SHA・ベースラインより先に行う', async () => {
+    const { plan } = await mergeablePlan()
+    mocks.fetchRemoteHeadSha.mockResolvedValue({ status: 'success', commitSha: 'remote-sha' })
+    const shaAtSave: (string | null)[] = []
+    mocks.saveLeaves.mockImplementationOnce(async () => {
+      shaAtSave.push(stores.lastKnownCommitSha.value)
+      expect(mocks.setLastPushedSnapshot).not.toHaveBeenCalled()
+    })
+
+    expect(await applyConflictMerge(plan, settings)).toEqual({ status: 'applied' })
+    expect(shaAtSave).toEqual(['base-sha'])
+    expect(stores.lastKnownCommitSha.value).toBe('remote-sha')
+  })
+
+  it('S2: 保存に失敗したら SHA・ベースライン・ストアを進めずに failed(save)', async () => {
+    const { plan } = await mergeablePlan()
+    mocks.fetchRemoteHeadSha.mockResolvedValue({ status: 'success', commitSha: 'remote-sha' })
+    mocks.saveLeaves.mockRejectedValueOnce(new Error('quota'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const before = JSON.stringify(stores.leaves.value)
+
+    expect(await applyConflictMerge(plan, settings)).toEqual({ status: 'failed', reason: 'save' })
+    expect(JSON.stringify(stores.leaves.value)).toBe(before)
+    expect(stores.lastKnownCommitSha.value).toBe('base-sha')
+    expect(stores.isStale.value).toBe(true)
+    expect(mocks.setLastPushedSnapshot).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('保存対象外（仮想ノート配下）のローカル項目はそのまま残す', async () => {
@@ -362,5 +410,96 @@ describe('applyConflictMerge', () => {
 
     expect(stores.leftLeaf.value).toBeNull()
     expect(mocks.restoreStateFromUrl).toHaveBeenCalled()
+  })
+})
+
+describe('analyzeConflictMerge（レビュー指摘の追加分）', () => {
+  it('S4: 比較の通信が返らなくても時間上限で timeout（理由つきで従来の選択肢へ）', async () => {
+    setLocal(baseWorld())
+    vi.useFakeTimers()
+    try {
+      let signal: AbortSignal | undefined
+      mocks.fetchCommitSnapshot.mockImplementation(
+        (_s: unknown, _sha: string, opts: { signal: AbortSignal }) => {
+          signal = opts.signal
+          return new Promise(() => {})
+        }
+      )
+      const pending = analyzeConflictMerge(stale, settings)
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(await pending).toEqual({ status: 'unavailable', reason: 'timeout' })
+      expect(signal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('metadata.json の破損は専用の理由（基準・リモートの取得失敗と分ける）', async () => {
+    setLocal(baseWorld())
+    mocks.fetchCommitSnapshot.mockResolvedValue({ status: 'error', reason: 'metadataInvalid' })
+    expect(await analyzeConflictMerge(stale, settings)).toEqual({
+      status: 'unavailable',
+      reason: 'metadataInvalid',
+    })
+  })
+
+  it('M2: アーカイブを base より新しいコミットから読んでいたら判定不能（他端末の削除を復活させない）', async () => {
+    // C1(base): アーカイブ空 → 他端末が C2 で X を追加 → 自分は C2 の時点でアーカイブを読込
+    // → 他端末が C3 で X を削除。ローカルのアーカイブには X があるが、base(C1) には無いので
+    // そのまま比べると「ローカルで追加」と誤認して X を復活させてしまう
+    setLocal(baseWorld())
+    stores.isArchiveLoaded.value = true
+    const x = leaf('x', 'o1', 'X', 'archived')
+    stores.archiveNotes.value = [note('o1', 'Old')]
+    stores.archiveLeaves.value = [x]
+    mocks.getArchiveBaseline.mockReturnValue({ notes: [note('o1', 'Old')], leaves: [x] })
+    const emptyArchive = world([note('o1', 'Old')], [])
+    mocks.fetchCommitSnapshot.mockImplementation(async (_s: unknown, sha: string) =>
+      snapshot(sha, baseWorld(), { archive: emptyArchive })
+    )
+
+    expect(await analyzeConflictMerge(stale, settings)).toEqual({
+      status: 'unavailable',
+      reason: 'archiveOutOfDate',
+    })
+  })
+
+  it('M2: アーカイブのベースラインが base と一致すれば、アーカイブも含めてマージできる', async () => {
+    setLocal(baseWorld())
+    stores.isArchiveLoaded.value = true
+    const x = leaf('x', 'o1', 'X', 'archived')
+    stores.archiveNotes.value = [note('o1', 'Old')]
+    stores.archiveLeaves.value = [{ ...x, content: 'archived local' }]
+    mocks.getArchiveBaseline.mockReturnValue({ notes: [note('o1', 'Old')], leaves: [x] })
+    const archiveAt = world([note('o1', 'Old')], [x])
+    mocks.fetchCommitSnapshot.mockImplementation(async (_s: unknown, sha: string) =>
+      snapshot(sha, baseWorld(), { archive: archiveAt })
+    )
+
+    const analysis = await analyzeConflictMerge(stale, settings)
+    expect(analysis.status).toBe('mergeable')
+    if (analysis.status !== 'mergeable') return
+    expect(analysis.plan.archive?.merged.leaves[0].content).toBe('archived local')
+  })
+
+  it('Priority バッジを双方が別々に変えたら競合', async () => {
+    setLocal(baseWorld())
+    const withPriority = (icon: string): Metadata => ({
+      ...meta(3),
+      leaves: { __priority__: { id: '__priority__', updatedAt: 0, order: 0, badgeIcon: icon } },
+    })
+    stores.metadata.value = withPriority('local-icon')
+    mocks.fetchCommitSnapshot.mockImplementation(async (_s: unknown, sha: string) => {
+      const w = baseWorld()
+      w.metadata = sha === 'base-sha' ? meta(3) : withPriority('remote-icon')
+      return snapshot(sha, w)
+    })
+
+    const analysis = await analyzeConflictMerge(stale, settings)
+    expect(analysis.status).toBe('conflicts')
+    if (analysis.status !== 'conflicts') return
+    expect(analysis.conflicts).toEqual([
+      { world: 'home', kind: 'attribute', target: 'leaf', path: 'Priority', field: 'badge' },
+    ])
   })
 })

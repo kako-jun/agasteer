@@ -70,3 +70,17 @@ export const MEDIA_INSERT_PHASE_STALE_MS = 60_000
  * 常時ポーリングではなく「復帰直後だけの限定リトライ」にとどめる。
  */
 export const RESUME_RETRY_BACKOFFS_MS = [2_000, 5_000] as const
+
+/**
+ * #321: 競合時の3方向比較（共通の基準・リモートの読み出し）の時間上限。
+ *
+ * 比較は Push preflight（UI ロック中）とPull の確認ダイアログの前に走るため、
+ * 通信が返らないままロックが解けない経路を作らない。超えたら「判定できない」として
+ * 理由を表示し、従来の選択肢に戻す。
+ */
+export const MERGE_COMPARE_TIMEOUT_MS = 20_000
+
+/**
+ * #321: マージ反映の直前に行うリモート HEAD 確認の時間上限。超えたら何も書き換えない。
+ */
+export const MERGE_HEAD_CHECK_TIMEOUT_MS = 10_000

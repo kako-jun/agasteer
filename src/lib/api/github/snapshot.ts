@@ -34,6 +34,8 @@ export type CommitSnapshotErrorReason =
   /** metadata.json が壊れている */
   | 'metadataInvalid'
   | 'rateLimited'
+  /** options.signal で打ち切られた（比較の時間上限） */
+  | 'timeout'
   /** 通信失敗・その他の HTTP エラー */
   | 'network'
 
@@ -60,6 +62,8 @@ export interface FetchCommitSnapshotOptions {
    * 同じ blob を2回取らない。
    */
   contentCache: Map<string, string>
+  /** 打ち切り用（比較の時間上限）。abort されたら `timeout` を返す */
+  signal?: AbortSignal
 }
 
 class SnapshotFetchError extends Error {
@@ -73,9 +77,10 @@ class SnapshotFetchError extends Error {
 
 async function getJson(
   url: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(url, { headers })
+  const res = await fetch(url, { headers, signal })
   if (parseRateLimitResponse(res).isRateLimited) {
     throw new SnapshotFetchError('rateLimited', res.status)
   }
@@ -104,17 +109,17 @@ export async function fetchCommitSnapshot(
   const fetchBlobText = async (sha: string): Promise<string> => {
     const cached = cache.get(sha)
     if (cached !== undefined) return cached
-    const data = await getJson(`${api}/blobs/${sha}`, headers)
+    const data = await getJson(`${api}/blobs/${sha}`, headers, options.signal)
     const text = decodeBase64ToString(String(data.content ?? ''))
     cache.set(sha, text)
     return text
   }
 
   try {
-    const commit = await getJson(`${api}/commits/${commitSha}`, headers)
+    const commit = await getJson(`${api}/commits/${commitSha}`, headers, options.signal)
     const treeSha = (commit.tree as { sha?: string } | undefined)?.sha
     if (!treeSha) throw new SnapshotFetchError('notFound')
-    const tree = await getJson(`${api}/trees/${treeSha}?recursive=1`, headers)
+    const tree = await getJson(`${api}/trees/${treeSha}?recursive=1`, headers, options.signal)
     if (tree.truncated) throw new SnapshotFetchError('truncated')
     const entries = (tree.tree as TreeEntry[] | undefined) ?? []
 
@@ -154,6 +159,7 @@ export async function fetchCommitSnapshot(
       : undefined
     return { status: 'success', commitSha, home, archive, hasUntrackedEntries }
   } catch (e) {
+    if (options.signal?.aborted) return { status: 'error', reason: 'timeout' }
     if (e instanceof SnapshotFetchError) {
       return { status: 'error', reason: e.reason, httpStatus: e.httpStatus }
     }

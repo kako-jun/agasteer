@@ -347,7 +347,10 @@
       "untracked": "共通の基準に、IDの記録がないファイルがあります（アプリの外で追加したファイルなど）。",
       "tooLarge": "リポジトリが大きすぎて比較できません。",
       "rateLimited": "GitHub APIの利用上限に達しています。",
-      "failed": "比較中にエラーが発生しました。"
+      "failed": "比較中にエラーが発生しました。",
+      "metadataInvalid": "metadata.json が壊れているため比較できません。",
+      "archiveOutOfDate": "読み込み済みのアーカイブが、最後に同期した時点と別の時点の内容です（アーカイブを開き直すか、従来の方法で解決してください）。",
+      "timeout": "比較に時間がかかりすぎたため打ち切りました。"
     },
     "mergeKind": {
       "content": "同じ箇所を双方で別々に編集",
@@ -368,9 +371,11 @@
     "mergeMoreLines": "...ほか{count}行",
     "mergeMoreConflicts": "ほか{count}件",
     "mergeArchive": "アーカイブ",
+    "mergeRoot": "（ルート）",
     "mergeDone": "両方の変更をマージしました。",
     "mergeRecompare": "比較の後に変更があったため、もう一度比較します。",
     "mergeApplyFailed": "リモートの状態を確認できなかったため、マージしませんでした。",
+    "mergeSaveFailed": "マージ結果を保存できなかったため、マージしませんでした。",
     "cancel": "キャンセル",
     "deleteLeaf": "このリーフを削除しますか？",
     "deleteRootNote": "このノートを削除しますか？直下のサブノートとリーフもまとめて削除されます。",

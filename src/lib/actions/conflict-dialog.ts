@@ -151,10 +151,14 @@ function conflictKindLabel(c: WorldConflict, $_: Translate): string {
           ? 'modal.mergeKind.deletedByLocal'
           : 'modal.mergeKind.deletedByRemote'
       )
-    case 'attribute':
+    case 'attribute': {
+      // 移動先がルート（親なし）のときは空文字になるので、ラベルで示す
+      const label = (v: string | undefined) =>
+        c.field === 'location' && !v ? $_('modal.mergeRoot') : (v ?? '')
       return $_(`modal.mergeKind.${c.field ?? 'name'}`, {
-        values: { local: c.localValue ?? '', remote: c.remoteValue ?? '' },
+        values: { local: label(c.localValue), remote: label(c.remoteValue) },
       })
+    }
     case 'pathCollision':
       return $_('modal.mergeKind.pathCollision')
     case 'structure':

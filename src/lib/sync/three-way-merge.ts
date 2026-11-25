@@ -15,6 +15,8 @@
  */
 
 import type { Leaf, Note } from '../types'
+// 同名衝突は Push が実際に書き込むパス（サニタイズ・80文字切り込み）で判定する
+import { buildPath, getFolderPath } from '../api/github/paths'
 
 // ============================================
 // 行単位の差分（Myers）
@@ -22,8 +24,8 @@ import type { Leaf, Note } from '../types'
 
 /**
  * 差分の編集距離の上限。これを超える（大規模な書き換え）ときは、一致行の探索を
- * 打ち切って中間部分を「全体が変更された」と扱う。結果は競合が増える方向にしか
- * 倒れない（安全側）。
+ * 打ち切って中間部分を「全体が変更された」と扱う。もう片側もそのリーフを編集して
+ * いれば、離れた行でも競合になる（安全側。マージ不可で従来の選択肢に戻る）。
  */
 const MAX_EDIT_DISTANCE = 2000
 
@@ -291,6 +293,15 @@ function leafEdited(a: Leaf, b: Leaf): boolean {
   )
 }
 
+/** 件数表示用: 並び順だけの変更も「変更」として数える（0件表示にしない） */
+function noteChanged(a: Note, b: Note): boolean {
+  return noteEdited(a, b) || a.order !== b.order
+}
+
+function leafChanged(a: Leaf, b: Leaf): boolean {
+  return leafEdited(a, b) || a.order !== b.order
+}
+
 /** 片側だけの変更を採る（両側が別の値に変えたら conflict=true） */
 function pick3<T>(base: T, local: T, remote: T): { value: T; conflict: boolean } {
   if (local === remote || remote === base) return { value: local, conflict: false }
@@ -506,22 +517,26 @@ export function mergeWorld(
       conflicts.push({ kind: 'structure', target: 'leaf', path: leafPath(leaf, notes) })
     }
   }
-  // 同名衝突（Push 時のファイルパスが重なると片方が失われる）
+  // 同名衝突（Push 時のファイルパスが重なると片方が黙って失われる）。
+  // 表示名ではなく、Push と同じ getFolderPath / buildPath で作った実パスで比べる
+  // （buildPath はリーフ名の `\/:*?"<>|#` を `-` に、連続空白を1つにし、80文字で切る）。
   const seenNotePaths = new Set<string>()
   for (const note of mergedNotes) {
-    const path = notePath(note, mergedNotes)
-    if (seenNotePaths.has(path)) {
-      conflicts.push({ kind: 'pathCollision', target: 'note', path })
+    const key = getFolderPath(note, mergedNotes)
+    if (seenNotePaths.has(key)) {
+      conflicts.push({ kind: 'pathCollision', target: 'note', path: notePath(note, mergedNotes) })
     }
-    seenNotePaths.add(path)
+    seenNotePaths.add(key)
   }
   const seenLeafPaths = new Set<string>()
   for (const leaf of mergedLeaves) {
-    const path = leafPath(leaf, mergedNotes)
-    if (seenLeafPaths.has(path)) {
-      conflicts.push({ kind: 'pathCollision', target: 'leaf', path })
+    // ノートが無いリーフは上の structure で競合済み（buildPath の警告も避ける）
+    if (!mergedNoteMap.has(leaf.noteId)) continue
+    const key = buildPath(leaf, mergedNotes)
+    if (seenLeafPaths.has(key)) {
+      conflicts.push({ kind: 'pathCollision', target: 'leaf', path: leafPath(leaf, mergedNotes) })
     }
-    seenLeafPaths.add(path)
+    seenLeafPaths.add(key)
   }
 
   return {
@@ -534,11 +549,11 @@ export function mergeWorld(
         : null,
     conflicts,
     localChangeCount:
-      countChanges(base.notes, local.notes, noteEdited) +
-      countChanges(base.leaves, local.leaves, leafEdited),
+      countChanges(base.notes, local.notes, noteChanged) +
+      countChanges(base.leaves, local.leaves, leafChanged),
     remoteChangeCount:
-      countChanges(base.notes, remote.notes, noteEdited) +
-      countChanges(base.leaves, remote.leaves, leafEdited),
+      countChanges(base.notes, remote.notes, noteChanged) +
+      countChanges(base.leaves, remote.leaves, leafChanged),
   }
 }
 
@@ -555,4 +570,21 @@ function orderedIds(...lists: ReadonlyArray<readonly { id: string }[]>): string[
     }
   }
   return ids
+}
+
+/**
+ * 2つのワールドの内容が同じか（ID ごとに名前・親・バッジ・並び順・本文を比べる。
+ * updatedAt / blobSha は比べない）。#321: ロード済みアーカイブが base コミットから
+ * 読まれたものかの確認に使う。
+ */
+export function sameWorldContent(a: WorldSnapshot, b: WorldSnapshot): boolean {
+  const noteKey = (n: Note) =>
+    JSON.stringify([n.id, n.name, n.parentId ?? null, badgeOf(n), n.order])
+  const leafKey = (l: Leaf) =>
+    JSON.stringify([l.id, l.title, l.noteId, l.content, badgeOf(l), l.order])
+  const keys = <T>(xs: readonly T[], f: (x: T) => string) => xs.map(f).sort().join('\n')
+  return (
+    keys(a.notes, noteKey) === keys(b.notes, noteKey) &&
+    keys(a.leaves, leafKey) === keys(b.leaves, leafKey)
+  )
 }

@@ -225,7 +225,10 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
           // やり直す（再帰した Push の stale 判定で比較とダイアログがもう一度出る）。
           const applied = await applyConflictMerge(mergeAnalysis.plan, settings.value)
           if (applied.status === 'failed') {
-            showPushCompletionToast($_('modal.mergeApplyFailed'), 'error')
+            showPushCompletionToast(
+              $_(applied.reason === 'save' ? 'modal.mergeSaveFailed' : 'modal.mergeApplyFailed'),
+              'error'
+            )
             return
           }
           if (applied.status === 'changed') {

@@ -2000,6 +2000,7 @@ describe('競合時の「両方の変更をマージして解決する」 (#321)
 
   it('Pull: マージを選ぶと反映して Pull を完了する（全件の取り直しはしない）', async () => {
     mocks.choiceAsync.mockResolvedValue('merge')
+    appState.isPullCompleted = false
 
     await pullFromGitHub(false)
 
@@ -2012,6 +2013,8 @@ describe('競合時の「両方の変更をマージして解決する」 (#321)
     ])
     expect(mergeMocks.applyConflictMerge).toHaveBeenCalledWith(plan, stores.settings.value)
     expect(mocks.showPullToast).toHaveBeenCalledWith('modal.mergeDone', 'success')
+    // S1: 通常の Pull 成功と同じく完了扱いになる
+    expect(appState.isPullCompleted).toBe(true)
     expect(mocks.executePull).not.toHaveBeenCalled()
     expect(mocks.clearAllData).not.toHaveBeenCalled()
     expect(stores.isPulling.value).toBe(false)
@@ -2039,5 +2042,18 @@ describe('競合時の「両方の変更をマージして解決する」 (#321)
     await pullFromGitHub(false)
 
     expect(mergeMocks.analyzeConflictMerge).not.toHaveBeenCalled()
+  })
+
+  it('Push / Pull: 保存に失敗したら保存失敗の文言で知らせ、続きの Push はしない', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+    mergeMocks.applyConflictMerge.mockResolvedValue({ status: 'failed', reason: 'save' })
+
+    await pushToGitHub()
+    expect(mocks.showPushCompletionToast).toHaveBeenCalledWith('modal.mergeSaveFailed', 'error')
+    expect(mocks.pushToGitHub).not.toHaveBeenCalled()
+
+    await pullFromGitHub(false)
+    expect(mocks.showPullToast).toHaveBeenCalledWith('modal.mergeSaveFailed', 'error')
+    expect(stores.isPulling.value).toBe(false)
   })
 })

@@ -211,11 +211,16 @@ export async function pullFromGitHub(
           // リモートに対する未 Push の変更として dirty のまま残る（Push で送られる）。
           const applied = await applyConflictMerge(mergeAnalysis.plan, settings.value)
           if (applied.status === 'applied') {
+            // リモートの内容を取り込み終えたので、通常の Pull 成功と同じく完了扱いにする
+            appState.isPullCompleted = true
             showPullToast($_('modal.mergeDone'), 'success')
             return
           }
           if (applied.status === 'failed') {
-            showPullToast($_('modal.mergeApplyFailed'), 'error')
+            showPullToast(
+              $_(applied.reason === 'save' ? 'modal.mergeSaveFailed' : 'modal.mergeApplyFailed'),
+              'error'
+            )
             return
           }
           // 比較後にリモート/ローカルが変わった: 何も書き換えていないので最初からやり直す

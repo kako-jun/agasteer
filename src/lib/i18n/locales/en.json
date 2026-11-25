@@ -346,7 +346,10 @@
       "untracked": "The common base has files without a recorded ID (for example, files added outside the app).",
       "tooLarge": "The repository is too large to compare.",
       "rateLimited": "The GitHub API rate limit has been reached.",
-      "failed": "An error occurred while comparing."
+      "failed": "An error occurred while comparing.",
+      "metadataInvalid": "metadata.json is broken, so the comparison is not possible.",
+      "archiveOutOfDate": "The loaded archive is from a different point than the last sync (reopen the archive, or resolve it the usual way).",
+      "timeout": "The comparison took too long and was stopped."
     },
     "mergeKind": {
       "content": "Both sides edited the same place differently",
@@ -367,9 +370,11 @@
     "mergeMoreLines": "...{count} more lines",
     "mergeMoreConflicts": "{count} more",
     "mergeArchive": "Archive",
+    "mergeRoot": "(root)",
     "mergeDone": "Merged both changes.",
     "mergeRecompare": "Something changed after the comparison, so comparing again.",
     "mergeApplyFailed": "Could not check the remote state, so nothing was merged.",
+    "mergeSaveFailed": "Could not save the merged result, so nothing was merged.",
     "cancel": "Cancel",
     "deleteRootNote": "Delete this note? Its direct sub-notes and leaves will also be deleted.",
     "deleteSubNote": "Delete this sub-note? Its leaves will also be deleted.",

@@ -189,4 +189,26 @@ describe('fetchCommitSnapshot', () => {
     if (result.status !== 'success') throw new Error('expected success')
     expect(result.archive?.leaves).toMatchObject([{ id: 'd', noteId: 'o1', title: 'Done' }])
   })
+
+  it('signal が abort されたら timeout を返す', async () => {
+    const controller = new AbortController()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError'))
+            )
+          })
+      )
+    )
+    const pending = fetchCommitSnapshot(settings, 'c1', {
+      includeArchive: false,
+      contentCache: new Map(),
+      signal: controller.signal,
+    })
+    controller.abort()
+    expect(await pending).toEqual({ status: 'error', reason: 'timeout' })
+  })
 })
