@@ -33,13 +33,7 @@ import { encodeContent, decodeBase64ToString } from './github/encoding'
 import { fetchGitHubContents, runWithConcurrency, validateGitHubSettings } from './github/http'
 import { normalizeMetadata, normalizePulledMetadata, detectChanges } from './github/metadata'
 import { buildPushMetadata, buildTreeItems } from './github/push-tree'
-import {
-  buildLeafFromTarget,
-  buildLeafTargets,
-  collapseToTwoLevels,
-  ensureNotePath,
-  getLeafPriority,
-} from './github/pull-map'
+import { buildLeafFromTarget, buildWorldStructure, getLeafPriority } from './github/pull-map'
 import {
   PUSH_STAGE_REFS,
   PUSH_STAGE_BASE_TREE,
@@ -949,51 +943,14 @@ export async function pullFromGitHub(
       }
     }
 
-    const noteMap = new Map<string, Note>()
-
-    // ベースパスのプレフィックスを作成（末尾スラッシュ付き）
-    const basePathPrefix = `${NOTES_PATH}/`
-    const basePathGitkeep = `${NOTES_PATH}/.gitkeep`
-
-    // まず.gitkeepファイルから空ノートを復元
-    const gitkeepPaths = entries.filter(
-      (e) =>
-        e.type === 'blob' &&
-        e.path.startsWith(basePathPrefix) &&
-        e.path.endsWith('.gitkeep') &&
-        e.path !== basePathGitkeep // ルートの.gitkeepは除外
-    )
-
-    for (const entry of gitkeepPaths) {
-      const relativePath = entry.path
-        .replace(new RegExp(`^${NOTES_PATH}/`), '')
-        .replace(/\/\.gitkeep$/, '')
-      const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
-      if (parts.length === 0) continue
-
-      // .gitkeepがあるディレクトリのノートを復元
-      ensureNotePath({ pathParts: parts, noteMap, metadata })
-    }
-
-    // 次に.mdファイル（リーフ）を復元
-    const notePaths = entries.filter(
-      (e) =>
-        e.type === 'blob' &&
-        e.path.startsWith(basePathPrefix) &&
-        e.path.toLowerCase().endsWith('.md') &&
-        !e.path.endsWith('.gitkeep') // .gitkeepは除外
-    )
-
+    // .gitkeep から空ノート、.md からリーフのターゲットを組み立てる（pull-map.ts の共通関数）。
     // コンテンツ取得用のターゲットを事前に作成（メタデータ取得はここで済ませる）
-    const leafTargets = buildLeafTargets({
-      entries: notePaths,
+    // ノート構造確定 → onStructureコールバック（優先情報を返してもらう）
+    const { notes: sortedNotes, leafTargets } = buildWorldStructure({
+      entries,
       basePath: NOTES_PATH,
       metadata,
-      noteMap,
     })
-
-    // ノート構造確定 → onStructureコールバック（優先情報を返してもらう）
-    const sortedNotes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
 
     // リーフのスケルトン情報を作成（コンテンツ取得前に分かる情報）
     const leafSkeletons: LeafSkeleton[] = leafTargets.map((target) => ({
@@ -1519,43 +1476,11 @@ export async function pullArchive(
       }
     }
 
-    const noteMap = new Map<string, Note>()
-
-    const basePathPrefix = `${ARCHIVE_PATH}/`
-    const basePathGitkeep = `${ARCHIVE_PATH}/.gitkeep`
-
-    // .gitkeepファイルから空ノートを復元
-    const gitkeepPaths = entries.filter(
-      (e) =>
-        e.type === 'blob' &&
-        e.path.startsWith(basePathPrefix) &&
-        e.path.endsWith('.gitkeep') &&
-        e.path !== basePathGitkeep
-    )
-
-    for (const entry of gitkeepPaths) {
-      const relativePath = entry.path
-        .replace(new RegExp(`^${ARCHIVE_PATH}/`), '')
-        .replace(/\/\.gitkeep$/, '')
-      const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
-      if (parts.length === 0) continue
-      ensureNotePath({ pathParts: parts, noteMap, metadata })
-    }
-
-    // .mdファイル（リーフ）を復元
-    const leafPaths = entries.filter(
-      (e) =>
-        e.type === 'blob' &&
-        e.path.startsWith(basePathPrefix) &&
-        e.path.toLowerCase().endsWith('.md') &&
-        !e.path.endsWith('.gitkeep')
-    )
-
-    const leafTargets = buildLeafTargets({
-      entries: leafPaths,
+    // .gitkeep から空ノート、.md からリーフのターゲットを組み立てる（pull-map.ts の共通関数）
+    const { notes: sortedNotes, leafTargets } = buildWorldStructure({
+      entries,
       basePath: ARCHIVE_PATH,
       metadata,
-      noteMap,
     })
 
     // リーフを並列取得
@@ -1615,7 +1540,6 @@ export async function pullArchive(
       }
     }
 
-    const sortedNotes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
     const sortedLeaves = leaves.sort((a, b) => a.order - b.order)
 
     return {
