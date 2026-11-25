@@ -114,7 +114,9 @@ flowchart TD
     Check2 -->|Yes| Rescue{push-in-flight<br/>救済成立? #235}
     Check2 -->|No| Push
     Rescue -->|Yes: 誤検出→続行| Push
-    Rescue -->|No| Confirm[3択ダイアログ<br/>ロック保持]
+    Rescue -->|No| Analyze[3方向比較 #321<br/>base・ローカル・リモート]
+    Analyze --> Confirm[3択ダイアログ<br/>マージ可能ならマージを先頭に<br/>ロック保持]
+    Confirm -->|マージ| MergeApply[マージ結果を反映→再Push]
     Confirm -->|Pull first| PullFirst[Pull実行→再Push]
     Confirm -->|Push上書き| Push[Push実行]
     Confirm -->|Cancel| Unlock
@@ -241,8 +243,11 @@ flowchart TD
     Check3 -->|No & Pull完了済| Msg[変更なし通知]
     Check3 -->|No & 初回| Check2
     Check3 -->|Yes| Check2{ダーティ?}
-    Check2 -->|Yes| Confirm[確認ダイアログ<br/>ロック保持]
+    Check2 -->|Yes| Analyze[3方向比較 #321<br/>stale / check_failed 時のみ]
+    Analyze --> Confirm[確認ダイアログ<br/>マージ可能ならマージを先頭に<br/>ロック保持]
     Check2 -->|No| Pull[Pull実行]
+    Confirm -->|マージ| MergeApply[マージ結果を反映<br/>Pull完了・ローカル変更はdirty]
+    MergeApply --> Unlock
     Confirm -->|OK/Pull overwrite| Pull
     Confirm -->|Push first| PushFirst[Push→再帰Pull]
     Confirm -->|Cancel: 初回| Cancel1[IndexedDB読み込み]
@@ -302,6 +307,72 @@ Pull処理中（第一優先完了後）にユーザーが編集を行った場�
 - Pull完了後、ダーティな変更がない場合のみクリア
 
 ---
+
+## 競合時の3方向マージ（#321）
+
+Push の stale ダイアログ（`stale-push`）と Pull の dirty ダイアログ（`pull-dirty`）では、ダイアログを出す前に
+**共通の基準（base）**・ローカル・リモートを比較し、両方の変更を安全に取り込めるときだけ
+「両方の変更をマージして解決する」を先頭の主ボタンとして出す（従来の主ボタンは副に下がる）。
+手動 Push と auto-push は同じ preflight を通るので、どちらでも同じ比較が走る。
+
+### base の取り方
+
+- base は **`lastKnownCommitSha` のコミットそのもの**（最後に Pull / Push で同期した時点）。リモートは stale 判定で得た
+  **リモート HEAD の SHA**。どちらも `src/lib/api/github/snapshot.ts` の `fetchCommitSnapshot()` で
+  commit → tree → metadata.json → 本文 blob を **SHA 指定**で読む（ブランチ名で読む通常の Pull と違い、読んでいる間に内容が動かない）
+- メモリ上のベースライン（`lastPushedNotes/Leaves`）は使わない。再起動・リポ切替の後は dirty なキャッシュから作られることがあり、base として信用できないため
+- 本文はローカルの本文から git blob SHA を計算して取得キャッシュに入れておき、変わっていない本文は取りに行かない。base とリモートで同じ blob も1回だけ取る
+- tree → ノート/リーフの組み立ては Pull と同じ `buildWorldStructure()`（`pull-map.ts`）
+- アーカイブは、ロード済みのときだけ同じ方法で比較・マージする。未ロードなら Push は従来どおりリモートのアーカイブを保持する
+
+### マージ判定（純粋関数）
+
+`src/lib/sync/three-way-merge.ts`。ノート・リーフを ID で対応づけて判定する。
+
+| ケース                                                      | 結果                         |
+| ----------------------------------------------------------- | ---------------------------- |
+| 片側だけの追加・編集・削除、双方が同じ変更                  | 取り込む                     |
+| 同じリーフの離れた行の編集                                  | 行単位 diff3 で両方取り込む  |
+| 同じ行・隣接行の相反する編集、同じ位置への別々の挿入        | 競合 `content`               |
+| 片側で削除、他方で編集                                      | 競合 `deleteEdit`            |
+| 名前・場所（親ノート）・バッジを双方が別の値に変更          | 競合 `attribute`             |
+| マージ後に同じ場所へ同じ名前ができる（Push でパスが重なる） | 競合 `pathCollision`         |
+| 削除されたノートへの追加・移動、3階層以上になる移動         | 競合 `structure`             |
+| 並び順（order）だけの食い違い                               | 内容は失われないのでリモート |
+
+- 行単位の差分は自前の Myers 差分（依存追加なし）。共通の先頭・末尾を除いてから差分を取り、編集距離が 2000 を超える大きな書き換えは
+  中間部分を「全体が変更された」と扱う（競合が増える方向にしか倒れない）
+- Priority（仮想リーフ）のバッジは metadata にだけあるので、ローカルで変えていればローカル、そうでなければリモートを採る
+
+### 判定できないとき（従来の選択肢のみ・理由を表示）
+
+`remoteStateUnknown`（stale 判定が check_failed）、`localIncomplete`（Pull の途中でローカルが揃っていない。欠けたリーフを削除と誤認しないため）、
+`baseUnavailable`（base の SHA が無い・コミットが取れない）、`remoteUnavailable`、`untracked`（base に metadata.json の ID が無いファイルがあり、
+読むたびに ID が変わって対応づけられない）、`tooLarge`（tree が truncated）、`rateLimited`、`failed`（予期しない例外）。
+初回 Pull 前の `up_to_date` では比べる基準が無いので比較しない。起動時（`startup-dirty`）と Push ハング復旧（`push-hang`）も対象外。
+
+### ダイアログの表示
+
+`showConflictDialog({ merge })`（`conflict-dialog.ts`）が本文に1行の要約（マージ可能な件数 / 競合の件数 / 判定できない理由）を足し、
+競合があるときは一覧（対象のパス・種類・該当行・ローカル/リモート双方の抜粋）を `choiceAsync` の `detail`（スクロール枠・等幅・テキスト描画）に出す。
+一覧は 10 件・各抜粋 3 行 80 文字で打ち切る。本文やタイトルを含むが、診断ログには記録しない（`conflict-choice` の `choice` に `merge` が増えただけ）。
+
+### マージを選んだ後（`applyConflictMerge`）
+
+1. リモート HEAD を読み直し、比較時の SHA と違えば何も書き換えずに `changed`。ローカルが比較時の内容から変わっていても同様
+2. ローカルのストア＝マージ結果（保存対象外の仮想ノート配下はそのまま残す）、ベースライン＝リモート、`lastKnownCommitSha`＝リモート SHA、
+   `metadata`＝リモートの metadata。`refreshDirtyState()` でローカル側の変更がリモートに対する dirty として残る。IndexedDB にも保存する
+3. 開いているペインのノート/リーフは新しいオブジェクトに差し替え、本文が変わったリーフはエディタへ流す。開いていたものがマージで消えた場合は Pull と同じく URL から復元する
+
+経路ごとの続き:
+
+- **Push**: 反映後に Push をやり直す（stale 判定から通常どおり）。`changed` のときもやり直し、再帰した Push の stale 判定で比較とダイアログがもう一度出る。リモート確認自体に失敗したら何もせず終える
+- **Pull**: 反映で Pull を完了する（全件の取り直しはしない）。ローカル側の変更は未 Push のまま残り、通常の Push / auto-push で送られる。`changed` のときは最初からやり直す
+
+キャンセル・比較失敗・反映前のリモート確認失敗ではストアを一切書き換えない。反映後の Push が失敗しても、マージ結果は dirty として手元に残る。
+
+テスト: `three-way-merge.test.ts`（diff3・ノート/リーフ単位）、`snapshot.test.ts`、`conflict-merge.test.ts`（比較・反映・比較後の変化）、
+`conflict-dialog.test.ts`（表示）、`git.test.ts`（Push / Pull 両経路）。
 
 ## 自動Push処理
 

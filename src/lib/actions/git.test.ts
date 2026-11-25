@@ -166,6 +166,15 @@ vi.mock('../app-state.svelte', () => ({
   },
 }))
 
+// #321: 3方向マージの比較・反映。既定は「判定できない」（従来の3択だけが出る）
+const mergeMocks = vi.hoisted(() => ({
+  analyzeConflictMerge: vi.fn(
+    async (): Promise<unknown> => ({ status: 'unavailable', reason: 'remoteStateUnknown' })
+  ),
+  applyConflictMerge: vi.fn(async (): Promise<unknown> => ({ status: 'applied' })),
+}))
+vi.mock('./conflict-merge', () => mergeMocks)
+
 vi.mock('../navigation', () => ({
   getPriorityFromUrl: vi.fn(() => null),
 }))
@@ -1895,5 +1904,140 @@ describe('runPendingRepoSyncIfIdle は保留中の rehydrate を先に行って�
 
     expect(mocks.rehydrateForRepo).not.toHaveBeenCalled()
     expect(mocks.canSync).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('競合時の「両方の変更をマージして解決する」 (#321)', () => {
+  const stale = {
+    status: 'stale' as const,
+    localCommitSha: 'local-sha',
+    remoteCommitSha: 'remote-sha',
+  }
+  const plan = { baseSha: 'local-sha', remoteSha: 'remote-sha' }
+  const mergeable = {
+    status: 'mergeable',
+    plan,
+    localChangeCount: 1,
+    remoteChangeCount: 2,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    stores.isPulling.value = false
+    stores.isPushing.value = false
+    stores.isPushingBackground.value = false
+    stores.isStale.value = false
+    stores.isDirty.value = true
+    stores.lastKnownCommitSha.value = 'local-sha'
+    appState.isArchiveLoading = false
+    appState.isFirstPriorityFetched = true
+    appState.isPullCompleted = true
+    appState.pendingRepoSync = false
+    mocks.flushPendingSaves.mockResolvedValue(undefined)
+    mocks.getPersistedDirtyFlag.mockReturnValue(false)
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 2 })
+    mocks.executeStaleCheck.mockResolvedValue(stale)
+    mergeMocks.analyzeConflictMerge.mockResolvedValue(mergeable)
+    mergeMocks.applyConflictMerge.mockResolvedValue({ status: 'applied' })
+  })
+
+  it('Push: マージ可能なら先頭にマージボタンを出し、選ぶと反映してから Push をやり直す', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+
+    await pushToGitHub()
+
+    expect(mergeMocks.analyzeConflictMerge).toHaveBeenCalledWith(stale, stores.settings.value)
+    const [, options] = mocks.choiceAsync.mock.calls[0]
+    expect(options.map((o: { value: string }) => o.value)).toEqual([
+      'merge',
+      'pull',
+      'push',
+      'cancel',
+    ])
+    expect(options[0].variant).toBe('primary')
+    expect(options[1].variant).toBe('secondary')
+    expect(mergeMocks.applyConflictMerge).toHaveBeenCalledWith(plan, stores.settings.value)
+    // この呼び出しでは送信せず、反映後の再 Push（stale 判定から）に委ねる
+    expect(mocks.executePush).not.toHaveBeenCalled()
+    expect(mocks.pushToGitHub).toHaveBeenCalledTimes(1)
+    expect(stores.isPushing.value).toBe(false)
+  })
+
+  it('Push: 比較後にリモートが変わっていたら、やり直し（再比較）を知らせて Push をやり直す', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+    mergeMocks.applyConflictMerge.mockResolvedValue({ status: 'changed', side: 'remote' })
+
+    await pushToGitHub()
+
+    expect(mocks.showPushToast).toHaveBeenCalledWith('modal.mergeRecompare')
+    expect(mocks.pushToGitHub).toHaveBeenCalledTimes(1)
+    expect(mocks.executePush).not.toHaveBeenCalled()
+  })
+
+  it('Push: 反映前のリモート確認に失敗したら何もせず終える（再 Push もしない）', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+    mergeMocks.applyConflictMerge.mockResolvedValue({ status: 'failed' })
+
+    await pushToGitHub()
+
+    expect(mocks.showPushCompletionToast).toHaveBeenCalledWith('modal.mergeApplyFailed', 'error')
+    expect(mocks.pushToGitHub).not.toHaveBeenCalled()
+    expect(mocks.executePush).not.toHaveBeenCalled()
+    expect(stores.isPushing.value).toBe(false)
+  })
+
+  it('Push: マージ不可（競合あり）なら従来の3択のまま、マージは選べない', async () => {
+    mergeMocks.analyzeConflictMerge.mockResolvedValue({ status: 'conflicts', conflicts: [] })
+    mocks.choiceAsync.mockResolvedValue('cancel')
+
+    await pushToGitHub()
+
+    const [, options] = mocks.choiceAsync.mock.calls[0]
+    expect(options.map((o: { value: string }) => o.value)).toEqual(['pull', 'push', 'cancel'])
+    expect(mergeMocks.applyConflictMerge).not.toHaveBeenCalled()
+    expect(stores.isStale.value).toBe(true)
+  })
+
+  it('Pull: マージを選ぶと反映して Pull を完了する（全件の取り直しはしない）', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+
+    await pullFromGitHub(false)
+
+    const [, options] = mocks.choiceAsync.mock.calls[0]
+    expect(options.map((o: { value: string }) => o.value)).toEqual([
+      'merge',
+      'pull',
+      'push',
+      'cancel',
+    ])
+    expect(mergeMocks.applyConflictMerge).toHaveBeenCalledWith(plan, stores.settings.value)
+    expect(mocks.showPullToast).toHaveBeenCalledWith('modal.mergeDone', 'success')
+    expect(mocks.executePull).not.toHaveBeenCalled()
+    expect(mocks.clearAllData).not.toHaveBeenCalled()
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('Pull: 比較後に変化があれば何も書き換えずに最初からやり直す（stale 判定・比較・ダイアログ）', async () => {
+    mocks.choiceAsync.mockResolvedValueOnce('merge').mockResolvedValueOnce('cancel')
+    mergeMocks.applyConflictMerge.mockResolvedValueOnce({ status: 'changed', side: 'local' })
+
+    await pullFromGitHub(false)
+
+    expect(mocks.showPullToast).toHaveBeenCalledWith('modal.mergeRecompare')
+    expect(mocks.executeStaleCheck).toHaveBeenCalledTimes(2)
+    expect(mergeMocks.analyzeConflictMerge).toHaveBeenCalledTimes(2)
+    expect(mocks.choiceAsync).toHaveBeenCalledTimes(2)
+    expect(mocks.executePull).not.toHaveBeenCalled()
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('Pull: 初回 Pull 前の up_to_date では比較しない（基準が無い）', async () => {
+    appState.isPullCompleted = false
+    mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
+    mocks.choiceAsync.mockResolvedValue('cancel')
+
+    await pullFromGitHub(false)
+
+    expect(mergeMocks.analyzeConflictMerge).not.toHaveBeenCalled()
   })
 })

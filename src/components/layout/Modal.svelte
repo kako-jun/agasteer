@@ -13,6 +13,8 @@
     onPromptSubmit?: ((value: string) => void) | null
     onChoiceSelect?: ((value: string) => void) | null
     choiceOptions?: ChoiceOption[]
+    /** 本文の下に出す補足テキスト（スクロール枠・等幅。テキストとして描画する） */
+    detail?: string
     placeholder?: string
     onClose: () => void
   }
@@ -27,6 +29,7 @@
     onPromptSubmit = null,
     onChoiceSelect = null,
     choiceOptions = [],
+    detail = '',
     placeholder = '',
     onClose,
   }: Props = $props()
@@ -127,6 +130,9 @@
       {#each message.split('\n') as line}
         <p>{line}</p>
       {/each}
+      {#if detail}
+        <pre class="modal-detail">{detail}</pre>
+      {/if}
       {#if type === 'prompt'}
         <input
           bind:this={inputElement}
@@ -219,6 +225,24 @@
   .modal-content p {
     margin-bottom: 1.5rem;
     color: var(--text);
+  }
+
+  .modal-detail {
+    margin: 0 0 1.5rem;
+    padding: 0.5rem 0.75rem;
+    max-height: 40vh;
+    overflow: auto;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family:
+      'Courier New', Menlo, Consolas, 'Noto Sans Mono CJK JP', 'Source Han Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-align: left;
   }
 
   .modal-buttons {

@@ -472,9 +472,12 @@ interface ChoiceOption {
 function choiceAsync(
   message: string,
   options: ChoiceOption[],
-  position: ModalPosition = 'center'
+  position: ModalPosition = 'center',
+  detail?: string // 本文の下にスクロール枠（等幅）で出す補足テキスト（#321 の競合内容など）
 ): Promise<string | null> // 選択されたvalue、×ボタン/背景クリックはnull
 ```
+
+`detail` はテキストとして描画する（HTML にしない）ため、ノート本文の抜粋を含めてよい。
 
 **使用例**:
 

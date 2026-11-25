@@ -2,6 +2,8 @@ import { type Leaf, type StaleCheckResult, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
 import { showPullToast } from '../ui'
 import { showConflictDialog } from './conflict-dialog'
+// #321: 共通の基準からの3方向比較と「両方の変更をマージして解決する」
+import { analyzeConflictMerge, applyConflictMerge } from './conflict-merge'
 import {
   settings,
   notes,
@@ -188,22 +190,48 @@ export async function pullFromGitHub(
           return
         }
       } else {
-        // 通常時: Push first / Pull (overwrite) / Cancel の3択
+        // #321: リモートに変更がある（または確認できなかった）ときは、ダイアログの前に
+        // 共通の基準・ローカル・リモートを比較する（読むだけ）。初回 Pull 前の
+        // up_to_date は比べる基準が無いので比較しない。
+        const mergeAnalysis =
+          staleResult.status === 'up_to_date'
+            ? undefined
+            : await analyzeConflictMerge(staleResult, settings.value)
+        // 通常時: Push first / Pull (overwrite) / Cancel の3択（マージ可能なら先頭にマージ）
         const choice = await showConflictDialog({
           kind: 'pull-dirty',
           staleResult,
           localPushCount: metadata.value.pushCount,
           settings: settings.value,
+          merge: mergeAnalysis,
         })
 
-        if (choice === 'push') {
+        if (choice === 'merge' && mergeAnalysis?.status === 'mergeable') {
+          // #321: マージ結果をローカルに反映して Pull を完了する。ローカル側の変更は
+          // リモートに対する未 Push の変更として dirty のまま残る（Push で送られる）。
+          const applied = await applyConflictMerge(mergeAnalysis.plan, settings.value)
+          if (applied.status === 'applied') {
+            showPullToast($_('modal.mergeDone'), 'success')
+            return
+          }
+          if (applied.status === 'failed') {
+            showPullToast($_('modal.mergeApplyFailed'), 'error')
+            return
+          }
+          // 比較後にリモート/ローカルが変わった: 何も書き換えていないので最初からやり直す
+          showPullToast($_('modal.mergeRecompare'))
+          isPulling.value = false
+          lockReleased = true
+          return pullFromGitHub(false, onCancel)
+        } else if (choice === 'push') {
           // Push first: isPullingロックを解放してPush→Pull
           isPulling.value = false
           lockReleased = true
           await appActions.pushToGitHub()
           // Push後に再度Pull（再帰呼び出し）
           return pullFromGitHub(false, onCancel)
-        } else if (choice === 'cancel' || choice === null) {
+        } else if (choice !== 'pull') {
+          // cancel / null（モーダル外クリック等）。
           // #314 M1: 同上の理由（この分岐も Pull しないと確定しているため、待たれる
           // 側の isPulling を先に解放してから onCancel を呼ぶ）。
           isPulling.value = false

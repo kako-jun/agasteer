@@ -105,6 +105,15 @@ const mocks = vi.hoisted(() => ({
   rehydrateForRepo: vi.fn(async () => {}),
 }))
 
+// #321: 3方向マージの比較は本テストの対象外（既定の「判定できない」に固定）
+vi.mock('./conflict-merge', () => ({
+  analyzeConflictMerge: vi.fn(async () => ({
+    status: 'unavailable',
+    reason: 'remoteStateUnknown',
+  })),
+  applyConflictMerge: vi.fn(),
+}))
+
 vi.mock('../stores', () => ({
   ...stores,
   clearAllChanges: mocks.clearAllChanges,

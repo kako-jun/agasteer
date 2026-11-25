@@ -7,6 +7,8 @@ import {
   setPushToastCountdown,
 } from '../ui'
 import { showConflictDialog } from './conflict-dialog'
+// #321: 共通の基準からの3方向比較と「両方の変更をマージして解決する」
+import { analyzeConflictMerge, applyConflictMerge } from './conflict-merge'
 import {
   settings,
   notes,
@@ -206,22 +208,41 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         console.log(
           `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
         )
+        // #321: ダイアログの前に共通の基準・ローカル・リモートを比較する（読むだけ）
+        const mergeAnalysis = await analyzeConflictMerge(staleResult, settings.value)
         // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
         const choice = await showConflictDialog({
           kind: 'stale-push',
           staleResult,
           localPushCount: metadata.value.pushCount,
           settings: settings.value,
+          merge: mergeAnalysis,
         })
 
-        if (choice === 'pull') {
+        if (choice === 'merge' && mergeAnalysis.status === 'mergeable') {
+          // #321: マージ結果をローカルに反映（ベースライン・SHA はリモートに揃う）してから
+          // Push をやり直す。比較後にリモート/ローカルが変わっていたら何も書き換えずに
+          // やり直す（再帰した Push の stale 判定で比較とダイアログがもう一度出る）。
+          const applied = await applyConflictMerge(mergeAnalysis.plan, settings.value)
+          if (applied.status === 'failed') {
+            showPushCompletionToast($_('modal.mergeApplyFailed'), 'error')
+            return
+          }
+          if (applied.status === 'changed') {
+            showPushToast($_('modal.mergeRecompare'))
+          }
+          isPushing.value = false
+          // options を引き継がないのは pull-first と同じ理由（有人操作になったため）
+          return appActions.pushToGitHub()
+        } else if (choice === 'pull') {
           // Pull first: isPushingロックを解放してPull→Push
           isPushing.value = false
           await pullFromGitHub(false)
           // Pull後に再度Push（再帰呼び出し）
           // options（abortIfStaleCheckFailed）を引き継がないのは意図的: ダイアログを操作した時点で有人操作なので、再Pushは手動Push相当の既定値で続行する（#235）
           return appActions.pushToGitHub()
-        } else if (choice === 'cancel' || choice === null) {
+        } else if (choice !== 'push') {
+          // cancel / null（モーダル外クリック等）
           return
         }
         // choice === 'push' → 続行（上書き）

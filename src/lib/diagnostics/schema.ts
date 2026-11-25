@@ -106,7 +106,7 @@ export const DIAG_SCHEMA = {
   /** 衝突ダイアログでの選択（null＝モーダル外クリック等は cancel 扱い） */
   'conflict-choice': {
     dialogKind: ['stale-push', 'pull-dirty', 'startup-dirty', 'push-hang'],
-    choice: ['pull', 'push', 'cancel'],
+    choice: ['pull', 'push', 'merge', 'cancel'],
   },
   /** rehydrate での lastKnownCommitSha 差し替え */
   'rehydrate-sha': { oldSha: 'sha', newSha: 'sha' },

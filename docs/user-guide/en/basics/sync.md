@@ -20,6 +20,7 @@ When there are unsaved changes, a **red dot** appears on the save button.
 ### Stale Warning
 
 If edits were made on another device, a warning appears before Push. You can choose to overwrite or Pull first.
+If the changes do not overlap, you can also merge both ([Merging Both Changes](#merging-both-changes)).
 
 ### Auto Push
 
@@ -74,6 +75,25 @@ When local and remote states diverge, a unified dialog appears across all paths
 - The body always shows **local/remote commit SHAs and push numbers**
 - Buttons are a 3-way choice: "Pull to fetch", "Push to overwrite", "Cancel" (Push is disabled on startup)
 - The push numbers help you decide which side is newer
+
+### Merging Both Changes
+
+When Push or Pull hits a conflict, the app first compares what the local side and the remote side each changed
+since the last sync (the common base), before showing the dialog.
+
+- **If the changes do not overlap** (different lines of the same leaf, or different leaves edited, added, or deleted),
+  a "Merge both changes to resolve" button appears at the top. Choosing it keeps both sides' changes
+  - On Push, the merged result is pushed right away
+  - On Pull, the remote changes are brought in and your local changes stay unsaved (red dot). Push them afterwards
+- **If the changes overlap** (both sides edited the same or adjacent lines differently, one side deleted what the other edited,
+  both renamed or moved the same item differently, or two items with the same name would end up in the same place),
+  nothing is merged automatically. The usual 3-way choice stays, and the dialog lists the affected leaf, the kind of conflict,
+  the lines, and both sides' content so you can decide
+- **If the comparison is not possible** (the last synced content cannot be fetched, the network failed,
+  or there are files added outside the app), the reason is shown and only the usual choices remain
+- If another device pushed, or your local content changed, after the comparison, nothing is merged and the comparison runs again.
+  Cancelling or a failed comparison never drops your local changes
+- Merging is not offered in the startup unsaved-change check or in the dialog after a Push stopped responding
 
 ---
 

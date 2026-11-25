@@ -35,6 +35,11 @@ export interface ModalState {
   promptCallback?: ((value: string) => void) | null
   choiceCallback?: ((value: string) => void) | null
   choiceOptions?: ChoiceOption[]
+  /**
+   * 本文の下にスクロール枠で出す補足テキスト（choice のみ。#321 の競合内容など）。
+   * テキストとして描画する（HTML にしない）ので、ノート本文などを含めてよい。
+   */
+  detail?: string
   placeholder?: string
   position: ModalPosition
 }
@@ -248,7 +253,8 @@ export function promptAsync(
 export function choiceAsync(
   message: string,
   options: ChoiceOption[],
-  position: ModalPosition = 'center'
+  position: ModalPosition = 'center',
+  detail?: string
 ): Promise<string | null> {
   return new Promise((resolve) => {
     modalState.value = {
@@ -259,6 +265,7 @@ export function choiceAsync(
       choiceCallback: (value) => resolve(value),
       cancelCallback: () => resolve(null),
       choiceOptions: options,
+      detail,
       position,
     }
   })
@@ -276,6 +283,7 @@ export function closeModal() {
     promptCallback: null,
     choiceCallback: null,
     choiceOptions: undefined,
+    detail: undefined,
     placeholder: '',
     position: 'center',
   }
