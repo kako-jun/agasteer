@@ -99,6 +99,7 @@ const mocks = vi.hoisted(() => ({
   waitForRehydrate: vi.fn(() => Promise.resolve()),
   // #297 S-c: 同期中にリポ切替された場合、予約 pull 開始前に呼ばれる
   rehydrateForRepo: vi.fn(async () => {}),
+  restoreStateFromUrl: vi.fn(async () => {}),
 }))
 
 vi.mock('../stores', () => ({
@@ -161,7 +162,7 @@ vi.mock('../app-state.svelte', () => ({
     pushToGitHub: mocks.pushToGitHub,
     resetLeafStats: vi.fn(),
     rebuildLeafStats: vi.fn(),
-    restoreStateFromUrl: vi.fn(),
+    restoreStateFromUrl: mocks.restoreStateFromUrl,
     getEditorView: vi.fn(() => ({ focusEditor: mocks.focusEditor })),
   },
 }))
@@ -2063,6 +2064,29 @@ describe('競合時の「両方の変更をマージして解決する」 (#321)
     expect(mocks.executePull).not.toHaveBeenCalled()
     expect(onCancel).not.toHaveBeenCalled()
     expect(stores.isPulling.value).toBe(false)
+    // N1: 起動時の先読み込みで省いた URL 復元を、Pull 成功と同じくマージ後に行う
+    await vi.waitFor(() => expect(mocks.restoreStateFromUrl).toHaveBeenCalled())
+  })
+
+  it('startup-dirty: Pull 上書きを選ぶとローカルは従来どおり消え、Pull が走る', async () => {
+    appState.isPullCompleted = false
+    mocks.choiceAsync.mockResolvedValue('pull')
+    mocks.executePull.mockResolvedValue({
+      success: false,
+      message: 'github.networkError',
+      variant: 'error',
+      notes: [],
+      leaves: [],
+      metadata: { version: 1, notes: {}, leaves: {}, pushCount: 0 },
+    })
+    const onCancel = vi.fn()
+
+    await pullFromGitHub(true, onCancel, stale)
+
+    expect(mergeMocks.applyConflictMerge).not.toHaveBeenCalled()
+    expect(mocks.clearAllData).toHaveBeenCalled()
+    expect(mocks.executePull).toHaveBeenCalled()
+    expect(onCancel).not.toHaveBeenCalled()
   })
 
   it('startup-dirty: 判定不能なら理由を出して従来の2択、キャンセルで onCancel', async () => {

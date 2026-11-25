@@ -255,11 +255,15 @@ async function analyze(
     ) {
       return { status: 'unavailable', reason: 'archiveOutOfDate' }
     }
-    const remote = await fetchCommitSnapshot(settings, remoteSha, {
-      includeArchive,
-      contentCache,
-      signal,
-    })
+    // up_to_date のときは base とリモートが同じコミットなので読み出しを使い回す
+    const remote =
+      remoteSha === baseSha
+        ? base
+        : await fetchCommitSnapshot(settings, remoteSha, {
+            includeArchive,
+            contentCache,
+            signal,
+          })
     if (remote.status === 'error') {
       return { status: 'unavailable', reason: snapshotReason(remote.reason, 'remote') }
     }

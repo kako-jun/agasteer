@@ -855,9 +855,12 @@ export function initApp(deps: InitAppDeps): () => void {
       // ロード済みキャッシュを state に反映する。
       // adoptAsBaseline=true: clean cache とみなし snapshot/dirty を更新
       // adoptAsBaseline=false: dirty cache をそのまま開く（最低限 global dirty を維持）
+      // restoreUrl=false: URL からの画面復元を呼び出し側に任せる（#321 起動時の先読み込み。
+      //   復元はアーカイブを読み込むことがあり、競合の比較より前に走らせないため）
       const applyPersistedStartupCache = async (
         cache: PersistedStartupCache,
-        adoptAsBaseline: boolean
+        adoptAsBaseline: boolean,
+        restoreUrl = true
       ): Promise<number> => {
         notes.value = cache.notes
         leaves.value = cache.leaves
@@ -886,7 +889,7 @@ export function initApp(deps: InitAppDeps): () => void {
         // restoreStateFromUrl がアーカイブ待機で pending のままの間に世代1側の
         // この finally が先に false へ戻してしまうと、抑制が早く外れて
         // updateUrlFromState() が pushState を余分に積む窓があった（Q1 と同種）。
-        await deps.restoreStateFromUrl()
+        if (restoreUrl) await deps.restoreStateFromUrl()
         return cache.notes.length + cache.leaves.length
       }
 
@@ -938,10 +941,13 @@ export function initApp(deps: InitAppDeps): () => void {
         // から Pull を始める。起動時の確認ダイアログでも他の経路と同じく、ローカルとリモートを
         // 比較して「両方の変更をマージして解決する」を出せるようにするため。キャンセル時は
         // 読み込み済みなのでそのまま操作可能（従来のキャンセル時の読み込みと同じ状態）。
+        // URL からの画面復元はここではしない（アーカイブ URL だと比較の前にアーカイブを
+        // 読み込んでしまうため）。解決後に、キャンセルなら下の onCancel、マージなら Pull 成功と
+        // 同じく git-pull 側、Pull 上書きなら Pull 自身が復元する。
         let startupLocalApplied = false
         if (persistedCache.wasDirty) {
           try {
-            await applyPersistedStartupCache(persistedCache, false)
+            await applyPersistedStartupCache(persistedCache, false, false)
             startupLocalApplied = true
           } catch (error) {
             console.error('Failed to load dirty cache before startup pull:', error)
@@ -951,7 +957,11 @@ export function initApp(deps: InitAppDeps): () => void {
         await deps.pullFromGitHub(
           true,
           async () => {
-            if (startupLocalApplied) return
+            if (startupLocalApplied) {
+              // 読み込み済み（二重に読み込まない）。先読み込みで省いた画面復元だけ行う
+              await deps.restoreStateFromUrl()
+              return
+            }
             try {
               await applyPersistedStartupCache(persistedCache, !persistedCache.wasDirty)
             } catch (error) {
@@ -1083,13 +1093,31 @@ export function initApp(deps: InitAppDeps): () => void {
    * cancel/null・反映失敗は何もしない（applyStaleResult で立てた赤バッジに任せる）。
    */
   const promptPushHangRecovery = async (staleResult: StaleCheckResult) => {
-    const resolution = await resolveConflict({
-      kind: 'push-hang',
-      staleResult,
-      localPushCount: metadata.value.pushCount,
-      settings: settings.value,
-      toast: (message, variant) => showPushToast(message, variant),
-    })
+    // 他の経路と同じく、解決中（比較・ダイアログ・マージ反映）は isPushing を立てて
+    // 別の Push / Pull が割り込まないようにする。別の同期が走っていて取れないときは
+    // ダイアログを出さない（applyStaleResult が立てた赤バッジに任せる）。
+    if (
+      isPulling.value ||
+      isPushing.value ||
+      isPushingBackground.value ||
+      appState.isArchiveLoading
+    ) {
+      return
+    }
+    isPushing.value = true
+    let resolution: Awaited<ReturnType<typeof resolveConflict>>
+    try {
+      resolution = await resolveConflict({
+        kind: 'push-hang',
+        staleResult,
+        localPushCount: metadata.value.pushCount,
+        settings: settings.value,
+        toast: (message, variant) => showPushToast(message, variant),
+      })
+    } finally {
+      // Push / Pull を呼ぶ前に必ず解放する（それぞれが自分でロックを取る）
+      isPushing.value = false
+    }
     if (resolution === 'pull') {
       await deps.pullFromGitHub(false)
     } else if (resolution === 'push' || resolution === 'merged' || resolution === 'recompare') {

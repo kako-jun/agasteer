@@ -515,7 +515,8 @@ describe('全経路対応・保存の整合（追加分）', () => {
 
     const analysis = await analyzeConflictMerge({ status: 'up_to_date' }, settings)
 
-    expect(mocks.fetchCommitSnapshot.mock.calls.map((c) => c[1])).toEqual(['base-sha', 'base-sha'])
+    // N2: base とリモートが同じコミットなので読み出しは1回だけ（使い回す）
+    expect(mocks.fetchCommitSnapshot.mock.calls.map((c) => c[1])).toEqual(['base-sha'])
     expect(analysis.status).toBe('mergeable')
     if (analysis.status !== 'mergeable') return
     expect(analysis.plan.remoteSha).toBe('base-sha')

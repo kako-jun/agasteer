@@ -182,6 +182,11 @@ export async function pullFromGitHub(
         // 残る（Push / auto-push で送られる）。起動時も Push はしない。
         appState.isPullCompleted = true
         appState.isFirstPriorityFetched = true
+        // Pull 成功時（onPriorityComplete）と同じく URL から画面を復元する。起動時は先読み込みで
+        // 復元を省いているため、ここで行う。await しない（復元はこの Pull の終了を待つため）
+        void Promise.resolve()
+          .then(() => appActions.restoreStateFromUrl())
+          .catch((e) => console.error('restoreStateFromUrl failed:', e))
         return
       }
       if (resolution === 'recompare') {
