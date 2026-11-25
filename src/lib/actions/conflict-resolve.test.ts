@@ -31,7 +31,7 @@ vi.mock('../i18n', () => ({
   },
 }))
 
-const { resolveConflict } = await import('./conflict-resolve')
+const { resolveConflict, isResolvingConflict } = await import('./conflict-resolve')
 
 const settings = {} as Settings
 const stale: StaleCheckResult = {
@@ -116,5 +116,26 @@ describe('resolveConflict: 全経路で同じ比較 → マージ → 反映', (
     expect(await run('push-hang')).toBe('push')
     mocks.choiceAsync.mockResolvedValueOnce(null)
     expect(await run('stale-push')).toBe('cancel')
+  })
+
+  it('isResolvingConflict は解決中だけ true（例外で終わっても戻る）', async () => {
+    let finish: (v: string) => void = () => {}
+    mocks.choiceAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    expect(isResolvingConflict()).toBe(false)
+    const pending = run('stale-push')
+    await vi.waitFor(() => expect(mocks.choiceAsync).toHaveBeenCalled())
+    expect(isResolvingConflict()).toBe(true)
+    finish('cancel')
+    await pending
+    expect(isResolvingConflict()).toBe(false)
+
+    mocks.analyzeConflictMerge.mockRejectedValueOnce(new Error('x'))
+    await expect(run('pull-dirty')).rejects.toThrow('x')
+    expect(isResolvingConflict()).toBe(false)
   })
 })

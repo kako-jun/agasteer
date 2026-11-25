@@ -179,14 +179,19 @@ export async function pullFromGitHub(
       if (resolution === 'merged') {
         // マージを反映した: リモートの内容を取り込み終えたので、通常の Pull 成功と同じく
         // 完了扱いにする。ローカル側の変更はリモートに対する未 Push の変更として dirty のまま
-        // 残る（Push / auto-push で送られる）。起動時も Push はしない。
+        // 残る（Push / auto-push で送られる）。通常時の pull-dirty も起動時の startup-dirty も
+        // 同じ扱いで、どちらも Push はしない。
         appState.isPullCompleted = true
         appState.isFirstPriorityFetched = true
-        // Pull 成功時（onPriorityComplete）と同じく URL から画面を復元する。起動時は先読み込みで
-        // 復元を省いているため、ここで行う。await しない（復元はこの Pull の終了を待つため）
-        void Promise.resolve()
-          .then(() => appActions.restoreStateFromUrl())
-          .catch((e) => console.error('restoreStateFromUrl failed:', e))
+        // 画面の復元は1か所に寄せる: 開いていたノート/リーフの差し替えと、それが消えたときの
+        // URL からの復元は applyConflictMerge が全経路で行う。起動時だけは先読み込みで URL 復元を
+        // 省いている（ペインが空のまま）ので、ここで復元する。await しない（復元はこの Pull の
+        // 終了を待つため）
+        if (isInitialStartup) {
+          void Promise.resolve()
+            .then(() => appActions.restoreStateFromUrl())
+            .catch((e) => console.error('restoreStateFromUrl failed:', e))
+        }
         return
       }
       if (resolution === 'recompare') {

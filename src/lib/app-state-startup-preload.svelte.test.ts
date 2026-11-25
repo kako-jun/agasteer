@@ -22,6 +22,7 @@ const h = vi.hoisted(() => {
     leaves: s<unknown[]>([]),
     isPulling: s(false),
     isPushing: s(false),
+    isPushingBackground: s(false),
     isStructureDirty: s(false),
     getPersistedDirtyFlag: vi.fn(() => true),
     rebuild: vi.fn(),
@@ -117,7 +118,7 @@ vi.mock('./stores', () => ({
   settings: vstore({ token: '', repoName: '', branch: 'main' }),
   isPulling: h.isPulling,
   isPushing: h.isPushing,
-  isPushingBackground: vstore(false),
+  isPushingBackground: h.isPushingBackground,
   githubConfigured: vstore(false),
   isDirty: vstore(false),
   isStructureDirty: h.isStructureDirty,
@@ -169,7 +170,10 @@ vi.mock('./utils', () => ({
 }))
 vi.mock('./startup-cache', () => ({ shouldUseStartupCache: vi.fn(() => false) }))
 vi.mock('./actions/conflict-dialog', () => ({ showConflictDialog: vi.fn() }))
-vi.mock('./actions/conflict-resolve', () => ({ resolveConflict: h.resolveConflict }))
+vi.mock('./actions/conflict-resolve', () => ({
+  resolveConflict: h.resolveConflict,
+  isResolvingConflict: () => false,
+}))
 vi.mock('./sync/constants', () => ({
   PUSH_HANG_THRESHOLD_MS: 60_000,
   RESUME_RETRY_BACKOFFS_MS: [1000],
@@ -224,6 +228,7 @@ beforeEach(() => {
   h.leaves.value = []
   h.isPulling.value = false
   h.isPushing.value = false
+  h.isPushingBackground.value = false
   h.isStructureDirty.value = false
   h.getPersistedDirtyFlag.mockReturnValue(true)
   h.rebuild.mockImplementation(() => {})
@@ -348,16 +353,92 @@ describe('#321 push-hang の競合解決中のロック', () => {
     teardown()
   })
 
-  it('Pull を選んだときも Pull の前に解放する', async () => {
-    const { deps, teardown } = await startAndTriggerHang('pull')
+  it('Pull を選んだときも Pull の前に解放する（解決中は isPushing が立っている）', async () => {
+    const { deps, teardown, pushingDuringResolve } = await startAndTriggerHang('pull')
     let pushingAtPull: boolean | undefined
     deps.pullFromGitHub.mockImplementation(async () => {
       pushingAtPull = h.isPushing.value
     })
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
+    expect(pushingDuringResolve()).toBe(true)
     expect(pushingAtPull).toBe(false)
     teardown()
   })
+
+  it('S1: 解決中に visibility 復帰が起きても、ダイアログは再入せずロックも外れない', async () => {
+    let finish: (v: string) => void = () => {}
+    h.resolveConflict.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve
+        })
+    )
+    h.getPersistedDirtyFlag.mockReturnValue(false)
+    const { initApp, appState } = await import('./app-state.svelte')
+    const deps = makeDeps(async () => {})
+    const teardown = initApp(deps)
+    await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
+    deps.pullFromGitHub.mockClear()
+
+    h.isPushing.value = true
+    h.getPushInFlightAt.mockReturnValue(Date.now() - 120_000)
+    h.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'base-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+    h.applyStaleResult.mockReturnValue('stale-dirty')
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(h.resolveConflict).toHaveBeenCalledTimes(1))
+    expect(h.isPushing.value).toBe(true)
+
+    // 解決中（ダイアログ表示中）にアプリを切り替えて戻る。飛行中フラグは古いまま
+    document.dispatchEvent(new Event('visibilitychange'))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(h.resolveConflict).toHaveBeenCalledTimes(1)
+    expect(h.isPushing.value).toBe(true)
+    expect(appState.pushHangRecovered).toBe(false)
+
+    finish('merged')
+    await vi.waitFor(() => expect(deps.pushToGitHub).toHaveBeenCalledTimes(1))
+    expect(h.isPushing.value).toBe(false)
+    teardown()
+  })
+
+  it.each(['isPulling', 'isPushing', 'isPushingBackground', 'isArchiveLoading'] as const)(
+    'S2: 他の同期中（%s）なら解決も Push / Pull もせず、push-hang フラグは消費される',
+    async (busy) => {
+      h.getPersistedDirtyFlag.mockReturnValue(false)
+      const { initApp, appState } = await import('./app-state.svelte')
+      const deps = makeDeps(async () => {})
+      const teardown = initApp(deps)
+      await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
+      deps.pullFromGitHub.mockClear()
+
+      h.isPushing.value = true
+      h.getPushInFlightAt.mockReturnValue(Date.now() - 120_000)
+      // ハング検出で isPushing / isPushingBackground は落とされるので、別の同期は stale check の
+      // 間に始まったことにする
+      h.executeStaleCheck.mockImplementation(async () => {
+        if (busy === 'isArchiveLoading') appState.isArchiveLoading = true
+        else h[busy].value = true
+        return { status: 'stale', localCommitSha: 'base-sha', remoteCommitSha: 'remote-sha' }
+      })
+      h.applyStaleResult.mockReturnValue('stale-dirty')
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.waitFor(() => expect(h.executeStaleCheck).toHaveBeenCalled())
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(h.resolveConflict).not.toHaveBeenCalled()
+      expect(deps.pushToGitHub).not.toHaveBeenCalled()
+      expect(deps.pullFromGitHub).not.toHaveBeenCalled()
+      expect(appState.pushHangRecovered).toBe(false)
+      appState.isArchiveLoading = false
+      teardown()
+    }
+  )
 
   it('解決が例外で終わってもロックを残さない', async () => {
     const { deps, teardown } = await startAndTriggerHang('cancel')

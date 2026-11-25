@@ -53,6 +53,11 @@ vi.mock('../stores', () => ({
   refreshDirtyState: mocks.refreshDirtyState,
   syncLeafEditors: mocks.syncLeafEditors,
 }))
+// blob SHA の計算は本物の crypto.subtle だと fake timer 下で進み方が読めない（負荷で
+// fetchCommitSnapshot の呼び出しが時間を進めた後になり flaky になった）ため、決定的な値に差し替える
+vi.mock('../api/github/sha', () => ({
+  calculateGitBlobSha: vi.fn(async (content: string) => `sha:${content}`),
+}))
 vi.mock('../data', () => ({
   saveNotes: mocks.saveNotes,
   saveLeaves: mocks.saveLeaves,
@@ -426,6 +431,8 @@ describe('analyzeConflictMerge（レビュー指摘の追加分）', () => {
         }
       )
       const pending = analyzeConflictMerge(stale, settings)
+      // 時間を進める前に、比較が通信（fetchCommitSnapshot）まで到達したことを待つ
+      await vi.waitFor(() => expect(mocks.fetchCommitSnapshot).toHaveBeenCalled())
       await vi.advanceTimersByTimeAsync(20_000)
       expect(await pending).toEqual({ status: 'unavailable', reason: 'timeout' })
       expect(signal?.aborted).toBe(true)

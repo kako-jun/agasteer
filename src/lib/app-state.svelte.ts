@@ -96,7 +96,7 @@ import {
   alertAsync,
 } from './ui'
 // #321: 競合ダイアログは全経路共通の resolveConflict（比較 → ダイアログ → マージ反映）を通す
-import { resolveConflict } from './actions/conflict-resolve'
+import { resolveConflict, isResolvingConflict } from './actions/conflict-resolve'
 import type { PushToGitHubOptions } from './actions/git'
 import { PUSH_HANG_THRESHOLD_MS, RESUME_RETRY_BACKOFFS_MS } from './sync/constants'
 import { runResumeStaleCheckRetry } from './sync/resume-retry'
@@ -1092,11 +1092,17 @@ export function initApp(deps: InitAppDeps): () => void {
    * マージを反映したら（比較後に変化があった場合も）Push をやり直す（stale-push と同じ）。
    * cancel/null・反映失敗は何もしない（applyStaleResult で立てた赤バッジに任せる）。
    */
+  // push-hang の解決中（ロックを取ってから解放するまで）。resolveConflict 自身の
+  // isResolvingConflict() と合わせて、visibility 復帰のハング検出・この関数の再入を止める
+  let resolvingPushHang = false
+  const isConflictResolutionActive = () => resolvingPushHang || isResolvingConflict()
+
   const promptPushHangRecovery = async (staleResult: StaleCheckResult) => {
     // 他の経路と同じく、解決中（比較・ダイアログ・マージ反映）は isPushing を立てて
-    // 別の Push / Pull が割り込まないようにする。別の同期が走っていて取れないときは
-    // ダイアログを出さない（applyStaleResult が立てた赤バッジに任せる）。
+    // 別の Push / Pull が割り込まないようにする。別の同期が走っていて取れないときや、
+    // すでに解決中のときはダイアログを出さない（applyStaleResult が立てた赤バッジに任せる）。
     if (
+      isConflictResolutionActive() ||
       isPulling.value ||
       isPushing.value ||
       isPushingBackground.value ||
@@ -1105,6 +1111,7 @@ export function initApp(deps: InitAppDeps): () => void {
       return
     }
     isPushing.value = true
+    resolvingPushHang = true
     let resolution: Awaited<ReturnType<typeof resolveConflict>>
     try {
       resolution = await resolveConflict({
@@ -1116,6 +1123,7 @@ export function initApp(deps: InitAppDeps): () => void {
       })
     } finally {
       // Push / Pull を呼ぶ前に必ず解放する（それぞれが自分でロックを取る）
+      resolvingPushHang = false
       isPushing.value = false
     }
     if (resolution === 'pull') {
@@ -1138,7 +1146,14 @@ export function initApp(deps: InitAppDeps): () => void {
       // ため、両フラグのいずれかが立ったまま固まっているケースを救う。
       const inFlight = getPushInFlightAt()
       const pushPhaseStuck = isPushing.value || isPushingBackground.value
-      if (pushPhaseStuck && inFlight && now - inFlight > PUSH_HANG_THRESHOLD_MS) {
+      // #321: 競合の解決中は、ロックを立てているのは解決中の経路（ハングではない）なので
+      // 検出しない（外からロックを落とす・ダイアログを再入させる経路を作らない）
+      if (
+        !isConflictResolutionActive() &&
+        pushPhaseStuck &&
+        inFlight &&
+        now - inFlight > PUSH_HANG_THRESHOLD_MS
+      ) {
         console.warn(
           `Push hang detected on visibility resume (inFlight age: ${now - inFlight}ms); clearing isPushing/isPushingBackground`
         )

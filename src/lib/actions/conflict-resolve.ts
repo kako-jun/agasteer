@@ -36,7 +36,27 @@ export interface ResolveConflictParams {
  * 同じ手順を通す: 3方向比較 → ダイアログ（マージ可能ならマージを先頭）→ 選ばれたら反映。
  * 判定できないときだけ理由を出して従来の選択肢になる（経路ごとの特例は持たない）。
  */
+/** 実行中の resolveConflict の数（通常は 0 か 1） */
+let resolvingCount = 0
+
+/**
+ * 競合の解決中（比較・ダイアログ・マージ反映の間）か。visibility 復帰時のハング検出などが、
+ * 解決中の経路のロックを外から落としたり、ダイアログを再入させたりしないために使う。
+ */
+export function isResolvingConflict(): boolean {
+  return resolvingCount > 0
+}
+
 export async function resolveConflict(params: ResolveConflictParams): Promise<ConflictResolution> {
+  resolvingCount++
+  try {
+    return await resolve(params)
+  } finally {
+    resolvingCount--
+  }
+}
+
+async function resolve(params: ResolveConflictParams): Promise<ConflictResolution> {
   const $_ = get(_)
   const analysis = await analyzeConflictMerge(params.staleResult, params.settings)
   const dialogParams = {

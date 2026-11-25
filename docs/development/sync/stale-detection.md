@@ -280,7 +280,7 @@ Phase A のタイムアウト後も `executePush` の fetch チェーンは生�
 `pushHangRecovered` が立った状態で stale check の結果に応じて分岐する:
 
 - `up_to_date` → `applyStaleResult` が `pushInFlightAt` をクリア（裏で Push が成功していた、救済成功）
-- `stale` → `resolveConflict({ kind: 'push-hang' })` で 3 択 (`pull` / `push` / `cancel`)。他の経路と同じく3方向比較を通し、重ならなければ先頭に「両方の変更をマージして解決する」を出す。マージを反映したら Push をやり直す。解決の間は `isPushing` を立て、Push / Pull を呼ぶ前に finally で落とす（他の同期中ならダイアログを出さない。#321）
+- `stale` → `resolveConflict({ kind: 'push-hang' })` で 3 択 (`pull` / `push` / `cancel`)。他の経路と同じく3方向比較を通し、重ならなければ先頭に「両方の変更をマージして解決する」を出す。マージを反映したら Push をやり直す。解決の間は `isPushing` を立て、Push / Pull を呼ぶ前に finally で落とす（他の同期中・競合の解決中ならダイアログを出さない。解決中は visibility 復帰時のハング検出もしない。#321）
   - ボタン配置・並びは `stale-push` と同じ（pullFirst primary / pushOverwrite secondary / cancel）
   - 本文だけ `modal.pushHangRecovery`（「Push の応答が途切れたため状態が不明」）
   - 専用 UI を増やさず #200 の共通ヘルパーに乗せることで一貫性を保つ（#205）
