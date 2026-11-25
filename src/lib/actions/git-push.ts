@@ -6,9 +6,8 @@ import {
   clearPushToast,
   setPushToastCountdown,
 } from '../ui'
-import { showConflictDialog } from './conflict-dialog'
-// #321: 共通の基準からの3方向比較と「両方の変更をマージして解決する」
-import { analyzeConflictMerge, applyConflictMerge } from './conflict-merge'
+// #321: 競合ダイアログは全経路共通の resolveConflict（比較 → ダイアログ → マージ反映）を通す
+import { resolveConflict } from './conflict-resolve'
 import {
   settings,
   notes,
@@ -76,6 +75,12 @@ class PushTimeoutError extends Error {
  * 最新世代のコールバックだけをトーストに反映する。
  */
 let pushProgressGeneration = 0
+
+/** #321: Push 経路の競合解決の通知。エラーは完了トースト、それ以外は通常の Push トースト */
+function pushPathToast(message: string, variant: 'success' | 'error' | ''): void {
+  if (variant === 'error') showPushCompletionToast(message, 'error')
+  else showPushToast(message)
+}
 
 /**
  * pushToGitHub のオプション（#235）
@@ -208,44 +213,31 @@ export async function pushToGitHub(options?: PushToGitHubOptions): Promise<void>
         console.log(
           `Push blocked: remote(${staleResult.remoteCommitSha}) !== local(${staleResult.localCommitSha})`
         )
-        // #321: ダイアログの前に共通の基準・ローカル・リモートを比較する（読むだけ）
-        const mergeAnalysis = await analyzeConflictMerge(staleResult, settings.value)
-        // 診断情報（ローカル/リモートのpushCount・SHA）はヘルパー側で付与される
-        const choice = await showConflictDialog({
+        // #321: 比較 → ダイアログ（マージ可能ならマージを先頭）→ 反映、を全経路共通の
+        // resolveConflict で行う。診断情報（ローカル/リモートのpushCount・SHA）はダイアログ側で付与される
+        const resolution = await resolveConflict({
           kind: 'stale-push',
           staleResult,
           localPushCount: metadata.value.pushCount,
           settings: settings.value,
-          merge: mergeAnalysis,
+          toast: pushPathToast,
         })
 
-        if (choice === 'merge' && mergeAnalysis.status === 'mergeable') {
-          // #321: マージ結果をローカルに反映（ベースライン・SHA はリモートに揃う）してから
-          // Push をやり直す。比較後にリモート/ローカルが変わっていたら何も書き換えずに
-          // やり直す（再帰した Push の stale 判定で比較とダイアログがもう一度出る）。
-          const applied = await applyConflictMerge(mergeAnalysis.plan, settings.value)
-          if (applied.status === 'failed') {
-            showPushCompletionToast(
-              $_(applied.reason === 'save' ? 'modal.mergeSaveFailed' : 'modal.mergeApplyFailed'),
-              'error'
-            )
-            return
-          }
-          if (applied.status === 'changed') {
-            showPushToast($_('modal.mergeRecompare'))
-          }
-          isPushing.value = false
+        if (resolution === 'merged' || resolution === 'recompare') {
+          // マージを反映した（ベースライン・SHA はリモートに揃った）/ 比較後に変化があった:
+          // どちらも Push をやり直す（後者は再帰した Push の stale 判定で比較とダイアログが再び出る）。
           // options を引き継がないのは pull-first と同じ理由（有人操作になったため）
+          isPushing.value = false
           return appActions.pushToGitHub()
-        } else if (choice === 'pull') {
+        } else if (resolution === 'pull') {
           // Pull first: isPushingロックを解放してPull→Push
           isPushing.value = false
           await pullFromGitHub(false)
           // Pull後に再度Push（再帰呼び出し）
           // options（abortIfStaleCheckFailed）を引き継がないのは意図的: ダイアログを操作した時点で有人操作なので、再Pushは手動Push相当の既定値で続行する（#235）
           return appActions.pushToGitHub()
-        } else if (choice !== 'push') {
-          // cancel / null（モーダル外クリック等）
+        } else if (resolution !== 'push') {
+          // cancel / null（モーダル外クリック等）/ マージ反映の失敗（何も進めていない）
           return
         }
         // choice === 'push' → 続行（上書き）

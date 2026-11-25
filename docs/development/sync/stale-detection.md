@@ -48,13 +48,13 @@ Refs APIが404/409を返す場合は`empty_repository`として`up_to_date`を�
 
 手動 Push / auto-push / pull-dirty / 起動時 dirty の各経路で個別に `choiceAsync` /
 `confirmAsync` を呼んでいた実装を、共通ヘルパー `src/lib/actions/conflict-dialog.ts`
-の `showConflictDialog({ kind, ... })` に集約した。`kind` は以下の3種類:
+の `showConflictDialog({ kind, ... })` に集約した。`kind` は以下の4種類（`push-hang` は後述）:
 
 - `stale-push`: 手動 Push / auto-push 共通の stale 警告
 - `pull-dirty`: 通常時の Pull 直前 dirty 警告（3択）
 - `startup-dirty`: 起動時の Pull 直前 dirty 警告（`disablePush: true` で push first を無効化した2択）
 
-`stale-push` / `pull-dirty` では呼び出し側が3方向比較の結果（`merge`）も渡し、マージボタン・競合の一覧・判定できない理由を出す（#321）。
+#321 以降、4種類すべてが共通の入口 `resolveConflict()`（`conflict-resolve.ts`）を通り、3方向比較の結果（マージボタン・競合の一覧・判定できない理由）を同じ形で出す（[push-pull.md](./push-pull.md#競合時の3方向マージ321)）。
 ヘルパー内部で `fetchRemotePushCount` を必ず呼び、ローカル/リモートの SHA と
 pushCount を `modal.staleEditDiagnostic` 形式で本文末尾に常時付与する。これに
 より「auto-push 経路だけ pushCount が出ない」といった経路差による表示揺れが
@@ -280,7 +280,7 @@ Phase A のタイムアウト後も `executePush` の fetch チェーンは生�
 `pushHangRecovered` が立った状態で stale check の結果に応じて分岐する:
 
 - `up_to_date` → `applyStaleResult` が `pushInFlightAt` をクリア（裏で Push が成功していた、救済成功）
-- `stale` → `showConflictDialog({ kind: 'push-hang' })` で 3 択 (`pull` / `push` / `cancel`)
+- `stale` → `resolveConflict({ kind: 'push-hang' })` で 3 択 (`pull` / `push` / `cancel`)。他の経路と同じく3方向比較を通し、重ならなければ先頭に「両方の変更をマージして解決する」を出す。マージを反映したら Push をやり直す（#321）
   - ボタン配置・並びは `stale-push` と同じ（pullFirst primary / pushOverwrite secondary / cancel）
   - 本文だけ `modal.pushHangRecovery`（「Push の応答が途切れたため状態が不明」）
   - 専用 UI を増やさず #200 の共通ヘルパーに乗せることで一貫性を保つ（#205）

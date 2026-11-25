@@ -396,3 +396,53 @@ describe('mergeWorld: 件数・sameWorldContent', () => {
     ).toBe(false)
   })
 })
+
+describe('mergeWorld: tree から読んだ名前（サニタイズ済み）とローカルの元の名前 (should-1)', () => {
+  // base / リモートはファイル名から読むので「a-b」、ローカルは元の「a/b」のまま
+  const base: WorldSnapshot = { notes: [note('n1', 'Work')], leaves: [leaf('a', 'n1', 'a-b', 'x')] }
+  const local: WorldSnapshot = {
+    notes: [note('n1', 'Work')],
+    leaves: [leaf('a', 'n1', 'a/b', 'x')],
+  }
+
+  it('リモートの改名は偽の改名競合にならずに取り込む', () => {
+    const remote: WorldSnapshot = JSON.parse(JSON.stringify(base))
+    remote.leaves[0].title = 'renamed'
+    const result = mergeWorld(base, local, remote)
+    expect(result.conflicts).toEqual([])
+    expect(result.merged!.leaves[0].title).toBe('renamed')
+    expect(result.localChangeCount).toBe(0)
+  })
+
+  it('リモートの削除は「削除と編集」の競合にならずに削除を採る', () => {
+    const remote: WorldSnapshot = { notes: [note('n1', 'Work')], leaves: [] }
+    const result = mergeWorld(base, local, remote)
+    expect(result.conflicts).toEqual([])
+    expect(result.merged!.leaves).toEqual([])
+  })
+
+  it('どちらも改名していなければローカルの元の表記を残す', () => {
+    const result = mergeWorld(base, local, base)
+    expect(result.merged!.leaves[0].title).toBe('a/b')
+  })
+
+  it('sameWorldContent も正規化して比べる（11/25 memo・90文字・空白2つ）', () => {
+    const raw: WorldSnapshot = {
+      notes: [note('n1', 'Work')],
+      leaves: [
+        leaf('p', 'n1', '11/25 memo', 'p'),
+        leaf('q', 'n1', 'y'.repeat(90), 'q'),
+        leaf('r', 'n1', 'a  b', 'r'),
+      ],
+    }
+    const readBack: WorldSnapshot = {
+      notes: [note('n1', 'Work')],
+      leaves: [
+        leaf('p', 'n1', '11-25 memo', 'p'),
+        leaf('q', 'n1', 'y'.repeat(80), 'q'),
+        leaf('r', 'n1', 'a b', 'r'),
+      ],
+    }
+    expect(sameWorldContent(raw, readBack)).toBe(true)
+  })
+})

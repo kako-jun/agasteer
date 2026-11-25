@@ -1096,14 +1096,20 @@ export async function pullFromGitHub(
  *
  * @returns FetchHeadShaResult - commit SHAまたはエラー状態
  */
-export async function fetchRemoteHeadSha(settings: Settings): Promise<FetchHeadShaResult> {
+export async function fetchRemoteHeadSha(
+  settings: Settings,
+  // #321: 打ち切り用（競合マージ反映前の HEAD 確認の時間上限）。未指定なら従来どおり
+  signal?: AbortSignal
+): Promise<FetchHeadShaResult> {
   const validation = validateGitHubSettings(settings)
   if (!validation.valid) return { status: 'settings_invalid' }
+  const abort = signal ? { signal } : {}
 
   try {
     const repoRes = await fetch(`https://api.github.com/repos/${settings.repoName}`, {
       headers: { Authorization: `Bearer ${settings.token}` },
       cache: 'no-store',
+      ...abort,
     })
     if (!repoRes.ok) {
       if (repoRes.status === 401 || repoRes.status === 403) return { status: 'auth_error' }
@@ -1117,6 +1123,7 @@ export async function fetchRemoteHeadSha(settings: Settings): Promise<FetchHeadS
       {
         headers: { Authorization: `Bearer ${settings.token}` },
         cache: 'no-store',
+        ...abort,
       }
     )
     if (refRes.status === 404 || refRes.status === 409) return { status: 'empty_repository' }

@@ -25,9 +25,10 @@ Push/Pull処理は、それぞれ**1つの統合関数**に集約されていま
 
 push/pull の衝突警告は、上記プリミティブを直接呼ばず、共通ヘルパー
 `showConflictDialog({ kind, ... })`（`src/lib/actions/conflict-dialog.ts`）を経由する。
-`kind` は `'stale-push' | 'pull-dirty' | 'startup-dirty'` の3種で、
+`kind` は `'stale-push' | 'pull-dirty' | 'startup-dirty' | 'push-hang'` の4種で、
 ヘルパー内部で `fetchRemotePushCount` を呼びローカル/リモートの SHA + pushCount を
-本文末尾に常時付与する（#200 / #201 / #202）。
+本文末尾に常時付与する（#200 / #201 / #202）。#321 以降、4経路とも `resolveConflict()`
+（`src/lib/actions/conflict-resolve.ts`。3方向比較 → ダイアログ → マージ反映）から呼ばれる。
 
 従来のコールバック版（`showConfirm`）では、ダイアログ表示中にロックを解放する必要がありましたが、Promise版では`await`で待機することでロックを保持したまま処理を継続できます。
 
@@ -310,10 +311,26 @@ Pull処理中（第一優先完了後）にユーザーが編集を行った場�
 
 ## 競合時の3方向マージ（#321）
 
-Push の stale ダイアログ（`stale-push`）と Pull の dirty ダイアログ（`pull-dirty`）では、ダイアログを出す前に
-**共通の基準（base）**・ローカル・リモートを比較し、両方の変更を安全に取り込めるときだけ
-「両方の変更をマージして解決する」を先頭の主ボタンとして出す（従来の主ボタンは副に下がる）。
+競合ダイアログが出る**全経路**（Push の stale `stale-push`・Pull の dirty `pull-dirty`・起動時の未 Push 確認 `startup-dirty`・
+Push ハング復旧 `push-hang`）で、共通の入口 `resolveConflict()`（`conflict-resolve.ts`）が同じ手順を通す:
+ダイアログを出す前に **共通の基準（base）**・ローカル・リモートを比較し、両方の変更を安全に取り込めるときは
+「両方の変更をマージして解決する」を先頭の主ボタンとして出す（従来の主ボタンは副に下がる）。選ばれたら反映する。
+判定できないときだけ理由を出して従来の選択肢になる。経路ごとの特例は持たず、続き（再 Push / Pull 完了 / やり直し）だけを呼び出し側が結果で決める。
 手動 Push と auto-push は同じ preflight を通るので、どちらでも同じ比較が走る。
+
+| 経路            | マージ以外の選択肢                                | マージ反映後                                                             |
+| --------------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
+| `stale-push`    | Pull first / Push 上書き / キャンセル             | Push をやり直す                                                          |
+| `push-hang`     | 同上                                              | Push をやり直す                                                          |
+| `pull-dirty`    | Pull 上書き / Push first / キャンセル             | Pull 完了（ローカル変更は dirty のまま）                                 |
+| `startup-dirty` | Pull 上書き / キャンセル（Push first は出さない） | Pull 完了（Push はしない。ローカル変更は dirty のまま。Pull 経路と同じ） |
+
+- **起動時**: `initApp` は dirty なキャッシュ（前回の未 Push の変更）があると、先にそれをストアへ読み込んでから起動時 Pull を始める
+  （従来はキャンセル時に読み込んでいた。キャンセル時はすでに読み込み済みなので、そのまま操作可能）。これで起動時も他の経路と同じく
+  ストアのローカルを比べられる
+- **リモートが進んでいない（`up_to_date`）とき**（起動時の未 Push 確認など）も比較を通す。base とリモートはどちらも
+  `lastKnownCommitSha` のコミットになり、ローカルの変更だけが取り込まれる（反映でベースラインがそのコミットに揃う）。
+  `lastKnownCommitSha` が無い（一度も同期していない）なら `baseUnavailable`
 
 ### base の取り方
 
@@ -329,6 +346,10 @@ Push の stale ダイアログ（`stale-push`）と Pull の dirty ダイアロ�
     そこで、アーカイブのベースライン（ロード時 / Push 時に `setArchiveBaseline` / `setLastPushedSnapshot` で控えた内容、`getArchiveBaseline()`）が
     base コミットのアーカイブと内容で一致しないときは `archiveOutOfDate`（判定不能）にする。ロード時の SHA を記録する方式は、
     `pullArchive` が SHA を持たずに読むため記録と永続化を新たに足す必要があり、内容の一致を直接確かめる方が小さく確実なためこちらを採った
+- 既知の限界: 通常の Pull はアーカイブのベースラインを、その時点のローカルのアーカイブで上書きする（`setLastPushedSnapshot(..., archiveNotes.value, archiveLeaves.value)`。既存挙動）。
+  アーカイブをロードした後でリモートのアーカイブが変わり、その後に Pull すると、ベースラインと新しい base が一致しないまま残るため、
+  アーカイブがロード済みの間は比較が `archiveOutOfDate`（判定不能・従来の選択肢）になり続ける。アプリを読み込み直すとアーカイブは未ロードに戻り解消する。
+  直すには Pull 時にアーカイブも取り直す（または未ロードに戻す）変更が要り、アーカイブ表示中の状態の扱いを含めて影響が広いため、今回は直していない
 - 通常の Pull（`pullFromGitHub`）は従来どおり tree をブランチ名、本文を Contents API のパスで読むため、読んでいる間にリモートが進むと
   別コミットの内容が混ざる窓が残る（既知の限界。tree だけ SHA 指定にしても本文側に同じ窓が残る）。3方向比較はすべて SHA 指定で読むので、この窓の影響を受けない
 - 比較の通信には上限（`MERGE_COMPARE_TIMEOUT_MS` = 20 秒、`sync/constants.ts`）がある。超えたら `AbortController` で打ち切り、
@@ -351,6 +372,9 @@ Push の stale ダイアログ（`stale-push`）と Pull の dirty ダイアロ�
 
 - 行単位の差分は自前の Myers 差分（依存追加なし）。共通の先頭・末尾を除いてから差分を取り、編集距離が 2000（`MAX_EDIT_DISTANCE`）を超える大きな書き換えは
   中間部分を「全体が変更された」と扱う。そのため、片側が大きく書き換えたリーフをもう片側も編集していると、離れた行でも競合になる（安全側）
+- 名前（リーフのタイトル・ノート名）の比較は、Push の正規化（`sanitizePathPart`）を通して行う。base / リモートは tree のファイル名から
+  読むためサニタイズ済み（例: `11/25 memo` → `11-25 memo`、90文字 → 80文字、`a  b` → `a b`）で、ローカルは元の名前のままなので、
+  そのまま比べると偽の改名・偽の「削除と編集」になる。採る値は元の名前（ローカルの表記を優先）。アーカイブのベースライン比較（`sameWorldContent`）も同じ
 - 同名衝突は表示名でなく、Push が実際に書き込むパス（`getFolderPath` / `buildPath`。リーフ名の `\/:*?"<>|#` を `-` に、連続空白を1つにし、80文字で切る）で判定する。
   表示名が違っても実パスが重なれば片方が黙って失われるため（例: 「TODO: x」と「TODO- x」）
 - Priority（仮想リーフ）のバッジは metadata にだけある。片側だけの変更ならその側、双方が別の値に変えたら競合
@@ -364,7 +388,7 @@ Push の stale ダイアログ（`stale-push`）と Pull の dirty ダイアロ�
 `timeout`（比較の通信が上限内に終わらない）、`tooLarge`（tree が truncated）、`rateLimited`、`failed`（予期しない例外）。
 既知の限界: ノート名に `:` などサニタイズ対象の文字を含むリポでは、metadata のキー（Push 側の生の名前）と Pull 側の名前（サニタイズ後）が食い違い、
 base が `untracked` と判定されて毎回マージ不可になる（既存のパス処理の不一致による。結果は安全側）。
-初回 Pull 前の `up_to_date` では比べる基準が無いので比較しない。起動時（`startup-dirty`）と Push ハング復旧（`push-hang`）も対象外。
+全経路で同じ扱い（経路による対象外は無い）。
 
 ### ダイアログの表示
 
@@ -376,7 +400,9 @@ base が `untracked` と判定されて毎回マージ不可になる（既存�
 
 1. リモート HEAD を読み直し（上限 `MERGE_HEAD_CHECK_TIMEOUT_MS` = 10 秒。超えたら `failed(remote)`）、比較時の SHA と違えば何も書き換えずに `changed`。ローカルが比較時の内容から変わっていても同様
 2. マージ結果を **先に IndexedDB へ保存して待つ**。失敗したら SHA・ベースライン・ストアを一切進めずに `failed(save)`（保存失敗の文言で知らせる）。
-   SHA を先に進めると、保存失敗や強制終了で「SHA は新しいのに中身は古い」状態になり、次の比較で相手の変更を失うため
+   SHA を先に進めると、保存失敗や強制終了で「SHA は新しいのに中身は古い」状態になり、次の比較で相手の変更を失うため。
+   一部だけ保存できた場合や、保存の後でローカルが変わっていた（`changed(local)`）場合は IndexedDB がマージ結果のまま残るので、
+   現在のメモリ（ノート・リーフ・ロード済みならアーカイブ）でベストエフォートに保存し直してから返す
 3. ローカルのストア＝マージ結果（保存対象外の仮想ノート配下はそのまま残す）、ベースライン＝リモート、`lastKnownCommitSha`＝リモート SHA、
    `metadata`＝リモートの metadata を await を挟まずに一度に書き換える。`refreshDirtyState()` でローカル側の変更がリモートに対する dirty として残る
 4. 開いているペインのノート/リーフは新しいオブジェクトに差し替え、本文が変わったリーフはエディタへ流す。開いていたものがマージで消えた場合は Pull と同じく URL から復元する
@@ -386,10 +412,10 @@ base が `untracked` と判定されて毎回マージ不可になる（既存�
 - **Push**: 反映後に Push をやり直す（stale 判定から通常どおり）。`changed` のときもやり直し、再帰した Push の stale 判定で比較とダイアログがもう一度出る。リモート確認自体に失敗したら何もせず終える
 - **Pull**: 反映で Pull を完了する（`isPullCompleted = true`。全件の取り直しはしない）。ローカル側の変更は未 Push のまま残り、通常の Push / auto-push で送られる。`changed` のときは最初からやり直す
 
-キャンセル・比較失敗・反映前のリモート確認失敗・保存失敗ではストアと SHA を一切書き換えない。反映後の Push が失敗しても、マージ結果は dirty として手元に残る。
+キャンセル・比較失敗・反映前のリモート確認失敗・保存失敗ではストア・ベースライン・SHA を書き換えない（IndexedDB は上記のとおりメモリの内容に戻す）。反映後の Push が失敗しても、マージ結果は dirty として手元に残る。
 
 テスト: `three-way-merge.test.ts`（diff3・ノート/リーフ単位）、`snapshot.test.ts`、`conflict-merge.test.ts`（比較・反映・比較後の変化）、
-`conflict-dialog.test.ts`（表示）、`git.test.ts`（Push / Pull 両経路）。
+`conflict-dialog.test.ts`（表示）、`conflict-resolve.test.ts`（4経路で同じ比較・マージ・判定不能の扱い）、`git.test.ts`（Push / Pull / 起動時の続き）。
 
 ## 自動Push処理
 

@@ -34,8 +34,8 @@ const mocks = vi.hoisted(() => ({
   archiveRebuild: vi.fn(),
   rebuildLeafStats: vi.fn(),
   restoreStateFromUrl: vi.fn(async () => {}),
-  saveNotes: vi.fn(async () => {}),
-  saveLeaves: vi.fn(async () => {}),
+  saveNotes: vi.fn(async (_items?: unknown) => {}),
+  saveLeaves: vi.fn(async (_items?: unknown) => {}),
   saveArchiveNotes: vi.fn(async () => {}),
   saveArchiveLeaves: vi.fn(async () => {}),
 }))
@@ -501,5 +501,115 @@ describe('analyzeConflictMerge（レビュー指摘の追加分）', () => {
     expect(analysis.conflicts).toEqual([
       { world: 'home', kind: 'attribute', target: 'leaf', path: 'Priority', field: 'badge' },
     ])
+  })
+})
+
+describe('全経路対応・保存の整合（追加分）', () => {
+  it('up_to_date（起動時の未 Push 確認など）は最後に同期したコミットを base とリモートの両方に使う', async () => {
+    const local = baseWorld()
+    local.leaves[1].content = 'local only'
+    setLocal(local)
+    mocks.fetchCommitSnapshot.mockImplementation(async (_s: unknown, sha: string) =>
+      snapshot(sha, baseWorld())
+    )
+
+    const analysis = await analyzeConflictMerge({ status: 'up_to_date' }, settings)
+
+    expect(mocks.fetchCommitSnapshot.mock.calls.map((c) => c[1])).toEqual(['base-sha', 'base-sha'])
+    expect(analysis.status).toBe('mergeable')
+    if (analysis.status !== 'mergeable') return
+    expect(analysis.plan.remoteSha).toBe('base-sha')
+    expect(analysis.plan.home.merged.leaves.find((l) => l.id === 'b')?.content).toBe('local only')
+  })
+
+  it('up_to_date でも最後に同期したコミットが無ければ判定不能', async () => {
+    stores.lastKnownCommitSha.value = null
+    expect(await analyzeConflictMerge({ status: 'up_to_date' }, settings)).toEqual({
+      status: 'unavailable',
+      reason: 'baseUnavailable',
+    })
+  })
+
+  async function mergeablePlan2() {
+    setupMergeable()
+    const analysis = await analyzeConflictMerge(stale, settings)
+    if (analysis.status !== 'mergeable') throw new Error('expected mergeable')
+    return analysis.plan
+  }
+
+  it('should-2: 保存が一部だけ失敗したら、IndexedDB を現在のメモリの内容で保存し直す', async () => {
+    const plan = await mergeablePlan2()
+    mocks.fetchRemoteHeadSha.mockResolvedValue({ status: 'success', commitSha: 'remote-sha' })
+    mocks.saveLeaves.mockRejectedValueOnce(new Error('quota'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const memoryLeaves = JSON.parse(JSON.stringify(stores.leaves.value))
+
+    expect(await applyConflictMerge(plan, settings)).toEqual({ status: 'failed', reason: 'save' })
+    // 1回目: マージ結果（notes は成功・leaves は失敗）、2回目: メモリの内容で保存し直し
+    expect(mocks.saveNotes).toHaveBeenCalledTimes(2)
+    expect(mocks.saveLeaves).toHaveBeenCalledTimes(2)
+    expect(mocks.saveNotes.mock.calls[1][0]).toEqual(stores.notes.value)
+    expect(mocks.saveLeaves.mock.calls[1][0]).toEqual(memoryLeaves)
+    spy.mockRestore()
+  })
+
+  it('should-2: 保存の後でローカルが変わっていたら、反映せずメモリの内容で保存し直す', async () => {
+    const plan = await mergeablePlan2()
+    mocks.fetchRemoteHeadSha.mockResolvedValue({ status: 'success', commitSha: 'remote-sha' })
+    mocks.saveLeaves.mockImplementationOnce(async () => {
+      stores.leaves.value[1].content = 'typed during save'
+    })
+
+    expect(await applyConflictMerge(plan, settings)).toEqual({ status: 'changed', side: 'local' })
+    expect(stores.lastKnownCommitSha.value).toBe('base-sha')
+    const lastSaved = mocks.saveLeaves.mock.calls.at(-1)![0] as Leaf[]
+    expect(lastSaved.find((l) => l.id === 'b')?.content).toBe('typed during save')
+  })
+
+  it('nit: 反映前の HEAD 確認は時間上限で通信も打ち切る（signal を渡す）', async () => {
+    const plan = await mergeablePlan2()
+    vi.useFakeTimers()
+    try {
+      let signal: AbortSignal | undefined
+      mocks.fetchRemoteHeadSha.mockImplementation((_s: unknown, sig: AbortSignal) => {
+        signal = sig
+        return new Promise(() => {})
+      })
+      const pending = applyConflictMerge(plan, settings)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(await pending).toEqual({ status: 'failed', reason: 'remote' })
+      expect(signal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('should-1: アーカイブのタイトルを Push の正規化で比べる（11/25 memo・90文字・空白2つ が読み戻しと一致）', async () => {
+    setLocal(baseWorld())
+    stores.isArchiveLoaded.value = true
+    const long = 'x'.repeat(90)
+    const raw = [
+      leaf('p', 'o1', '11/25 memo', 'p'),
+      leaf('q', 'o1', long, 'q'),
+      leaf('r', 'o1', 'a  b', 'r'),
+    ]
+    stores.archiveNotes.value = [note('o1', 'Old')]
+    stores.archiveLeaves.value = raw
+    mocks.getArchiveBaseline.mockReturnValue({ notes: [note('o1', 'Old')], leaves: raw })
+    // tree から読み戻すとファイル名（サニタイズ後）がタイトルになる
+    const readBack = world(
+      [note('o1', 'Old')],
+      [
+        leaf('p', 'o1', '11-25 memo', 'p'),
+        leaf('q', 'o1', 'x'.repeat(80), 'q'),
+        leaf('r', 'o1', 'a b', 'r'),
+      ]
+    )
+    mocks.fetchCommitSnapshot.mockImplementation(async (_s: unknown, sha: string) =>
+      snapshot(sha, baseWorld(), { archive: readBack })
+    )
+
+    const analysis = await analyzeConflictMerge(stale, settings)
+    expect(analysis.status).toBe('mergeable')
   })
 })

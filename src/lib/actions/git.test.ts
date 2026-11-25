@@ -2026,7 +2026,7 @@ describe('競合時の「両方の変更をマージして解決する」 (#321)
 
     await pullFromGitHub(false)
 
-    expect(mocks.showPullToast).toHaveBeenCalledWith('modal.mergeRecompare')
+    expect(mocks.showPullToast).toHaveBeenCalledWith('modal.mergeRecompare', '')
     expect(mocks.executeStaleCheck).toHaveBeenCalledTimes(2)
     expect(mergeMocks.analyzeConflictMerge).toHaveBeenCalledTimes(2)
     expect(mocks.choiceAsync).toHaveBeenCalledTimes(2)
@@ -2034,14 +2034,50 @@ describe('競合時の「両方の変更をマージして解決する」 (#321)
     expect(stores.isPulling.value).toBe(false)
   })
 
-  it('Pull: 初回 Pull 前の up_to_date では比較しない（基準が無い）', async () => {
+  it('Pull: 初回 Pull 前（up_to_date）でも同じ比較を通す（判定は比較側に任せる）', async () => {
     appState.isPullCompleted = false
     mocks.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
     mocks.choiceAsync.mockResolvedValue('cancel')
 
     await pullFromGitHub(false)
 
-    expect(mergeMocks.analyzeConflictMerge).not.toHaveBeenCalled()
+    expect(mergeMocks.analyzeConflictMerge).toHaveBeenCalledWith(
+      { status: 'up_to_date' },
+      stores.settings.value
+    )
+  })
+
+  it('startup-dirty: マージ可能なら [マージ, Pull, キャンセル]（Push first は出さない）で、マージ後は Push せず Pull 完了', async () => {
+    appState.isPullCompleted = false
+    mocks.choiceAsync.mockResolvedValue('merge')
+    const onCancel = vi.fn()
+
+    await pullFromGitHub(true, onCancel, stale)
+
+    const [body, options] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.unsavedChangesOnStartup')
+    expect(options.map((o: { value: string }) => o.value)).toEqual(['merge', 'pull', 'cancel'])
+    expect(mergeMocks.applyConflictMerge).toHaveBeenCalledWith(plan, stores.settings.value)
+    expect(appState.isPullCompleted).toBe(true)
+    expect(mocks.pushToGitHub).not.toHaveBeenCalled()
+    expect(mocks.executePull).not.toHaveBeenCalled()
+    expect(onCancel).not.toHaveBeenCalled()
+    expect(stores.isPulling.value).toBe(false)
+  })
+
+  it('startup-dirty: 判定不能なら理由を出して従来の2択、キャンセルで onCancel', async () => {
+    mergeMocks.analyzeConflictMerge.mockResolvedValue({
+      status: 'unavailable',
+      reason: 'baseUnavailable',
+    })
+    mocks.choiceAsync.mockResolvedValue('cancel')
+    const onCancel = vi.fn()
+
+    await pullFromGitHub(true, onCancel, stale)
+
+    const [, options] = mocks.choiceAsync.mock.calls[0]
+    expect(options.map((o: { value: string }) => o.value)).toEqual(['pull', 'cancel'])
+    expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
   it('Push / Pull: 保存に失敗したら保存失敗の文言で知らせ、続きの Push はしない', async () => {

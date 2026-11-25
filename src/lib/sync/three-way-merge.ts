@@ -16,7 +16,7 @@
 
 import type { Leaf, Note } from '../types'
 // 同名衝突は Push が実際に書き込むパス（サニタイズ・80文字切り込み）で判定する
-import { buildPath, getFolderPath } from '../api/github/paths'
+import { buildPath, getFolderPath, sanitizePathPart } from '../api/github/paths'
 
 // ============================================
 // 行単位の差分（Myers）
@@ -280,13 +280,23 @@ function badgeOf(x: { badgeIcon?: string; badgeColor?: string }): string {
   return `${x.badgeIcon ?? ''}|${x.badgeColor ?? ''}`
 }
 
+/**
+ * 名前の比較キー。base / リモートはコミットの tree（ファイル名・フォルダ名）から読むため、
+ * Push 時のサニタイズ（`\/:*?"<>|#` → `-`、連続空白を1つ、80文字切り）を通った名前になる。
+ * ローカルは元の名前のままなので、同じ正規化を通してから比べる（`11/25 memo` と
+ * `11-25 memo` を「改名」と誤認しない）。ノート名も Pull 側で同じ関数を通る。
+ */
+const nameKey = (name: string) => sanitizePathPart(name)
+
 function noteEdited(a: Note, b: Note): boolean {
-  return a.name !== b.name || a.parentId !== b.parentId || badgeOf(a) !== badgeOf(b)
+  return (
+    nameKey(a.name) !== nameKey(b.name) || a.parentId !== b.parentId || badgeOf(a) !== badgeOf(b)
+  )
 }
 
 function leafEdited(a: Leaf, b: Leaf): boolean {
   return (
-    a.title !== b.title ||
+    nameKey(a.title) !== nameKey(b.title) ||
     a.noteId !== b.noteId ||
     a.content !== b.content ||
     badgeOf(a) !== badgeOf(b)
@@ -300,6 +310,22 @@ function noteChanged(a: Note, b: Note): boolean {
 
 function leafChanged(a: Leaf, b: Leaf): boolean {
   return leafEdited(a, b) || a.order !== b.order
+}
+
+/**
+ * 名前用の pick3。比較は正規化したキーで行い、採る値は元の名前（ローカルの表記を優先）。
+ */
+function pickName(
+  base: string,
+  local: string,
+  remote: string
+): { value: string; conflict: boolean } {
+  const b = nameKey(base)
+  const l = nameKey(local)
+  const r = nameKey(remote)
+  if (l === r || r === b) return { value: local, conflict: false }
+  if (l === b) return { value: remote, conflict: false }
+  return { value: local, conflict: true }
 }
 
 /** 片側だけの変更を採る（両側が別の値に変えたら conflict=true） */
@@ -352,7 +378,7 @@ export function mergeWorld(
     const r = remoteNotes.get(id)
     if (l && r) {
       const ref = b ?? r
-      const name = pick3(ref.name, l.name, r.name)
+      const name = pickName(ref.name, l.name, r.name)
       const parentId = pick3(ref.parentId, l.parentId, r.parentId)
       const badge = pick3(badgeOf(ref), badgeOf(l), badgeOf(r))
       const order = pick3(ref.order, l.order, r.order)
@@ -432,7 +458,7 @@ export function mergeWorld(
       const path = leafPath(l, local.notes)
       // base に無い同一 ID（通常は起こらない）: 空の base として扱う
       const ref: Leaf = b ?? { ...r, title: '', content: '', noteId: '' }
-      const title = pick3(ref.title, l.title, r.title)
+      const title = pickName(ref.title, l.title, r.title)
       const noteId = pick3(ref.noteId, l.noteId, r.noteId)
       const badge = pick3(badgeOf(ref), badgeOf(l), badgeOf(r))
       const order = pick3(ref.order, l.order, r.order)
@@ -576,12 +602,17 @@ function orderedIds(...lists: ReadonlyArray<readonly { id: string }[]>): string[
  * 2つのワールドの内容が同じか（ID ごとに名前・親・バッジ・並び順・本文を比べる。
  * updatedAt / blobSha は比べない）。#321: ロード済みアーカイブが base コミットから
  * 読まれたものかの確認に使う。
+ *
+ * - 名前は Push の正規化（`nameKey`）を通して比べる（tree から読んだ側はサニタイズ済み）
+ * - parentId の undefined と null、バッジの undefined と '' は同じものとして扱う。
+ *   metadata.json は undefined のバッジを書かず、読み戻すと undefined / 欠落になるため、
+ *   「値が無い」の表し方の違いを内容の違いと誤認しない
  */
 export function sameWorldContent(a: WorldSnapshot, b: WorldSnapshot): boolean {
   const noteKey = (n: Note) =>
-    JSON.stringify([n.id, n.name, n.parentId ?? null, badgeOf(n), n.order])
+    JSON.stringify([n.id, nameKey(n.name), n.parentId ?? null, badgeOf(n), n.order])
   const leafKey = (l: Leaf) =>
-    JSON.stringify([l.id, l.title, l.noteId, l.content, badgeOf(l), l.order])
+    JSON.stringify([l.id, nameKey(l.title), l.noteId, l.content, badgeOf(l), l.order])
   const keys = <T>(xs: readonly T[], f: (x: T) => string) => xs.map(f).sort().join('\n')
   return (
     keys(a.notes, noteKey) === keys(b.notes, noteKey) &&

@@ -103,11 +103,15 @@ export type MergeAnalysis =
 
 export type ApplyMergeResult =
   | { status: 'applied' }
-  /** 比較後にリモートが進んだ / ローカルが変わった（何も書き換えていない。再比較が必要） */
+  /**
+   * 比較後にリモートが進んだ / ローカルが変わった。ストア・ベースライン・SHA は
+   * 書き換えていない（IndexedDB はメモリの内容で保存し直してある）。再比較が必要
+   */
   | { status: 'changed'; side: 'remote' | 'local' }
   /**
-   * 何も書き換えていない。reason='remote': 反映前のリモート確認に失敗した /
-   * reason='save': IndexedDB への保存に失敗した（SHA・ベースラインも進めていない）
+   * ストア・ベースライン・SHA は書き換えていない。reason='remote': 反映前のリモート確認に
+   * 失敗した / reason='save': IndexedDB への保存に失敗した（IndexedDB はメモリの内容で
+   * ベストエフォートに保存し直してある）
    */
   | { status: 'failed'; reason: 'remote' | 'save' }
 
@@ -208,12 +212,16 @@ async function analyze(
   settings: Settings,
   signal: AbortSignal
 ): Promise<MergeAnalysis> {
-  if (!staleResult || staleResult.status !== 'stale') {
+  // 比べる2つのコミット。stale ならリモート HEAD と最後に同期したコミット、
+  // up_to_date（起動時の未 Push 確認など、リモートは進んでいないがローカルに変更がある）なら
+  // 両方とも最後に同期したコミット（＝ローカルの変更だけが取り込まれる）
+  if (!staleResult || staleResult.status === 'check_failed') {
     return { status: 'unavailable', reason: 'remoteStateUnknown' }
   }
-  const baseSha = staleResult.localCommitSha
+  const baseSha =
+    staleResult.status === 'stale' ? staleResult.localCommitSha : lastKnownCommitSha.value
   if (!baseSha) return { status: 'unavailable', reason: 'baseUnavailable' }
-  const remoteSha = staleResult.remoteCommitSha
+  const remoteSha = staleResult.status === 'stale' ? staleResult.remoteCommitSha : baseSha
 
   try {
     if (!appState.isFirstPriorityFetched || appState.loadingLeafIds.size > 0) {
@@ -313,14 +321,36 @@ function withUnsaveable(merged: WorldSnapshot): { notes: Note[]; leaves: Leaf[] 
   }
 }
 
-/** リモート HEAD の確認（時間上限つき。超えたら null） */
+/**
+ * IndexedDB を現在のメモリ上の内容で保存し直す（ベストエフォート。失敗はログのみ）。
+ * マージ結果を先に保存した後で反映を取りやめたとき、IndexedDB だけがマージ結果に
+ * なった不整合を残さないため。
+ */
+async function restorePersistedFromMemory(): Promise<void> {
+  const results = await Promise.allSettled([
+    saveNotes(notes.value),
+    saveLeaves(leaves.value),
+    ...(isArchiveLoaded.value
+      ? [saveArchiveNotes(archiveNotes.value), saveArchiveLeaves(archiveLeaves.value)]
+      : []),
+  ])
+  for (const r of results) {
+    if (r.status === 'rejected') console.error('Failed to restore persisted data:', r.reason)
+  }
+}
+
+/** リモート HEAD の確認（時間上限つき。超えたら通信を打ち切って null） */
 async function fetchHeadWithTimeout(settings: Settings): Promise<string | null> {
+  const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), MERGE_HEAD_CHECK_TIMEOUT_MS)
+    timer = setTimeout(() => {
+      controller.abort()
+      resolve(null)
+    }, MERGE_HEAD_CHECK_TIMEOUT_MS)
   })
   try {
-    const head = await Promise.race([fetchRemoteHeadSha(settings), timeout])
+    const head = await Promise.race([fetchRemoteHeadSha(settings, controller.signal), timeout])
     return head && head.status === 'success' ? head.commitSha : null
   } catch {
     return null
@@ -335,7 +365,9 @@ async function fetchHeadWithTimeout(settings: Settings): Promise<string | null> 
  * 1. リモート HEAD が比較時の SHA のままか・ローカルが比較時の内容のままかを確かめる。
  *    変わっていれば何も書き換えずに `changed` を返す（呼び出し側で再比較）
  * 2. マージ結果を IndexedDB へ先に保存する。失敗したら SHA・ベースライン・ストアを
- *    進めずに `failed(save)` を返す（「SHA は新しいのに中身は古い」状態を作らない）
+ *    進めずに `failed(save)` を返す（「SHA は新しいのに中身は古い」状態を作らない）。
+ *    一部だけ保存できた場合や、保存の後でローカルが変わっていた場合は、IndexedDB が
+ *    マージ結果のまま残るので、現在のメモリの内容をベストエフォートで保存し直してから返す
  * 3. メモリ上の状態（ストア・ベースライン・lastKnownCommitSha）を一度に書き換える
  */
 export async function applyConflictMerge(
@@ -362,10 +394,13 @@ export async function applyConflictMerge(
   const failed = results.find((r) => r.status === 'rejected')
   if (failed) {
     console.error('Failed to persist merged data:', (failed as PromiseRejectedResult).reason)
+    await restorePersistedFromMemory()
     return { status: 'failed', reason: 'save' }
   }
-  // 保存を待つ間にローカルが変わっていたら反映しない（IndexedDB は次の自動保存で追いつく）
+  // 保存を待つ間にローカルが変わっていたら反映しない。IndexedDB はマージ結果を書いた後
+  // なので、メモリ（＝実際の手元の内容）に戻しておく
   if (readLocal().fingerprint !== plan.localFingerprint) {
+    await restorePersistedFromMemory()
     return { status: 'changed', side: 'local' }
   }
 

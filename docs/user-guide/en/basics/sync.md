@@ -94,7 +94,8 @@ since the last sync (the common base), before showing the dialog.
   there are files added outside the app, or the loaded archive is newer than the last sync), the reason is shown and only the usual choices remain
 - If another device pushed, or your local content changed, after the comparison, nothing is merged and the comparison runs again.
   Cancelling or a failed comparison never drops your local changes
-- Merging is not offered in the startup unsaved-change check or in the dialog after a Push stopped responding
+- This comparison and merge work the same way wherever the conflict dialog appears (manual push, auto-push, pull, the startup unsaved-change check,
+  and after a Push stopped responding). Merging in the startup check brings in the remote changes and keeps your local changes unsaved (same as Pull)
 
 ---
 

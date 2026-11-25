@@ -95,7 +95,8 @@ import {
   showPullToast,
   alertAsync,
 } from './ui'
-import { showConflictDialog } from './actions/conflict-dialog'
+// #321: 競合ダイアログは全経路共通の resolveConflict（比較 → ダイアログ → マージ反映）を通す
+import { resolveConflict } from './actions/conflict-resolve'
 import type { PushToGitHubOptions } from './actions/git'
 import { PUSH_HANG_THRESHOLD_MS, RESUME_RETRY_BACKOFFS_MS } from './sync/constants'
 import { runResumeStaleCheckRetry } from './sync/resume-retry'
@@ -218,7 +219,7 @@ let _repoChangePending = $state(false)
 // rehydrateForRepo を走らせてから pull を開始するため、ここで待機させる。
 let _pendingRehydrateRepo = $state<string | null>(null)
 // #204/#205: visibility 復帰時に「Push 中ハング」を検出して isPushing を強制解除した場合に立つフラグ。
-// 直後の stale check で showConflictDialog('push-hang') を表示するために使う（1 度だけ消費）。
+// 直後の stale check で push-hang の競合ダイアログ（resolveConflict）を表示するために使う（1 度だけ消費）。
 let _pushHangRecovered = $state(false)
 
 export const appState = {
@@ -933,10 +934,24 @@ export function initApp(deps: InitAppDeps): () => void {
       } else {
         // 初回 Pull 実行（pullFromGitHub 内で dirty チェックを行う）
         // stale チェックは既に実行済みなら pullFromGitHub に渡して再取得を省略（#158）
+        // #321: 前回の未 Push の変更（dirty なキャッシュ）があるときは、先にストアへ読み込んで
+        // から Pull を始める。起動時の確認ダイアログでも他の経路と同じく、ローカルとリモートを
+        // 比較して「両方の変更をマージして解決する」を出せるようにするため。キャンセル時は
+        // 読み込み済みなのでそのまま操作可能（従来のキャンセル時の読み込みと同じ状態）。
+        let startupLocalApplied = false
+        if (persistedCache.wasDirty) {
+          try {
+            await applyPersistedStartupCache(persistedCache, false)
+            startupLocalApplied = true
+          } catch (error) {
+            console.error('Failed to load dirty cache before startup pull:', error)
+          }
+        }
         // キャンセル時は IndexedDB から読み込んで操作可能にする
         await deps.pullFromGitHub(
           true,
           async () => {
+            if (startupLocalApplied) return
             try {
               await applyPersistedStartupCache(persistedCache, !persistedCache.wasDirty)
             } catch (error) {
@@ -1061,20 +1076,23 @@ export function initApp(deps: InitAppDeps): () => void {
   }
 
   /**
-   * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
+   * #205: Push ハング復旧後にリモートが進んでいた場合、共通の競合ダイアログで判断を仰ぐ。
    * stale-push と同じ並び（pull primary / push secondary / cancel）。
-   * cancel/null は何もしない（applyStaleResult で立てた赤バッジに任せる）。
+   * #321: 他の経路と同じ resolveConflict（3方向比較 → マージ可能ならマージを先頭 → 反映）を通す。
+   * マージを反映したら（比較後に変化があった場合も）Push をやり直す（stale-push と同じ）。
+   * cancel/null・反映失敗は何もしない（applyStaleResult で立てた赤バッジに任せる）。
    */
   const promptPushHangRecovery = async (staleResult: StaleCheckResult) => {
-    const choice = await showConflictDialog({
+    const resolution = await resolveConflict({
       kind: 'push-hang',
       staleResult,
       localPushCount: metadata.value.pushCount,
       settings: settings.value,
+      toast: (message, variant) => showPushToast(message, variant),
     })
-    if (choice === 'pull') {
+    if (resolution === 'pull') {
       await deps.pullFromGitHub(false)
-    } else if (choice === 'push') {
+    } else if (resolution === 'push' || resolution === 'merged' || resolution === 'recompare') {
       await deps.pushToGitHub()
     }
   }

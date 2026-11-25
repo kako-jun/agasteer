@@ -102,8 +102,8 @@ fetch が pending のまま戻らなかった「ハング状態」と判定し�
 これにより、ガラス効果オーバーレイと `inert` が永遠に残るリグレッションを防ぐ。
 
 ハング検出後は `applyStaleResult` の通常経路で stale 判定を行い、状態が ambiguous
-（stale）な場合は共通ヘルパー `showConflictDialog({ kind: 'push-hang', ... })`
-（[`../sync/stale-detection.md`](../sync/stale-detection.md) 参照）で 3 択を求める。
+（stale）な場合は全経路共通の `resolveConflict({ kind: 'push-hang', ... })`
+（[`../sync/stale-detection.md`](../sync/stale-detection.md) 参照）で 3 択を求める（#321 以降、重ならない変更ならマージも選べる）。
 専用 UI を増やさず、衝突ダイアログ統一方針（#200/#201/#202）の延長に乗せている。
 
 #### 復帰直後の stale check リトライ（#203）
