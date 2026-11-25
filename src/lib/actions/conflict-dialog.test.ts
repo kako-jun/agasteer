@@ -49,7 +49,7 @@ vi.mock('../i18n', () => ({
   },
 }))
 
-const { showConflictDialog } = await import('./conflict-dialog')
+const { showConflictDialog, formatConflictDetail } = await import('./conflict-dialog')
 
 const settings = {} as Settings
 
@@ -338,5 +338,203 @@ describe('showConflictDialog', () => {
   it('#317: ボタン構成は案内追加で増えない（stale-push は 3 択のまま）', async () => {
     await showConflictDialog({ kind: 'stale-push', localPushCount: 1, settings })
     expect(mocks.choiceAsync.mock.calls[0][1]).toHaveLength(3)
+  })
+})
+
+describe('#321: 3方向比較の結果の表示', () => {
+  const staleResult: StaleCheckResult = {
+    status: 'stale',
+    localCommitSha: 'aaaaaaaabb',
+    remoteCommitSha: 'ccccccccdd',
+  }
+  // 表示テストではプランの中身は使わない
+  const mergeable = {
+    status: 'mergeable' as const,
+    plan: {} as never,
+    localChangeCount: 2,
+    remoteChangeCount: 1,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.fetchRemotePushCount.mockResolvedValue({ status: 'success', pushCount: 7 })
+    mocks.choiceAsync.mockResolvedValue('cancel')
+  })
+
+  it('stale-push でマージ可能: マージを先頭の主ボタンにし、従来の主ボタンは副に下げ、件数を本文に出す', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+    const choice = await showConflictDialog({
+      kind: 'stale-push',
+      staleResult,
+      localPushCount: 1,
+      settings,
+      merge: mergeable,
+    })
+    expect(choice).toBe('merge')
+    const [body, options, , detail] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.mergeAvailable{localCount=2,remoteCount=1}')
+    expect(options.map((o: { value: string; variant: string }) => [o.value, o.variant])).toEqual([
+      ['merge', 'primary'],
+      ['pull', 'secondary'],
+      ['push', 'secondary'],
+      ['cancel', 'cancel'],
+    ])
+    expect(options[0].label).toBe('modal.mergeBoth')
+    expect(detail).toBeUndefined()
+    expect(diag.recordDiag).toHaveBeenCalledWith('conflict-choice', {
+      dialogKind: 'stale-push',
+      choice: 'merge',
+    })
+  })
+
+  it('pull-dirty でマージ可能: 同じくマージが先頭', async () => {
+    await showConflictDialog({
+      kind: 'pull-dirty',
+      staleResult,
+      localPushCount: 1,
+      settings,
+      merge: mergeable,
+    })
+    const [, options] = mocks.choiceAsync.mock.calls[0]
+    expect(options.map((o: { value: string }) => o.value)).toEqual([
+      'merge',
+      'pull',
+      'push',
+      'cancel',
+    ])
+  })
+
+  it('競合あり: 従来の3択のまま、競合の一覧を詳細欄に出す', async () => {
+    await showConflictDialog({
+      kind: 'stale-push',
+      staleResult,
+      localPushCount: 1,
+      settings,
+      merge: {
+        status: 'conflicts',
+        conflicts: [
+          {
+            world: 'home',
+            kind: 'content',
+            target: 'leaf',
+            path: 'Work/Todo',
+            lines: [{ baseStart: 1, baseEnd: 2, base: ['b'], local: ['L'], remote: ['R'] }],
+          },
+        ],
+      },
+    })
+    const [body, options, position, detail] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.mergeConflicts{count=1}')
+    expect(options.map((o: { value: string }) => o.value)).toEqual(['pull', 'push', 'cancel'])
+    expect(position).toBe('center')
+    expect(detail).toContain('Work/Todo')
+    expect(detail).toContain('modal.mergeKind.content')
+    expect(detail).toContain('modal.mergeLine{line=2}')
+    expect(detail).toContain('L')
+    expect(detail).toContain('R')
+  })
+
+  it('判定不能: 理由を本文に出し、従来の3択のまま', async () => {
+    await showConflictDialog({
+      kind: 'stale-push',
+      staleResult,
+      localPushCount: 1,
+      settings,
+      merge: { status: 'unavailable', reason: 'baseUnavailable' },
+    })
+    const [body, options] = mocks.choiceAsync.mock.calls[0]
+    expect(body).toContain('modal.mergeUnavailable{reason=modal.mergeReason.baseUnavailable}')
+    expect(options).toHaveLength(3)
+  })
+
+  it('マージボタンを出していないのに merge が返っても cancel 扱い（従来の操作を壊さない）', async () => {
+    mocks.choiceAsync.mockResolvedValue('merge')
+    const choice = await showConflictDialog({
+      kind: 'stale-push',
+      staleResult,
+      localPushCount: 1,
+      settings,
+      merge: { status: 'unavailable', reason: 'failed' },
+    })
+    expect(choice).toBe('cancel')
+  })
+
+  it('formatConflictDetail: 種類ごとの文言・アーカイブの印・削除側・抜粋の打ち切り・件数の打ち切り', () => {
+    const t = (key: string, opts?: { values?: Record<string, unknown> }) =>
+      opts?.values ? `${key}(${JSON.stringify(opts.values)})` : key
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      world: 'home' as const,
+      kind: 'pathCollision' as const,
+      target: 'leaf' as const,
+      path: `N/L${i}`,
+    }))
+    const detail = formatConflictDetail(
+      [
+        {
+          world: 'archive',
+          kind: 'deleteEdit',
+          target: 'leaf',
+          path: 'Old/Done',
+          deletedBy: 'local',
+        },
+        {
+          world: 'home',
+          kind: 'attribute',
+          target: 'note',
+          path: 'Work',
+          field: 'name',
+          localValue: 'Job',
+          remoteValue: 'Office',
+        },
+        {
+          world: 'home',
+          kind: 'content',
+          target: 'leaf',
+          path: 'Work/Long',
+          lines: [
+            {
+              baseStart: 3,
+              baseEnd: 3,
+              base: [],
+              local: ['1', '2', '3', '4', '5'],
+              remote: [],
+            },
+          ],
+        },
+        ...many,
+      ],
+      t
+    )
+    expect(detail).toContain('modal.mergeArchive: Old/Done')
+    expect(detail).toContain('modal.mergeKind.deletedByLocal')
+    expect(detail).toContain('modal.mergeKind.name({"local":"Job","remote":"Office"})')
+    expect(detail).toContain('modal.mergeLinesInsert({"line":4})')
+    expect(detail).toContain('modal.mergeMoreLines({"count":2})')
+    expect(detail).toContain('modal.mergeEmpty')
+    // 10 件まで表示し、残りは件数だけ
+    expect(detail).toContain('modal.mergeMoreConflicts({"count":5})')
+    expect(detail).not.toContain('N/L7')
+  })
+
+  it('location 競合でルート（空文字）は「ルート」のラベルで表示する', () => {
+    const t = (key: string, opts?: { values?: Record<string, unknown> }) =>
+      opts?.values ? `${key}(${JSON.stringify(opts.values)})` : key
+    const detail = formatConflictDetail(
+      [
+        {
+          world: 'home',
+          kind: 'attribute',
+          target: 'note',
+          path: 'Sub',
+          field: 'location',
+          localValue: '',
+          remoteValue: 'Work',
+        },
+      ],
+      t
+    )
+    expect(detail).toContain(
+      'modal.mergeKind.location({"local":"modal.mergeRoot","remote":"Work"})'
+    )
   })
 })

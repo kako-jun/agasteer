@@ -62,7 +62,7 @@
 
 **A:** Yes, you can sync by Pull/Push to the same GitHub repository.
 
-**Note**: Conflict resolution UI is not yet implemented. If you edit simultaneously on multiple devices, the data from the later Push will overwrite.
+**Note**: When edits on multiple devices conflict, "Merge both changes to resolve" keeps both sides as long as the changes do not overlap. Overlapping changes (for example, the same line edited on both sides) are not merged automatically, so you choose one side to overwrite with ([Merging Both Changes](./basics/sync.md#merging-both-changes)).
 
 ### Q: How much does it cost?
 

@@ -27,6 +27,7 @@ export {
   getLastPushedContent,
   setLastPushedSnapshot,
   setArchiveBaseline,
+  getArchiveBaseline,
   addNotesToBaseline,
   addLeafToBaseline,
   refreshDirtyState,

@@ -95,7 +95,8 @@ import {
   showPullToast,
   alertAsync,
 } from './ui'
-import { showConflictDialog } from './actions/conflict-dialog'
+// #321: 競合ダイアログは全経路共通の resolveConflict（比較 → ダイアログ → マージ反映）を通す
+import { resolveConflict, isResolvingConflict } from './actions/conflict-resolve'
 import type { PushToGitHubOptions } from './actions/git'
 import { PUSH_HANG_THRESHOLD_MS, RESUME_RETRY_BACKOFFS_MS } from './sync/constants'
 import { runResumeStaleCheckRetry } from './sync/resume-retry'
@@ -218,7 +219,7 @@ let _repoChangePending = $state(false)
 // rehydrateForRepo を走らせてから pull を開始するため、ここで待機させる。
 let _pendingRehydrateRepo = $state<string | null>(null)
 // #204/#205: visibility 復帰時に「Push 中ハング」を検出して isPushing を強制解除した場合に立つフラグ。
-// 直後の stale check で showConflictDialog('push-hang') を表示するために使う（1 度だけ消費）。
+// 直後の stale check で push-hang の競合ダイアログ（resolveConflict）を表示するために使う（1 度だけ消費）。
 let _pushHangRecovered = $state(false)
 
 export const appState = {
@@ -854,9 +855,12 @@ export function initApp(deps: InitAppDeps): () => void {
       // ロード済みキャッシュを state に反映する。
       // adoptAsBaseline=true: clean cache とみなし snapshot/dirty を更新
       // adoptAsBaseline=false: dirty cache をそのまま開く（最低限 global dirty を維持）
+      // restoreUrl=false: URL からの画面復元を呼び出し側に任せる（#321 起動時の先読み込み。
+      //   復元はアーカイブを読み込むことがあり、競合の比較より前に走らせないため）
       const applyPersistedStartupCache = async (
         cache: PersistedStartupCache,
-        adoptAsBaseline: boolean
+        adoptAsBaseline: boolean,
+        restoreUrl = true
       ): Promise<number> => {
         notes.value = cache.notes
         leaves.value = cache.leaves
@@ -885,7 +889,7 @@ export function initApp(deps: InitAppDeps): () => void {
         // restoreStateFromUrl がアーカイブ待機で pending のままの間に世代1側の
         // この finally が先に false へ戻してしまうと、抑制が早く外れて
         // updateUrlFromState() が pushState を余分に積む窓があった（Q1 と同種）。
-        await deps.restoreStateFromUrl()
+        if (restoreUrl) await deps.restoreStateFromUrl()
         return cache.notes.length + cache.leaves.length
       }
 
@@ -933,10 +937,31 @@ export function initApp(deps: InitAppDeps): () => void {
       } else {
         // 初回 Pull 実行（pullFromGitHub 内で dirty チェックを行う）
         // stale チェックは既に実行済みなら pullFromGitHub に渡して再取得を省略（#158）
+        // #321: 前回の未 Push の変更（dirty なキャッシュ）があるときは、先にストアへ読み込んで
+        // から Pull を始める。起動時の確認ダイアログでも他の経路と同じく、ローカルとリモートを
+        // 比較して「両方の変更をマージして解決する」を出せるようにするため。キャンセル時は
+        // 読み込み済みなのでそのまま操作可能（従来のキャンセル時の読み込みと同じ状態）。
+        // URL からの画面復元はここではしない（アーカイブ URL だと比較の前にアーカイブを
+        // 読み込んでしまうため）。解決後に、キャンセルなら下の onCancel、マージなら Pull 成功と
+        // 同じく git-pull 側、Pull 上書きなら Pull 自身が復元する。
+        let startupLocalApplied = false
+        if (persistedCache.wasDirty) {
+          try {
+            await applyPersistedStartupCache(persistedCache, false, false)
+            startupLocalApplied = true
+          } catch (error) {
+            console.error('Failed to load dirty cache before startup pull:', error)
+          }
+        }
         // キャンセル時は IndexedDB から読み込んで操作可能にする
         await deps.pullFromGitHub(
           true,
           async () => {
+            if (startupLocalApplied) {
+              // 読み込み済み（二重に読み込まない）。先読み込みで省いた画面復元だけ行う
+              await deps.restoreStateFromUrl()
+              return
+            }
             try {
               await applyPersistedStartupCache(persistedCache, !persistedCache.wasDirty)
             } catch (error) {
@@ -1061,20 +1086,55 @@ export function initApp(deps: InitAppDeps): () => void {
   }
 
   /**
-   * #205: Push ハング復旧後にリモートが進んでいた場合、共通 3 択ダイアログで判断を仰ぐ。
+   * #205: Push ハング復旧後にリモートが進んでいた場合、共通の競合ダイアログで判断を仰ぐ。
    * stale-push と同じ並び（pull primary / push secondary / cancel）。
-   * cancel/null は何もしない（applyStaleResult で立てた赤バッジに任せる）。
+   * #321: 他の経路と同じ resolveConflict（3方向比較 → マージ可能ならマージを先頭 → 反映）を通す。
+   * マージを反映したら（比較後に変化があった場合も）Push をやり直す（stale-push と同じ）。
+   * cancel/null・反映失敗は何もしない（applyStaleResult で立てた赤バッジに任せる）。
    */
+  // push-hang の解決中（ロックを取ってから解放するまで）。resolveConflict 自身の
+  // isResolvingConflict() と合わせて、visibility 復帰のハング検出・この関数の再入を止める。
+  // 本番では resolveConflict が最初の await より前に同期でカウンタを上げるため冗長だが、
+  // 保険として残す（resolveConflict の実装が変わっても push-hang の再入を止める）。テストでは
+  // resolveConflict をモックするので、この入口側の判定を単独で縛る役も持つ
+  let resolvingPushHang = false
+  const isConflictResolutionActive = () => resolvingPushHang || isResolvingConflict()
+
   const promptPushHangRecovery = async (staleResult: StaleCheckResult) => {
-    const choice = await showConflictDialog({
-      kind: 'push-hang',
-      staleResult,
-      localPushCount: metadata.value.pushCount,
-      settings: settings.value,
-    })
-    if (choice === 'pull') {
+    // 他の経路と同じく、解決中（比較・ダイアログ・マージ反映）は isPushing を立てて
+    // 別の Push / Pull が割り込まないようにする。別の同期が走っていて取れないときや、
+    // すでに解決中のときはダイアログを出さない（applyStaleResult が立てた赤バッジに任せる）。
+    // 解決中の経路は isPushing / isPulling を立てているので、下のロック判定でもほぼ先に弾かれる。
+    // isConflictResolutionActive() を先に置くのは「解決中は再入しない」という意図を、
+    // 個々のロックの持ち方に依存せず明示するため（挙動は同じ）
+    if (
+      isConflictResolutionActive() ||
+      isPulling.value ||
+      isPushing.value ||
+      isPushingBackground.value ||
+      appState.isArchiveLoading
+    ) {
+      return
+    }
+    isPushing.value = true
+    resolvingPushHang = true
+    let resolution: Awaited<ReturnType<typeof resolveConflict>>
+    try {
+      resolution = await resolveConflict({
+        kind: 'push-hang',
+        staleResult,
+        localPushCount: metadata.value.pushCount,
+        settings: settings.value,
+        toast: (message, variant) => showPushToast(message, variant),
+      })
+    } finally {
+      // Push / Pull を呼ぶ前に必ず解放する（それぞれが自分でロックを取る）
+      resolvingPushHang = false
+      isPushing.value = false
+    }
+    if (resolution === 'pull') {
       await deps.pullFromGitHub(false)
-    } else if (choice === 'push') {
+    } else if (resolution === 'push' || resolution === 'merged' || resolution === 'recompare') {
       await deps.pushToGitHub()
     }
   }
@@ -1092,7 +1152,14 @@ export function initApp(deps: InitAppDeps): () => void {
       // ため、両フラグのいずれかが立ったまま固まっているケースを救う。
       const inFlight = getPushInFlightAt()
       const pushPhaseStuck = isPushing.value || isPushingBackground.value
-      if (pushPhaseStuck && inFlight && now - inFlight > PUSH_HANG_THRESHOLD_MS) {
+      // #321: 競合の解決中は、ロックを立てているのは解決中の経路（ハングではない）なので
+      // 検出しない（外からロックを落とす・ダイアログを再入させる経路を作らない）
+      if (
+        !isConflictResolutionActive() &&
+        pushPhaseStuck &&
+        inFlight &&
+        now - inFlight > PUSH_HANG_THRESHOLD_MS
+      ) {
         console.warn(
           `Push hang detected on visibility resume (inFlight age: ${now - inFlight}ms); clearing isPushing/isPushingBackground`
         )

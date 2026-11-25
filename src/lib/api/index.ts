@@ -25,6 +25,8 @@ export {
   type PushOptions,
   type ArchivePullResult,
 } from './github'
+// 競合時の3方向マージ用: コミット SHA 指定の読み出し（#321）
+export { fetchCommitSnapshot, type CommitSnapshotResult, type WorldData } from './github/snapshot'
 export * from './sync'
 export * from './sync-handlers'
 // メディア同期層（#242）。Push/Pull フローとは独立

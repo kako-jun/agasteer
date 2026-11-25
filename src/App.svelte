@@ -275,6 +275,7 @@
       onPromptSubmit={modalState.value.promptCallback}
       onChoiceSelect={modalState.value.choiceCallback}
       choiceOptions={modalState.value.choiceOptions || []}
+      detail={modalState.value.detail || ''}
       placeholder={modalState.value.placeholder || ''}
       onClose={closeModal}
     />

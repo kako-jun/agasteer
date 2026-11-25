@@ -142,6 +142,62 @@ export function buildLeafTargets(params: {
 }
 
 /**
+ * tree エントリ群から、1つのワールド（home / archive）のノート構造とリーフ取得ターゲットを組み立てる。
+ *
+ * pullFromGitHub / pullArchive / 競合比較用のコミット読み出し（snapshot.ts, #321）で共通。
+ * 1. basePath 配下の .gitkeep から空ノートを復元（basePath 直下の .gitkeep は除外）
+ * 2. basePath 配下の .md からリーフのターゲットを作る（ノートも必要に応じて作られる）
+ * notes は order 昇順で返す。idGenerator は metadata に無いノート/リーフの ID 生成に使う。
+ */
+export function buildWorldStructure(params: {
+  entries: TreeEntry[]
+  basePath: string
+  metadata: Metadata
+  idGenerator?: () => string
+  now?: () => number
+}): { notes: Note[]; leafTargets: LeafTarget[] } {
+  const { entries, basePath, metadata, idGenerator, now } = params
+  const noteMap = new Map<string, Note>()
+  const basePathPrefix = `${basePath}/`
+  const basePathGitkeep = `${basePath}/.gitkeep`
+
+  const gitkeepPaths = entries.filter(
+    (e) =>
+      e.type === 'blob' &&
+      e.path.startsWith(basePathPrefix) &&
+      e.path.endsWith('.gitkeep') &&
+      e.path !== basePathGitkeep
+  )
+  for (const entry of gitkeepPaths) {
+    const relativePath = entry.path
+      .replace(new RegExp(`^${basePath}/`), '')
+      .replace(/\/\.gitkeep$/, '')
+    const parts = collapseToTwoLevels(relativePath.split('/').filter(Boolean))
+    if (parts.length === 0) continue
+    ensureNotePath({ pathParts: parts, noteMap, metadata, idGenerator })
+  }
+
+  const leafEntries = entries.filter(
+    (e) =>
+      e.type === 'blob' &&
+      e.path.startsWith(basePathPrefix) &&
+      e.path.toLowerCase().endsWith('.md') &&
+      !e.path.endsWith('.gitkeep')
+  )
+  const leafTargets = buildLeafTargets({
+    entries: leafEntries,
+    basePath,
+    metadata,
+    noteMap,
+    idGenerator,
+    now,
+  })
+
+  const notes = Array.from(noteMap.values()).sort((a, b) => a.order - b.order)
+  return { notes, leafTargets }
+}
+
+/**
  * リーフの取得優先度を返す（pullFromGitHub 専用）。
  * 0: URLで指定されたリーフ / 1: 指定リーフと同じノート配下 / 2: その他。
  */

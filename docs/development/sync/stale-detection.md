@@ -40,7 +40,7 @@ Refs APIが404/409を返す場合は`empty_repository`として`up_to_date`を�
 2. stale編集かどうかチェック（`check_failed` のとき、auto-push 経由なら `abortIfStaleCheckFailed` オプションにより中止。#235。[`push-pull.md`](./push-pull.md) 参照）
 3. staleの場合はまず push-in-flight 救済（`tryRescueStalePush()`、後述）を試す。成立すれば stale は誤検出なので、ダイアログを出さずにPushを続行（#235）
 4. 救済不成立なら`isStale`を`true`にしてPullボタンに赤丸を表示
-5. 3択ダイアログを表示（Pull first / Push上書き / Cancel）
+5. 共通の基準・ローカル・リモートを3方向比較し（#321、[push-pull.md](./push-pull.md#競合時の3方向マージ321)）、3択ダイアログを表示（Pull first / Push上書き / Cancel。重ならなければ先頭に「両方の変更をマージして解決する」）
 6. Cancelした場合も赤丸を維持し、ユーザーがPullすべき状態を見失わないようにする
 7. staleでなければそのままPush
 
@@ -48,12 +48,13 @@ Refs APIが404/409を返す場合は`empty_repository`として`up_to_date`を�
 
 手動 Push / auto-push / pull-dirty / 起動時 dirty の各経路で個別に `choiceAsync` /
 `confirmAsync` を呼んでいた実装を、共通ヘルパー `src/lib/actions/conflict-dialog.ts`
-の `showConflictDialog({ kind, ... })` に集約した。`kind` は以下の3種類:
+の `showConflictDialog({ kind, ... })` に集約した。`kind` は以下の4種類（`push-hang` は後述）:
 
 - `stale-push`: 手動 Push / auto-push 共通の stale 警告
 - `pull-dirty`: 通常時の Pull 直前 dirty 警告（3択）
 - `startup-dirty`: 起動時の Pull 直前 dirty 警告（`disablePush: true` で push first を無効化した2択）
 
+#321 以降、4種類すべてが共通の入口 `resolveConflict()`（`conflict-resolve.ts`）を通り、3方向比較の結果（マージボタン・競合の一覧・判定できない理由）を同じ形で出す（[push-pull.md](./push-pull.md#競合時の3方向マージ321)）。
 ヘルパー内部で `fetchRemotePushCount` を必ず呼び、ローカル/リモートの SHA と
 pushCount を `modal.staleEditDiagnostic` 形式で本文末尾に常時付与する。これに
 より「auto-push 経路だけ pushCount が出ない」といった経路差による表示揺れが
@@ -83,7 +84,7 @@ Push成功後は、Push APIの戻り値から新しいcommit SHAを取得して`
 3. **このデバイスでPush** → `fetchRemoteHeadSha`でリモートのHEAD commit SHAを取得
 4. **比較** → `remoteCommitSha !== lastKnownCommitSha`ならstale
 5. **赤丸表示** → `isStale = true`でPullボタンに通知
-6. **3択ダイアログ** → Pull first（リモート取得後に再Push）/ Push上書き / キャンセル
+6. **3択ダイアログ** → Pull first（リモート取得後に再Push）/ Push上書き / キャンセル（重ならない変更なら「両方の変更をマージして解決する」→ 反映後に再Push。#321）
 7. **Push成功** → 新しいcommit SHAで`lastKnownCommitSha`を更新し、`isStale = false`に戻す
 
 ### 定期的なstaleチェック
@@ -279,7 +280,7 @@ Phase A のタイムアウト後も `executePush` の fetch チェーンは生�
 `pushHangRecovered` が立った状態で stale check の結果に応じて分岐する:
 
 - `up_to_date` → `applyStaleResult` が `pushInFlightAt` をクリア（裏で Push が成功していた、救済成功）
-- `stale` → `showConflictDialog({ kind: 'push-hang' })` で 3 択 (`pull` / `push` / `cancel`)
+- `stale` → `resolveConflict({ kind: 'push-hang' })` で 3 択 (`pull` / `push` / `cancel`)。他の経路と同じく3方向比較を通し、重ならなければ先頭に「両方の変更をマージして解決する」を出す。マージを反映したら Push をやり直す。解決の間は `isPushing` を立て、Push / Pull を呼ぶ前に finally で落とす（他の同期中・競合の解決中ならダイアログを出さない。解決中は visibility 復帰時のハング検出もしない。#321）
   - ボタン配置・並びは `stale-push` と同じ（pullFirst primary / pushOverwrite secondary / cancel）
   - 本文だけ `modal.pushHangRecovery`（「Push の応答が途切れたため状態が不明」）
   - 専用 UI を増やさず #200 の共通ヘルパーに乗せることで一貫性を保つ（#205）

@@ -191,7 +191,9 @@ agasteer/
 │   │   │   ├── crud.ts                  # ノート/リーフCRUDのペイン/ストア配線（実体はdata/へ委譲）
 │   │   │   ├── move.ts                  # ノート/リーフのワールド間移動（アーカイブ↔ホーム）
 │   │   │   ├── io.ts                    # ZIPエクスポート/他アプリインポート/ダウンロード
-│   │   │   ├── conflict-dialog.ts       # Push前のPushCount衝突ダイアログ
+│   │   │   ├── conflict-dialog.ts       # Push/Pull衝突ダイアログ（#200で共通化、#321でマージ表示）
+│   │   │   ├── conflict-merge.ts        # #321 衝突時の3方向比較と「両方の変更をマージ」の反映
+│   │   │   ├── conflict-resolve.ts      # #321 競合ダイアログ全経路の共通入口（比較→ダイアログ→反映）
 │   │   │   ├── swipe.ts                 # スワイプナビゲーション（Svelte action）
 │   │   │   ├── portal.ts                # ポータル（Svelte action）
 │   │   │   └── index.ts                 # actions系エクスポート
@@ -204,6 +206,7 @@ agasteer/
 │   │   │   │   ├── rate-limit.ts        # レート制限解析（純粋）
 │   │   │   │   ├── metadata.ts          # メタデータ正規化・安定化・push差分判定・pull正規化（純粋）
 │   │   │   │   ├── pull-map.ts          # pullのパス折り畳み＋notes/leavesスケルトン構築（純粋）
+│   │   │   │   ├── snapshot.ts          # #321 コミットSHA指定でnotes/leavesを読む（競合比較用、副作用層）
 │   │   │   │   ├── push-tree.ts         # pushのメタデータ生成＋tree エントリ構築（純粋）
 │   │   │   │   └── http.ts              # Contents API fetch/並列ワーカー/設定検証（副作用層）
 │   │   │   ├── media.ts                 # メディア同期層（副作用層: lazy作成/アップロード/キュー/キャッシュ、#242）
@@ -277,6 +280,7 @@ agasteer/
 │   │   │   ├── constants.ts             # Push/Pull/stale checkで共有するタイムアウト定数
 │   │   │   ├── push-stages.ts           # #238 Push進捗ステージ（7コール→5段階カウントダウン）
 │   │   │   ├── repo-sync-queue.ts       # リポ切替後の予約pull判定（純粋）
+│   │   │   ├── three-way-merge.ts       # #321 行単位diff3とノート/リーフ単位の3方向マージ（純粋）
 │   │   │   └── resume-retry.ts          # #203 復帰直後のstale check短期リトライ
 │   │   ├── ui/
 │   │   │   ├── theme.ts                 # テーマ適用ロジック
@@ -452,7 +456,9 @@ agasteer/
 **アクションモジュール（App.svelteから抽出）:**
 
 - `actions/git.ts`: Push/Pull/接続テスト。#226 で責務別モジュールへ純移動し、`git.ts` 自体は import パス（`./actions/git`）と公開 API（`pushToGitHub` / `PushToGitHubOptions` / `pullFromGitHub` / `handleTestConnection`）を不変に保つための薄い barrel（再輸出のみ）になった。実体は `actions/git-push.ts`（`pushToGitHub` + `PushToGitHubOptions` + `PushTimeoutError` + #238 世代ガード `pushProgressGeneration` を内包）／`actions/git-pull.ts`（`pullFromGitHub` + `runPendingRepoSyncIfIdle`）／`actions/git-orphan.ts`（#235 タイムアウト後の遅延結果観測 `observeOrphanPush`）／`actions/git-connection.ts`（`handleTestConnection`）に分割。循環回避のため push→pull は静的 import の一方向のみで、pull→push（Push first・stale 再帰）は `appActions.pushToGitHub` 経由の間接呼びで維持する
-- `actions/conflict-dialog.ts`: Push前のPushCount衝突検出時に表示する確認ダイアログの選択肢組み立て
+- `actions/conflict-dialog.ts`: Push/Pull 衝突時の確認ダイアログ（本文・診断情報・選択肢）の組み立て。#321 で3方向比較の結果（マージボタン・競合の一覧・判定できない理由）の表示を追加
+- `actions/conflict-merge.ts`: #321 衝突時に共通の基準（`lastKnownCommitSha` のコミット）・ローカル・リモート HEAD を比較し、マージを選んだら比較後の変化を確かめてから反映する（詳細は [sync/push-pull.md](./sync/push-pull.md#競合時の3方向マージ321)）
+- `actions/conflict-resolve.ts`: #321 競合ダイアログが出る全経路（stale-push / pull-dirty / startup-dirty / push-hang）の共通入口 `resolveConflict()`。比較 → ダイアログ → マージ反映を1か所で行い、経路ごとの続きは呼び出し側が結果で決める
 - `actions/move.ts`: ノート/リーフのワールド間移動（アーカイブ↔ホーム）
 - `actions/crud.ts`: ノート/リーフCRUDのペイン/ストア配線（バッジ更新含む）。純粋なCRUDロジック本体は `data/notes.ts` / `data/leaves.ts` に委譲し、ここでは`Pane`引数の解決・確認ダイアログ・ストア更新の呼び出し順を担う
 - `actions/io.ts`: ZIPエクスポート、他アプリからのインポート、Markdown/画像ダウンロード
@@ -501,6 +507,7 @@ CodeMirrorの拡張ロジックをDOM非依存の形に分離し、node環境の
 - `sync/push-stages.ts`: #238 Push進捗ステージ。`pushAllWithTreeAPI`（api/github.ts）の直列API呼び出し7コールを5段階のFF風カウントダウン（5→1）に束ねてトースト表示する
 - `sync/repo-sync-queue.ts`: リポ切替後、同期中なら予約pullすべきかを判定する純粋関数
 - `sync/resume-retry.ts`: #203 復帰直後のstale check短期リトライ（`document.visibilityState` 等は引数注入でテスト可能）
+- `sync/three-way-merge.ts`: #321 行単位 diff3（自前の Myers 差分）とノート/リーフ単位の3方向マージ。競合の対象・種類・行を返す純粋関数
 
 **ナビゲーション（navigation/）:**
 

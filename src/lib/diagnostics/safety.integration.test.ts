@@ -108,6 +108,16 @@ const mocks = vi.hoisted(() => ({
   rehydrateForRepo: vi.fn(async () => {}),
 }))
 
+// #321: 3方向マージの比較は本テストの対象外（既定の「判定できない」に固定）。実物を通すと
+// 比較の非同期処理ぶん stale 経路のタイミングがずれ、裏で走る記録（stale-recheck 等）が次のテストに混ざる
+vi.mock('../actions/conflict-merge', () => ({
+  analyzeConflictMerge: vi.fn(async () => ({
+    status: 'unavailable',
+    reason: 'remoteStateUnknown',
+  })),
+  applyConflictMerge: vi.fn(),
+}))
+
 vi.mock('../stores', () => ({
   ...stores,
   clearAllChanges: mocks.clearAllChanges,

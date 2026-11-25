@@ -262,6 +262,17 @@ export function setArchiveBaseline(archiveNotesData: Note[], archiveLeavesData: 
 }
 
 /**
+ * アーカイブのベースライン（アーカイブをロード / Push した時点の内容）の写しを返す。
+ * #321: 3方向比較で、ロード済みアーカイブが base コミットの内容から読まれたかを確かめる
+ * （pullArchive はブランチの最新を読むため、lastKnownCommitSha より新しいことがある）。
+ */
+export function getArchiveBaseline(): { notes: Note[]; leaves: Leaf[] } {
+  return JSON.parse(
+    JSON.stringify({ notes: lastPushedArchiveNotes, leaves: lastPushedArchiveLeaves })
+  )
+}
+
+/**
  * Pull中に到着したノートをベースラインに追加（ノートダーティの誤検出防止）
  * Pull完了前でも、到着済みノートが「新規追加」と誤判定されることを防ぐ。
  * Pull完了時の setLastPushedSnapshot で全上書きされるため、一時的なベースライン。

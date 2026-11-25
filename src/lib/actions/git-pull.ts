@@ -1,7 +1,8 @@
 import { type Leaf, type StaleCheckResult, buildBlobShaCache } from '../types'
 import type { PullOptions } from '../api'
 import { showPullToast } from '../ui'
-import { showConflictDialog } from './conflict-dialog'
+// #321: 競合ダイアログは全経路共通の resolveConflict（比較 → ダイアログ → マージ反映）を通す
+import { resolveConflict } from './conflict-resolve'
 import {
   settings,
   notes,
@@ -160,59 +161,67 @@ export async function pullFromGitHub(
     // 未保存の変更がある場合は確認（PWA強制終了後の再起動も考慮）
     // ここから先は実際にPullが走る可能性があるパスのみ
     if (isDirty.value || getPersistedDirtyFlag()) {
-      if (isInitialStartup) {
-        // 起動時: push first は選べない（まだPullしていないため disablePush=true）。
-        // 共通ヘルパー経由で他経路と本文・診断情報を統一する（#201）。
-        // disablePush=true により戻り値から 'push' が型レベルで除外される。
-        // staleResult は precomputedStale 経由で「やや古い」値が来る可能性があるが、
-        // 影響は本文 SHA の表示のみ（判定ロジックには使わない）ため受容範囲。
-        const choice = await showConflictDialog({
-          kind: 'startup-dirty',
-          staleResult,
-          localPushCount: metadata.value.pushCount,
-          settings: settings.value,
-          disablePush: true,
-        })
-        if (choice !== 'pull') {
-          // #314 M1: この分岐は Pull を行わないと確定している。onCancel（起動時
-          // キャンセル）は applyPersistedStartupCache 経由で restoreStateFromUrl を
-          // await するが、そちらのアーカイブ待機（waitForSyncIdle）は isPulling が
-          // false になるのを待つ。ここで isPulling を落とさずに `await onCancel?.()`
-          // すると、この finally（関数末尾）が isPulling を落とすのは onCancel の
-          // 完了後、onCancel は isPulling が落ちるのを待つ、という相互待機になり
-          // デッドロックする。Push-first 分岐（下）と同様に、待たれる側を先に
-          // 解放してから待つ側を呼ぶ。
-          isPulling.value = false
-          lockReleased = true
-          await onCancel?.()
-          return
-        }
-      } else {
-        // 通常時: Push first / Pull (overwrite) / Cancel の3択
-        const choice = await showConflictDialog({
-          kind: 'pull-dirty',
-          staleResult,
-          localPushCount: metadata.value.pushCount,
-          settings: settings.value,
-        })
+      // #321: 起動時（startup-dirty）も通常時（pull-dirty）も、全経路共通の resolveConflict
+      // （3方向比較 → ダイアログ → マージ反映）を通す。起動時は push first を出さない
+      // （まだ Pull していないため disablePush。マージは出る）。起動時のローカルは、呼び出し側
+      // （initApp）が dirty なキャッシュを先にストアへ読み込んでから Pull を始めている。
+      // staleResult は precomputedStale 経由で「やや古い」値が来る可能性があるが、比較の
+      // 反映直前にリモート HEAD を確かめ直すので、古ければ反映せずやり直しになる。
+      const resolution = await resolveConflict({
+        kind: isInitialStartup ? 'startup-dirty' : 'pull-dirty',
+        staleResult,
+        localPushCount: metadata.value.pushCount,
+        settings: settings.value,
+        disablePush: isInitialStartup,
+        toast: showPullToast,
+      })
 
-        if (choice === 'push') {
-          // Push first: isPullingロックを解放してPush→Pull
-          isPulling.value = false
-          lockReleased = true
-          await appActions.pushToGitHub()
-          // Push後に再度Pull（再帰呼び出し）
-          return pullFromGitHub(false, onCancel)
-        } else if (choice === 'cancel' || choice === null) {
-          // #314 M1: 同上の理由（この分岐も Pull しないと確定しているため、待たれる
-          // 側の isPulling を先に解放してから onCancel を呼ぶ）。
-          isPulling.value = false
-          lockReleased = true
-          await onCancel?.()
-          return
+      if (resolution === 'merged') {
+        // マージを反映した: リモートの内容を取り込み終えたので、通常の Pull 成功と同じく
+        // 完了扱いにする。ローカル側の変更はリモートに対する未 Push の変更として dirty のまま
+        // 残る（Push / auto-push で送られる）。通常時の pull-dirty も起動時の startup-dirty も
+        // 同じ扱いで、どちらも Push はしない。
+        appState.isPullCompleted = true
+        appState.isFirstPriorityFetched = true
+        // 画面の復元は1か所に寄せる: 開いていたノート/リーフの差し替えと、それが消えたときの
+        // URL からの復元は applyConflictMerge が全経路で行う。起動時だけは先読み込みで URL 復元を
+        // 省いている（ペインが空のまま）ので、ここで復元する。await しない（復元はこの Pull の
+        // 終了を待つため）
+        if (isInitialStartup) {
+          void Promise.resolve()
+            .then(() => appActions.restoreStateFromUrl())
+            .catch((e) => console.error('restoreStateFromUrl failed:', e))
         }
-        // choice === 'pull' → 続行（上書き）
+        return
       }
+      if (resolution === 'recompare') {
+        // 比較後にリモート/ローカルが変わった: ストア・SHA は進めていないので最初からやり直す
+        isPulling.value = false
+        lockReleased = true
+        return pullFromGitHub(isInitialStartup, onCancel)
+      }
+      if (resolution === 'push') {
+        // Push first: isPullingロックを解放してPush→Pull
+        isPulling.value = false
+        lockReleased = true
+        await appActions.pushToGitHub()
+        // Push後に再度Pull（再帰呼び出し）
+        return pullFromGitHub(false, onCancel)
+      }
+      if (resolution !== 'pull') {
+        // cancel / null（モーダル外クリック等）/ マージ反映の失敗（何も進めていない）。
+        // #314 M1: この分岐は Pull を行わないと確定している。onCancel（起動時
+        // キャンセル）は restoreStateFromUrl を await しうるが、そちらのアーカイブ待機
+        // （waitForSyncIdle）は isPulling が false になるのを待つ。ここで isPulling を
+        // 落とさずに `await onCancel?.()` すると、この finally（関数末尾）が isPulling を
+        // 落とすのは onCancel の完了後、onCancel は isPulling が落ちるのを待つ、という
+        // 相互待機になりデッドロックする。待たれる側を先に解放してから待つ側を呼ぶ。
+        isPulling.value = false
+        lockReleased = true
+        await onCancel?.()
+        return
+      }
+      // resolution === 'pull' → 続行（上書き）
     }
 
     switch (staleResult.status) {
