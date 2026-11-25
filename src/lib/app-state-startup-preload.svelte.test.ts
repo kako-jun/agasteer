@@ -30,6 +30,7 @@ const h = vi.hoisted(() => {
     executeStaleCheck: vi.fn(async (): Promise<unknown> => ({ status: 'up_to_date' })),
     applyStaleResult: vi.fn((): string => 'up-to-date'),
     resolveConflict: vi.fn(async (): Promise<string> => 'cancel'),
+    isResolvingConflict: vi.fn(() => false),
   }
 })
 
@@ -172,7 +173,7 @@ vi.mock('./startup-cache', () => ({ shouldUseStartupCache: vi.fn(() => false) })
 vi.mock('./actions/conflict-dialog', () => ({ showConflictDialog: vi.fn() }))
 vi.mock('./actions/conflict-resolve', () => ({
   resolveConflict: h.resolveConflict,
-  isResolvingConflict: () => false,
+  isResolvingConflict: h.isResolvingConflict,
 }))
 vi.mock('./sync/constants', () => ({
   PUSH_HANG_THRESHOLD_MS: 60_000,
@@ -236,6 +237,7 @@ beforeEach(() => {
   h.executeStaleCheck.mockResolvedValue({ status: 'up_to_date' })
   h.applyStaleResult.mockReturnValue('up-to-date')
   h.resolveConflict.mockResolvedValue('cancel')
+  h.isResolvingConflict.mockReturnValue(false)
 })
 
 afterEach(() => {
@@ -403,6 +405,33 @@ describe('#321 push-hang の競合解決中のロック', () => {
     finish('merged')
     await vi.waitFor(() => expect(deps.pushToGitHub).toHaveBeenCalledTimes(1))
     expect(h.isPushing.value).toBe(false)
+    teardown()
+  })
+
+  it('S-1: 他の経路（stale-push など）が解決中にスリープ復帰しても、ロックを外さずダイアログも出さない', async () => {
+    h.getPersistedDirtyFlag.mockReturnValue(false)
+    const { initApp, appState } = await import('./app-state.svelte')
+    const deps = makeDeps(async () => {})
+    const teardown = initApp(deps)
+    await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
+
+    // stale-push の解決中: preflight が isPushing を立てたまま resolveConflict が動いている
+    h.isResolvingConflict.mockReturnValue(true)
+    h.isPushing.value = true
+    h.getPushInFlightAt.mockReturnValue(Date.now() - 120_000)
+    h.executeStaleCheck.mockResolvedValue({
+      status: 'stale',
+      localCommitSha: 'base-sha',
+      remoteCommitSha: 'remote-sha',
+    })
+    h.applyStaleResult.mockReturnValue('stale-dirty')
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(h.isPushing.value).toBe(true)
+    expect(appState.pushHangRecovered).toBe(false)
+    expect(h.resolveConflict).not.toHaveBeenCalled()
     teardown()
   })
 

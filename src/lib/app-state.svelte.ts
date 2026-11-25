@@ -1093,7 +1093,10 @@ export function initApp(deps: InitAppDeps): () => void {
    * cancel/null・反映失敗は何もしない（applyStaleResult で立てた赤バッジに任せる）。
    */
   // push-hang の解決中（ロックを取ってから解放するまで）。resolveConflict 自身の
-  // isResolvingConflict() と合わせて、visibility 復帰のハング検出・この関数の再入を止める
+  // isResolvingConflict() と合わせて、visibility 復帰のハング検出・この関数の再入を止める。
+  // 本番では resolveConflict が最初の await より前に同期でカウンタを上げるため冗長だが、
+  // 保険として残す（resolveConflict の実装が変わっても push-hang の再入を止める）。テストでは
+  // resolveConflict をモックするので、この入口側の判定を単独で縛る役も持つ
   let resolvingPushHang = false
   const isConflictResolutionActive = () => resolvingPushHang || isResolvingConflict()
 
@@ -1101,6 +1104,9 @@ export function initApp(deps: InitAppDeps): () => void {
     // 他の経路と同じく、解決中（比較・ダイアログ・マージ反映）は isPushing を立てて
     // 別の Push / Pull が割り込まないようにする。別の同期が走っていて取れないときや、
     // すでに解決中のときはダイアログを出さない（applyStaleResult が立てた赤バッジに任せる）。
+    // 解決中の経路は isPushing / isPulling を立てているので、下のロック判定でもほぼ先に弾かれる。
+    // isConflictResolutionActive() を先に置くのは「解決中は再入しない」という意図を、
+    // 個々のロックの持ち方に依存せず明示するため（挙動は同じ）
     if (
       isConflictResolutionActive() ||
       isPulling.value ||
