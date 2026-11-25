@@ -240,7 +240,24 @@ beforeEach(() => {
   h.isResolvingConflict.mockReturnValue(false)
 })
 
+// initApp の teardown（document の visibilitychange リスナー等の解除）は afterEach で必ず呼ぶ。
+// テスト末尾で呼ぶと assert 失敗時に呼ばれず、リスナーが次のテストへ波及するため。
+const teardowns: Array<() => void> = []
+function track(teardown: () => void): () => void {
+  let done = false
+  const once = () => {
+    if (done) return
+    done = true
+    teardown()
+  }
+  teardowns.push(once)
+  return once
+}
+
 afterEach(() => {
+  while (teardowns.length > 0) teardowns.pop()!()
+  // テストで上書きした document.visibilityState を元（プロトタイプの getter）に戻す
+  delete (document as { visibilityState?: unknown }).visibilityState
   vi.unstubAllGlobals()
   vi.resetModules()
 })
@@ -257,13 +274,12 @@ describe('#321 起動時の先読み込み', () => {
         restoreCalls: deps.restoreStateFromUrl.mock.calls.length,
       }
     })
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
 
     expect(atPull).toEqual({ notes: CACHED_NOTES, dirty: true, restoreCalls: 0 })
     expect(deps.pullFromGitHub.mock.calls[0][0]).toBe(true)
     expect(setLastPushedSnapshot).not.toHaveBeenCalled()
-    teardown()
   })
 
   it('キャンセル時は二重に読み込まず、省いた URL 復元だけ行う', async () => {
@@ -271,13 +287,12 @@ describe('#321 起動時の先読み込み', () => {
     const deps = makeDeps(async (_startup, onCancel) => {
       await onCancel?.()
     })
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.restoreStateFromUrl).toHaveBeenCalledTimes(1))
 
     // 読み込み（集計の再構築）は先読み込みの1回だけ
     expect(h.rebuild).toHaveBeenCalledTimes(1)
     expect(h.notes.value).toEqual(CACHED_NOTES)
-    teardown()
   })
 
   it('先読み込みが失敗したら、従来どおりキャンセル時に読み込む', async () => {
@@ -289,26 +304,24 @@ describe('#321 起動時の先読み込み', () => {
     const deps = makeDeps(async (_startup, onCancel) => {
       await onCancel?.()
     })
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.restoreStateFromUrl).toHaveBeenCalledTimes(1))
 
     // 1回目（先読み込み）は失敗、2回目（キャンセル時の従来の読み込み）で読み込まれる
     expect(h.rebuild).toHaveBeenCalledTimes(2)
     expect(h.notes.value).toEqual(CACHED_NOTES)
     spy.mockRestore()
-    teardown()
   })
 
   it('dirty でなければ先読み込みしない（従来どおり Pull だけ）', async () => {
     h.getPersistedDirtyFlag.mockReturnValue(false)
     const { initApp } = await import('./app-state.svelte')
     const deps = makeDeps(async () => {})
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
 
     expect(h.rebuild).not.toHaveBeenCalled()
     expect(h.notes.value).toEqual([])
-    teardown()
   })
 })
 
@@ -322,7 +335,7 @@ describe('#321 push-hang の競合解決中のロック', () => {
       return resolution
     })
     const deps = makeDeps(async () => {})
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
     deps.pullFromGitHub.mockClear()
 
@@ -337,11 +350,11 @@ describe('#321 push-hang の競合解決中のロック', () => {
     h.applyStaleResult.mockReturnValue('stale-dirty')
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
     document.dispatchEvent(new Event('visibilitychange'))
-    return { deps, teardown, pushingDuringResolve: () => pushingDuringResolve }
+    return { deps, pushingDuringResolve: () => pushingDuringResolve }
   }
 
   it('解決中は isPushing を立て、マージ後の Push の前に解放する', async () => {
-    const { deps, teardown, pushingDuringResolve } = await startAndTriggerHang('merged')
+    const { deps, pushingDuringResolve } = await startAndTriggerHang('merged')
     let pushingAtPush: boolean | undefined
     deps.pushToGitHub.mockImplementation(async () => {
       pushingAtPush = h.isPushing.value
@@ -352,11 +365,10 @@ describe('#321 push-hang の競合解決中のロック', () => {
     expect(pushingDuringResolve()).toBe(true)
     expect(pushingAtPush).toBe(false)
     expect(h.isPushing.value).toBe(false)
-    teardown()
   })
 
   it('Pull を選んだときも Pull の前に解放する（解決中は isPushing が立っている）', async () => {
-    const { deps, teardown, pushingDuringResolve } = await startAndTriggerHang('pull')
+    const { deps, pushingDuringResolve } = await startAndTriggerHang('pull')
     let pushingAtPull: boolean | undefined
     deps.pullFromGitHub.mockImplementation(async () => {
       pushingAtPull = h.isPushing.value
@@ -364,7 +376,6 @@ describe('#321 push-hang の競合解決中のロック', () => {
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
     expect(pushingDuringResolve()).toBe(true)
     expect(pushingAtPull).toBe(false)
-    teardown()
   })
 
   it('S1: 解決中に visibility 復帰が起きても、ダイアログは再入せずロックも外れない', async () => {
@@ -378,7 +389,7 @@ describe('#321 push-hang の競合解決中のロック', () => {
     h.getPersistedDirtyFlag.mockReturnValue(false)
     const { initApp, appState } = await import('./app-state.svelte')
     const deps = makeDeps(async () => {})
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
     deps.pullFromGitHub.mockClear()
 
@@ -405,14 +416,13 @@ describe('#321 push-hang の競合解決中のロック', () => {
     finish('merged')
     await vi.waitFor(() => expect(deps.pushToGitHub).toHaveBeenCalledTimes(1))
     expect(h.isPushing.value).toBe(false)
-    teardown()
   })
 
   it('S-1: 他の経路（stale-push など）が解決中にスリープ復帰しても、ロックを外さずダイアログも出さない', async () => {
     h.getPersistedDirtyFlag.mockReturnValue(false)
     const { initApp, appState } = await import('./app-state.svelte')
     const deps = makeDeps(async () => {})
-    const teardown = initApp(deps)
+    track(initApp(deps))
     await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
 
     // stale-push の解決中: preflight が isPushing を立てたまま resolveConflict が動いている
@@ -432,7 +442,6 @@ describe('#321 push-hang の競合解決中のロック', () => {
     expect(h.isPushing.value).toBe(true)
     expect(appState.pushHangRecovered).toBe(false)
     expect(h.resolveConflict).not.toHaveBeenCalled()
-    teardown()
   })
 
   it.each(['isPulling', 'isPushing', 'isPushingBackground', 'isArchiveLoading'] as const)(
@@ -441,7 +450,7 @@ describe('#321 push-hang の競合解決中のロック', () => {
       h.getPersistedDirtyFlag.mockReturnValue(false)
       const { initApp, appState } = await import('./app-state.svelte')
       const deps = makeDeps(async () => {})
-      const teardown = initApp(deps)
+      track(initApp(deps))
       await vi.waitFor(() => expect(deps.pullFromGitHub).toHaveBeenCalled())
       deps.pullFromGitHub.mockClear()
 
@@ -465,16 +474,14 @@ describe('#321 push-hang の競合解決中のロック', () => {
       expect(deps.pullFromGitHub).not.toHaveBeenCalled()
       expect(appState.pushHangRecovered).toBe(false)
       appState.isArchiveLoading = false
-      teardown()
     }
   )
 
   it('解決が例外で終わってもロックを残さない', async () => {
-    const { deps, teardown } = await startAndTriggerHang('cancel')
+    const { deps } = await startAndTriggerHang('cancel')
     h.resolveConflict.mockRejectedValueOnce(new Error('x'))
     await vi.waitFor(() => expect(h.resolveConflict).toHaveBeenCalled())
     await vi.waitFor(() => expect(h.isPushing.value).toBe(false))
     expect(deps.pushToGitHub).not.toHaveBeenCalled()
-    teardown()
   })
 })
